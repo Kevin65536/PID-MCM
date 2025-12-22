@@ -1,0 +1,7 @@
+experiments/runs
+experiments/configs
+experiments/logs
+experiments/results
+
+# pycache
+__pycache__
