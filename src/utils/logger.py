@@ -1,0 +1,565 @@
+"""
+Experiment Logger for PID-MCM experiments.
+Handles config management, metrics logging, and visualization generation.
+"""
+
+import json
+import yaml
+import hashlib
+import shutil
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+import numpy as np
+
+# Try to import visualization libraries
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+
+class ExperimentLogger:
+    """Logger for tracking experiment configurations, metrics, and results."""
+    
+    def __init__(
+        self,
+        config_path: str,
+        experiments_dir: str = "experiments",
+        run_name: Optional[str] = None
+    ):
+        """
+        Initialize experiment logger.
+        
+        Args:
+            config_path: Path to experiment config YAML file
+            experiments_dir: Base directory for experiments
+            run_name: Optional custom run name (default: auto-generated)
+        """
+        self.experiments_dir = Path(experiments_dir)
+        self.configs_dir = self.experiments_dir / "configs"
+        self.runs_dir = self.experiments_dir / "runs"
+        self.results_dir = self.experiments_dir / "results"
+        
+        # Load and merge config
+        self.config = self._load_config(config_path)
+        self.config_hash = self._hash_config(self.config)
+        
+        # Create run directory
+        exp_name = self.config.get("experiment", {}).get("name", "unknown")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_name = run_name or f"{exp_name}_{timestamp}"
+        self.run_dir = self.runs_dir / self.run_name
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create subdirectories
+        self.checkpoints_dir = self.run_dir / "checkpoints"
+        self.figures_dir = self.run_dir / "figures"
+        self.checkpoints_dir.mkdir(exist_ok=True)
+        self.figures_dir.mkdir(exist_ok=True)
+        
+        # Initialize metrics storage
+        self.metrics = {
+            "config_hash": self.config_hash,
+            "started_at": datetime.now().isoformat(),
+            "completed_at": None,
+            "epochs": [],
+            "final_metrics": {}
+        }
+        
+        # Save frozen config
+        self._save_config()
+        
+        print(f"[ExperimentLogger] Initialized run: {self.run_name}")
+        print(f"[ExperimentLogger] Run directory: {self.run_dir}")
+    
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """Load config with inheritance support."""
+        config_path = Path(config_path)
+        
+        # If relative path and not already in configs dir, look there
+        if not config_path.is_absolute():
+            full_path = self.configs_dir / config_path
+            if full_path.exists():
+                config_path = full_path
+            # else assume the path is already correct (e.g., already absolute)
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # Handle inheritance
+        if "_base_" in config:
+            base_filename = config.pop("_base_")
+            # Base is always relative to configs_dir
+            base_path = self.configs_dir / base_filename
+            base_config = self._load_config(base_path)
+            config = self._merge_configs(base_config, config)
+        
+        return config
+    
+    def _merge_configs(self, base: Dict, override: Dict) -> Dict:
+        """Deep merge two config dictionaries."""
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._merge_configs(result[key], value)
+            else:
+                result[key] = value
+        return result
+    
+    def _hash_config(self, config: Dict) -> str:
+        """Generate hash of config for reproducibility tracking."""
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()[:8]
+    
+    def _save_config(self):
+        """Save frozen config to run directory."""
+        config_path = self.run_dir / "config.yaml"
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True)
+    
+    def log_epoch(
+        self,
+        epoch: int,
+        train_loss: float,
+        val_loss: Optional[float] = None,
+        loss_breakdown: Optional[Dict[str, float]] = None,
+        metrics: Optional[Dict[str, float]] = None
+    ):
+        """
+        Log metrics for an epoch.
+        
+        Args:
+            epoch: Current epoch number
+            train_loss: Total training loss
+            val_loss: Validation loss (optional)
+            loss_breakdown: Dict of individual loss components
+            metrics: Dict of evaluation metrics (correlations, HSIC, etc.)
+        """
+        epoch_data = {
+            "epoch": epoch,
+            "train_loss": float(train_loss),
+            "val_loss": float(val_loss) if val_loss is not None else None,
+            "loss_breakdown": loss_breakdown or {},
+            "metrics": metrics or {}
+        }
+        self.metrics["epochs"].append(epoch_data)
+        
+        # Print progress
+        metrics_str = ", ".join(f"{k}: {v:.4f}" for k, v in (metrics or {}).items())
+        print(f"[Epoch {epoch}] loss: {train_loss:.4f} | {metrics_str}")
+    
+    def log_final(self, final_metrics: Dict[str, float]):
+        """Log final evaluation metrics."""
+        self.metrics["final_metrics"] = {k: float(v) for k, v in final_metrics.items()}
+        self.metrics["completed_at"] = datetime.now().isoformat()
+        self._save_metrics()
+    
+    def _save_metrics(self):
+        """Save metrics to JSON file."""
+        metrics_path = self.run_dir / "metrics.json"
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(self.metrics, f, indent=2)
+    
+    def save_checkpoint(self, state_dict: Dict, epoch: int, is_best: bool = False):
+        """Save model checkpoint."""
+        checkpoint_path = self.checkpoints_dir / f"checkpoint_epoch_{epoch}.pt"
+        
+        # Import torch only when needed
+        import torch
+        torch.save(state_dict, checkpoint_path)
+        
+        if is_best:
+            best_path = self.checkpoints_dir / "best_model.pt"
+            shutil.copy(checkpoint_path, best_path)
+    
+    def generate_figures(self):
+        """Generate visualization figures from logged metrics."""
+        if not HAS_MATPLOTLIB:
+            print("[Warning] matplotlib not available, skipping figure generation")
+            return
+        
+        if not self.metrics["epochs"]:
+            print("[Warning] No epochs logged, skipping figure generation")
+            return
+        
+        epochs = [e["epoch"] for e in self.metrics["epochs"]]
+        
+        # 1. Training curves
+        self._plot_training_curves(epochs)
+        
+        # 2. Latent recovery (if metrics available)
+        if self.metrics["epochs"][0].get("metrics"):
+            self._plot_latent_recovery(epochs)
+        
+        # 3. Loss breakdown
+        if self.metrics["epochs"][0].get("loss_breakdown"):
+            self._plot_loss_breakdown(epochs)
+        
+        print(f"[ExperimentLogger] Figures saved to {self.figures_dir}")
+    
+    def _plot_training_curves(self, epochs: List[int]):
+        """Plot training and validation loss curves."""
+        train_losses = [e["train_loss"] for e in self.metrics["epochs"]]
+        val_losses = [e["val_loss"] for e in self.metrics["epochs"] if e["val_loss"] is not None]
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(epochs, train_losses, label='Train Loss', linewidth=2)
+        if val_losses and len(val_losses) == len(epochs):
+            ax.plot(epochs, val_losses, label='Val Loss', linewidth=2)
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.set_title(f'Training Curves - {self.config["experiment"]["name"]}')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        fig.savefig(self.figures_dir / "training_curves.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    
+    def _plot_latent_recovery(self, epochs: List[int]):
+        """Plot latent recovery correlations over training."""
+        metric_names = ["corr_zr_wr", "corr_zu_wu", "corr_zs_ws"]
+        metric_labels = ["Redundancy (z_r)", "Unique (z_u)", "Synergy (z_s)"]
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        for name, label in zip(metric_names, metric_labels):
+            values = [e["metrics"].get(name) for e in self.metrics["epochs"]]
+            if any(v is not None for v in values):
+                valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
+                valid_values = [v for v in values if v is not None]
+                ax.plot(valid_epochs, valid_values, label=label, linewidth=2, marker='o', markersize=3)
+        
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Correlation with Ground Truth')
+        ax.set_title('Latent Recovery')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(0, 1)
+        
+        # Add target lines
+        ax.axhline(y=0.6, color='r', linestyle='--', alpha=0.5, label='Target (R)')
+        
+        fig.savefig(self.figures_dir / "latent_recovery.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    
+    def _plot_loss_breakdown(self, epochs: List[int]):
+        """Plot individual loss components."""
+        loss_names = ["reconstruction", "alignment", "orthogonality", "synergy"]
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        for name in loss_names:
+            values = [e["loss_breakdown"].get(name) for e in self.metrics["epochs"]]
+            if any(v is not None for v in values):
+                valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
+                valid_values = [v for v in values if v is not None]
+                ax.plot(valid_epochs, valid_values, label=name.capitalize(), linewidth=2)
+        
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss Value')
+        ax.set_title('Loss Components')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        fig.savefig(self.figures_dir / "loss_breakdown.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    
+    def plot_signal_reconstruction(
+        self, 
+        x1_orig: np.ndarray, 
+        x2_orig: np.ndarray,
+        x1_rec: np.ndarray,
+        x2_rec: np.ndarray,
+        sample_idx: int = 0,
+        fs: float = 200.0
+    ):
+        """
+        Plot original vs reconstructed signals.
+        
+        Args:
+            x1_orig: Original X1 signal [batch, seq] or [seq]
+            x2_orig: Original X2 signal
+            x1_rec: Reconstructed X1 signal
+            x2_rec: Reconstructed X2 signal
+            sample_idx: Which sample to plot (if batch)
+            fs: Sampling frequency for time axis
+        """
+        if not HAS_MATPLOTLIB:
+            return
+        
+        # Handle batch dimension
+        if x1_orig.ndim == 2:
+            x1_orig = x1_orig[sample_idx]
+            x2_orig = x2_orig[sample_idx]
+            x1_rec = x1_rec[sample_idx]
+            x2_rec = x2_rec[sample_idx]
+        
+        seq_len = len(x1_orig)
+        t = np.arange(seq_len) / fs
+        
+        fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+        
+        # X1 time domain
+        axes[0, 0].plot(t, x1_orig, label='Original', alpha=0.8, linewidth=1)
+        axes[0, 0].plot(t, x1_rec, label='Reconstructed', alpha=0.8, linewidth=1)
+        axes[0, 0].set_xlabel('Time (s)')
+        axes[0, 0].set_ylabel('Amplitude')
+        axes[0, 0].set_title('X1 (EEG-like) - Time Domain')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # X2 time domain
+        axes[0, 1].plot(t, x2_orig, label='Original', alpha=0.8, linewidth=1)
+        axes[0, 1].plot(t, x2_rec, label='Reconstructed', alpha=0.8, linewidth=1)
+        axes[0, 1].set_xlabel('Time (s)')
+        axes[0, 1].set_ylabel('Amplitude')
+        axes[0, 1].set_title('X2 (fNIRS-like) - Time Domain')
+        axes[0, 1].legend()
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        # X1 frequency domain
+        freqs = np.fft.fftfreq(seq_len, 1/fs)[:seq_len//2]
+        x1_fft_orig = np.abs(np.fft.fft(x1_orig))[:seq_len//2]
+        x1_fft_rec = np.abs(np.fft.fft(x1_rec))[:seq_len//2]
+        axes[1, 0].plot(freqs, x1_fft_orig, label='Original', alpha=0.8)
+        axes[1, 0].plot(freqs, x1_fft_rec, label='Reconstructed', alpha=0.8)
+        axes[1, 0].set_xlabel('Frequency (Hz)')
+        axes[1, 0].set_ylabel('Magnitude')
+        axes[1, 0].set_title('X1 - Frequency Domain')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].set_xlim(0, fs/4)  # Show up to Nyquist/2
+        
+        # X2 frequency domain
+        x2_fft_orig = np.abs(np.fft.fft(x2_orig))[:seq_len//2]
+        x2_fft_rec = np.abs(np.fft.fft(x2_rec))[:seq_len//2]
+        axes[1, 1].plot(freqs, x2_fft_orig, label='Original', alpha=0.8)
+        axes[1, 1].plot(freqs, x2_fft_rec, label='Reconstructed', alpha=0.8)
+        axes[1, 1].set_xlabel('Frequency (Hz)')
+        axes[1, 1].set_ylabel('Magnitude')
+        axes[1, 1].set_title('X2 - Frequency Domain')
+        axes[1, 1].legend()
+        axes[1, 1].grid(True, alpha=0.3)
+        axes[1, 1].set_xlim(0, fs/4)
+        
+        plt.tight_layout()
+        fig.savefig(self.figures_dir / "signal_reconstruction.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    
+    def plot_pid_analysis(
+        self,
+        z_r: np.ndarray,
+        z_u1: np.ndarray,
+        z_u2: np.ndarray,
+        z_s: np.ndarray,
+        w_r: np.ndarray,
+        w_u1: np.ndarray,
+        w_u2: np.ndarray,
+        w_s: np.ndarray,
+        fs: float = 200.0
+    ):
+        """
+        Plot detailed PID component analysis.
+        
+        Shows:
+        - Token distributions (histograms)
+        - Ground truth vs learned correlations
+        - Frequency content of tokens
+        - Cross-correlation matrix
+        """
+        if not HAS_MATPLOTLIB:
+            return
+        
+        # Flatten for analysis if needed
+        def flatten(x):
+            if x.ndim > 1:
+                return x.mean(axis=-1) if x.shape[-1] > 1 else x.flatten()
+            return x
+        
+        z_r_flat = flatten(z_r)
+        z_u1_flat = flatten(z_u1)
+        z_s_flat = flatten(z_s)
+        w_r_flat = flatten(w_r)
+        w_u1_flat = flatten(w_u1)
+        w_s_flat = flatten(w_s)
+        
+        fig = plt.figure(figsize=(16, 12))
+        
+        # 1. Token value distributions (top row)
+        ax1 = fig.add_subplot(3, 3, 1)
+        ax1.hist(z_r_flat, bins=50, alpha=0.7, label='z_r (learned)', density=True)
+        ax1.hist(w_r_flat, bins=50, alpha=0.7, label='w_r (ground truth)', density=True)
+        ax1.set_title('Redundancy Distribution')
+        ax1.legend()
+        ax1.set_xlabel('Value')
+        
+        ax2 = fig.add_subplot(3, 3, 2)
+        ax2.hist(z_u1_flat, bins=50, alpha=0.7, label='z_u (learned)', density=True)
+        ax2.hist(w_u1_flat, bins=50, alpha=0.7, label='w_u (ground truth)', density=True)
+        ax2.set_title('Unique Distribution')
+        ax2.legend()
+        ax2.set_xlabel('Value')
+        
+        ax3 = fig.add_subplot(3, 3, 3)
+        ax3.hist(z_s_flat, bins=50, alpha=0.7, label='z_s (learned)', density=True)
+        ax3.hist(w_s_flat, bins=50, alpha=0.7, label='w_s (ground truth)', density=True)
+        ax3.set_title('Synergy Distribution')
+        ax3.legend()
+        ax3.set_xlabel('Value')
+        
+        # 2. Scatter plots: learned vs ground truth (middle row)
+        ax4 = fig.add_subplot(3, 3, 4)
+        ax4.scatter(w_r_flat, z_r_flat, alpha=0.3, s=5)
+        ax4.set_xlabel('Ground Truth (w_r)')
+        ax4.set_ylabel('Learned (z_r)')
+        ax4.set_title(f'Redundancy Correlation: {np.corrcoef(w_r_flat, z_r_flat)[0,1]:.3f}')
+        # Add identity line
+        lims = [min(ax4.get_xlim()[0], ax4.get_ylim()[0]), max(ax4.get_xlim()[1], ax4.get_ylim()[1])]
+        ax4.plot(lims, lims, 'r--', alpha=0.5)
+        
+        ax5 = fig.add_subplot(3, 3, 5)
+        ax5.scatter(w_u1_flat, z_u1_flat, alpha=0.3, s=5)
+        ax5.set_xlabel('Ground Truth (w_u)')
+        ax5.set_ylabel('Learned (z_u)')
+        ax5.set_title(f'Unique Correlation: {np.corrcoef(w_u1_flat, z_u1_flat)[0,1]:.3f}')
+        lims = [min(ax5.get_xlim()[0], ax5.get_ylim()[0]), max(ax5.get_xlim()[1], ax5.get_ylim()[1])]
+        ax5.plot(lims, lims, 'r--', alpha=0.5)
+        
+        ax6 = fig.add_subplot(3, 3, 6)
+        ax6.scatter(w_s_flat, z_s_flat, alpha=0.3, s=5)
+        ax6.set_xlabel('Ground Truth (w_s)')
+        ax6.set_ylabel('Learned (z_s)')
+        ax6.set_title(f'Synergy Correlation: {np.corrcoef(w_s_flat, z_s_flat)[0,1]:.3f}')
+        lims = [min(ax6.get_xlim()[0], ax6.get_ylim()[0]), max(ax6.get_xlim()[1], ax6.get_ylim()[1])]
+        ax6.plot(lims, lims, 'r--', alpha=0.5)
+        
+        # 3. Cross-correlation matrix of learned tokens (bottom left)
+        ax7 = fig.add_subplot(3, 3, 7)
+        token_matrix = np.vstack([z_r_flat, z_u1_flat, flatten(z_u2), z_s_flat])
+        corr_matrix = np.corrcoef(token_matrix)
+        im = ax7.imshow(corr_matrix, cmap='RdBu_r', vmin=-1, vmax=1)
+        ax7.set_xticks([0, 1, 2, 3])
+        ax7.set_xticklabels(['z_r', 'z_u1', 'z_u2', 'z_s'])
+        ax7.set_yticks([0, 1, 2, 3])
+        ax7.set_yticklabels(['z_r', 'z_u1', 'z_u2', 'z_s'])
+        ax7.set_title('Token Cross-Correlation (Orthogonality)')
+        plt.colorbar(im, ax=ax7)
+        # Annotate values
+        for i in range(4):
+            for j in range(4):
+                ax7.text(j, i, f'{corr_matrix[i,j]:.2f}', ha='center', va='center',
+                        color='white' if abs(corr_matrix[i,j]) > 0.5 else 'black')
+        
+        # 4. Summary metrics (bottom middle)
+        ax8 = fig.add_subplot(3, 3, 8)
+        ax8.axis('off')
+        
+        # Compute summary stats
+        corr_r = np.corrcoef(w_r_flat, z_r_flat)[0, 1]
+        corr_u = np.corrcoef(w_u1_flat, z_u1_flat)[0, 1]
+        corr_s = np.corrcoef(w_s_flat, z_s_flat)[0, 1]
+        
+        off_diag = [corr_matrix[0,1], corr_matrix[0,2], corr_matrix[0,3],
+                    corr_matrix[1,2], corr_matrix[1,3], corr_matrix[2,3]]
+        mean_orth = np.mean(np.abs(off_diag))
+        
+        summary_text = f"""
+PID Component Recovery Summary
+{'='*40}
+
+Redundancy (z_r ↔ w_r):  {corr_r:+.4f}  {'✓' if corr_r > 0.5 else '✗'}
+Unique (z_u ↔ w_u):      {corr_u:+.4f}  {'✓' if corr_u > 0.4 else '✗'}
+Synergy (z_s ↔ w_s):     {corr_s:+.4f}  {'✓' if corr_s > 0.3 else '✗'}
+
+Token Orthogonality:
+  Mean |off-diagonal|:   {mean_orth:.4f}  {'✓' if mean_orth < 0.2 else '✗'}
+
+Token Statistics:
+  std(z_r): {np.std(z_r_flat):.4f}
+  std(z_u): {np.std(z_u1_flat):.4f}
+  std(z_s): {np.std(z_s_flat):.4f}
+"""
+        ax8.text(0.1, 0.9, summary_text, transform=ax8.transAxes, 
+                fontsize=10, verticalalignment='top', fontfamily='monospace')
+        
+        # 5. Token variance over samples (bottom right)
+        ax9 = fig.add_subplot(3, 3, 9)
+        sample_indices = np.arange(min(100, len(z_r_flat)))
+        ax9.plot(sample_indices, z_r_flat[:100], label='z_r', alpha=0.7)
+        ax9.plot(sample_indices, z_u1_flat[:100], label='z_u', alpha=0.7)
+        ax9.plot(sample_indices, z_s_flat[:100], label='z_s', alpha=0.7)
+        ax9.set_xlabel('Sample Index')
+        ax9.set_ylabel('Token Value (mean)')
+        ax9.set_title('Token Values Across Samples')
+        ax9.legend()
+        ax9.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        fig.savefig(self.figures_dir / "pid_analysis.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        
+        print(f"[ExperimentLogger] PID analysis saved to {self.figures_dir / 'pid_analysis.png'}")
+    
+    def get_config(self) -> Dict[str, Any]:
+        """Return the merged configuration."""
+        return self.config
+
+
+def update_comparison_csv(experiments_dir: str = "experiments"):
+    """Aggregate all experiment results into a comparison CSV."""
+    import csv
+    
+    experiments_dir = Path(experiments_dir)
+    runs_dir = experiments_dir / "runs"
+    results_dir = experiments_dir / "results"
+    results_dir.mkdir(exist_ok=True)
+    
+    csv_path = results_dir / "comparison.csv"
+    
+    rows = []
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        
+        metrics_path = run_dir / "metrics.json"
+        config_path = run_dir / "config.yaml"
+        
+        if not metrics_path.exists():
+            continue
+        
+        with open(metrics_path, 'r') as f:
+            metrics = json.load(f)
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        final = metrics.get("final_metrics", {})
+        loss_config = config.get("loss", {})
+        
+        row = {
+            "exp_id": config.get("experiment", {}).get("name", "unknown"),
+            "run_name": run_dir.name,
+            "config": f"{loss_config.get('alignment', {}).get('type', 'N/A')}+"
+                      f"{loss_config.get('orthogonality', {}).get('type', 'N/A')}+"
+                      f"{loss_config.get('synergy', {}).get('type', 'N/A')}",
+            "corr_zr": final.get("corr_zr_wr", ""),
+            "corr_zu": final.get("corr_zu_wu", ""),
+            "corr_zs": final.get("corr_zs_ws", ""),
+            "hsic": final.get("hsic_zr_zu", ""),
+            "completed": metrics.get("completed_at", "")
+        }
+        rows.append(row)
+    
+    if rows:
+        fieldnames = ["exp_id", "run_name", "config", "corr_zr", "corr_zu", "corr_zs", "hsic", "completed"]
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        
+        print(f"[Results] Updated comparison CSV: {csv_path}")
+        print(f"[Results] Total experiments: {len(rows)}")
