@@ -5,3 +5,7 @@ experiments/results
 
 # pycache
 __pycache__
+
+# virtual environment
+.env
+.venv
