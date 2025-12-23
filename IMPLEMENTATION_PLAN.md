@@ -68,6 +68,31 @@ This implementation realizes the **Explicit Latent Partitioning (ELP)** framewor
 
 ## Phase 1: 时序合成数据集与快速预实验 (Week 1-2)
 
+### 1.0 基础 Sanity-Check：XOR = 纯协同（必须通过）
+
+**动机**：在经典 PID 场景中，若 $Y = X_1 \oplus X_2$ 且 $X_1, X_2$ 独立同分布，则
+\[
+I(X_1;Y)=0,\quad I(X_2;Y)=0,\quad I(X_1,X_2;Y)=1\text{ bit}
+\]
+因此关于目标 $Y$ 的信息应全部落在 **Synergy**。
+
+**实验目标**：验证我们的 token 分解在“显式目标 $Y$”下能够把 XOR 信息主要交给 $z_s$，并且单模态/单 token 不能预测 $Y$。
+
+**实现方式（最小可复现）**：
+- 构造二值时间序列 $X_1, X_2 \in \{0,1\}^{T}$，令 $Y = X_1 \oplus X_2$（逐时刻 XOR）。
+- 训练一个最小 ELP-style 模型，使 $\hat{Y}$ 仅由 $z_s$ 解码（$z_r, z_{u1}, z_{u2}$ 作为旁路 token 用于正交/对齐约束）。
+
+**评估指标**（必须同时报告）：
+- `acc_joint(z_s→Y)`: 用 $z_s$ 预测 $Y$ 的逐点准确率，应接近 1.0
+- `acc_x1_only(X1→Y)`: 仅用 $X_1$ 预测 $Y$，应接近 0.5（chance）
+- `acc_x2_only(X2→Y)`: 仅用 $X_2$ 预测 $Y$，应接近 0.5（chance）
+- `acc_token_ablation`: 冻结 encoder，仅用单个 token（$z_r$ / $z_{u1}$ / $z_{u2}$ / $z_s$）训练线性 probe 预测 $Y$；除 $z_s$ 外都应接近 0.5
+
+**Success Criteria**：
+- `acc_joint(z_s→Y) ≥ 0.95`
+- `acc_x1_only(X1→Y) ≤ 0.55` 且 `acc_x2_only(X2→Y) ≤ 0.55`
+- `acc_probe(z_s) - max(acc_probe(z_r), acc_probe(z_{u1}), acc_probe(z_{u2})) ≥ 0.35`
+
 ### 1.1 重新设计：具有明确 PID 语义的时序数据
 
 **设计目标**：生成时间序列数据，其中各 PID 成分有**可验证的物理/频率特征**。
@@ -138,6 +163,7 @@ X2 = α2*w_r + β2*w_u2 + γ2*w_s + noise
 | **E6** | A1 | B1 | **C4 (Residual)** | D1 | **协同残差重建** |
 | **E7** | A1 | B1 | **C5 (Unpred)** | D1 | **协同不可预测性** |
 | E8 | A1 | B1 | C4+C5 | D2 | 组合策略 |
+| **E9** | (N/A) | B1 | **XOR Supervised Sanity** | (N/A) | **XOR 纯协同验证** |
 
 #### 评估指标
 
