@@ -7,6 +7,10 @@ Usage:
     python run_experiment.py --config E6_synergy_residual.yaml --epochs 50
 """
 
+# Fix OMP duplicate library error (must be before numpy/torch imports)
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import argparse
 import sys
 from pathlib import Path
@@ -28,21 +32,28 @@ from src.data.synthetic_timeseries import PIDTimeSeriesDataset, create_dataset_f
 class SimpleELPEncoder(nn.Module):
     """
     Simplified ELP encoder for validation experiments.
-    Uses FC layers instead of full Transformer for quick testing.
+    Uses FC layers with LayerNorm for stable training.
     """
     
-    def __init__(self, seq_length: int = 256, hidden_dim: int = 128, token_dim: int = 32):
+    def __init__(self, seq_length: int = 256, hidden_dim: int = 256, token_dim: int = 64):
         super().__init__()
         self.seq_length = seq_length
         self.hidden_dim = hidden_dim
         self.token_dim = token_dim
         
-        # Shared encoder backbone
+        # Shared encoder backbone with LayerNorm for stability
         self.encoder = nn.Sequential(
             nn.Linear(seq_length * 2, hidden_dim),
-            nn.ReLU(),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
         )
         
         # Token-specific projection heads
@@ -51,10 +62,14 @@ class SimpleELPEncoder(nn.Module):
         self.head_u2 = nn.Linear(hidden_dim, token_dim)
         self.head_s = nn.Linear(hidden_dim, token_dim)
         
-        # Decoder (shared)
+        # Decoder (shared, deeper for better reconstruction)
         self.decoder = nn.Sequential(
             nn.Linear(token_dim * 4, hidden_dim),
-            nn.ReLU(),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
             nn.Linear(hidden_dim, seq_length * 2),
         )
     
@@ -270,6 +285,10 @@ def run_experiment(config_path: str, epochs: Optional[int] = None):
             losses = compute_losses(outputs, batch_device, config)
             
             losses['total'].backward()
+            
+            # Gradient clipping for training stability
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             
             epoch_losses.append({k: v for k, v in losses.items() if k != 'total'})
