@@ -215,6 +215,21 @@ class FSQTokenizer(BaseTokenizer):
         z_q = (z_q - half_levels) / (half_levels + 1e-8)
         
         return z_q
+    
+    def get_codebook_embeddings(self) -> Optional[torch.Tensor]:
+        """
+        Generate all possible codebook embeddings for FSQ.
+        
+        Returns:
+            embeddings: [K, D] tensor where K = codebook_size, D = len(levels)
+            Returns None if codebook is too large (>16384)
+        """
+        if self.get_codebook_size() > 16384:
+            return None  # Too large to enumerate
+        
+        # Generate all possible indices
+        indices = torch.arange(self.get_codebook_size(), device=self.quantizer._levels.device)
+        return self.get_embedding(indices)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,10 @@ import numpy as np
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import visualization module
+from src.visualization.tokenizer_plots import TokenizerVisualizer, visualize_tokenizer_run
+sys.path.insert(0, str(project_root))
+
 
 # =============================================================================
 # Configuration Loading
@@ -570,6 +574,31 @@ def train(config_path: str, epochs: Optional[int] = None):
             print(f"  {k}: {v:.4f}")
         else:
             print(f"  {k}: {v}")
+    
+    # ==========================================================================
+    # Generate Visualizations
+    # ==========================================================================
+    print("\n[Visualization] Generating figures...")
+    try:
+        # Get metrics history from logger
+        metrics_history = logger.metrics.get('epochs', [])
+        
+        # Generate all visualizations
+        generated_figures = visualize_tokenizer_run(
+            run_dir=logger.run_dir,
+            model=model,
+            test_loader=test_loader,
+            metrics_history=metrics_history,
+            config=config,
+            final_metrics=final_metrics,
+            device=device
+        )
+        
+        print(f"[Visualization] Generated {len(generated_figures)} figures:")
+        for fig_path in generated_figures:
+            print(f"  - {fig_path.name}")
+    except Exception as e:
+        print(f"[Visualization] Warning: Failed to generate visualizations: {e}")
     
     return logger.run_name, final_metrics
 

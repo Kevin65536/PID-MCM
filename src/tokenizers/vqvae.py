@@ -271,6 +271,15 @@ class VQVAETokenizer(BaseTokenizer):
     
     def get_embedding(self, indices: torch.Tensor) -> torch.Tensor:
         return self.quantizer.embedding(indices)
+    
+    def get_codebook_embeddings(self) -> torch.Tensor:
+        """
+        Get all codebook embeddings.
+        
+        Returns:
+            embeddings: [K, D] tensor where K = codebook_size, D = embedding_dim
+        """
+        return self.quantizer.embedding.weight.detach()
 
 
 if __name__ == "__main__":
