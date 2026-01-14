@@ -1,7 +1,7 @@
 # Neuro-Tokenization Implementation Plan
 
-> **Last Updated**: 2026-01-13  
-> **Status**: Phase 0 - Real Data Tokenization  
+> **Last Updated**: 2026-01-14  
+> **Status**: Phase 0 - Real Data Tokenization (数据集已选定)  
 > **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)
 
 ---
@@ -48,33 +48,73 @@
 
 #### 1.2.1 数据集选择
 
-| 数据集 | 模态 | 任务类型 | 备注 |
-|--------|------|----------|------|
-| TBD | EEG | Motor/Cognitive | 待确定公开数据集 |
-| TBD | fNIRS | Motor/Cognitive | 待确定公开数据集 |
-| TBD | EEG+fNIRS | 同步采集 | 理想情况，待寻找 |
+**选定数据集**: `EEG+NIRS Single-Trial` (TU Berlin Open Access Dataset)
+
+**数据集对比分析** (2026-01-14):
+
+| 数据集 | 被试 | 任务类型 | EEG采样率 | fNIRS采样率 | 格式 | 同步方式 |
+|--------|------|----------|-----------|-------------|------|----------|
+| Visual Cognitive Motivation | 16 | 视觉记忆动机 | 原始EDF | CSV | .edf+.csv+.mat | DC9触发器 |
+| **EEG+NIRS Single-Trial** ✅ | 29 | MI + MA | 200Hz | 10Hz | MATLAB .mat | Parallel port |
+| REFED | 32 | 情绪识别 | 1000Hz | 47.62Hz | MATLAB .mat | 时间对齐 |
+| Simultaneous EEG&NIRS (Cognitive) | 26 | N-back/DSR/WG | 200Hz | 10Hz | MATLAB .mat | Parallel port |
+
+**选择 EEG+NIRS Single-Trial 的理由**:
+
+1. **任务经典**: Motor Imagery (左/右手想象) 是 BCI 领域标准任务，信号模式清晰可辨
+2. **格式统一**: MATLAB .mat 格式，已下采样 (EEG 200Hz, NIRS 10Hz)，无需复杂预处理
+3. **同步完善**: 通过 parallel port 同时发送触发器到 EEG 和 NIRS 设备，时间同步精确
+4. **文档完整**: 使用 BBCI Toolbox 数据结构，有详细说明
+5. **被试充足**: 29 名被试，可进行跨被试泛化实验
+
+**数据集详细信息**:
+
+| 属性 | 值 |
+|------|------|
+| 来源 | TU Berlin (doc.ml.tu-berlin.de/hBCI) |
+| EEG 电极 | 30 通道 (10-5 系统) + EOG/ECG |
+| fNIRS 通道 | 36 通道 (14 sources + 16 detectors) |
+| 任务 A | Motor Imagery: 左手 vs 右手想象 (marker 16/32) |
+| 任务 B | Mental Arithmetic: 心算 vs 静息 (marker 16/32) |
+| 试次结构 | 2s指示 + 10s任务 + 15-17s休息 |
+| 数据路径 | `data/EEG+NIRS Single-Trial/` |
+
+**数据结构**:
+```
+EEG_01-29/subject XX/
+  cnt.mat          # 连续EEG数据 (1x6 cells: MI/MA 交替 x 3 sessions)
+  mrk.mat          # 事件标记 (1x6 cells)
+  mnt.mat          # 电极位置
+
+NIRS_01-29/subject XX/
+  cnt.mat          # 连续NIRS光强数据 (需转换为 HbO/HbR)
+  mrk.mat          # 事件标记 (marker 1/2)
+  mnt.mat          # 光极位置
+```
 
 #### 1.2.2 数据预处理规范
 
-需要在实验前确定以下规范：
+基于 EEG+NIRS Single-Trial 数据集特点的预处理规范：
 
 **EEG 预处理**
-- 采样率：重采样到统一频率（如 200Hz）
-- 滤波：带通滤波范围（如 0.5-45Hz）
-- 参考方式：平均参考 / 特定电极
-- 伪迹处理：ICA / 阈值剔除
-- 通道选择：全通道 / ROI 子集
+- 采样率：200Hz (已由数据集提供方下采样)
+- 滤波：带通滤波 0.5-45Hz (需实现)
+- 参考方式：已 re-reference 到 linked mastoids
+- 伪迹处理：数据集提供 artifact 数据可选择跳过
+- 通道选择：30 通道全使用，或选择运动区 ROI (C3, C4, Cz 周围)
 
 **fNIRS 预处理**
-- 信号类型：HbO / HbR / 两者
-- 滤波：低通滤波（如 0.1Hz）
-- 运动伪迹：样条插值 / 剔除
-- 通道处理：单通道 / 多通道
+- 采样率：10Hz (已由数据集提供方下采样)
+- 信号转换：原始数据为光强，需转换为 HbO/HbR (Modified Beer-Lambert Law)
+- 滤波：低通滤波 0.1Hz (去除心跳等高频噪声)
+- 通道选择：36 通道全使用，或选择运动区 ROI (C3, C4 周围各 4 通道)
 
-**窗口化**
-- 窗口长度：$W$（建议 2-8s，按任务设计）
-- 步长：$H$（可选重叠）
-- 对齐策略：时间戳同步
+**窗口化设计**
+- 任务时长：10s (每个 trial)
+- EEG 窗口：512 samples = 2.56s @ 200Hz
+- fNIRS 窗口：26 samples ≈ 2.5s @ 10.4Hz
+- 步长：50% 重叠
+- 对齐策略：以 marker 时间戳为基准，裁剪对应时段
 
 ### 1.3 实验设计
 
@@ -197,13 +237,15 @@ experiment:
 
 data:
   modality: "eeg"  # eeg | fnirs
-  dataset: "TBD"
+  dataset: "EEG+NIRS Single-Trial"
+  data_root: "data/EEG+NIRS Single-Trial"
+  task: "motor_imagery"  # motor_imagery | mental_arithmetic
   preprocessing:
-    resample_rate: 200
+    resample_rate: 200  # 已下采样
     bandpass: [0.5, 45]
   window:
-    length: 512    # samples
-    stride: 256    # samples
+    length: 512    # samples (2.56s @ 200Hz)
+    stride: 256    # samples (50% overlap)
 
 model:
   type: "fsq"      # fsq | vqvae
@@ -258,11 +300,12 @@ logging:
 
 experiment:
   name: "P0_EEG_FSQ"
-  description: "FSQ tokenizer on EEG data"
+  description: "FSQ tokenizer on EEG data (Motor Imagery task)"
 
 data:
   modality: "eeg"
-  dataset: "TBD"
+  dataset: "EEG+NIRS Single-Trial"
+  task: "motor_imagery"
 
 model:
   type: "fsq"
@@ -276,10 +319,13 @@ model:
 
 ### Week 1（当前）
 
-1. [ ] **数据集调研**：寻找合适的公开 EEG/fNIRS 数据集
-2. [ ] **数据加载模块**：实现 `src/data/eeg_dataset.py`
-3. [ ] **评估指标模块**：实现 `src/metrics/codebook_health.py`
-4. [ ] **训练脚本**：实现 `experiments/scripts/train_tokenizer.py`
+1. [x] **数据集调研**：寻找合适的公开 EEG/fNIRS 数据集 ✅ 2026-01-14
+   - 选定 EEG+NIRS Single-Trial 数据集 (TU Berlin)
+2. [ ] **数据加载模块**：实现 `src/data/eeg_fnirs_dataset.py`
+   - 解析 BBCI Toolbox .mat 格式
+   - 实现窗口化和标签提取
+3. [ ] **评估指标模块**：完善 `src/metrics/codebook_health.py` ✅ 已实现
+4. [ ] **训练脚本**：完善 `experiments/scripts/train_tokenizer.py` ✅ 已实现
 
 ### Week 2
 
@@ -299,11 +345,11 @@ model:
 
 以下事项将在实验推进过程中逐步确定：
 
-1. **数据集选择**：具体使用哪个公开数据集？
-2. **预处理细节**：滤波参数、伪迹处理方法？
-3. **模型超参数**：codebook 大小、encoder 深度？
-4. **下游任务**：使用什么任务验证 token 质量？
-5. **跨模态对齐**：何时开始、使用什么对齐目标？
+1. ~~**数据集选择**~~：✅ 已选定 EEG+NIRS Single-Trial
+2. **预处理细节**：fNIRS 光强转 HbO/HbR 的具体实现？
+3. **模型超参数**：codebook 大小、encoder 深度需要调参？
+4. **下游任务**：使用 Motor Imagery 分类 (左/右手) 验证 token 质量
+5. **跨模态对齐**：在单模态 tokenizer 稳定后开始
 
 ---
 
