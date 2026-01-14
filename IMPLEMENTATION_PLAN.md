@@ -92,6 +92,25 @@ NIRS_01-29/subject XX/
   mnt.mat          # 光极位置
 ```
 
+**同步检查结果** (2026-01-14):
+
+通过对全部 29 名被试的 marker 对齐分析，验证了 EEG 和 fNIRS 的同步质量：
+
+| 指标 | 结果 | 说明 |
+|------|------|------|
+| 偏移量 (NIRS - EEG) | 52.2 ± 2.4 s | NIRS 包含更长的预实验静息期 |
+| 事件间隔差异 | mean ≈ 0 ms | 两模态事件间隔高度一致 |
+| 事件间隔最大差异 | 64-78 ms | 在可接受范围内 (< 100ms) |
+| 标签匹配 | 100% | 所有被试所有 session 标签完全一致 |
+
+**结论**: 虽然存在固定时间偏移（因录制起点不同），但事件触发器精确对齐，可安全使用 marker 时间戳进行跨模态窗口裁剪。
+
+**数据加载器**: `src/data/eeg_fnirs_dataset.py`
+- `BBCIDataLoader`: 低层数据访问，包含同步检查功能
+- `EEGfNIRSDataset`: 单模态 PyTorch Dataset
+- `MultiModalEEGfNIRSDataset`: 双模态同步 Dataset
+- `create_dataloaders()`: 创建 train/val/test 分割
+
 #### 1.2.2 数据预处理规范
 
 基于 EEG+NIRS Single-Trial 数据集特点的预处理规范：
@@ -172,12 +191,12 @@ src/
     vqvae.py           # VQ-VAE
   data/                 # 数据加载
     __init__.py
-    (待新增) eeg_dataset.py      # EEG 数据加载
-    (待新增) fnirs_dataset.py    # fNIRS 数据加载
-  metrics/              # 评估指标（待新增）
+    eeg_fnirs_dataset.py    # EEG+NIRS 真实数据加载 ✅
+    synthetic_timeseries.py # 合成数据
+  metrics/              # 评估指标
     __init__.py
-    codebook_health.py  # perplexity, usage, dead codes
-    reconstruction.py   # MSE, spectral loss
+    codebook_health.py  # perplexity, usage, dead codes ✅
+    reconstruction.py   # MSE, spectral loss ✅
   models/               # 旧 ELP 模型（存档）
   losses/               # 旧 PID 损失（存档）
   utils/                # 工具函数
@@ -321,11 +340,12 @@ model:
 
 1. [x] **数据集调研**：寻找合适的公开 EEG/fNIRS 数据集 ✅ 2026-01-14
    - 选定 EEG+NIRS Single-Trial 数据集 (TU Berlin)
-2. [ ] **数据加载模块**：实现 `src/data/eeg_fnirs_dataset.py`
+2. [x] **数据加载模块**：实现 `src/data/eeg_fnirs_dataset.py` ✅ 2026-01-14
    - 解析 BBCI Toolbox .mat 格式
    - 实现窗口化和标签提取
-3. [ ] **评估指标模块**：完善 `src/metrics/codebook_health.py` ✅ 已实现
-4. [ ] **训练脚本**：完善 `experiments/scripts/train_tokenizer.py` ✅ 已实现
+   - 验证 29 名被试的 EEG/fNIRS 同步对齐
+3. [x] **评估指标模块**：完善 `src/metrics/codebook_health.py` ✅ 已实现
+4. [x] **训练脚本**：完善 `experiments/scripts/train_tokenizer.py` ✅ 已实现
 
 ### Week 2
 
