@@ -14,6 +14,14 @@ FSQ stands for "Fixed Scalar Quantization".
 
 ### VQ-VAE
 
+VQ-VAE stands for "Vector Quantized Variational Autoencoder".
 
+- **Mechanism**: It uses a learnable codebook where each code is a vector in the latent space. During training, the continuous latent representations produced by the encoder are matched to the nearest code in the codebook, and the corresponding code index is used for reconstruction.
+  - **Encoder**: A neural network takes continuous input data and  compresses it into a grid of continuous vectors (e.g., a 32*32 grid of 64-dimensional vectors).
+  - **Codebook**: A set of learnable vectors (codes) that the encoder's output vectors are quantized against.
+  - **Quantization**: Each continuous vector from the encoder is replaced by the nearest code from the codebook, and the index of that code is stored as the discrete representation.
+  - **Decoder**: The decoder reconstructs the original data from the quantized codes.
 
-## Current EEG foundational model choices
+- **Key Feature**: The codebook is learned during training, allowing the model to adaptively find useful representations.
+
+- **Challenges**: VQ-VAE can suffer from codebook collapse, where only a few codes are used frequently while others are ignored. This requires additional techniques like commitment loss or codebook reseeding to maintain codebook diversity.
