@@ -3,6 +3,8 @@ experiments/configs
 experiments/logs
 experiments/results
 
+reference_repository
+
 # pycache
 __pycache__
 
