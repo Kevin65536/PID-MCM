@@ -1,8 +1,9 @@
 # Neuro-Tokenization Implementation Plan
 
 > **Last Updated**: 2026-01-15  
-> **Status**: Phase 0+ - Multi-channel Tokenizer & Classification Pipeline  
-> **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)
+> **Status**: Phase 0+ - Single-channel Tokenizer (Time-aligned) + Multi-lead Classifier  
+> **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)  
+> **Experiment Log**: [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md)
 
 ---
 
@@ -32,18 +33,19 @@
 
 ```
 Phase 0+: Tokenizer 完善 (Week 1-2)
-    ├── P0.1: 多通道输入设计
-    ├── P0.2: 序列长度优化
-    └── P0.3: 跨被试泛化验证
+    ├── P0+.1: 时间对齐设计 (两模态 token 对应相同时长)
+    ├── P0+.2: 重新训练对齐后的 tokenizer
+    └── P0+.3: 跨被试泛化验证
 
 Phase 1A: 全数据流验证 (Week 2-3) ──┐
-    ├── P1A.1: EEG tokens → MI 分类   │  并行
-    ├── P1A.2: fNIRS tokens → MI 分类  │
-    └── P1A.3: 简单多模态融合          │
-                                      │
+    ├── P1A.1: 多导联分类器实现       │  并行
+    ├── P1A.2: EEG tokens → MI 分类      │
+    ├── P1A.3: fNIRS tokens → MI 分类     │
+    └── P1A.4: 简单多模态融合             │
+                                         │
 Phase 1B: 跨模态 Token 分析 (Week 2-3)─┘
     ├── P1B.1: Token 序列统计分析
-    ├── P1B.2: 时序耦合分析
+    ├── P1B.2: 时序耦合分析 (单导联对之间)
     └── P1B.3: 因果关系探索
 
 Phase 2: 对齐策略设计 (Week 4+)
@@ -57,9 +59,23 @@ Phase 2: 对齐策略设计 (Week 4+)
 ### 1.1 目标
 
 在 Phase 0 基础实验之上，完善 tokenizer 以支持：
-1. **多通道输入**：利用空间信息提升重构质量
-2. **合理序列长度**：根据模态特性和任务需求优化
+1. **保持单通道设计**：每个导联独立 tokenization，避免多通道复杂性
+2. **时间对齐**：两模态的 token 序列对应相同的原始信号时长
 3. **跨被试泛化**：验证 codebook 的稳定性
+
+### 1.1.1 设计理由
+
+**为什么保持单通道 tokenizer？**
+
+| 考虑因素 | 单通道 | 多通道 |
+|----------|--------|--------|
+| 模式复杂度 | 简单，单纯时间模式 | 复杂，混合时空模式 |
+| 脑区/ROI 划分 | 无需 | 需要先验知识 |
+| EEG-fNIRS 导联位置 | 无影响 | 两模态位置不匹配 |
+| 跨模态分析 | 可比较单导联对 | 难以对比 |
+| 空间信息 | 在分类器层融合 | 在 tokenizer 层融合 |
+
+**结论**：Tokenizer 专注于时间模式编码，分类器负责空间融合。
 
 ### 1.2 数据准备（已完成）
 
@@ -109,18 +125,7 @@ NIRS_01-29/subject XX/
   mnt.mat          # 光极位置
 ```
 
-**同步检查结果** (2026-01-14):
-
-通过对全部 29 名被试的 marker 对齐分析，验证了 EEG 和 fNIRS 的同步质量：
-
-| 指标 | 结果 | 说明 |
-|------|------|------|
-| 偏移量 (NIRS - EEG) | 52.2 ± 2.4 s | NIRS 包含更长的预实验静息期 |
-| 事件间隔差异 | mean ≈ 0 ms | 两模态事件间隔高度一致 |
-| 事件间隔最大差异 | 64-78 ms | 在可接受范围内 (< 100ms) |
-| 标签匹配 | 100% | 所有被试所有 session 标签完全一致 |
-
-**结论**: 虽然存在固定时间偏移（因录制起点不同），但事件触发器精确对齐，可安全使用 marker 时间戳进行跨模态窗口裁剪。
+**同步检查结论** ✅: EEG/fNIRS 事件触发器精确对齐（偏移量恒定 ~52s，标签 100% 匹配），可安全使用 marker 时间戳进行跨模态窗口裁剪。
 
 **数据加载器**: `src/data/eeg_fnirs_dataset.py`
 - `BBCIDataLoader`: 低层数据访问，包含同步检查功能
@@ -156,66 +161,75 @@ NIRS_01-29/subject XX/
 
 #### 1.3.1 Phase 0 基础实验（已完成）
 
-| 实验 | 模态 | Tokenizer | Test MSE | Perplexity | Utilization | 状态 |
-|------|------|-----------|----------|------------|-------------|------|
-| P0-EEG-FSQ | EEG | FSQ (4096) | 0.0767 | 727.4 | 53.5% | ✅ |
-| P0-EEG-VQ | EEG | VQ-VAE (512) | **0.0742** | 382.3 | **100%** | ✅ |
-| P0-fNIRS-FSQ | fNIRS | FSQ (512) | **0.0538** | 329.2 | 85.7% | ✅ |
-| P0-fNIRS-VQ | fNIRS | VQ-VAE (256) | 0.0613 | 189.1 | 95.3% | ✅ |
+详见 [EXP-000](docs/EXPERIMENT_LOG.md#exp-000-tokenizer-comparison-2026-01-14)
 
 **结论**：
-- EEG: VQ-VAE 重构更好，codebook 无死码
-- fNIRS: FSQ 重构更好，perplexity 更高
-- 问题：当前使用单通道、固定序列长度
+- ✅ EEG: VQ-VAE 表现更好（更低 MSE，100% codebook 利用率）
+- ✅ fNIRS: FSQ 表现更好（更低 MSE，更高 perplexity）
+- ⚠️ 问题：两模态时间窗口未对齐 (EEG 2.56s vs fNIRS 2.5s)
 
-#### 1.3.2 P0+.1: 多通道输入设计
+#### 1.3.2 P0+.1: 时间对齐设计
 
-**目标**：利用多通道空间信息提升表示质量
+**目标**：让两模态的 token 序列代表相同时长的原始信号
 
-**EEG 多通道方案**：
+**当前配置** (Phase 0)：
 
-| 方案 | 输入 shape | 描述 | 优势 | 劣势 |
-|------|------------|------|------|------|
-| A1: 通道平均 | [B, T] | 空间平均后单通道 | 简单，已验证 | 丢失空间信息 |
-| A2: 运动区 ROI | [B, 6, T] | C3/C4/Cz 及周围 | 任务相关，降低维度 | 需要先验知识 |
-| A3: 全通道独立 | [B, 30, T] | 每通道独立 token 化 | 保留全部信息 | 计算量大 |
-| **A4: 全通道共享** | [B, 30, T] → [B, T, 30] | 多通道作为特征维度 | 学习空间模式 | Encoder 需适配 |
+| 模态 | 采样率 | 窗口 samples | 时长 | Token 数 (stride=2·3) |
+|------|--------|--------------|------|--------------------|
+| EEG | 200Hz | 512 | 2.56s | ~64 |
+| fNIRS | 10Hz | 25 | 2.5s | ~3-4 |
 
-**推荐方案**: A4（全通道共享 Encoder）
-- 输入：[B, C, T] = [B, 30, 512]
-- Encoder：将通道视为特征维度，Conv1d 沿时间轴
-- 或使用 2D Conv：时间×通道
+**问题**：
+1. 时间窗口未完全对齐 (2.56s vs 2.5s)
+2. fNIRS 时长过短，未覆盖血流动力学响应峰值 (~5-6s)
+3. fNIRS token 序列过短 (~3-4 tokens)，难以分析时序模式
 
-**fNIRS 多通道方案**：
+**新方案**：对齐到 **5.0s** 窗口
 
-| 方案 | 输入 shape | 描述 |
-|------|------------|------|
-| B1: 单通道 | [B, T] | 当前方案 |
-| B2: HbO+HbR | [B, 2, T] | 双通道（同位置） |
-| **B3: 运动区 ROI** | [B, 8, T] | C3/C4 周围 8 通道 |
+| 模态 | 采样率 | 窗口 samples | 时长 | Token 数 (stride=2·3) | Token 时间分辨率 |
+|------|--------|--------------|------|--------------------|-----------------|
+| EEG | 200Hz | **1000** | **5.0s** | ~125 | ~40ms/token |
+| fNIRS | 10Hz | **50** | **5.0s** | ~6-8 | ~625-833ms/token |
 
-**推荐方案**: B3（运动区 ROI）
-- 选择运动皮层上方的 8 个通道
-- 包含 HbO 或仅 HbO（HbR 信噪比较低）
+**对齐优势**：
+- 两模态 token 对应相同时段，便于跨模态分析
+- fNIRS 覆盖 HRF 峰值时段 (5-6s)
+- token 序列更长，可分析时序耦合
 
-#### 1.3.3 P0+.2: 序列长度优化
+**重要参数**：
 
-**当前问题**：
-- EEG: 512 samples @ 200Hz = 2.56s，可能包含任务无关段
-- fNIRS: 25 samples @ 10Hz = 2.5s，血流动力学响应未完全展开
+```yaml
+# EEG Tokenizer (VQ-VAE, 5.0s window)
+eeg:
+  seq_length: 1000        # 5.0s @ 200Hz
+  encoder_dims: [32, 64, 128]
+  encoder_kernel: 7
+  encoder_stride: 2       # 3 layers → T' = 1000/8 = 125
+  codebook_size: 512
+  embedding_dim: 64
 
-**优化方案**：
+# fNIRS Tokenizer (FSQ, 5.0s window)
+fnirs:
+  seq_length: 50          # 5.0s @ 10Hz
+  encoder_dims: [32, 64]
+  encoder_kernel: 5
+  encoder_stride: 2       # 2 layers → T' = 50/4 ≈ 12-13
+  levels: [8, 8, 8]       # 512 codes
+```
 
-| 模态 | 当前 | 建议 | 时长 | 理由 |
-|------|------|------|------|------|
-| EEG | 512 | **400** | 2.0s | 聚焦任务开始后的关键时段 |
-| fNIRS | 25 | **80** | 8.0s | 覆盖 HRF 峰值（~5-6s） |
+#### 1.3.3 P0+.2: 序列长度分析
 
-**验证方法**：
-- 训练不同长度的 tokenizer，比较：
-  1. 重构质量
-  2. 下游分类准确率
-  3. Token 序列的判别性
+| 时长 | EEG tokens | fNIRS tokens | 优势 | 劣势 |
+|------|------------|--------------|------|------|
+| 2.5s | ~32 | ~3 | 数据量大 | fNIRS 序列过短 |
+| **5.0s** | ~125 | ~12 | 平衡 | — |
+| 8.0s | ~200 | ~20 | HRF 完整 | 跨 trial 重叠 |
+| 10s | ~250 | ~25 | 整个 trial | 无重叠样本 |
+
+**选择 5.0s** 的理由：
+- 一个 trial 为 10s，5s 窗口可以有 50% 重叠，增加样本数
+- 覆盖 HRF 主要响应时段 (0-5s 或 2-7s)
+- fNIRS 生成足够长度的 token 序列 (~12 tokens)
 
 #### 1.3.4 P0+.3: 跨被试泛化验证
 
@@ -409,10 +423,10 @@ src/
     __init__.py
     codebook_health.py  # perplexity, usage, dead codes ✅
     reconstruction.py   # MSE, spectral loss ✅
-  classifiers/          # 下游分类器 (待实现)
+  classifiers/          # 下游分类器 ✅ 2026-01-15
     __init__.py
-    simple_classifier.py    # Pool + Linear
-    sequence_classifier.py  # LSTM/Transformer
+    simple_classifier.py    # TokenClassifierHead, SimpleTokenClassifier, RawSignalClassifier ✅
+    end_to_end.py           # EndToEndClassifier, MultiModalClassifier ✅
   analysis/             # 跨模态分析 (待实现)
     __init__.py
     token_statistics.py     # Token 分布、熵
@@ -439,19 +453,23 @@ experiments/
     phase0plus/                # Phase 0+ 多通道实验 (待添加)
       P0plus_eeg_multichannel.yaml
       P0plus_fnirs_multichannel.yaml
-    phase1a/                   # Phase 1A 分类实验 (待添加)
-      P1A_eeg_classification.yaml
-      P1A_fnirs_classification.yaml
-      P1A_fusion.yaml
+    phase1a/                   # Phase 1A 分类实验 ✅
+      P1A_eeg_classification.yaml    # EEG token 分类 ✅
+      P1A_eeg_raw_baseline.yaml      # EEG raw 基线 ✅
+      P1A_fnirs_classification.yaml  # fNIRS token 分类 ✅
     phase1b/                   # Phase 1B 分析配置 (待添加)
       P1B_token_analysis.yaml
   scripts/
     train_tokenizer.py         # 通用训练脚本 ✅
     run_tokenizer_comparison.py # 对比实验脚本 ✅
-    train_classifier.py        # 分类器训练 (待实现)
+    train_classifier.py        # 分类器训练脚本 ✅ 2026-01-15
+    test_classifier_pipeline.py # 分类器测试脚本 ✅
     analyze_tokens.py          # Token 分析 (待实现)
   runs/                        # 实验运行记录
     comparison_20260114_*/     # Tokenizer 对比实验 ✅
+    P1A_eeg_classification_*/  # EEG 分类实验 ✅
+    P1A_eeg_raw_baseline_*/    # Raw 基线实验 ✅
+    P1A_fnirs_classification_*/ # fNIRS 分类实验 ✅
   results/                     # 汇总结果
 ```
 
@@ -472,36 +490,44 @@ experiments/
 5. [x] **Phase 0 实验**：FSQ/VQ-VAE × EEG/fNIRS 对比 ✅ 2026-01-14
    - 完成 4 组对比实验
    - 结论：VQ-VAE 适合 EEG，FSQ 适合 fNIRS
+6. [x] **Phase 1A 分类器框架** ✅ 2026-01-15
+   - 实现 `src/classifiers/simple_classifier.py` (TokenClassifierHead, SimpleTokenClassifier, RawSignalClassifier)
+   - 实现 `src/classifiers/end_to_end.py` (EndToEndClassifier, MultiModalClassifier)
+   - 实现 `experiments/scripts/train_classifier.py` (分类器训练脚本)
+   - 创建 Phase 1A 实验配置文件
 
-### 🔄 当前：Phase 0+
+### 🔄 当前优先：P0+ 时间对齐 Tokenizer
 
-**P0+.1：多通道 Tokenizer**（优先）
+基于策略调整（2026-01-15），保持单通道 tokenizer + 多导联分类器架构：
 
-1. [ ] 修改 `src/tokenizers/base.py` 支持多通道输入
-   - EEG: input_channels=30 (原有30通道作为特征维度)
-   - fNIRS: input_channels=8 (C3/C4 区域 ROI)
-2. [ ] 创建 `experiments/configs/phase0plus/` 配置目录
-3. [ ] 运行多通道实验，对比单通道结果
+**设计原则**：
+- **Tokenizer**: 单通道，专注编码时间模式，每导联独立 tokenization
+- **Classifier**: 接收多导联输入，负责空间信息聚合
+- **分析**: 通过单导联对之间的 token 序列分析跨模态耦合
 
-**P0+.2：序列长度优化**
+### 📋 短期行动计划 (本周)
 
-4. [ ] EEG 窗口从 100 扩展到 400 samples (2.0s)
-5. [ ] fNIRS 窗口从 100 扩展到 80 samples (8.0s @ 10Hz)
-6. [ ] 评估不同序列长度的重建质量和 token 利用率
+**Step 1: P0+ Tokenizer 时间对齐**
+1. [ ] 创建新配置：EEG 1000 samples (5s)，fNIRS 50 samples (5s)
+2. [ ] 训练对齐后的 tokenizer
+3. [ ] 验证重构质量和 codebook 健康度
 
-### 📋 下阶段：Phase 1A（分类验证）
+**Step 2: 多导联分类器实现**
+4. [ ] 实现 `MultiLeadClassifier`：接收 [B, C, T] 输入
+5. [ ] 修改数据加载器支持多导联输出
+6. [ ] 创建分类实验配置
 
-1. [ ] 实现 `src/classifiers/simple_classifier.py`
-2. [ ] 创建分类实验配置 `experiments/configs/phase1a/`
-3. [ ] 训练 Token 分类器，与 Raw 信号基线对比
-4. [ ] 实现融合分类器（concat / late fusion）
+**Step 3: 分类实验**
+7. [ ] 单模态：EEG 30 导联分类
+8. [ ] 单模态：fNIRS 36 导联分类
+9. [ ] 双模态：融合分类
 
-### 📋 下阶段：Phase 1B（跨模态分析）
+### 📋 Phase 1B（跨模态分析）
 
 1. [ ] 实现 `src/analysis/token_statistics.py`
 2. [ ] 实现 `src/analysis/temporal_coupling.py`
-3. [ ] 运行 token 统计分析（分布、熵、转移概率）
-4. [ ] 运行时序耦合分析（cross-correlation, MI）
+3. [ ] 选取相邻的 EEG-fNIRS 导联对，分析 token 序列耦合
+4. [ ] 运行时序相关分析（cross-correlation, MI）
 5. [ ] 运行因果关系检验（Granger causality）
 
 ### 📋 远期：Phase 2（对齐策略）
