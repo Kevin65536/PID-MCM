@@ -391,3 +391,230 @@
 [8] CSBrain: A Cross-scale Spatiotemporal Brain Foundation Model for EEG Decoding. <https://arxiv.org/abs/2506.23075>.  
 [9] EEG-DINO: Learning EEG Foundation Models via Hierarchical Self-distillation. <https://papers.miccai.org/miccai-2025/paper/3347_paper.pdf>.  
 [10] FoME: A Foundation Model for EEG using Adaptive Temporal-Lateral Attention Scaling. <https://arxiv.org/abs/2409.12454>.
+
+---
+
+## 1. LaBraM：VQ‑NSP 神经 tokenizer + EEG 专用 FM
+
+### 1.1 整体数据流（从原始 EEG 到下游任务）
+
+```mermaid
+flowchart LR
+    A["原始多通道 EEG"] --> B["预处理<br/>(去伪迹, 滤波, 重采样 200Hz)"]
+    B --> C["按通道分割为<br/>时间 patch (长度≈200)"]
+    
+    subgraph T1["阶段 1：VQ‑NSP 神经 tokenizer 训练"]
+        C --> D["卷积/Transformer 编码器<br/>(频谱预测)"]
+        D --> E["向量量化<br/>Codebook 学习<br/>(8192×64)"]
+        E --> F["离散神经 code<br/>(EEG token)"]
+    end
+    
+    subgraph T2["阶段 2：LaBraM 预训练"]
+        C --> G["利用已训练 tokenizer<br/>将每个 patch 编码为 token"]
+        G --> H["随机 Mask 一部分<br/>patch 对应的 token"]
+        H --> I["Transformer Encoder<br/>(labram_base_patch200_1600_8k_vocab)"]
+        I --> J["预测被 Mask 的 token<br/>(重建原 code)"]
+    end
+    
+    J --> K["下游微调模块<br/>(分类/回归头)"]
+    K --> L["异常检测 / 事件分类<br/>情绪识别 / 步态等任务"]
+```
+
+### 1.2 结构要点（tokenizer 侧）
+
+- 输入：单通道 EEG patch（如 3×200×12 等配置）。
+- 编码器：神经网络提取 patch 的时频特征。
+- 向量量化：  
+  - codebook 大小约 **8192**，维度 **64**。  
+  - 使用 EMA / k‑means 初始化等策略稳定训练。
+- 训练目标：**Neural Spectrum Prediction**  
+  → 预测 patch 的频谱并通过 VQ 学习离散 code，使得每个 patch 被映射到一个 codebook 索引（神经 token）。
+- 使用方式：  
+  - 阶段 1：单独训练 tokenizer（`run_vqnsp_training.py`）。  
+  - 阶段 2：冻结 tokenizer，只用离散 token 训练大 Transformer（masked token 预测）。
+
+**一句话总结**：  
+LaBraM 的 tokenizer 是「**单尺度 EEG patch → VQ‑NSP → 8192 类离散神经 token**」，FM 在 token 上做 BERT 式掩码重建。
+
+---
+
+## 2. NeuroLM：在 LaBraM 式 tokenizer 之上的「文本对齐」EEG‑LLM
+
+### 2.1 多模态数据流（EEG & 文本）
+
+```mermaid
+flowchart LR
+    subgraph EEG侧
+        A[原始 EEG] --> B[预处理]
+        B --> C[patch 切分]
+        C --> D["训练 VQ 编码器<br/>(与 LaBraM 类似的<br/>时频 VQ 预测)"]
+        D --> E["冻结的 VQ 编码器<br/>(checkpoints/VQ.pt)"]
+        E --> F[离散 EEG token 序列]
+    end
+
+    subgraph 文本侧
+        G[原始文本] --> H["文本 tokenizer<br/>(BPE/WordPiece 等)"]
+        H --> I["文本 token 序列"]
+    end
+
+    F --> J["输入到 LLM<br/>(当作一种“新语言”)"]
+    I --> J
+
+    subgraph LLM["NeuroLM LLM 主体"]
+        J --> K["多通道自回归建模<br/>(建模 EEG 时间因果结构)"]
+        K --> L["多任务指令微调<br/>(下游任务/对话/解读)"]
+    end
+```
+
+### 2.2 结构要点（tokenizer 与 LLM 解耦）
+
+- **EEG tokenizer**：
+  - 类型：向量量化的时频预测（与 LaBraM 非常相似/兼容），得到离散 EEG token。
+  - 训练：通过 `train_vq.py` 等脚本，先在大规模 EEG 上训练；训练好之后 **冻结**。
+  - 输出：`checkpoints/VQ.pt`，在 NeuroLM 中只作为「前端编码器」。
+
+- **LLM 部分**：
+  - 把 EEG token 与文本 token 都当作「序列符号」，用一个统一的 LLM 来建模。
+  - 对 EEG：做 **多通道自回归**，学习因果结构。
+  - 对多任务：通过 `train_instruction.py` 进行 **指令微调**，在统一 token 空间中完成诊断、理解、BCI 等任务。
+
+**一句话总结**：  
+NeuroLM 在 LaBraM 类 tokenizer 之上，将 EEG token 视作「**与文字等价的离散语言**」，用一个 LLM 统一建模 EEG 与文本。
+
+---
+
+## 3. NeuroRVQ：多尺度 RVQ tokenizer + 小型 FM
+
+### 3.1 多尺度 tokenization 数据流
+
+```mermaid
+flowchart LR
+    A["原始生理信号<br/>(EEG/EMG/ECG...)"] --> B["预处理"]
+    B --> C["分段为时间 patch"]
+
+    subgraph MS["多尺度时间编码器"]
+        direction TB
+        C --> D1["尺度 1<br/>高频/短窗口"]
+        C --> D2["尺度 2<br/>中等窗口"]
+        C --> D3["尺度 3<br/>低频/长窗口"]
+        D1 --> E1["Encoder_1<br/>提取高频特征"]
+        D2 --> E2["Encoder_2<br/>提取中频特征"]
+        D3 --> E3["Encoder_3<br/>提取低频特征"]
+    end
+
+    subgraph RVQ["分尺度 RVQ 量化"]
+        E1 --> F1["RVQ Codebook_1<br/>多级残差量化"]
+        E2 --> F2["RVQ Codebook_2"]
+        E3 --> F3["RVQ Codebook_3"]
+    end
+
+    F1 & F2 & F3 --> G["Transformer Encoder<br/>融合多尺度 token"]
+    G --> H["统一 token 序列"]
+
+    subgraph Dec["Tokenizer 解码器"]
+        H --> I["频谱/patch 重建<br/>(傅里叶域)"]
+    end
+
+    H --> J["NeuroRVQ Foundation Model<br/>(仅在 token 上做<br/>masked token prediction)"]
+```
+
+### 3.2 结构要点（与 LaBraM/NeuroLM 的关键区别）
+
+- 输入：任意多通道生理时间序列（EEG/EMG/ECG）。
+- 多尺度编码：
+  - 使用多尺度时间编码器：同一段信号被不同窗口长度/步长处理，分别提取高频/中频/低频特征。
+- **残差向量量化 (RVQ)**：
+  - 每个尺度都有自己的 RVQ codebook，分级量化残差：  
+    第一层 code 量化主分量，后续层对残差再量化。
+  - 输出：每个 patch 在每个尺度上得到一串 code index。
+- Token 融合：
+  - 不同尺度的 token 通过 Transformer encoder 融合，得到统一 token 序列。
+- 训练目标：
+  - tokenizer：重建输入 patch 的频谱；  
+  - foundation model：在 token 序列上做 **masked token prediction**，学习长程依赖。
+
+**一句话总结**：  
+NeuroRVQ 把 LaBraM 单尺度 VQ 扩展为「**多尺度 + 分层残差量化**」，对 EEG/生理信号给出更丰富、更可扩展的 token 表征。
+
+---
+
+## 4. Neuroformer：统一 token 接口的多模态 GPT（非 VQ）
+
+### 4.1 多模态数据 & token 接口
+
+```mermaid
+flowchart TB
+    subgraph Input["输入数据字典"]
+        A["spikes<br/>(N_neurons×T)"] --> B["Spike 预处理"]
+        C["frames<br/>(图像/视频帧)"] --> D["Frame 特征提取"]
+        E["behavior 变量<br/>(speed/phi/th...)"] --> F["行为特征提取"]
+    end
+
+    B --> G["Spike 序列 token<br/>(“id”)"]
+    D --> H["Frame 序列 token"]
+    F --> I["Behavior 序列 token"]
+
+    G & H & I --> J["统一 embedding 层"]
+    J --> K["GPT 式 Transformer<br/>(多层 MH-Attn + FFN)"]
+
+    K --> L["模态特定 Head<br/>(行为预测/神经解码等)"]
+```
+
+### 4.2 配置驱动的多模态机制
+
+- 数据接口（Data Dictionary）：
+  - `data['spikes']`: (N_neurons, N_timesteps) – 必需。
+  - `data['frames']`: (N_frames, N_timesteps) – 可选。
+  - `data['behavior vars']`: (N_timepoints,) – 可选。
+- 模态配置（config）：
+  - 每个模态可设置：
+    - 是否作为输入 / 预测目标 (`predict: true/false`)；
+    - 任务类型（回归 / 分类）；
+    - 时间分辨率 dt 等。
+- 对比学习 & 多任务：
+  - 可指定对比学习变量列表，如：  
+    `vars: ['id', 'frames', {'behavior': 'speed'}]`  
+    表示 spike token、frame、speed 三者进行对比对齐。
+- 训练目标：
+  - Spike Causal Language Modeling（对 spike 序列做因果建模）。
+  - 行为变量回归/分类。
+  - 多模态对比学习。
+
+**关键差异**：  
+- 它并没有单独的「离散 codebook/VQ tokenizer」模块，而是采用 **连续 embedding 级别的 token**。
+- spike、frame、behavior 等都被「视为 token 序列」，由统一的 GPT transformer 处理。
+
+**一句话总结**：  
+Neuroformer 强调的是「**统一的多模态 token 接口 + GPT 预训练**」，而不是像 LaBraM/NeuroRVQ 那样专门设计的 VQ/RVQ tokenizer。
+
+---
+
+## 5. 四种 tokenizer 思路的核心对比（便于你后续设计 EEG+fNIRS）
+
+| 模型        | token 类型           | 是否显式 codebook | 是否多尺度 | 上层模型         | 适用模态                | 你可借鉴的关键点 |
+|-------------|----------------------|-------------------|------------|------------------|-------------------------|------------------|
+| LaBraM      | 单尺度 VQ‑NSP token  | 是（8192×64）     | 否         | 专用 EEG Transformer | EEG                     | EEG patch 大小、VQ‑NSP 目标、masked code 重建 |
+| NeuroLM     | 文本对齐的 VQ token  | 是（继承 LaBraM） | 否         | LLM (NeuroLM‑XL) | EEG + 文本              | 「冻结 tokenizer + LLM」的解耦接口、多任务指令调优 |
+| NeuroRVQ    | 多尺度 RVQ token     | 是（多级 RVQ）    | 是         | 小型 FM          | EEG/EMG/ECG 等生理信号  | 多尺度 patch 设计、残差量化、token 级 masked prediction |
+| Neuroformer | 连续 embedding token | 否                | 由网络实现 | GPT‑style        | spikes / frames / 行为等 | 配置驱动的多模态 token 接口、统一训练范式 |
+
+---
+
+## 6. 如何利用这些可视化来设计你自己的 EEG+fNIRS tokenizer‑based FM（简要建议）
+
+结合你前面的研究目标，这 4 个图可直接指导你：
+
+1. **EEG 侧**：  
+   - 若追求稳定：先直接复现 **LaBraM 式 VQ‑NSP tokenizer**；  
+   - 若追求表达力：参考 **NeuroRVQ** 做「多尺度 RVQ」。
+
+2. **fNIRS 侧**：  
+   - 没有现成 VQ tokenizer，可按 LaBraM/NeuroRVQ 的结构仿造：  
+     - 「通道空间 + 时间 patch」→ 编码器 → VQ/RVQ → token。  
+   - 因为 fNIRS 频率更低，可以少一些高频尺度，多强调长时间窗口的尺度。
+
+3. **融合层**：
+   - 若偏向 FM 风格：  
+     - EEG token + fNIRS token 拼接 → NeuroRVQ/LaBraM 式 Transformer / 或 Neuroformer 式 GPT。  
+   - 若偏向 LLM 风格：  
+     - 采用 **NeuroLM 范式**：两个模态各自 tokenizer 冻结，把 EEG/fNIRS token 当「多语言」，统一接到 LLM。
