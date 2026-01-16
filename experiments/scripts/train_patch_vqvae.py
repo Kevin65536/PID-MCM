@@ -3,6 +3,7 @@ Train Patch-based VQ-VAE Tokenizers (LaBraM Standard)
 
 Following STANDARDIZATION_GUIDE.md:
 - Uses ExperimentLogger for config loading and metrics tracking
+- Uses TokenizerVisualizer for generating figures
 - Outputs to experiments/runs/<exp_name>_<timestamp>/
 - Saves config.yaml, metrics.json, checkpoints/, figures/
 
@@ -19,7 +20,6 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from tqdm import tqdm
 import numpy as np
 
 # Add src to path
@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.utils.logger import ExperimentLogger
 from src.tokenizers.patch_vqvae import PatchVQVAETokenizer
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.visualization import TokenizerVisualizer
 
 
 def create_dataloader(config: dict, split: str) -> DataLoader:
@@ -45,16 +46,16 @@ def create_dataloader(config: dict, split: str) -> DataLoader:
         shuffle = False
     
     dataset = EEGfNIRSDataset(
-        root_dir=data_cfg['data_root'],
+        data_root=data_cfg['data_root'],
         modality=data_cfg['modality'],
-        subjects=subjects,
+        subject_ids=subjects,
         task=data_cfg.get('task', 'motor_imagery'),
         window_samples=data_cfg['window']['length'],
-        stride_samples=data_cfg['window']['stride'],
-        offset_ms=data_cfg['window'].get('offset_ms', 0),
+        window_offset_ms=data_cfg['window'].get('offset_ms', 0),
         normalize=True,
         exclude_eog=data_cfg.get('exclude_eog', False),
         hbo_only=data_cfg.get('hbo_only', False),
+        hbr_only=data_cfg.get('hbr_only', False),
     )
     
     return DataLoader(
@@ -365,7 +366,80 @@ def main():
     
     logger.log_final(final_metrics)
     
-    # Generate figures
+    # =========================================================================
+    # Generate Visualizations (following STANDARDIZATION_GUIDE.md)
+    # =========================================================================
+    print("\nGenerating visualizations...")
+    
+    # Initialize TokenizerVisualizer
+    visualizer = TokenizerVisualizer(logger.run_dir)
+    
+    # 1. Training curves from metrics history
+    metrics_history = logger.get_metrics_history()
+    visualizer.plot_training_curves(metrics_history)
+    
+    # 2. Get validation samples for reconstruction visualization
+    print("  Collecting samples for visualization...")
+    tokenizer.eval()
+    all_originals = []
+    all_reconstructed = []
+    all_indices = []
+    
+    with torch.no_grad():
+        for batch in val_loader:
+            if isinstance(batch, dict):
+                x = batch['data']
+            else:
+                x = batch[0]
+            
+            x = x.to(device)
+            B, C, T = x.shape
+            x_flat = x.view(B * C, T)
+            
+            outputs = tokenizer(x_flat)
+            all_originals.append(x_flat.cpu())
+            all_reconstructed.append(outputs['x_rec'].cpu())
+            all_indices.append(outputs['indices'].cpu())
+            
+            # Limit to ~200 samples
+            if sum(o.shape[0] for o in all_originals) >= 200:
+                break
+    
+    original = torch.cat(all_originals, dim=0)
+    reconstructed = torch.cat(all_reconstructed, dim=0)
+    indices = torch.cat(all_indices, dim=0)
+    
+    # 3. Reconstruction samples
+    visualizer.plot_reconstruction_samples(
+        original, reconstructed, 
+        n_samples=4, 
+        fs=sr
+    )
+    
+    # 4. Spectral comparison
+    visualizer.plot_spectral_comparison(
+        original, reconstructed, 
+        fs=sr,
+        n_samples=100
+    )
+    
+    # 5. Codebook usage histogram
+    visualizer.plot_codebook_usage(indices, tokenizer.codebook_size)
+    
+    # 6. Token embeddings (t-SNE/PCA)
+    embeddings = tokenizer.get_codebook_embeddings()
+    if embeddings is not None:
+        flat_indices = indices.flatten()
+        usage = torch.bincount(flat_indices, minlength=tokenizer.codebook_size)
+        visualizer.plot_token_embeddings(embeddings, usage)
+    
+    # 7. Summary figure
+    visualizer.generate_summary_figure(final_metrics, config)
+    
+    # Save figure manifest
+    visualizer.save_figure_manifest()
+    
+    # Also generate default logger figures
     logger.generate_figures()
     
     print(f"\n{'='*60}")
@@ -373,6 +447,7 @@ def main():
     print(f"Best validation loss: {best_val_loss:.4f}")
     print(f"Final utilization: {val_metrics['val_utilization']*100:.1f}%")
     print(f"Run directory: {logger.run_dir}")
+    print(f"Generated figures: {len(visualizer.get_generated_figures())}")
     print(f"{'='*60}")
 
 
