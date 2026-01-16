@@ -6,5 +6,6 @@ Contains VQ-VAE, FSQ, and other quantization methods.
 from .base import BaseTokenizer
 from .fsq import FSQTokenizer
 from .vqvae import VQVAETokenizer
+from .patch_vqvae import PatchVQVAETokenizer
 
-__all__ = ['BaseTokenizer', 'FSQTokenizer', 'VQVAETokenizer']
+__all__ = ['BaseTokenizer', 'FSQTokenizer', 'VQVAETokenizer', 'PatchVQVAETokenizer']
