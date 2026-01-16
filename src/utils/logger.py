@@ -507,6 +507,38 @@ Token Statistics:
     def get_config(self) -> Dict[str, Any]:
         """Return the merged configuration."""
         return self.config
+    
+    def get_metrics_history(self) -> List[Dict[str, Any]]:
+        """
+        Return metrics history in format expected by TokenizerVisualizer.
+        
+        Transforms logged epoch data into visualization-compatible format.
+        """
+        history = []
+        for epoch_data in self.metrics.get("epochs", []):
+            entry = {
+                "epoch": epoch_data.get("epoch", 0),
+                "reconstruction_mse": epoch_data.get("loss_breakdown", {}).get("reconstruction", 
+                                      epoch_data.get("train_loss", 0)),
+                "val_reconstruction_mse": epoch_data.get("val_loss", 0),
+            }
+            # Add metrics
+            metrics = epoch_data.get("metrics", {})
+            entry["perplexity"] = metrics.get("perplexity", 0)
+            entry["code_utilization"] = metrics.get("train_utilization", 
+                                        metrics.get("val_utilization", 0))
+            entry["dead_codes"] = entry.get("code_utilization", 1) * self.config.get("model", {}).get(
+                "quantizer", {}).get("codebook_size", 1024)
+            entry["dead_codes"] = int((1 - entry["code_utilization"]) * self.config.get("model", {}).get(
+                "quantizer", {}).get("codebook_size", 1024))
+            
+            # Add loss breakdown
+            for key, val in epoch_data.get("loss_breakdown", {}).items():
+                entry[f"{key}_mse"] = val
+            
+            history.append(entry)
+        
+        return history
 
 
 def update_comparison_csv(experiments_dir: str = "experiments"):
