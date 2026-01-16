@@ -8,6 +8,10 @@
 
 | Date | ID | Phase | Description | Status |
 |------|-----|-------|-------------|--------|
+| 2026-01-15 | EXP-011 | P1A | Dual-Modality (4s MI window) | ⚠️ 46.7% |
+| 2026-01-15 | EXP-010 | P1A | fNIRS Classification (4s MI window) | ⚠️ 49.2% |
+| 2026-01-15 | EXP-009 | P1A | EEG Classification (4s MI window) | ⚠️ 55.0% |
+| 2026-01-15 | EXP-008 | P0+ | LaBraM-style Tokenizers (4s window) | ✅ Complete |
 | 2026-01-15 | EXP-007 | P1A | Dual-Modality Multi-Lead Classification | ⚠️ Chance level |
 | 2026-01-15 | EXP-006 | P1A | fNIRS Multi-Lead Classification (5s) | ⚠️ Chance level |
 | 2026-01-15 | EXP-005 | P1A | EEG Multi-Lead Classification (5s) | ⚠️ ~54% |
@@ -16,6 +20,167 @@
 | 2026-01-15 | EXP-002 | P1A | EEG Raw Baseline Classification | ⚠️ Chance level |
 | 2026-01-15 | EXP-001 | P1A | EEG Token Classification (single-channel) | ⚠️ Chance level |
 | 2026-01-14 | EXP-000 | P0 | Tokenizer Comparison (FSQ vs VQ-VAE) | ✅ Complete |
+
+---
+
+## EXP-011: Dual-Modality Classification with 4s MI Window (2026-01-15)
+
+### Objective
+使用4秒MI标准窗口和LaBraM风格tokenizer进行双模态融合分类。
+
+### Configuration
+```yaml
+Run: experiments/runs/P1A_both_attention_early_20260115_233642/
+Tokenizers: 
+  - EEG: VQVAE (800 samples = 4s @ 200Hz), 100 tokens
+  - fNIRS: VQVAE (40 samples = 4s @ 10Hz), 10 tokens
+Window Offset: 500ms (MI response delay)
+Classifier: DualModalityMultiLeadClassifier
+  - EEG leads: 32
+  - fNIRS leads: 36
+  - Aggregation: attention
+  - Fusion: early
+```
+
+### Results
+```
+| Metric | Value |
+|--------|-------|
+| Accuracy | 46.7% |
+| Precision | 47.6% |
+| Recall | 67.5% |
+| F1 | 55.9% |
+
+Confusion Matrix (Test):
+[[31, 89]
+ [39, 81]]
+```
+
+### Conclusion
+- ⚠️ 双模态融合性能反而下降（46.7% < 55.0%）
+- 可能原因：两个模态的噪声叠加，或融合层需要更多训练数据
+
+---
+
+## EXP-010: fNIRS Classification with 4s MI Window (2026-01-15)
+
+### Objective
+使用4秒MI窗口和对齐的fNIRS VQVAE tokenizer进行分类。
+
+### Configuration
+```yaml
+Run: experiments/runs/P1A_fnirs_attention_20260115_233533/
+Tokenizer: VQVAE_fNIRS_Aligned (4s window, 10 tokens, dim=64)
+Window Offset: 500ms
+Classifier: MultiLeadClassifier
+  - Leads: 36
+  - Aggregation: attention
+```
+
+### Results
+```
+| Metric | Value |
+|--------|-------|
+| Accuracy | 49.2% |
+| Precision | 49.5% |
+| Recall | 89.2% |
+| F1 | 63.7% |
+
+Confusion Matrix (Test):
+[[11, 109]
+ [13, 107]]
+```
+
+### Conclusion
+- ⚠️ fNIRS分类仍接近chance level
+- 高recall但极低precision说明模型偏向预测一个类别
+- fNIRS对MI任务可能不敏感
+
+---
+
+## EXP-009: EEG Classification with 4s MI Window (2026-01-15)
+
+### Objective
+使用4秒MI标准窗口和LaBraM风格tokenizer进行EEG分类。这是最接近标准MI-BCI实验设置的实验。
+
+### Configuration
+```yaml
+Run: experiments/runs/P1A_eeg_attention_20260115_232738/
+Tokenizer: VQVAE_EEG_LaBraM
+  - Input: 800 samples (4s @ 200Hz)
+  - Output: 100 tokens
+  - Codebook: 1024, dim=64
+  - Test MSE: 0.0186, Utilization: 99%
+Window Offset: 500ms (standard MI response delay)
+Classifier: MultiLeadClassifier
+  - Leads: 32
+  - Aggregation: attention
+  - Hidden dim: 128
+  - Params: 33,667
+```
+
+### Results
+```
+| Metric | Value |
+|--------|-------|
+| Accuracy | 55.0% |
+| Precision | 54.5% |
+| Recall | 60.0% |
+| F1 | 57.1% |
+
+Confusion Matrix (Test):
+[[60, 60]
+ [48, 72]]
+```
+
+### Conclusion
+- ⚠️ 准确率55%，略高于chance level但仍不理想
+- **这是本阶段最好的结果**
+- 与文献报告的MI-BCI准确率(60-80%)仍有差距
+- **关键问题**: 冻结的tokenizer可能不包含任务判别特征
+
+---
+
+## EXP-008: LaBraM-style Tokenizers with 4s Window (2026-01-15)
+
+### Objective
+按照LaBraM/NeuroLM等EEG foundation model的标准做法，训练4秒窗口的VQ-VAE tokenizer。
+
+### Code Changes
+- `experiments/scripts/train_labram_tokenizers.py`: 新增LaBraM风格tokenizer训练脚本
+
+### Configuration
+```yaml
+Run: experiments/runs/LaBraM_tokenizers_20260115_232415/
+
+EEG Tokenizer:
+  - Input: 800 samples (4.0s @ 200Hz)
+  - Encoder: (64, 128, 256), kernel=7, stride=2
+  - Output: 100 tokens, dim=64
+  - Codebook: 1024, commitment=0.25, EMA decay=0.99
+
+fNIRS Tokenizer (Aligned):
+  - Input: 40 samples (4.0s @ 10Hz)
+  - Encoder: (64, 128), kernel=5, stride=2
+  - Output: 10 tokens, dim=64
+  - Codebook: 1024, commitment=0.25, EMA decay=0.99
+
+Training: 100 epochs, batch_size=64, lr=0.001
+```
+
+### Results
+```
+| Model | MSE | Perplexity | Utilization | Dead Codes |
+|-------|-----|------------|-------------|------------|
+| VQVAE_EEG_LaBraM | 0.0186 | 760.2 | 99.0% | 10/1024 |
+| VQVAE_fNIRS_Aligned | 0.0066 | 374.4 | 49.7% | 515/1024 |
+```
+
+### Conclusion
+- ✅ EEG tokenizer表现优秀：低MSE，高perplexity，99%利用率
+- ✅ fNIRS tokenizer重建质量好，但codebook利用率较低(50%)
+- ✅ 两模态token维度对齐(dim=64)，时间对齐(4s)
+- **下一步**: 使用这些tokenizer进行下游分类
 
 ---
 

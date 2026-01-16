@@ -41,6 +41,7 @@ from src.data.eeg_fnirs_dataset import (
 from src.tokenizers.vqvae import VQVAETokenizer
 from src.tokenizers.fsq import FSQTokenizer
 from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
+from src.visualization.classifier_plots import ClassifierVisualizer, visualize_classifier_run
 
 
 # =============================================================================
@@ -48,20 +49,20 @@ from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLea
 # =============================================================================
 
 TOKENIZER_PATHS = {
-    'eeg': 'experiments/runs/P0plus_aligned_20260115_174100/VQVAE_EEG_5s/best_model.pt',
-    'fnirs': 'experiments/runs/P0plus_aligned_20260115_174100/FSQ_fNIRS_5s/best_model.pt',
+    'eeg': 'experiments/runs/LaBraM_tokenizers_20260115_232415/VQVAE_EEG_LaBraM/best_model.pt',
+    'fnirs': 'experiments/runs/LaBraM_tokenizers_20260115_232415/VQVAE_fNIRS_Aligned/best_model.pt',
 }
 
-# EEG config
+# EEG config (4s MI window @ 200Hz)
 EEG_CONFIG = {
-    'seq_length': 1000,  # 5s @ 200Hz
-    'num_leads': 30,
+    'seq_length': 800,  # 4s @ 200Hz (MI standard)
+    'num_leads': 32,    # Actual EEG channels in dataset
     'sample_rate': 200,
 }
 
-# fNIRS config
+# fNIRS config (4s MI window @ 10Hz)
 FNIRS_CONFIG = {
-    'seq_length': 50,  # 5s @ 10Hz
+    'seq_length': 40,  # 4s @ 10Hz
     'num_leads': 36,
     'sample_rate': 10,
 }
@@ -77,7 +78,11 @@ def load_tokenizer(modality: str, device: str) -> nn.Module:
     checkpoint = torch.load(path, weights_only=False)
     config = checkpoint['config']
     
-    if modality == 'eeg':
+    # Check model type from config
+    model_type = config.get('model_type', 'vqvae')
+    
+    if model_type == 'vqvae' or 'codebook_size' in config:
+        # VQ-VAE tokenizer
         tokenizer = VQVAETokenizer(
             seq_length=config['seq_length'],
             input_channels=config['input_channels'],
@@ -88,6 +93,7 @@ def load_tokenizer(modality: str, device: str) -> nn.Module:
             encoder_stride=config['stride'],
         )
     else:
+        # FSQ tokenizer
         tokenizer = FSQTokenizer(
             seq_length=config['seq_length'],
             input_channels=config['input_channels'],
@@ -118,6 +124,7 @@ class MultiLeadDataset(torch.utils.data.Dataset):
         window_samples: int,
         task: str = 'motor_imagery',
         normalize: bool = True,
+        window_offset_ms: float = 500,  # MI response delay: 0.5s after cue
     ):
         self.base_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -126,6 +133,7 @@ class MultiLeadDataset(torch.utils.data.Dataset):
             modality=modality,
             window_samples=window_samples,
             normalize=normalize,
+            window_offset_ms=window_offset_ms,
         )
         
     def __len__(self):
@@ -148,6 +156,7 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
         fnirs_window_samples: int,
         task: str = 'motor_imagery',
         normalize: bool = True,
+        window_offset_ms: float = 500,  # MI response delay
     ):
         self.eeg_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -156,6 +165,7 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
             modality='eeg',
             window_samples=eeg_window_samples,
             normalize=normalize,
+            window_offset_ms=window_offset_ms,
         )
         self.fnirs_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -164,6 +174,7 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
             modality='fnirs',
             window_samples=fnirs_window_samples,
             normalize=normalize,
+            window_offset_ms=window_offset_ms,
         )
         
         # Align by (subject, session, trial)
@@ -298,6 +309,7 @@ def evaluate(
     criterion: nn.Module,
     device: str,
     modality: str,
+    return_predictions: bool = False,
 ) -> Dict[str, Any]:
     """Evaluate model."""
     model.eval()
@@ -305,6 +317,8 @@ def evaluate(
     total_loss = 0.0
     all_preds = []
     all_labels = []
+    all_probs = []
+    all_subjects = []
     
     for batch in dataloader:
         if modality == 'both':
@@ -321,11 +335,15 @@ def evaluate(
         
         logits = outputs['logits']
         loss = criterion(logits, labels)
+        probs = torch.softmax(logits, dim=-1)
         
         total_loss += loss.item()
         preds = logits.argmax(dim=-1).cpu().numpy()
         all_preds.extend(preds)
         all_labels.extend(labels.cpu().numpy())
+        all_probs.extend(probs.cpu().numpy())
+        if 'subject_id' in batch:
+            all_subjects.extend(batch['subject_id'].cpu().numpy() if isinstance(batch['subject_id'], torch.Tensor) else batch['subject_id'])
     
     accuracy = accuracy_score(all_labels, all_preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
@@ -333,7 +351,7 @@ def evaluate(
     )
     conf_matrix = confusion_matrix(all_labels, all_preds)
     
-    return {
+    result = {
         'loss': total_loss / len(dataloader),
         'accuracy': accuracy,
         'precision': precision,
@@ -341,6 +359,13 @@ def evaluate(
         'f1': f1,
         'confusion_matrix': conf_matrix.tolist(),
     }
+    
+    if return_predictions:
+        result['y_true'] = np.array(all_labels)
+        result['y_probs'] = np.array(all_probs)
+        result['subjects'] = np.array(all_subjects) if all_subjects else None
+    
+    return result
 
 
 def train_classifier(
@@ -463,7 +488,23 @@ def train_classifier(
     checkpoint = torch.load(output_dir / 'best_model.pt', weights_only=False)
     model.load_state_dict(checkpoint['model_state_dict'])
     
-    test_metrics = evaluate(model, dataloaders['test'], criterion, device, modality)
+    test_metrics = evaluate(model, dataloaders['test'], criterion, device, modality, return_predictions=True)
+    
+    # Extract predictions for visualization
+    y_true = test_metrics.pop('y_true', None)
+    y_probs = test_metrics.pop('y_probs', None)
+    subjects = test_metrics.pop('subjects', None)
+    
+    # Compute per-subject accuracy
+    subject_accuracies = None
+    if subjects is not None and len(subjects) > 0:
+        subject_accuracies = {}
+        for subj in np.unique(subjects):
+            mask = subjects == subj
+            if mask.sum() > 0:
+                subj_preds = np.argmax(y_probs[mask], axis=1)
+                subj_acc = np.mean(subj_preds == y_true[mask])
+                subject_accuracies[int(subj)] = float(subj_acc)
     
     # Save results
     results = {
@@ -480,6 +521,47 @@ def train_classifier(
     
     with open(output_dir / 'results.json', 'w') as f:
         json.dump(results, f, indent=2)
+    
+    # Generate visualizations
+    print("\n[Visualization] Generating figures...")
+    
+    # Prepare metrics history for visualization
+    metrics_history = []
+    for i, (train_m, val_m) in enumerate(zip(history['train'], history['val'])):
+        metrics_history.append({
+            'epoch': i + 1,
+            'loss': train_m['loss'],
+            'accuracy': train_m['accuracy'],
+            'val_loss': val_m['loss'],
+            'val_accuracy': val_m['accuracy'],
+        })
+    
+    # Create config dict for visualization
+    viz_config = {
+        'experiment': {'name': f'P1A_{modality}_{aggregation}'},
+        'data': {'modality': modality},
+        'classifier': {'type': f'multi_lead_{aggregation}'},
+    }
+    
+    final_metrics = {
+        'test_accuracy': test_metrics['accuracy'],
+        'test_precision': test_metrics['precision'],
+        'test_recall': test_metrics['recall'],
+        'test_f1': test_metrics['f1'],
+        'test_confusion_matrix': test_metrics['confusion_matrix'],
+        'best_val_accuracy': best_val_acc,
+    }
+    
+    visualize_classifier_run(
+        run_dir=output_dir,
+        metrics_history=metrics_history,
+        final_metrics=final_metrics,
+        config=viz_config,
+        y_true=y_true,
+        y_probs=y_probs,
+        subject_accuracies=subject_accuracies,
+        class_names=['Left MI', 'Right MI'],
+    )
     
     print(f"\nTest Results:")
     print(f"  Accuracy: {test_metrics['accuracy']*100:.1f}%")
