@@ -9,9 +9,15 @@ Key findings from data exploration (2026-01-14):
 - Event intervals match well between modalities (mean diff ~0ms, std ~40ms)
 - Labels are identical between modalities for corresponding events
 - Session 0,2,4: Motor Imagery (LMI/RMI), Session 1,3,5: Mental Arithmetic (MA/BL)
+
+Channel Structure:
+- EEG: 30 channels total (28 EEG + 2 EOG: 'EOGv', 'EOGh')
+- fNIRS: 72 channels (36 HbO + 36 HbR, HbO channels end with '_O', HbR channels end with '_R')
+  - Current implementation supports filtering to use only HbO channels
 """
 
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Literal, Union
 from dataclasses import dataclass, field
@@ -20,6 +26,81 @@ import numpy as np
 import scipy.io as sio
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+
+# =============================================================================
+# Channel Filtering Utilities
+# =============================================================================
+
+def get_eeg_channel_mask(channel_names: List[str], exclude_eog: bool = True) -> np.ndarray:
+    """
+    Get a boolean mask for EEG channels, optionally excluding EOG channels.
+    
+    Args:
+        channel_names: List of channel names
+        exclude_eog: If True, exclude EOG channels (EOGv, EOGh, VEOG, HEOG, etc.)
+        
+    Returns:
+        Boolean mask array where True = include channel
+    """
+    eog_patterns = ['EOG', 'eog', 'VEOG', 'HEOG']
+    mask = np.ones(len(channel_names), dtype=bool)
+    
+    if exclude_eog:
+        for i, name in enumerate(channel_names):
+            for pattern in eog_patterns:
+                if pattern in name:
+                    mask[i] = False
+                    break
+    
+    return mask
+
+
+def get_fnirs_channel_mask(
+    channel_names: List[str], 
+    hbo_only: bool = True,
+    hbr_only: bool = False
+) -> np.ndarray:
+    """
+    Get a boolean mask for fNIRS channels, filtering by chromophore type.
+    
+    This dataset uses wavelength-based naming convention:
+    - 'highWL' suffix = high wavelength (~850nm) → sensitive to HbO (oxy-hemoglobin)
+    - 'lowWL' suffix = low wavelength (~760nm) → sensitive to HbR (deoxy-hemoglobin)
+    
+    Note: Some datasets may use '_O' and '_R' suffixes instead.
+    
+    Args:
+        channel_names: List of channel names
+        hbo_only: If True, only include HbO (oxy-hemoglobin) channels (highWL)
+        hbr_only: If True, only include HbR (deoxy-hemoglobin) channels (lowWL)
+        
+    Returns:
+        Boolean mask array where True = include channel
+    """
+    if hbo_only and hbr_only:
+        raise ValueError("Cannot set both hbo_only and hbr_only to True")
+    
+    mask = np.ones(len(channel_names), dtype=bool)
+    
+    if hbo_only:
+        # Only include channels with highWL (HbO) or _O suffix
+        for i, name in enumerate(channel_names):
+            if 'highWL' in name or name.endswith('_O'):
+                mask[i] = True
+            elif 'lowWL' in name or name.endswith('_R'):
+                mask[i] = False
+            # If neither pattern matches, keep the channel (conservative)
+    elif hbr_only:
+        # Only include channels with lowWL (HbR) or _R suffix
+        for i, name in enumerate(channel_names):
+            if 'lowWL' in name or name.endswith('_R'):
+                mask[i] = True
+            elif 'highWL' in name or name.endswith('_O'):
+                mask[i] = False
+            # If neither pattern matches, keep the channel (conservative)
+    
+    return mask
 
 
 @dataclass
@@ -216,6 +297,10 @@ class EEGfNIRSDataset(Dataset):
     PyTorch Dataset for EEG+NIRS Single-Trial data.
     
     Extracts fixed-length windows around event markers for training tokenizers.
+    
+    Channel Filtering:
+    - EEG: Can exclude EOG channels (EOGv, EOGh) via exclude_eog parameter
+    - fNIRS: Can filter to HbO-only or HbR-only channels via hbo_only/hbr_only parameters
     """
     
     def __init__(
@@ -228,6 +313,10 @@ class EEGfNIRSDataset(Dataset):
         window_offset_ms: float = 0,  # Offset from event onset (can be negative for pre-stimulus)
         normalize: bool = True,
         use_artifact_data: bool = True,
+        # Channel filtering options
+        exclude_eog: bool = True,  # For EEG: exclude EOG channels
+        hbo_only: bool = True,     # For fNIRS: only use HbO channels
+        hbr_only: bool = False,    # For fNIRS: only use HbR channels
     ):
         """
         Initialize the dataset.
@@ -241,6 +330,9 @@ class EEGfNIRSDataset(Dataset):
             window_offset_ms: Offset from event onset in milliseconds
             normalize: Whether to z-score normalize each window
             use_artifact_data: If True, use 'with occular artifact' folder for EEG
+            exclude_eog: If True, exclude EOG channels from EEG data (default: True)
+            hbo_only: If True, only use HbO channels for fNIRS (default: True)
+            hbr_only: If True, only use HbR channels for fNIRS (default: False)
         """
         self.data_root = Path(data_root)
         self.subject_ids = subject_ids or list(range(1, 30))
@@ -250,6 +342,11 @@ class EEGfNIRSDataset(Dataset):
         self.window_offset_ms = window_offset_ms
         self.normalize = normalize
         self.use_artifact_data = use_artifact_data
+        
+        # Channel filtering options
+        self.exclude_eog = exclude_eog
+        self.hbo_only = hbo_only
+        self.hbr_only = hbr_only
         
         # Loader for data access
         self.loader = BBCIDataLoader(
@@ -270,8 +367,12 @@ class EEGfNIRSDataset(Dataset):
         self.trials: List[TrialInfo] = []
         self._build_trial_index()
         
-        # Cache for loaded data
+        # Cache for loaded data (will store filtered data)
         self._data_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        
+        # Cache for channel mask (computed once per subject)
+        self._channel_mask_cache: Dict[int, np.ndarray] = {}
+        self._filtered_channel_names_cache: Dict[int, List[str]] = {}
         
     def _build_trial_index(self):
         """Build an index of all available trials."""
@@ -311,10 +412,39 @@ class EEGfNIRSDataset(Dataset):
                 print(f"Warning: Could not load subject {subject_id}: {e}")
                 
     def _get_subject_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load subject data."""
+        """Get cached or load subject data with channel filtering applied."""
         if subject_id not in self._data_cache:
             cnt_list, mrk_list, info = self.loader.load_subject_data(subject_id, self.modality)
-            self._data_cache[subject_id] = (cnt_list, mrk_list, info)
+            
+            # Get channel mask for filtering
+            channel_names = list(info['clab'])
+            if self.modality == 'eeg':
+                channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=self.exclude_eog)
+            else:  # fnirs
+                channel_mask = get_fnirs_channel_mask(
+                    channel_names, 
+                    hbo_only=self.hbo_only, 
+                    hbr_only=self.hbr_only
+                )
+            
+            # Apply channel filtering to all sessions
+            filtered_cnt_list = []
+            for cnt in cnt_list:
+                # cnt shape: (n_samples, n_channels) -> filter channels
+                filtered_cnt = cnt[:, channel_mask]
+                filtered_cnt_list.append(filtered_cnt)
+            
+            # Update channel info
+            filtered_info = info.copy()
+            filtered_channel_names = [name for i, name in enumerate(channel_names) if channel_mask[i]]
+            filtered_info['clab'] = filtered_channel_names
+            filtered_info['original_clab'] = channel_names
+            filtered_info['channel_mask'] = channel_mask
+            
+            self._data_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
+            self._channel_mask_cache[subject_id] = channel_mask
+            self._filtered_channel_names_cache[subject_id] = filtered_channel_names
+            
         return self._data_cache[subject_id]
     
     def __len__(self) -> int:
@@ -379,12 +509,24 @@ class EEGfNIRSDataset(Dataset):
         }
     
     def get_channel_names(self) -> List[str]:
-        """Get the channel names for the current modality."""
+        """Get the channel names for the current modality (after filtering)."""
         if len(self.trials) == 0:
             return []
         first_subject = self.trials[0].subject_id
         _, _, info = self._get_subject_data(first_subject)
         return list(info['clab'])
+    
+    def get_num_channels(self) -> int:
+        """Get the number of channels (after filtering)."""
+        return len(self.get_channel_names())
+    
+    def get_original_channel_names(self) -> List[str]:
+        """Get the original channel names before filtering."""
+        if len(self.trials) == 0:
+            return []
+        first_subject = self.trials[0].subject_id
+        _, _, info = self._get_subject_data(first_subject)
+        return list(info.get('original_clab', info['clab']))
     
     def get_sample_rate(self) -> float:
         """Get the sampling rate for the current modality."""
@@ -401,6 +543,10 @@ class MultiModalEEGfNIRSDataset(Dataset):
     
     Returns aligned windows from both modalities for the same trial.
     Note: Due to different sampling rates, window durations are matched, not sample counts.
+    
+    Channel Filtering:
+    - EEG: Can exclude EOG channels (EOGv, EOGh) via exclude_eog parameter
+    - fNIRS: Can filter to HbO-only or HbR-only channels via hbo_only/hbr_only parameters
     """
     
     def __init__(
@@ -412,6 +558,10 @@ class MultiModalEEGfNIRSDataset(Dataset):
         window_offset_ms: float = 0,
         normalize: bool = True,
         use_artifact_data: bool = True,
+        # Channel filtering options
+        exclude_eog: bool = True,  # For EEG: exclude EOG channels
+        hbo_only: bool = True,     # For fNIRS: only use HbO channels
+        hbr_only: bool = False,    # For fNIRS: only use HbR channels
     ):
         """
         Initialize the multimodal dataset.
@@ -424,6 +574,9 @@ class MultiModalEEGfNIRSDataset(Dataset):
             window_offset_ms: Offset from event onset in milliseconds
             normalize: Whether to z-score normalize each window
             use_artifact_data: If True, use 'with occular artifact' folder for EEG
+            exclude_eog: If True, exclude EOG channels from EEG data (default: True)
+            hbo_only: If True, only use HbO channels for fNIRS (default: True)
+            hbr_only: If True, only use HbR channels for fNIRS (default: False)
         """
         self.data_root = Path(data_root)
         self.subject_ids = subject_ids or list(range(1, 30))
@@ -431,6 +584,11 @@ class MultiModalEEGfNIRSDataset(Dataset):
         self.window_duration_s = window_duration_s
         self.window_offset_ms = window_offset_ms
         self.normalize = normalize
+        
+        # Channel filtering options
+        self.exclude_eog = exclude_eog
+        self.hbo_only = hbo_only
+        self.hbr_only = hbr_only
         
         # Loaders for both modalities
         self.eeg_loader = BBCIDataLoader(
@@ -520,17 +678,59 @@ class MultiModalEEGfNIRSDataset(Dataset):
                 print(f"Warning: Could not load subject {subject_id}: {e}")
     
     def _get_eeg_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load EEG data."""
+        """Get cached or load EEG data with channel filtering applied."""
         if subject_id not in self._eeg_cache:
             cnt_list, mrk_list, info = self.eeg_loader.load_subject_data(subject_id, 'eeg')
-            self._eeg_cache[subject_id] = (cnt_list, mrk_list, info)
+            
+            # Get channel mask for filtering
+            channel_names = list(info['clab'])
+            channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=self.exclude_eog)
+            
+            # Apply channel filtering to all sessions
+            filtered_cnt_list = []
+            for cnt in cnt_list:
+                filtered_cnt = cnt[:, channel_mask]
+                filtered_cnt_list.append(filtered_cnt)
+            
+            # Update channel info
+            filtered_info = info.copy()
+            filtered_channel_names = [name for i, name in enumerate(channel_names) if channel_mask[i]]
+            filtered_info['clab'] = filtered_channel_names
+            filtered_info['original_clab'] = channel_names
+            filtered_info['channel_mask'] = channel_mask
+            
+            self._eeg_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
+            
         return self._eeg_cache[subject_id]
     
     def _get_nirs_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load NIRS data."""
+        """Get cached or load NIRS data with channel filtering applied."""
         if subject_id not in self._nirs_cache:
             cnt_list, mrk_list, info = self.nirs_loader.load_subject_data(subject_id, 'fnirs')
-            self._nirs_cache[subject_id] = (cnt_list, mrk_list, info)
+            
+            # Get channel mask for filtering
+            channel_names = list(info['clab'])
+            channel_mask = get_fnirs_channel_mask(
+                channel_names, 
+                hbo_only=self.hbo_only, 
+                hbr_only=self.hbr_only
+            )
+            
+            # Apply channel filtering to all sessions
+            filtered_cnt_list = []
+            for cnt in cnt_list:
+                filtered_cnt = cnt[:, channel_mask]
+                filtered_cnt_list.append(filtered_cnt)
+            
+            # Update channel info
+            filtered_info = info.copy()
+            filtered_channel_names = [name for i, name in enumerate(channel_names) if channel_mask[i]]
+            filtered_info['clab'] = filtered_channel_names
+            filtered_info['original_clab'] = channel_names
+            filtered_info['channel_mask'] = channel_mask
+            
+            self._nirs_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
+            
         return self._nirs_cache[subject_id]
     
     def _extract_window(
@@ -609,6 +809,46 @@ class MultiModalEEGfNIRSDataset(Dataset):
             'session_idx': trial.session_idx,
             'trial_idx': trial.trial_idx,
         }
+    
+    def get_eeg_channel_names(self) -> List[str]:
+        """Get the EEG channel names (after filtering)."""
+        if len(self.trials) == 0:
+            return []
+        first_subject = self.trials[0].subject_id
+        _, _, info = self._get_eeg_data(first_subject)
+        return list(info['clab'])
+    
+    def get_fnirs_channel_names(self) -> List[str]:
+        """Get the fNIRS channel names (after filtering)."""
+        if len(self.trials) == 0:
+            return []
+        first_subject = self.trials[0].subject_id
+        _, _, info = self._get_nirs_data(first_subject)
+        return list(info['clab'])
+    
+    def get_num_eeg_channels(self) -> int:
+        """Get the number of EEG channels (after filtering)."""
+        return len(self.get_eeg_channel_names())
+    
+    def get_num_fnirs_channels(self) -> int:
+        """Get the number of fNIRS channels (after filtering)."""
+        return len(self.get_fnirs_channel_names())
+    
+    def get_eeg_sample_rate(self) -> float:
+        """Get the EEG sampling rate."""
+        if len(self.trials) == 0:
+            return 0.0
+        first_subject = self.trials[0].subject_id
+        _, _, info = self._get_eeg_data(first_subject)
+        return float(info['fs'])
+    
+    def get_fnirs_sample_rate(self) -> float:
+        """Get the fNIRS sampling rate."""
+        if len(self.trials) == 0:
+            return 0.0
+        first_subject = self.trials[0].subject_id
+        _, _, info = self._get_nirs_data(first_subject)
+        return float(info['fs'])
 
 
 def create_dataloaders(
@@ -622,6 +862,9 @@ def create_dataloaders(
     window_duration_s: float = 2.5,
     batch_size: int = 32,
     num_workers: int = 0,
+    exclude_eog: bool = True,
+    hbo_only: bool = True,
+    hbr_only: bool = False,
     **kwargs
 ) -> Dict[str, DataLoader]:
     """
@@ -638,6 +881,9 @@ def create_dataloaders(
         window_duration_s: Window duration for multimodal
         batch_size: Batch size
         num_workers: DataLoader workers
+        exclude_eog: If True, exclude EOG channels from EEG data (default: True)
+        hbo_only: If True, only use HbO channels for fNIRS (default: True)
+        hbr_only: If True, only use HbR channels for fNIRS (default: False)
         **kwargs: Additional arguments for dataset
         
     Returns:
@@ -664,6 +910,9 @@ def create_dataloaders(
                 subject_ids=subject_ids,
                 task=task,
                 window_duration_s=window_duration_s,
+                exclude_eog=exclude_eog,
+                hbo_only=hbo_only,
+                hbr_only=hbr_only,
                 **kwargs
             )
         else:
@@ -673,6 +922,9 @@ def create_dataloaders(
                 task=task,
                 modality=modality,
                 window_samples=window_samples,
+                exclude_eog=exclude_eog,
+                hbo_only=hbo_only,
+                hbr_only=hbr_only,
                 **kwargs
             )
         
@@ -706,28 +958,68 @@ if __name__ == '__main__':
     print(f"  Interval diff: mean={sync_info.interval_diff_mean_ms:.1f}, std={sync_info.interval_diff_std_ms:.1f}, max={sync_info.interval_diff_max_ms:.1f} ms")
     print(f"  Labels match: {sync_info.labels_match}")
     
+    # Show raw channel info
     print("\n" + "=" * 60)
-    print("Testing EEGfNIRSDataset (single modality)")
+    print("Testing Channel Filtering")
     print("=" * 60)
     
+    cnt_list, _, info = loader.load_subject_data(1, 'eeg')
+    eeg_channels = list(info['clab'])
+    print(f"\nOriginal EEG channels ({len(eeg_channels)}): {eeg_channels}")
+    eeg_mask = get_eeg_channel_mask(eeg_channels, exclude_eog=True)
+    eeg_filtered = [ch for i, ch in enumerate(eeg_channels) if eeg_mask[i]]
+    print(f"Filtered EEG channels ({len(eeg_filtered)}, exclude_eog=True): {eeg_filtered}")
+    
+    cnt_list, _, info = loader.load_subject_data(1, 'fnirs')
+    fnirs_channels = list(info['clab'])
+    print(f"\nOriginal fNIRS channels ({len(fnirs_channels)}): {fnirs_channels[:10]}... (showing first 10)")
+    fnirs_mask = get_fnirs_channel_mask(fnirs_channels, hbo_only=True)
+    fnirs_filtered = [ch for i, ch in enumerate(fnirs_channels) if fnirs_mask[i]]
+    print(f"Filtered fNIRS channels ({len(fnirs_filtered)}, hbo_only=True): {fnirs_filtered[:10]}... (showing first 10)")
+    
+    print("\n" + "=" * 60)
+    print("Testing EEGfNIRSDataset (single modality) with filtering")
+    print("=" * 60)
+    
+    # Test EEG with EOG exclusion
     dataset = EEGfNIRSDataset(
         data_root=data_root,
         subject_ids=[1, 2],
         task='motor_imagery',
         modality='eeg',
         window_samples=512,
+        exclude_eog=True,  # Default: exclude EOG
     )
     
-    print(f"Dataset size: {len(dataset)}")
-    print(f"Sample rate: {dataset.get_sample_rate()} Hz")
-    print(f"Channels: {len(dataset.get_channel_names())} - {dataset.get_channel_names()[:5]}...")
+    print(f"\nEEG Dataset (exclude_eog=True):")
+    print(f"  Dataset size: {len(dataset)}")
+    print(f"  Sample rate: {dataset.get_sample_rate()} Hz")
+    print(f"  Channels ({dataset.get_num_channels()}): {dataset.get_channel_names()}")
     
     sample = dataset[0]
-    print(f"Sample data shape: {sample['data'].shape}")
-    print(f"Sample label: {sample['label']}")
+    print(f"  Sample data shape: {sample['data'].shape}")
+    print(f"  Sample label: {sample['label']}")
+    
+    # Test fNIRS with HbO only
+    dataset_fnirs = EEGfNIRSDataset(
+        data_root=data_root,
+        subject_ids=[1, 2],
+        task='motor_imagery',
+        modality='fnirs',
+        window_samples=25,  # ~2.5s @ 10Hz
+        hbo_only=True,  # Default: HbO only
+    )
+    
+    print(f"\nfNIRS Dataset (hbo_only=True):")
+    print(f"  Dataset size: {len(dataset_fnirs)}")
+    print(f"  Sample rate: {dataset_fnirs.get_sample_rate()} Hz")
+    print(f"  Channels ({dataset_fnirs.get_num_channels()}): {dataset_fnirs.get_channel_names()[:5]}...")
+    
+    sample_fnirs = dataset_fnirs[0]
+    print(f"  Sample data shape: {sample_fnirs['data'].shape}")
     
     print("\n" + "=" * 60)
-    print("Testing MultiModalEEGfNIRSDataset")
+    print("Testing MultiModalEEGfNIRSDataset with filtering")
     print("=" * 60)
     
     mm_dataset = MultiModalEEGfNIRSDataset(
@@ -735,13 +1027,17 @@ if __name__ == '__main__':
         subject_ids=[1, 2],
         task='motor_imagery',
         window_duration_s=2.5,
+        exclude_eog=True,
+        hbo_only=True,
     )
     
     print(f"Dataset size: {len(mm_dataset)}")
+    print(f"EEG channels ({mm_dataset.get_num_eeg_channels()}): {mm_dataset.get_eeg_channel_names()}")
+    print(f"fNIRS channels ({mm_dataset.get_num_fnirs_channels()}): {mm_dataset.get_fnirs_channel_names()[:5]}...")
     
     mm_sample = mm_dataset[0]
     print(f"EEG shape: {mm_sample['eeg'].shape}")
-    print(f"NIRS shape: {mm_sample['fnirs'].shape}")
+    print(f"fNIRS shape: {mm_sample['fnirs'].shape}")
     print(f"Label: {mm_sample['label']}")
     
     print("\n" + "=" * 60)
@@ -757,6 +1053,7 @@ if __name__ == '__main__':
         test_subjects=[4],
         window_samples=512,
         batch_size=8,
+        exclude_eog=True,
     )
     
     for split, dl in dataloaders.items():

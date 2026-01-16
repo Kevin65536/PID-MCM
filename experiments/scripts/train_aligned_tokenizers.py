@@ -277,6 +277,9 @@ def train_tokenizer(
         window_samples=config.seq_length,
         batch_size=config.batch_size,
         num_workers=0,
+        # Channel filtering: exclude EOG for EEG, use HbO only for fNIRS
+        exclude_eog=True,
+        hbo_only=True,
     )
     
     print(f"Train: {len(dataloaders['train'].dataset)} samples")

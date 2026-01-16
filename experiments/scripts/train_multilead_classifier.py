@@ -56,14 +56,14 @@ TOKENIZER_PATHS = {
 # EEG config (4s MI window @ 200Hz)
 EEG_CONFIG = {
     'seq_length': 800,  # 4s @ 200Hz (MI standard)
-    'num_leads': 32,    # Actual EEG channels in dataset
+    'num_leads': 28,    # EEG channels after excluding EOG (30 - 2 = 28)
     'sample_rate': 200,
 }
 
 # fNIRS config (4s MI window @ 10Hz)
 FNIRS_CONFIG = {
     'seq_length': 40,  # 4s @ 10Hz
-    'num_leads': 36,
+    'num_leads': 36,   # HbO channels only (36 HbO out of 72 total)
     'sample_rate': 10,
 }
 
@@ -125,6 +125,8 @@ class MultiLeadDataset(torch.utils.data.Dataset):
         task: str = 'motor_imagery',
         normalize: bool = True,
         window_offset_ms: float = 500,  # MI response delay: 0.5s after cue
+        exclude_eog: bool = True,  # Exclude EOG channels from EEG
+        hbo_only: bool = True,     # Use only HbO channels for fNIRS
     ):
         self.base_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -134,6 +136,8 @@ class MultiLeadDataset(torch.utils.data.Dataset):
             window_samples=window_samples,
             normalize=normalize,
             window_offset_ms=window_offset_ms,
+            exclude_eog=exclude_eog,
+            hbo_only=hbo_only,
         )
         
     def __len__(self):
@@ -157,6 +161,8 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
         task: str = 'motor_imagery',
         normalize: bool = True,
         window_offset_ms: float = 500,  # MI response delay
+        exclude_eog: bool = True,  # Exclude EOG channels from EEG
+        hbo_only: bool = True,     # Use only HbO channels for fNIRS
     ):
         self.eeg_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -166,6 +172,7 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
             window_samples=eeg_window_samples,
             normalize=normalize,
             window_offset_ms=window_offset_ms,
+            exclude_eog=exclude_eog,
         )
         self.fnirs_dataset = EEGfNIRSDataset(
             data_root=data_root,
@@ -175,6 +182,7 @@ class DualModalityMultiLeadDataset(torch.utils.data.Dataset):
             window_samples=fnirs_window_samples,
             normalize=normalize,
             window_offset_ms=window_offset_ms,
+            hbo_only=hbo_only,
         )
         
         # Align by (subject, session, trial)

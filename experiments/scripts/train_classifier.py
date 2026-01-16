@@ -455,6 +455,10 @@ def train(config_path: str, epochs: Optional[int] = None):
         batch_size=config['training']['batch_size'],
         num_workers=data_config.get('num_workers', 0),
         normalize=data_config.get('normalize', True),
+        # Channel filtering options
+        exclude_eog=data_config.get('exclude_eog', True),
+        hbo_only=data_config.get('hbo_only', True),
+        hbr_only=data_config.get('hbr_only', False),
     )
     
     print(f"[Data] Train: {len(dataloaders['train'].dataset)}, "
