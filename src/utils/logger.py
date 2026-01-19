@@ -58,8 +58,8 @@ class ExperimentLogger:
         # Create subdirectories
         self.checkpoints_dir = self.run_dir / "checkpoints"
         self.figures_dir = self.run_dir / "figures"
-        self.checkpoints_dir.mkdir(exist_ok=True)
-        self.figures_dir.mkdir(exist_ok=True)
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        self.figures_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize metrics storage
         self.metrics = {
@@ -166,6 +166,9 @@ class ExperimentLogger:
     
     def save_checkpoint(self, state_dict: Dict, epoch: int, is_best: bool = False):
         """Save model checkpoint."""
+        # Ensure directory exists
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        
         checkpoint_path = self.checkpoints_dir / f"checkpoint_epoch_{epoch}.pt"
         
         # Import torch only when needed
