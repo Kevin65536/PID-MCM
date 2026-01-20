@@ -2,6 +2,7 @@ experiments/runs
 experiments/configs
 experiments/logs
 experiments/results
+experiments/probe_results
 
 reference_repository
 

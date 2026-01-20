@@ -89,6 +89,72 @@ def create_tokenizer(config: dict) -> PatchVQVAETokenizer:
     )
 
 
+def compute_spectral_loss(original: torch.Tensor, reconstructed: torch.Tensor, 
+                          config: dict) -> torch.Tensor:
+    """Compute multi-scale spectral loss."""
+    spectral_cfg = config.get('loss', {}).get('spectral', {})
+    if not spectral_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    fft_sizes = spectral_cfg.get('fft_sizes', [64, 128, 256])
+    hop_sizes = spectral_cfg.get('hop_sizes', [16, 32, 64])
+    win_sizes = spectral_cfg.get('win_sizes', [64, 128, 256])
+    
+    total_loss = torch.tensor(0.0, device=original.device)
+    
+    for fft_size, hop_size, win_size in zip(fft_sizes, hop_sizes, win_sizes):
+        # Simple FFT-based spectral loss
+        if original.shape[-1] >= fft_size:
+            # Compute magnitude spectrum
+            orig_fft = torch.fft.rfft(original, n=fft_size, dim=-1)
+            rec_fft = torch.fft.rfft(reconstructed, n=fft_size, dim=-1)
+            
+            orig_mag = torch.abs(orig_fft)
+            rec_mag = torch.abs(rec_fft)
+            
+            # Log magnitude loss (more sensitive to low-amplitude frequencies)
+            eps = 1e-8
+            log_orig = torch.log(orig_mag + eps)
+            log_rec = torch.log(rec_mag + eps)
+            
+            total_loss = total_loss + F.mse_loss(log_rec, log_orig)
+    
+    return total_loss / len(fft_sizes)
+
+
+def compute_smoothness_loss(original: torch.Tensor, reconstructed: torch.Tensor,
+                            config: dict) -> torch.Tensor:
+    """Compute temporal smoothness loss (L2 norm of second derivative)."""
+    smoothness_cfg = config.get('loss', {}).get('smoothness', {})
+    if not smoothness_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    # Second derivative of reconstructed signal
+    diff1 = reconstructed[:, 1:] - reconstructed[:, :-1]
+    diff2 = diff1[:, 1:] - diff1[:, :-1]
+    
+    # Same for original
+    orig_diff1 = original[:, 1:] - original[:, :-1]
+    orig_diff2 = orig_diff1[:, 1:] - orig_diff1[:, :-1]
+    
+    # Match second derivative to preserve curvature
+    return F.mse_loss(diff2, orig_diff2)
+
+
+def compute_derivative_loss(original: torch.Tensor, reconstructed: torch.Tensor,
+                            config: dict) -> torch.Tensor:
+    """Compute first derivative matching loss for trend tracking."""
+    deriv_cfg = config.get('loss', {}).get('derivative', {})
+    if not deriv_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    # First derivative
+    orig_deriv = original[:, 1:] - original[:, :-1]
+    rec_deriv = reconstructed[:, 1:] - reconstructed[:, :-1]
+    
+    return F.mse_loss(rec_deriv, orig_deriv)
+
+
 def train_epoch(
     tokenizer: PatchVQVAETokenizer,
     dataloader: DataLoader,
@@ -129,10 +195,22 @@ def train_epoch(
         # VQ loss (commitment)
         vq_loss = outputs['commitment_loss']
         
-        # Total loss
+        # Additional losses
+        spectral_loss = compute_spectral_loss(x_flat, outputs['x_rec'], config)
+        smoothness_loss = compute_smoothness_loss(x_flat, outputs['x_rec'], config)
+        derivative_loss = compute_derivative_loss(x_flat, outputs['x_rec'], config)
+        
+        # Total loss with weights
         loss_cfg = config.get('loss', {})
         rec_weight = loss_cfg.get('reconstruction', {}).get('weight', 1.0)
-        loss = rec_weight * rec_loss + vq_loss
+        spectral_weight = loss_cfg.get('spectral', {}).get('weight', 0.0)
+        smoothness_weight = loss_cfg.get('smoothness', {}).get('weight', 0.0)
+        derivative_weight = loss_cfg.get('derivative', {}).get('weight', 0.0)
+        
+        loss = (rec_weight * rec_loss + vq_loss + 
+                spectral_weight * spectral_loss +
+                smoothness_weight * smoothness_loss +
+                derivative_weight * derivative_loss)
         
         # Backward
         optimizer.zero_grad()
