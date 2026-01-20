@@ -1,618 +1,533 @@
-#!/usr/bin/env python
 """
-Train tokenizer (FSQ / VQ-VAE) on EEG/fNIRS data.
+Train Patch-based VQ-VAE Tokenizers (LaBraM Standard)
+
+Following STANDARDIZATION_GUIDE.md:
+- Uses ExperimentLogger for config loading and metrics tracking
+- Uses TokenizerVisualizer for generating figures
+- Outputs to experiments/runs/<exp_name>_<timestamp>/
+- Saves config.yaml, metrics.json, checkpoints/, figures/
 
 Usage:
-    python train_tokenizer.py --config phase0/P0_eeg_fsq.yaml
-    python train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml --epochs 50
+    python train_patch_vqvae.py --config phase0plus/eeg_patch_vqvae_1s.yaml
+    python train_patch_vqvae.py --config phase0plus/fnirs_patch_vqvae_4s.yaml
 """
 
-# Fix OMP duplicate library error (must be before numpy/torch imports)
-import os
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-import argparse
 import sys
-import json
-import hashlib
+import argparse
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any
 
-import yaml
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split, Dataset
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import numpy as np
 
-# Add project root to path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Import visualization module
-from src.visualization.tokenizer_plots import TokenizerVisualizer, visualize_tokenizer_run
-sys.path.insert(0, str(project_root))
+from src.utils.logger import ExperimentLogger
+from src.tokenizers.patch_vqvae import PatchVQVAETokenizer
+from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.visualization import TokenizerVisualizer
 
 
-# =============================================================================
-# Configuration Loading
-# =============================================================================
-
-def load_config(config_path: str) -> Dict[str, Any]:
-    """Load experiment configuration with base config inheritance."""
-    configs_dir = project_root / "experiments" / "configs"
+def create_dataloader(config: dict, split: str) -> DataLoader:
+    """Create dataloader for specified split."""
+    data_cfg = config['data']
     
-    # Load base config
-    base_path = configs_dir / "base.yaml"
-    with open(base_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    if split == 'train':
+        subjects = data_cfg['split']['train_subjects']
+        shuffle = True
+    elif split == 'val':
+        subjects = data_cfg['split']['val_subjects']
+        shuffle = False
+    else:
+        subjects = data_cfg['split']['test_subjects']
+        shuffle = False
     
-    # Load experiment-specific config and merge
-    exp_path = configs_dir / config_path
-    if exp_path.exists():
-        with open(exp_path, 'r', encoding='utf-8') as f:
-            exp_config = yaml.safe_load(f)
-        config = deep_merge(config, exp_config)
+    dataset = EEGfNIRSDataset(
+        data_root=data_cfg['data_root'],
+        modality=data_cfg['modality'],
+        subject_ids=subjects,
+        task=data_cfg.get('task', 'motor_imagery'),
+        window_samples=data_cfg['window']['length'],
+        window_offset_ms=data_cfg['window'].get('offset_ms', 0),
+        normalize=True,
+        exclude_eog=data_cfg.get('exclude_eog', False),
+        hbo_only=data_cfg.get('hbo_only', False),
+        hbr_only=data_cfg.get('hbr_only', False),
+    )
     
-    return config
+    return DataLoader(
+        dataset,
+        batch_size=config['training']['batch_size'],
+        shuffle=shuffle,
+        num_workers=data_cfg.get('num_workers', 0),
+        pin_memory=True,
+        drop_last=split == 'train',
+    )
 
 
-def deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge override into base."""
-    result = base.copy()
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value)
+def create_tokenizer(config: dict) -> PatchVQVAETokenizer:
+    """Create patch-based VQ-VAE tokenizer from config."""
+    model_cfg = config['model']
+    patch_cfg = model_cfg.get('patch', {})
+    encoder_cfg = model_cfg.get('encoder', {})
+    quantizer_cfg = model_cfg.get('quantizer', {})
+    
+    return PatchVQVAETokenizer(
+        seq_length=model_cfg['seq_length'],
+        patch_size=patch_cfg.get('size', 200),
+        input_channels=model_cfg.get('input_channels', 1),
+        codebook_size=quantizer_cfg.get('codebook_size', 1024),
+        embedding_dim=quantizer_cfg.get('embedding_dim', 64),
+        hidden_dim=encoder_cfg.get('hidden_dim', 256),
+        num_layers=encoder_cfg.get('num_layers', 2),
+        encoder_type=encoder_cfg.get('type', 'cnn'),
+        commitment_cost=quantizer_cfg.get('commitment_cost', 0.25),
+        ema_decay=quantizer_cfg.get('ema_decay', 0.99),
+    )
+
+
+def compute_spectral_loss(original: torch.Tensor, reconstructed: torch.Tensor, 
+                          config: dict) -> torch.Tensor:
+    """Compute multi-scale spectral loss."""
+    spectral_cfg = config.get('loss', {}).get('spectral', {})
+    if not spectral_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    fft_sizes = spectral_cfg.get('fft_sizes', [64, 128, 256])
+    hop_sizes = spectral_cfg.get('hop_sizes', [16, 32, 64])
+    win_sizes = spectral_cfg.get('win_sizes', [64, 128, 256])
+    
+    total_loss = torch.tensor(0.0, device=original.device)
+    
+    for fft_size, hop_size, win_size in zip(fft_sizes, hop_sizes, win_sizes):
+        # Simple FFT-based spectral loss
+        if original.shape[-1] >= fft_size:
+            # Compute magnitude spectrum
+            orig_fft = torch.fft.rfft(original, n=fft_size, dim=-1)
+            rec_fft = torch.fft.rfft(reconstructed, n=fft_size, dim=-1)
+            
+            orig_mag = torch.abs(orig_fft)
+            rec_mag = torch.abs(rec_fft)
+            
+            # Log magnitude loss (more sensitive to low-amplitude frequencies)
+            eps = 1e-8
+            log_orig = torch.log(orig_mag + eps)
+            log_rec = torch.log(rec_mag + eps)
+            
+            total_loss = total_loss + F.mse_loss(log_rec, log_orig)
+    
+    return total_loss / len(fft_sizes)
+
+
+def compute_smoothness_loss(original: torch.Tensor, reconstructed: torch.Tensor,
+                            config: dict) -> torch.Tensor:
+    """Compute temporal smoothness loss (L2 norm of second derivative)."""
+    smoothness_cfg = config.get('loss', {}).get('smoothness', {})
+    if not smoothness_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    # Second derivative of reconstructed signal
+    diff1 = reconstructed[:, 1:] - reconstructed[:, :-1]
+    diff2 = diff1[:, 1:] - diff1[:, :-1]
+    
+    # Same for original
+    orig_diff1 = original[:, 1:] - original[:, :-1]
+    orig_diff2 = orig_diff1[:, 1:] - orig_diff1[:, :-1]
+    
+    # Match second derivative to preserve curvature
+    return F.mse_loss(diff2, orig_diff2)
+
+
+def compute_derivative_loss(original: torch.Tensor, reconstructed: torch.Tensor,
+                            config: dict) -> torch.Tensor:
+    """Compute first derivative matching loss for trend tracking."""
+    deriv_cfg = config.get('loss', {}).get('derivative', {})
+    if not deriv_cfg.get('enabled', False):
+        return torch.tensor(0.0, device=original.device)
+    
+    # First derivative
+    orig_deriv = original[:, 1:] - original[:, :-1]
+    rec_deriv = reconstructed[:, 1:] - reconstructed[:, :-1]
+    
+    return F.mse_loss(rec_deriv, orig_deriv)
+
+
+def train_epoch(
+    tokenizer: PatchVQVAETokenizer,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    config: dict,
+) -> dict:
+    """Train for one epoch."""
+    tokenizer.train()
+    
+    total_loss = 0.0
+    total_rec_loss = 0.0
+    total_vq_loss = 0.0
+    total_samples = 0
+    total_perplexity = 0.0
+    total_utilization = 0.0
+    n_batches = 0
+    
+    for batch in dataloader:
+        # Get data
+        if isinstance(batch, dict):
+            x = batch['data']  # [B, C, T]
         else:
-            result[key] = value
-    return result
-
-
-def get_config_hash(config: dict) -> str:
-    """Generate a short hash of config for identification."""
-    config_str = json.dumps(config, sort_keys=True)
-    return hashlib.md5(config_str.encode()).hexdigest()[:8]
-
-
-# =============================================================================
-# Placeholder Dataset (to be replaced with real EEG/fNIRS loaders)
-# =============================================================================
-
-class PlaceholderDataset(Dataset):
-    """
-    Placeholder dataset that generates synthetic data for testing.
-    Replace with real EEG/fNIRS dataset implementations.
-    """
-    
-    def __init__(
-        self, 
-        modality: str = "eeg",
-        n_samples: int = 5000,
-        seq_length: int = 512,
-        n_channels: int = 1,
-        seed: int = 42
-    ):
-        super().__init__()
-        self.modality = modality
-        self.n_samples = n_samples
-        self.seq_length = seq_length
-        self.n_channels = n_channels
+            x = batch[0]
         
-        # Generate synthetic data
-        np.random.seed(seed)
+        x = x.to(device)
+        B, C, T = x.shape
         
-        if modality == "eeg":
-            # EEG-like: Mix of oscillations (alpha, beta) + noise
-            fs = 200  # Hz
-            t = np.linspace(0, seq_length / fs, seq_length)
-            self.data = np.zeros((n_samples, n_channels, seq_length), dtype=np.float32)
-            
-            for i in range(n_samples):
-                alpha = np.sin(2 * np.pi * (8 + np.random.rand() * 4) * t)  # 8-12 Hz
-                beta = 0.5 * np.sin(2 * np.pi * (15 + np.random.rand() * 10) * t)  # 15-25 Hz
-                noise = 0.3 * np.random.randn(seq_length)
-                signal = alpha + beta + noise
-                self.data[i, 0] = signal.astype(np.float32)
-                
-        else:  # fnirs
-            # fNIRS-like: Low frequency oscillations + hemodynamic response
-            fs = 10  # Hz
-            t = np.linspace(0, seq_length / fs, seq_length)
-            self.data = np.zeros((n_samples, n_channels, seq_length), dtype=np.float32)
-            
-            for i in range(n_samples):
-                # Slow drift
-                drift = 0.1 * np.sin(2 * np.pi * 0.05 * t)
-                # Mayer waves (~0.1 Hz)
-                mayer = 0.2 * np.sin(2 * np.pi * 0.1 * t)
-                # Random HRF-like response
-                hrf_onset = np.random.randint(0, seq_length // 2)
-                hrf = np.zeros(seq_length)
-                if hrf_onset < seq_length - 20:
-                    hrf_kernel = np.exp(-np.linspace(0, 3, 20)) * np.linspace(0, 1, 20)
-                    hrf[hrf_onset:hrf_onset+20] = hrf_kernel
-                noise = 0.1 * np.random.randn(seq_length)
-                signal = drift + mayer + hrf + noise
-                self.data[i, 0] = signal.astype(np.float32)
+        # Process each channel independently
+        x_flat = x.view(B * C, T)  # [B*C, T]
         
-        # Normalize
-        self.data = (self.data - self.data.mean()) / (self.data.std() + 1e-8)
-    
-    def __len__(self):
-        return self.n_samples
-    
-    def __getitem__(self, idx):
-        x = torch.from_numpy(self.data[idx])
-        if self.n_channels == 1:
-            x = x.squeeze(0)  # [T] for single channel
-        return {'x': x, 'idx': idx}
-
-
-# =============================================================================
-# Training Utilities
-# =============================================================================
-
-def create_model(config: dict) -> nn.Module:
-    """Create tokenizer model based on config."""
-    model_type = config['model']['type']
-    
-    if model_type == "fsq":
-        from src.tokenizers.fsq import FSQTokenizer
-        return FSQTokenizer(
-            seq_length=config['model']['seq_length'],
-            input_channels=config['model'].get('input_channels', 1),
-            levels=config['model']['quantizer']['levels'],
-            encoder_dims=config['model']['encoder']['hidden_dims'],
-            encoder_kernel=config['model']['encoder']['kernel_size'],
-            encoder_stride=config['model']['encoder']['stride'],
-        )
-    elif model_type == "vqvae":
-        from src.tokenizers.vqvae import VQVAETokenizer
-        return VQVAETokenizer(
-            seq_length=config['model']['seq_length'],
-            input_channels=config['model'].get('input_channels', 1),
-            codebook_size=config['model']['quantizer']['codebook_size'],
-            embedding_dim=config['model']['quantizer']['embedding_dim'],
-            commitment_cost=config['model']['quantizer'].get('commitment_cost', 0.25),
-            ema_decay=config['model']['quantizer'].get('ema_decay', 0.99),
-            encoder_dims=config['model']['encoder']['hidden_dims'],
-            encoder_kernel=config['model']['encoder']['kernel_size'],
-            encoder_stride=config['model']['encoder']['stride'],
-        )
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
-
-
-def compute_losses(outputs: dict, batch: dict, config: dict, device: torch.device) -> dict:
-    """Compute all loss components."""
-    x = batch['x'].to(device)
-    x_rec = outputs['x_rec']
-    
-    loss_config = config.get('loss', {})
-    
-    # Reconstruction loss
-    recon_type = loss_config.get('reconstruction', {}).get('type', 'mse')
-    if recon_type == 'mse':
-        l_recon = F.mse_loss(x_rec, x)
-    elif recon_type == 'huber':
-        l_recon = F.smooth_l1_loss(x_rec, x)
-    else:
-        l_recon = F.mse_loss(x_rec, x)
-    
-    # Spectral loss (optional)
-    l_spectral = torch.tensor(0.0, device=device)
-    spectral_config = loss_config.get('spectral', {})
-    if spectral_config.get('enabled', False):
-        l_spectral = compute_spectral_loss(x, x_rec, spectral_config)
-    
-    # Commitment loss (for VQ-VAE)
-    l_commit = outputs.get('commitment_loss', torch.tensor(0.0, device=device))
-    
-    # Weighted sum
-    w_recon = loss_config.get('reconstruction', {}).get('weight', 1.0)
-    w_spectral = spectral_config.get('weight', 0.1) if spectral_config.get('enabled', False) else 0.0
-    w_commit = loss_config.get('commitment', {}).get('weight', 0.25)
-    
-    total = w_recon * l_recon + w_spectral * l_spectral + w_commit * l_commit
+        # Forward pass
+        outputs = tokenizer(x_flat)
+        
+        # Reconstruction loss
+        rec_loss = F.mse_loss(outputs['x_rec'], x_flat)
+        
+        # VQ loss (commitment)
+        vq_loss = outputs['commitment_loss']
+        
+        # Additional losses
+        spectral_loss = compute_spectral_loss(x_flat, outputs['x_rec'], config)
+        smoothness_loss = compute_smoothness_loss(x_flat, outputs['x_rec'], config)
+        derivative_loss = compute_derivative_loss(x_flat, outputs['x_rec'], config)
+        
+        # Total loss with weights
+        loss_cfg = config.get('loss', {})
+        rec_weight = loss_cfg.get('reconstruction', {}).get('weight', 1.0)
+        spectral_weight = loss_cfg.get('spectral', {}).get('weight', 0.0)
+        smoothness_weight = loss_cfg.get('smoothness', {}).get('weight', 0.0)
+        derivative_weight = loss_cfg.get('derivative', {}).get('weight', 0.0)
+        
+        loss = (rec_weight * rec_loss + vq_loss + 
+                spectral_weight * spectral_loss +
+                smoothness_weight * smoothness_loss +
+                derivative_weight * derivative_loss)
+        
+        # Backward
+        optimizer.zero_grad()
+        loss.backward()
+        
+        # Gradient clipping
+        grad_clip = config['training'].get('gradient_clip', 1.0)
+        if grad_clip > 0:
+            torch.nn.utils.clip_grad_norm_(tokenizer.parameters(), grad_clip)
+        
+        optimizer.step()
+        
+        # Metrics
+        total_loss += loss.item() * B
+        total_rec_loss += rec_loss.item() * B
+        total_vq_loss += vq_loss.item() * B
+        total_samples += B
+        total_perplexity += outputs['perplexity'].item()
+        total_utilization += outputs['code_utilization'].item()
+        n_batches += 1
     
     return {
-        'total': total,
-        'reconstruction_mse': l_recon.item(),
-        'spectral_mse': l_spectral.item() if isinstance(l_spectral, torch.Tensor) else l_spectral,
-        'commitment_loss': l_commit.item() if isinstance(l_commit, torch.Tensor) else l_commit,
+        'loss': total_loss / total_samples,
+        'rec_loss': total_rec_loss / total_samples,
+        'vq_loss': total_vq_loss / total_samples,
+        'perplexity': total_perplexity / n_batches,
+        'utilization': total_utilization / n_batches,
     }
 
 
-def compute_spectral_loss(x: torch.Tensor, x_rec: torch.Tensor, config: dict) -> torch.Tensor:
-    """Compute multi-scale STFT loss."""
-    fft_sizes = config.get('fft_sizes', [64, 128, 256])
+@torch.no_grad()
+def validate(
+    tokenizer: PatchVQVAETokenizer,
+    dataloader: DataLoader,
+    device: torch.device,
+) -> dict:
+    """Validate tokenizer."""
+    tokenizer.eval()
     
-    loss = torch.tensor(0.0, device=x.device)
+    total_rec_loss = 0.0
+    total_samples = 0
+    all_indices = []
     
-    for n_fft in fft_sizes:
-        # Ensure x and x_rec are [B, T]
-        if x.dim() == 3:
-            x_2d = x.squeeze(1)
-            x_rec_2d = x_rec.squeeze(1)
+    for batch in dataloader:
+        if isinstance(batch, dict):
+            x = batch['data']
         else:
-            x_2d = x
-            x_rec_2d = x_rec
+            x = batch[0]
         
-        # Compute STFT
-        window = torch.hann_window(n_fft, device=x.device)
+        x = x.to(device)
+        B, C, T = x.shape
         
-        # Pad if needed
-        if x_2d.shape[-1] < n_fft:
-            pad_size = n_fft - x_2d.shape[-1]
-            x_2d = F.pad(x_2d, (0, pad_size))
-            x_rec_2d = F.pad(x_rec_2d, (0, pad_size))
+        x_flat = x.view(B * C, T)
+        outputs = tokenizer(x_flat)
         
-        stft_x = torch.stft(x_2d, n_fft, hop_length=n_fft//4, window=window, return_complex=True)
-        stft_rec = torch.stft(x_rec_2d, n_fft, hop_length=n_fft//4, window=window, return_complex=True)
+        rec_loss = F.mse_loss(outputs['x_rec'], x_flat)
+        total_rec_loss += rec_loss.item() * B
+        total_samples += B
         
-        # Magnitude loss
-        mag_x = stft_x.abs()
-        mag_rec = stft_rec.abs()
-        loss = loss + F.mse_loss(mag_rec, mag_x)
+        all_indices.append(outputs['indices'].cpu())
     
-    return loss / len(fft_sizes)
-
-
-def compute_codebook_health(indices: torch.Tensor, codebook_size: int) -> dict:
-    """Compute codebook health metrics."""
-    flat = indices.flatten()
-    usage = torch.bincount(flat, minlength=codebook_size).float()
-    usage_prob = usage / (usage.sum() + 1e-10)
-    
-    # Perplexity
-    entropy = -(usage_prob * torch.log(usage_prob + 1e-10)).sum()
-    perplexity = torch.exp(entropy)
-    
-    # Utilization
-    active_codes = (usage > 0).sum()
-    utilization = active_codes / codebook_size
-    
-    # Dead codes
-    dead_codes = (usage == 0).sum()
+    # Compute code utilization
+    all_indices = torch.cat(all_indices, dim=0).flatten()
+    unique_codes = torch.unique(all_indices)
+    utilization = len(unique_codes) / tokenizer.codebook_size
     
     return {
-        'perplexity': perplexity.item(),
-        'code_utilization': utilization.item(),
-        'dead_codes': dead_codes.item(),
-        'active_codes': active_codes.item(),
+        'val_rec_loss': total_rec_loss / total_samples,
+        'val_utilization': utilization,
+        'val_unique_codes': len(unique_codes),
     }
 
 
-# =============================================================================
-# Experiment Logger
-# =============================================================================
-
-class TokenizerLogger:
-    """Logger for tokenizer training experiments."""
+def main():
+    parser = argparse.ArgumentParser(description="Train Patch VQ-VAE Tokenizer")
+    parser.add_argument('--config', type=str, required=True,
+                        help='Config file path (relative to experiments/configs/)')
+    args = parser.parse_args()
     
-    def __init__(self, config: dict, config_path: str):
-        self.config = config
-        self.config_path = config_path
-        
-        # Create run directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        exp_name = config['experiment']['name']
-        self.run_name = f"{exp_name}_{timestamp}"
-        
-        self.runs_dir = project_root / "experiments" / "runs"
-        self.run_dir = self.runs_dir / self.run_name
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create subdirectories
-        (self.run_dir / "checkpoints").mkdir(exist_ok=True)
-        (self.run_dir / "figures").mkdir(exist_ok=True)
-        
-        # Save config
-        with open(self.run_dir / "config.yaml", 'w') as f:
-            yaml.dump(config, f, default_flow_style=False)
-        
-        # Initialize metrics storage
-        self.metrics = {
-            'config_hash': get_config_hash(config),
-            'started_at': datetime.now().isoformat(),
-            'epochs': [],
-        }
+    # Initialize ExperimentLogger (handles config loading and run directory)
+    logger = ExperimentLogger(config_path=args.config)
+    config = logger.config
     
-    def log_epoch(self, epoch: int, metrics: dict):
-        """Log metrics for an epoch."""
-        self.metrics['epochs'].append({
-            'epoch': epoch,
-            **metrics
-        })
-        
-        # Save metrics incrementally
-        with open(self.run_dir / "metrics.json", 'w') as f:
-            json.dump(self.metrics, f, indent=2)
+    print(f"\n{'='*60}")
+    print(f"Training Patch-based VQ-VAE Tokenizer")
+    print(f"{'='*60}")
+    print(f"Experiment: {config['experiment']['name']}")
+    print(f"Description: {config['experiment'].get('description', 'N/A')}")
+    print(f"Modality: {config['data']['modality']}")
     
-    def save_checkpoint(self, state: dict, epoch: int):
-        """Save model checkpoint."""
-        path = self.run_dir / "checkpoints" / f"checkpoint_epoch_{epoch}.pt"
-        torch.save(state, path)
+    # Device
+    device = torch.device(config['experiment'].get('device', 'cuda') 
+                          if torch.cuda.is_available() else 'cpu')
+    print(f"Device: {device}")
     
-    def save_final(self, final_metrics: dict):
-        """Save final metrics and model."""
-        self.metrics['completed_at'] = datetime.now().isoformat()
-        self.metrics['final_metrics'] = final_metrics
-        
-        with open(self.run_dir / "metrics.json", 'w') as f:
-            json.dump(self.metrics, f, indent=2)
-        
-        print(f"[Logger] Results saved to: {self.run_dir}")
-
-
-# =============================================================================
-# Main Training Function
-# =============================================================================
-
-def train(config_path: str, epochs: Optional[int] = None):
-    """Run tokenizer training."""
-    
-    # Load config
-    config = load_config(config_path)
-    
-    # Override epochs if specified
-    if epochs is not None:
-        config['training']['epochs'] = epochs
-    
-    # Setup
-    device = torch.device(config['experiment'].get('device', 'cuda') if torch.cuda.is_available() else 'cpu')
+    # Seed
     seed = config['experiment'].get('seed', 42)
     torch.manual_seed(seed)
     np.random.seed(seed)
     
-    print(f"[Config] Loaded: {config_path}")
-    print(f"[Device] Using: {device}")
-    print(f"[Seed] {seed}")
+    # Create dataloaders
+    print("\nLoading data...")
+    train_loader = create_dataloader(config, 'train')
+    val_loader = create_dataloader(config, 'val')
+    print(f"Train samples: {len(train_loader.dataset)}")
+    print(f"Val samples: {len(val_loader.dataset)}")
     
-    # Create dataset (placeholder - replace with real data loading)
-    print("[Data] Creating dataset...")
-    dataset = PlaceholderDataset(
-        modality=config['data']['modality'],
-        n_samples=5000,
-        seq_length=config['data']['window']['length'],
-        seed=seed
-    )
+    # Create tokenizer
+    print("\nCreating tokenizer...")
+    tokenizer = create_tokenizer(config).to(device)
     
-    # Split train/val/test
-    split = config['data'].get('split', {'train': 0.8, 'val': 0.1, 'test': 0.1})
-    n_total = len(dataset)
-    n_train = int(n_total * split['train'])
-    n_val = int(n_total * split['val'])
-    n_test = n_total - n_train - n_val
+    # Token specification info
+    patch_cfg = config['model'].get('patch', {})
+    patch_size = patch_cfg.get('size', 200)
+    seq_length = config['model']['seq_length']
+    n_tokens = seq_length // patch_size
+    sr = config['data']['preprocessing'].get('resample_rate', 200)
+    token_duration = patch_size / sr
     
-    train_dataset, val_dataset, test_dataset = random_split(
-        dataset, [n_train, n_val, n_test],
-        generator=torch.Generator().manual_seed(seed)
-    )
-    
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config['training']['batch_size'],
-        shuffle=True,
-        num_workers=config['data'].get('num_workers', 0),
-        pin_memory=True
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config['training']['batch_size'],
-        shuffle=False,
-        num_workers=config['data'].get('num_workers', 0)
-    )
-    
-    print(f"[Data] Train: {n_train}, Val: {n_val}, Test: {n_test}")
-    
-    # Create model
-    print("[Model] Creating tokenizer...")
-    model = create_model(config).to(device)
-    codebook_size = model.get_codebook_size()
-    print(f"[Model] Type: {config['model']['type']}, Codebook size: {codebook_size}")
+    print(f"\n{'='*40}")
+    print("Token Specification:")
+    print(f"  Patch size: {patch_size} samples ({token_duration:.2f}s)")
+    print(f"  Tokens per window: {n_tokens}")
+    print(f"  Codebook size: {tokenizer.codebook_size}")
+    print(f"  Embedding dim: {tokenizer.embedding_dim}")
+    n_channels = config['data'].get('n_channels', 1)
+    print(f"  Tokens per trial: {n_tokens} × {n_channels} = {n_tokens * n_channels}")
+    print(f"{'='*40}\n")
     
     # Optimizer
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        tokenizer.parameters(),
         lr=config['training']['learning_rate'],
-        weight_decay=config['training'].get('weight_decay', 1e-4)
+        weight_decay=config['training'].get('weight_decay', 0.0001),
     )
     
     # Scheduler
-    scheduler_type = config['training'].get('scheduler', 'cosine')
-    num_epochs = config['training']['epochs']
-    warmup_epochs = config['training'].get('warmup_epochs', 5)
-    
-    if scheduler_type == 'cosine':
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=num_epochs - warmup_epochs
-        )
-    else:
-        scheduler = None
-    
-    # Logger
-    logger = TokenizerLogger(config, config_path)
+    scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=config['training']['epochs'],
+        eta_min=config['training']['learning_rate'] / 100,
+    )
     
     # Training loop
-    print(f"[Training] Starting {num_epochs} epochs...")
     best_val_loss = float('inf')
     patience_counter = 0
-    early_stop_config = config['training'].get('early_stopping', {})
-    patience = early_stop_config.get('patience', 20)
+    patience = config['training'].get('early_stopping', {}).get('patience', 20)
     
-    for epoch in range(1, num_epochs + 1):
+    print(f"Starting training for {config['training']['epochs']} epochs...")
+    print(f"Early stopping patience: {patience}\n")
+    
+    for epoch in range(1, config['training']['epochs'] + 1):
         # Train
-        model.train()
-        train_losses = []
-        all_indices = []
-        
-        for batch in train_loader:
-            optimizer.zero_grad()
-            
-            x = batch['x'].to(device)
-            outputs = model(x)
-            losses = compute_losses(outputs, batch, config, device)
-            
-            losses['total'].backward()
-            
-            # Gradient clipping
-            grad_clip = config['training'].get('gradient_clip', 1.0)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
-            
-            optimizer.step()
-            
-            train_losses.append({k: v for k, v in losses.items() if k != 'total'})
-            all_indices.append(outputs['indices'].detach().cpu())
-        
-        # Scheduler step
-        if scheduler is not None and epoch > warmup_epochs:
-            scheduler.step()
-        
-        # Validation
-        model.eval()
-        val_losses = []
-        val_indices = []
-        
-        with torch.no_grad():
-            for batch in val_loader:
-                x = batch['x'].to(device)
-                outputs = model(x)
-                losses = compute_losses(outputs, batch, config, device)
-                val_losses.append({k: v for k, v in losses.items() if k != 'total'})
-                val_indices.append(outputs['indices'].cpu())
-        
-        # Aggregate metrics
-        train_metrics = {k: np.mean([l[k] for l in train_losses]) for k in train_losses[0]}
-        val_metrics = {f"val_{k}": np.mean([l[k] for l in val_losses]) for k in val_losses[0]}
-        
-        # Codebook health
-        all_train_indices = torch.cat(all_indices, dim=0)
-        health_metrics = compute_codebook_health(all_train_indices, codebook_size)
-        
-        # Combine metrics
-        epoch_metrics = {
-            **train_metrics,
-            **val_metrics,
-            **health_metrics,
-            'lr': optimizer.param_groups[0]['lr']
-        }
-        
-        # Log
-        logger.log_epoch(epoch, epoch_metrics)
-        
-        # Print progress
-        if epoch % 10 == 0 or epoch == 1:
-            print(f"[Epoch {epoch:3d}/{num_epochs}] "
-                  f"recon={train_metrics['reconstruction_mse']:.4f}, "
-                  f"val_recon={val_metrics['val_reconstruction_mse']:.4f}, "
-                  f"perplexity={health_metrics['perplexity']:.1f}, "
-                  f"util={health_metrics['code_utilization']:.3f}")
-        
-        # Checkpoint
-        save_every = config['logging'].get('save_checkpoint_every', 10)
-        if epoch % save_every == 0:
-            logger.save_checkpoint({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'metrics': epoch_metrics,
-            }, epoch)
-        
-        # Early stopping
-        val_loss = val_metrics['val_reconstruction_mse']
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            patience_counter = 0
-            # Save best model
-            logger.save_checkpoint({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'metrics': epoch_metrics,
-            }, epoch=0)  # epoch=0 indicates best model
-        else:
-            patience_counter += 1
-            if early_stop_config.get('enabled', True) and patience_counter >= patience:
-                print(f"[Early Stop] No improvement for {patience} epochs. Stopping.")
-                break
-    
-    # Final evaluation
-    print("[Evaluation] Computing final metrics...")
-    model.eval()
-    
-    test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'], shuffle=False)
-    test_losses = []
-    test_indices = []
-    
-    with torch.no_grad():
-        for batch in test_loader:
-            x = batch['x'].to(device)
-            outputs = model(x)
-            losses = compute_losses(outputs, batch, config, device)
-            test_losses.append({k: v for k, v in losses.items() if k != 'total'})
-            test_indices.append(outputs['indices'].cpu())
-    
-    test_metrics = {f"test_{k}": np.mean([l[k] for l in test_losses]) for k in test_losses[0]}
-    all_test_indices = torch.cat(test_indices, dim=0)
-    test_health = compute_codebook_health(all_test_indices, codebook_size)
-    test_health = {f"test_{k}": v for k, v in test_health.items()}
-    
-    final_metrics = {
-        **test_metrics,
-        **test_health,
-        'best_val_reconstruction_mse': best_val_loss,
-    }
-    
-    logger.save_final(final_metrics)
-    
-    print(f"\n[Done] Experiment: {logger.run_name}")
-    print(f"[Results] Final test metrics:")
-    for k, v in final_metrics.items():
-        if isinstance(v, float):
-            print(f"  {k}: {v:.4f}")
-        else:
-            print(f"  {k}: {v}")
-    
-    # ==========================================================================
-    # Generate Visualizations
-    # ==========================================================================
-    print("\n[Visualization] Generating figures...")
-    try:
-        # Get metrics history from logger
-        metrics_history = logger.metrics.get('epochs', [])
-        
-        # Generate all visualizations
-        generated_figures = visualize_tokenizer_run(
-            run_dir=logger.run_dir,
-            model=model,
-            test_loader=test_loader,
-            metrics_history=metrics_history,
-            config=config,
-            final_metrics=final_metrics,
-            device=device
+        train_metrics = train_epoch(
+            tokenizer, train_loader, optimizer, device, config
         )
         
-        print(f"[Visualization] Generated {len(generated_figures)} figures:")
-        for fig_path in generated_figures:
-            print(f"  - {fig_path.name}")
-    except Exception as e:
-        print(f"[Visualization] Warning: Failed to generate visualizations: {e}")
+        # Validate
+        val_metrics = validate(tokenizer, val_loader, device)
+        
+        # Update scheduler
+        scheduler.step()
+        
+        # Log epoch with ExperimentLogger
+        logger.log_epoch(
+            epoch=epoch,
+            train_loss=train_metrics['loss'],
+            val_loss=val_metrics['val_rec_loss'],
+            loss_breakdown={
+                'reconstruction': train_metrics['rec_loss'],
+                'vq_commitment': train_metrics['vq_loss'],
+            },
+            metrics={
+                'perplexity': train_metrics['perplexity'],
+                'train_utilization': train_metrics['utilization'],
+                'val_utilization': val_metrics['val_utilization'],
+                'val_unique_codes': val_metrics['val_unique_codes'],
+            }
+        )
+        
+        # Print epoch summary
+        print(f"  Val - Rec: {val_metrics['val_rec_loss']:.4f}, "
+              f"Util: {val_metrics['val_utilization']*100:.1f}% "
+              f"({val_metrics['val_unique_codes']}/{tokenizer.codebook_size})")
+        
+        # Early stopping check
+        if val_metrics['val_rec_loss'] < best_val_loss:
+            best_val_loss = val_metrics['val_rec_loss']
+            patience_counter = 0
+            
+            # Save best model
+            logger.save_checkpoint(
+                state_dict={
+                    'model_state_dict': tokenizer.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'epoch': epoch,
+                    'val_loss': best_val_loss,
+                },
+                epoch=epoch,
+                is_best=True
+            )
+            print(f"  ★ New best model saved!")
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f"\nEarly stopping triggered after {epoch} epochs.")
+                break
+        
+        # Save checkpoint periodically
+        save_every = config['logging'].get('save_checkpoint_every', 10)
+        if epoch % save_every == 0:
+            logger.save_checkpoint(
+                state_dict={
+                    'model_state_dict': tokenizer.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'epoch': epoch,
+                },
+                epoch=epoch
+            )
     
-    return logger.run_name, final_metrics
-
-
-# =============================================================================
-# Entry Point
-# =============================================================================
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train tokenizer on neural signals")
-    parser.add_argument("--config", type=str, required=True, 
-                        help="Config file path relative to experiments/configs/")
-    parser.add_argument("--epochs", type=int, default=None, 
-                        help="Override number of epochs")
+    # Final metrics
+    final_metrics = {
+        'best_val_rec_loss': best_val_loss,
+        'final_val_utilization': val_metrics['val_utilization'],
+        'final_unique_codes': val_metrics['val_unique_codes'],
+        'codebook_size': tokenizer.codebook_size,
+        'tokens_per_window': n_tokens,
+        'patch_size_samples': patch_size,
+        'patch_duration_seconds': token_duration,
+    }
     
-    args = parser.parse_args()
-    train(args.config, args.epochs)
+    logger.log_final(final_metrics)
+    
+    # =========================================================================
+    # Generate Visualizations (following STANDARDIZATION_GUIDE.md)
+    # =========================================================================
+    print("\nGenerating visualizations...")
+    
+    # Initialize TokenizerVisualizer
+    visualizer = TokenizerVisualizer(logger.run_dir)
+    
+    # 1. Training curves from metrics history
+    metrics_history = logger.get_metrics_history()
+    visualizer.plot_training_curves(metrics_history)
+    
+    # 2. Get validation samples for reconstruction visualization
+    print("  Collecting samples for visualization...")
+    tokenizer.eval()
+    all_originals = []
+    all_reconstructed = []
+    all_indices = []
+    
+    with torch.no_grad():
+        for batch in val_loader:
+            if isinstance(batch, dict):
+                x = batch['data']
+            else:
+                x = batch[0]
+            
+            x = x.to(device)
+            B, C, T = x.shape
+            x_flat = x.view(B * C, T)
+            
+            outputs = tokenizer(x_flat)
+            all_originals.append(x_flat.cpu())
+            all_reconstructed.append(outputs['x_rec'].cpu())
+            all_indices.append(outputs['indices'].cpu())
+            
+            # Limit to ~200 samples
+            if sum(o.shape[0] for o in all_originals) >= 200:
+                break
+    
+    original = torch.cat(all_originals, dim=0)
+    reconstructed = torch.cat(all_reconstructed, dim=0)
+    indices = torch.cat(all_indices, dim=0)
+    
+    # 3. Reconstruction samples
+    visualizer.plot_reconstruction_samples(
+        original, reconstructed, 
+        n_samples=4, 
+        fs=sr
+    )
+    
+    # 4. Spectral comparison
+    visualizer.plot_spectral_comparison(
+        original, reconstructed, 
+        fs=sr,
+        n_samples=100
+    )
+    
+    # 5. Codebook usage histogram
+    visualizer.plot_codebook_usage(indices, tokenizer.codebook_size)
+    
+    # 6. Token embeddings (t-SNE/PCA)
+    embeddings = tokenizer.get_codebook_embeddings()
+    if embeddings is not None:
+        flat_indices = indices.flatten()
+        usage = torch.bincount(flat_indices, minlength=tokenizer.codebook_size)
+        visualizer.plot_token_embeddings(embeddings, usage)
+    
+    # 7. Summary figure
+    visualizer.generate_summary_figure(final_metrics, config)
+    
+    # Save figure manifest
+    visualizer.save_figure_manifest()
+    
+    # Also generate default logger figures
+    logger.generate_figures()
+    
+    print(f"\n{'='*60}")
+    print(f"Training completed!")
+    print(f"Best validation loss: {best_val_loss:.4f}")
+    print(f"Final utilization: {val_metrics['val_utilization']*100:.1f}%")
+    print(f"Run directory: {logger.run_dir}")
+    print(f"Generated figures: {len(visualizer.get_generated_figures())}")
+    print(f"{'='*60}")
+
+
+if __name__ == '__main__':
+    main()
