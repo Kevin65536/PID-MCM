@@ -615,6 +615,7 @@ class NeuroRVQTokenizer(nn.Module):
             'pre_quant': z,
             'vq_loss': vq_loss,
             'usage_ratios': usage_ratios,
+            'utilization': sum(usage_ratios) / len(usage_ratios) if usage_ratios else 0.0,  # Average utilization
         }
     
     def decode(self, z_q: torch.Tensor) -> Dict[str, torch.Tensor]:
@@ -712,16 +713,19 @@ class NeuroRVQTokenizer(nn.Module):
         # VQ loss
         vq_loss = encode_output['vq_loss']
         
-        # Total loss
-        total_loss = (
+        # Reconstruction loss (sum of amp, phase, time components)
+        rec_loss = (
             self.amplitude_weight * amp_loss +
             self.phase_weight * phase_loss +
-            self.time_weight * time_loss +
-            self.vq_weight * vq_loss
+            self.time_weight * time_loss
         )
+        
+        # Total loss
+        total_loss = rec_loss + self.vq_weight * vq_loss
         
         return {
             'loss': total_loss,
+            'rec_loss': rec_loss,  # Standardized: total reconstruction loss
             'amp_loss': amp_loss,
             'phase_loss': phase_loss,
             'time_loss': time_loss,

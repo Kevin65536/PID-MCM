@@ -412,6 +412,7 @@ class PatchVQVAETokenizer(BaseTokenizer):
             
         Returns:
             dict with x_rec, z, z_q, indices, losses, etc.
+            Always includes 'loss' for unified training interface.
         """
         # Encode
         z = self.encode(x)  # [B, N, D]
@@ -422,16 +423,31 @@ class PatchVQVAETokenizer(BaseTokenizer):
         # Decode
         x_rec = self.decode(z_q)  # [B, T]
         
+        # Compute reconstruction loss
+        rec_loss = F.mse_loss(x_rec, x)
+        
+        # Total loss = reconstruction + VQ losses
+        vq_loss = vq_info['commitment_loss'] + vq_info['codebook_loss']
+        loss = rec_loss + vq_loss
+        
         return {
             'x_rec': x_rec,
+            'reconstructed': x_rec,  # Standardized alias
             'z': z,
             'z_q': z_q,
             'indices': indices,
+            'tokens': indices,  # Standardized alias
+            # Losses
+            'loss': loss,
+            'rec_loss': rec_loss,
+            'vq_loss': vq_loss,
             'commitment_loss': vq_info['commitment_loss'],
             'codebook_loss': vq_info['codebook_loss'],
+            # Stats
             'perplexity': vq_info['perplexity'],
             'dead_ratio': vq_info['dead_ratio'],
             'code_utilization': vq_info['code_utilization'],
+            'utilization': vq_info['code_utilization'],  # Standardized alias
         }
     
     def get_codebook_size(self) -> int:

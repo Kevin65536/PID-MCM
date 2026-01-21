@@ -474,20 +474,32 @@ class FreqDomainPatchVQVAE(BaseTokenizer):
             self.time_loss_weight * time_loss
         )
         
+        # Total loss = reconstruction + VQ losses
+        vq_loss = vq_info['commitment_loss'] + vq_info['codebook_loss']
+        total_loss = total_rec_loss + vq_loss
+        
         return {
             'x_rec': x_rec,
+            'reconstructed': x_rec,  # Standardized alias
             'z': z,
             'z_q': z_q,
             'indices': indices,
+            'tokens': indices,  # Standardized alias
+            # Losses
+            'loss': total_loss,
             'rec_loss': total_rec_loss,
             'amplitude_loss': amplitude_loss,
+            'amp_loss': amplitude_loss,  # Standardized alias
             'phase_loss': phase_loss,
             'time_loss': time_loss,
+            'vq_loss': vq_loss,
             'commitment_loss': vq_info['commitment_loss'],
             'codebook_loss': vq_info['codebook_loss'],
+            # Stats
             'perplexity': vq_info['perplexity'],
             'dead_ratio': vq_info['dead_ratio'],
             'code_utilization': vq_info['code_utilization'],
+            'utilization': vq_info['code_utilization'],  # Standardized alias
         }
     
     def get_codebook_size(self) -> int:
@@ -612,20 +624,32 @@ class FreqDomainPatchVQVAE_V2(FreqDomainPatchVQVAE):
             self.time_loss_weight * time_loss
         )
         
+        # Total loss = reconstruction + VQ losses
+        vq_loss = vq_info['commitment_loss'] + vq_info['codebook_loss']
+        total_loss = total_rec_loss + vq_loss
+        
         return {
             'x_rec': x_rec,
+            'reconstructed': x_rec,  # Standardized alias
             'z': z,
             'z_q': z_q,
             'indices': indices,
+            'tokens': indices,  # Standardized alias
+            # Losses
+            'loss': total_loss,
             'rec_loss': total_rec_loss,
             'amplitude_loss': amplitude_loss,
+            'amp_loss': amplitude_loss,  # Standardized alias
             'phase_loss': phase_loss,
             'time_loss': time_loss,
+            'vq_loss': vq_loss,
             'commitment_loss': vq_info['commitment_loss'],
             'codebook_loss': vq_info['codebook_loss'],
+            # Stats
             'perplexity': vq_info['perplexity'],
             'dead_ratio': vq_info['dead_ratio'],
             'code_utilization': vq_info['code_utilization'],
+            'utilization': vq_info['code_utilization'],  # Standardized alias
         }
 
 
