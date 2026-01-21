@@ -154,7 +154,18 @@ class ExperimentLogger:
     
     def log_final(self, final_metrics: Dict[str, float]):
         """Log final evaluation metrics."""
-        self.metrics["final_metrics"] = {k: float(v) for k, v in final_metrics.items()}
+        # 处理混合类型的metrics (数值和字符串)
+        processed_metrics = {}
+        for k, v in final_metrics.items():
+            if isinstance(v, str):
+                processed_metrics[k] = v
+            elif isinstance(v, (int, float)):
+                processed_metrics[k] = float(v)
+            elif hasattr(v, 'item'):  # tensor
+                processed_metrics[k] = float(v.item())
+            else:
+                processed_metrics[k] = v
+        self.metrics["final_metrics"] = processed_metrics
         self.metrics["completed_at"] = datetime.now().isoformat()
         self._save_metrics()
     
