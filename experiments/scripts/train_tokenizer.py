@@ -17,6 +17,9 @@ Usage:
     
 后台运行:
     nohup python train_tokenizer.py --config phase0plus/eeg_neurorvq.yaml &
+
+TensorBoard:
+    tensorboard --logdir experiments/runs
 """
 
 import sys
@@ -39,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.utils.logger import ExperimentLogger
 from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
-from src.visualization import TokenizerVisualizer
+from src.visualization import TokenizerVisualizer, TensorBoardLogger
 
 
 # ============================================================================
@@ -532,6 +535,10 @@ def main():
     ckpt_cfg = train_cfg.get('checkpoint', {})
     save_every = ckpt_cfg.get('save_every', 10)
     
+    # Visualization config
+    viz_cfg = train_cfg.get('visualization', {})
+    viz_interval = viz_cfg.get('interval', 10)  # Log visualizations every N epochs
+    
     # Checkpoint directory (correct location!)
     checkpoints_dir = logger.checkpoints_dir
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
@@ -539,12 +546,24 @@ def main():
     # Get learning rate for display
     actual_lr = opt_cfg.get('lr', train_cfg.get('learning_rate', 1e-3))
     
+    # Initialize TensorBoard logger
+    tb_logger = TensorBoardLogger(run_dir=logger.run_dir)
+    print(f"  TensorBoard: tensorboard --logdir {logger.run_dir / 'tensorboard'}")
+    
+    # Get sampling rate for visualizations
+    sr = config['data']['preprocessing'].get('resample_rate', 200)
+    
+    # Pre-compute tokenizer settings for the training loop
+    tokenizer_type = config['model'].get('type', 'patch_vqvae')
+    patch_size = get_patch_size(tokenizer, config)
+    
     # Training loop
     print(f"\nStarting training for {train_cfg['epochs']} epochs...")
     print(f"  Batch size: {train_cfg['batch_size']}")
     print(f"  Learning rate: {actual_lr}")
     print(f"  Early stopping patience: {patience}")
     print(f"  Checkpoints saved to: {checkpoints_dir}")
+    print(f"  Visualization interval: every {viz_interval} epochs")
     
     for epoch in range(start_epoch, train_cfg['epochs']):
         epoch_start = datetime.now()
@@ -592,6 +611,139 @@ def main():
             }
         )
         
+        # ========================================
+        # TensorBoard Logging
+        # ========================================
+        step = epoch + 1
+        
+        # Log scalar metrics to TensorBoard
+        tb_logger.log_scalars("train", train_metrics, step)
+        tb_logger.log_scalars("val", {k.replace('val_', ''): v for k, v in val_metrics.items()}, step)
+        tb_logger.log_learning_rate(current_lr, step)
+        
+        # Log loss breakdown
+        loss_breakdown = {k: v for k, v in train_metrics.items() if '_loss' in k}
+        if loss_breakdown:
+            tb_logger.log_loss_breakdown(loss_breakdown, step, prefix="loss_components")
+        
+        # Periodic visualization (reconstruction, spectral, codebook, t-SNE)
+        if (epoch + 1) % viz_interval == 0 or epoch == 0:
+            try:
+                print(f"  [Viz] Generating epoch {epoch+1} visualizations...")
+                tokenizer.eval()
+                
+                # Collect samples for visualization
+                viz_originals = []
+                viz_reconstructed = []
+                viz_indices = []
+                viz_latents = []
+                
+                with torch.no_grad():
+                    for batch_idx, batch in enumerate(val_loader):
+                        if isinstance(batch, dict):
+                            x = batch['data']
+                        else:
+                            x = batch[0]
+                        
+                        x = x.to(device)
+                        x_input = prepare_input(x, patch_size, tokenizer_type)
+                        
+                        outputs = tokenizer(x_input)
+                        std_out = StandardizedOutput.standardize(outputs)
+                        
+                        viz_originals.append(x_input.cpu())
+                        
+                        if 'reconstructed' in std_out:
+                            viz_reconstructed.append(std_out['reconstructed'].cpu())
+                        if 'tokens' in std_out:
+                            tokens = std_out['tokens']
+                            # Handle RVQ multi-layer tokens [num_quantizers, B, ...] -> [B]
+                            if tokens.dim() > 1:
+                                if tokens.dim() == 2 and tokens.shape[0] < tokens.shape[1]:
+                                    # RVQ format: use first layer
+                                    tokens = tokens[0]
+                                else:
+                                    tokens = tokens.flatten()
+                            viz_indices.append(tokens.cpu())
+                        if 'quantized' in std_out:
+                            viz_latents.append(std_out['quantized'].cpu())
+                        elif 'pre_quant' in outputs:
+                            viz_latents.append(outputs['pre_quant'].cpu())
+                        
+                        # Limit samples
+                        if sum(o.shape[0] for o in viz_originals) >= 100:
+                            break
+                
+                original_viz = torch.cat(viz_originals, dim=0)
+                
+                # Log reconstruction
+                if viz_reconstructed:
+                    reconstructed_viz = torch.cat(viz_reconstructed, dim=0)
+                    tb_logger.log_reconstruction(
+                        original_viz, reconstructed_viz, step, 
+                        n_samples=4, fs=sr
+                    )
+                    
+                    # Log spectral comparison
+                    tb_logger.log_spectral_comparison(
+                        original_viz, reconstructed_viz, step,
+                        fs=sr, n_samples=50
+                    )
+                
+                # Log codebook usage
+                if viz_indices:
+                    indices_viz = torch.cat(viz_indices, dim=0)
+                    codebook_size = config['model'].get('quantizer', {}).get('codebook_size',
+                                   config['model'].get('quantizer', {}).get('num_codes', 2048))
+                    tb_logger.log_codebook_usage(indices_viz, codebook_size, step)
+                
+                # Log t-SNE of codebook embeddings
+                if hasattr(tokenizer, 'get_codebook_embeddings') and viz_indices:
+                    embeddings = tokenizer.get_codebook_embeddings()
+                    if embeddings is not None:
+                        flat_indices = indices_viz.flatten().long()
+                        usage = torch.bincount(flat_indices, minlength=codebook_size)
+                        tb_logger.log_embedding_tsne(embeddings, usage, step)
+                elif hasattr(tokenizer, 'quantizer') and viz_indices:
+                    # Try to get embeddings from quantizer
+                    try:
+                        if hasattr(tokenizer.quantizer, 'embedding'):
+                            embeddings = tokenizer.quantizer.embedding.detach()
+                        elif hasattr(tokenizer.quantizer, 'codebook'):
+                            embeddings = tokenizer.quantizer.codebook.detach()
+                        elif hasattr(tokenizer.quantizer, 'layers'):
+                            # RVQ - use first layer
+                            embeddings = tokenizer.quantizer.layers[0].embedding.detach()
+                        else:
+                            embeddings = None
+                        
+                        if embeddings is not None:
+                            codebook_size = embeddings.shape[0]
+                            flat_indices = indices_viz.flatten().long()
+                            # Clamp indices to valid range
+                            flat_indices = flat_indices.clamp(0, codebook_size - 1)
+                            usage = torch.bincount(flat_indices, minlength=codebook_size)
+                            tb_logger.log_embedding_tsne(embeddings, usage, step)
+                    except Exception as e:
+                        print(f"    [Viz] Could not extract embeddings: {e}")
+                
+                # Log latent distribution
+                if viz_latents:
+                    latents_viz = torch.cat(viz_latents, dim=0)
+                    tb_logger.log_latent_distribution(latents_viz, step)
+                
+                # Log loss pie chart (every 5 visualization intervals)
+                if (epoch + 1) % (viz_interval * 5) == 0 and loss_breakdown:
+                    tb_logger.log_loss_pie_chart(loss_breakdown, step)
+                
+                tokenizer.train()
+                tb_logger.flush()
+                
+            except Exception as e:
+                print(f"    [Viz] Warning: Visualization failed: {e}")
+                traceback.print_exc()
+                tokenizer.train()
+        
         # Check for improvement
         val_loss = val_metrics['val_loss']
         if val_loss < best_val_loss - min_delta:
@@ -611,6 +763,9 @@ def main():
         if save_every > 0 and (epoch + 1) % save_every == 0:
             ckpt_path = checkpoints_dir / f'checkpoint_epoch_{epoch+1}.pt'
             save_checkpoint(tokenizer, optimizer, epoch + 1, val_loss, config, ckpt_path)
+    
+    # Close TensorBoard writer
+    tb_logger.close()
     
     print(f"\n{'='*60}")
     print("Training completed!")
@@ -771,13 +926,36 @@ def main():
             **final_val,
         }
         logger.log_final(final_metrics)
+        
+        # Log hyperparameters to TensorBoard
+        hparams = {
+            'model_type': config['model'].get('type', 'unknown'),
+            'patch_size': patch_size,
+            'batch_size': train_cfg['batch_size'],
+            'learning_rate': actual_lr,
+            'epochs': train_cfg['epochs'],
+            'codebook_size': config['model'].get('quantizer', {}).get('codebook_size',
+                            config['model'].get('quantizer', {}).get('num_codes', 2048)),
+        }
+        tb_logger.log_hparams(hparams, {
+            'best_val_loss': best_val_loss,
+            'final_val_loss': final_val.get('val_loss', 0.0),
+            'final_utilization': final_val.get('val_utilization', 0.0),
+        })
     except Exception as e:
         print(f"Warning: Could not log final metrics: {e}")
+    
+    # Generate experiment logger figures
+    try:
+        logger.generate_figures()
+    except Exception as e:
+        print(f"Warning: Could not generate logger figures: {e}")
     
     print(f"\n{'='*60}")
     print(f"Experiment completed!")
     print(f"Results saved to: {logger.run_dir}")
     print(f"Best model: {checkpoints_dir / 'best_model.pt'}")
+    print(f"TensorBoard: tensorboard --logdir {logger.run_dir / 'tensorboard'}")
     print(f"Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
     

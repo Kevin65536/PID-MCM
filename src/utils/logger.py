@@ -234,52 +234,196 @@ class ExperimentLogger:
         plt.close(fig)
     
     def _plot_latent_recovery(self, epochs: List[int]):
-        """Plot latent recovery correlations over training."""
-        metric_names = ["corr_zr_wr", "corr_zu_wu", "corr_zs_ws"]
-        metric_labels = ["Redundancy (z_r)", "Unique (z_u)", "Synergy (z_s)"]
+        """Plot latent recovery correlations or other tracked metrics over training."""
+        # First try the original PID metrics
+        pid_metric_names = ["corr_zr_wr", "corr_zu_wu", "corr_zs_ws"]
+        pid_metric_labels = ["Redundancy (z_r)", "Unique (z_u)", "Synergy (z_s)"]
         
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Check if any PID metrics exist
+        has_pid_metrics = any(
+            any(e["metrics"].get(name) is not None for e in self.metrics["epochs"])
+            for name in pid_metric_names
+        )
         
-        for name, label in zip(metric_names, metric_labels):
-            values = [e["metrics"].get(name) for e in self.metrics["epochs"]]
-            if any(v is not None for v in values):
-                valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
-                valid_values = [v for v in values if v is not None]
-                ax.plot(valid_epochs, valid_values, label=label, linewidth=2, marker='o', markersize=3)
-        
-        ax.set_xlabel('Epoch')
-        ax.set_ylabel('Correlation with Ground Truth')
-        ax.set_title('Latent Recovery')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        ax.set_ylim(0, 1)
-        
-        # Add target lines
-        ax.axhline(y=0.6, color='r', linestyle='--', alpha=0.5, label='Target (R)')
-        
-        fig.savefig(self.figures_dir / "latent_recovery.png", dpi=150, bbox_inches='tight')
-        plt.close(fig)
+        if has_pid_metrics:
+            # Plot PID latent recovery
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            for name, label in zip(pid_metric_names, pid_metric_labels):
+                values = [e["metrics"].get(name) for e in self.metrics["epochs"]]
+                if any(v is not None for v in values):
+                    valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
+                    valid_values = [v for v in values if v is not None]
+                    ax.plot(valid_epochs, valid_values, label=label, linewidth=2, marker='o', markersize=3)
+            
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Correlation with Ground Truth')
+            ax.set_title('Latent Recovery')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            ax.set_ylim(0, 1)
+            ax.axhline(y=0.6, color='r', linestyle='--', alpha=0.5, label='Target')
+            
+            fig.savefig(self.figures_dir / "latent_recovery.png", dpi=150, bbox_inches='tight')
+            plt.close(fig)
+        else:
+            # Plot all available metrics dynamically
+            all_metric_names = set()
+            for e in self.metrics["epochs"]:
+                if e.get("metrics"):
+                    all_metric_names.update(e["metrics"].keys())
+            
+            # Filter out lr and non-numeric metrics
+            numeric_metrics = []
+            for name in all_metric_names:
+                sample_val = next((e["metrics"].get(name) for e in self.metrics["epochs"] 
+                                  if e["metrics"].get(name) is not None), None)
+                if isinstance(sample_val, (int, float)):
+                    numeric_metrics.append(name)
+            
+            if not numeric_metrics:
+                return
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            for name in sorted(numeric_metrics):
+                if name == 'lr':  # Skip learning rate, it's plotted separately
+                    continue
+                values = [e["metrics"].get(name) for e in self.metrics["epochs"]]
+                if any(v is not None for v in values):
+                    valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
+                    valid_values = [v for v in values if v is not None]
+                    ax.plot(valid_epochs, valid_values, label=name, linewidth=2, marker='o', markersize=3)
+            
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Value')
+            ax.set_title('Training Metrics')
+            ax.legend(loc='best', fontsize=8)
+            ax.grid(True, alpha=0.3)
+            
+            fig.savefig(self.figures_dir / "training_metrics.png", dpi=150, bbox_inches='tight')
+            plt.close(fig)
     
     def _plot_loss_breakdown(self, epochs: List[int]):
-        """Plot individual loss components."""
-        loss_names = ["reconstruction", "alignment", "orthogonality", "synergy"]
+        """Plot individual loss components dynamically."""
+        # Collect all loss component names from the logged data
+        all_loss_names = set()
+        for e in self.metrics["epochs"]:
+            if e.get("loss_breakdown"):
+                all_loss_names.update(e["loss_breakdown"].keys())
         
-        fig, ax = plt.subplots(figsize=(10, 6))
+        if not all_loss_names:
+            return
         
-        for name in loss_names:
+        # Filter to get only actual loss components (exclude utilization, etc.)
+        loss_names = [name for name in all_loss_names 
+                     if 'loss' in name.lower() or name in ['reconstruction', 'alignment', 'orthogonality', 'synergy']]
+        
+        # If no specific loss names found, use all available
+        if not loss_names:
+            loss_names = list(all_loss_names)
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        colors = plt.cm.Set2(np.linspace(0, 1, len(loss_names)))
+        
+        for i, name in enumerate(sorted(loss_names)):
             values = [e["loss_breakdown"].get(name) for e in self.metrics["epochs"]]
             if any(v is not None for v in values):
                 valid_epochs = [ep for ep, v in zip(epochs, values) if v is not None]
                 valid_values = [v for v in values if v is not None]
-                ax.plot(valid_epochs, valid_values, label=name.capitalize(), linewidth=2)
+                # Clean up label name
+                label = name.replace('_', ' ').replace('loss', '').strip().title()
+                if not label:
+                    label = name
+                ax.plot(valid_epochs, valid_values, label=label, linewidth=2, color=colors[i])
         
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Loss Value')
         ax.set_title('Loss Components')
-        ax.legend()
+        ax.legend(loc='best', fontsize=9)
         ax.grid(True, alpha=0.3)
         
         fig.savefig(self.figures_dir / "loss_breakdown.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        
+        # Also create a stacked area plot if we have multiple components
+        if len(loss_names) > 1:
+            self._plot_loss_stacked(epochs, loss_names)
+        
+        # Plot utilization if available
+        self._plot_utilization(epochs)
+    
+    def _plot_loss_stacked(self, epochs: List[int], loss_names: List[str]):
+        """Plot stacked area chart of loss components."""
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Collect values for each loss component
+        loss_data = {}
+        for name in sorted(loss_names):
+            values = []
+            for e in self.metrics["epochs"]:
+                val = e.get("loss_breakdown", {}).get(name, 0.0)
+                values.append(val if val is not None else 0.0)
+            loss_data[name] = values
+        
+        # Stack plot
+        labels = [name.replace('_', ' ').replace('loss', '').strip().title() or name 
+                  for name in sorted(loss_names)]
+        values_list = [loss_data[name] for name in sorted(loss_names)]
+        
+        ax.stackplot(epochs, *values_list, labels=labels, alpha=0.7)
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss Value')
+        ax.set_title('Loss Components (Stacked)')
+        ax.legend(loc='upper right', fontsize=9)
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        fig.savefig(self.figures_dir / "loss_stacked.png", dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    
+    def _plot_utilization(self, epochs: List[int]):
+        """Plot codebook utilization metrics over training."""
+        # Check for utilization in loss_breakdown
+        util_values = []
+        val_util_values = []
+        
+        for e in self.metrics["epochs"]:
+            # Try different possible keys
+            util = e.get("loss_breakdown", {}).get("utilization")
+            val_util = e.get("metrics", {}).get("val_utilization")
+            util_values.append(util)
+            val_util_values.append(val_util)
+        
+        has_util = any(v is not None for v in util_values)
+        has_val_util = any(v is not None for v in val_util_values)
+        
+        if not has_util and not has_val_util:
+            return
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if has_util:
+            valid_epochs = [ep for ep, v in zip(epochs, util_values) if v is not None]
+            valid_values = [v for v in util_values if v is not None]
+            ax.plot(valid_epochs, [v * 100 for v in valid_values], 
+                   label='Train Utilization', linewidth=2, color='#2E86AB')
+        
+        if has_val_util:
+            valid_epochs = [ep for ep, v in zip(epochs, val_util_values) if v is not None]
+            valid_values = [v for v in val_util_values if v is not None]
+            ax.plot(valid_epochs, [v * 100 for v in valid_values], 
+                   label='Val Utilization', linewidth=2, color='#A23B72', linestyle='--')
+        
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Utilization (%)')
+        ax.set_title('Codebook Utilization')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim([0, 105])
+        ax.axhline(y=90, color='green', linestyle=':', alpha=0.5, label='Target: 90%')
+        
+        fig.savefig(self.figures_dir / "utilization.png", dpi=150, bbox_inches='tight')
         plt.close(fig)
     
     def plot_signal_reconstruction(
