@@ -100,21 +100,28 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'use_log_amplitude': loss_cfg.get('use_log_amplitude', True),
         }
     
-    elif tokenizer_type in ['neurorvq', 'neurorvq_v2']:
+    elif tokenizer_type in ['neurorvq']:
         return {
             'patch_size': patch_cfg.get('size', 200),
+            'n_embed': quantizer_cfg.get('n_embed', quantizer_cfg.get('num_codes', 8192)),
             'code_dim': quantizer_cfg.get('code_dim', 64),
-            'num_codes': quantizer_cfg.get('num_codes', 8192),
             'num_quantizers': quantizer_cfg.get('num_quantizers', 8),
-            'hidden_channels': encoder_cfg.get('hidden_channels', 8),
-            'hidden_dim': decoder_cfg.get('hidden_dim', 256),
+            'out_chans': encoder_cfg.get('out_chans', encoder_cfg.get('hidden_channels', 8)),
             'beta': quantizer_cfg.get('beta', 1.0),
             'decay': quantizer_cfg.get('decay', 0.99),
             'kmeans_init': quantizer_cfg.get('kmeans_init', True),
-            'amplitude_weight': loss_cfg.get('amplitude', {}).get('weight', 1.0),
-            'phase_weight': loss_cfg.get('phase', {}).get('weight', 1.0),
-            'time_weight': loss_cfg.get('time', {}).get('weight', 1.0),
-            'vq_weight': loss_cfg.get('vq', {}).get('weight', 1.0),
+        }
+    
+    elif tokenizer_type in ['neurorvq_fnirs']:
+        return {
+            'patch_size': patch_cfg.get('size', 40),
+            'n_embed': quantizer_cfg.get('n_embed', quantizer_cfg.get('num_codes', 4096)),
+            'code_dim': quantizer_cfg.get('code_dim', 32),
+            'num_quantizers': quantizer_cfg.get('num_quantizers', 4),
+            'out_chans': encoder_cfg.get('out_chans', encoder_cfg.get('hidden_channels', 8)),
+            'beta': quantizer_cfg.get('beta', 1.0),
+            'decay': quantizer_cfg.get('decay', 0.99),
+            'kmeans_init': quantizer_cfg.get('kmeans_init', True),
         }
     
     else:

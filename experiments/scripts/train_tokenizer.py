@@ -450,7 +450,50 @@ def main():
                         help='Config file path (relative to experiments/configs/)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to checkpoint to resume from')
+    parser.add_argument('--foreground', '-f', action='store_true',
+                        help='Run in foreground (default is background with nohup)')
     args = parser.parse_args()
+    
+    # If not foreground mode, re-launch as background process
+    if not args.foreground and not os.environ.get('TOKENIZER_TRAINING_BG'):
+        import subprocess
+        import sys
+        
+        # Create log directory
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+        
+        # Extract experiment name from config
+        config_name = Path(args.config).stem
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_file = log_dir / f'{config_name}_{timestamp}.log'
+        
+        # Build command with foreground flag and env var
+        cmd = [sys.executable, __file__, '--config', args.config, '--foreground']
+        if args.resume:
+            cmd.extend(['--resume', args.resume])
+        
+        # Set environment variable to mark this as background run
+        env = os.environ.copy()
+        env['TOKENIZER_TRAINING_BG'] = '1'
+        
+        # Launch background process with nohup-like behavior
+        with open(log_file, 'w') as log_f:
+            # Use DEVNULL for stdin to fully detach
+            process = subprocess.Popen(
+                cmd, 
+                stdin=subprocess.DEVNULL,
+                stdout=log_f, 
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+        
+        print(f"Training started in background (PID: {process.pid})")
+        print(f"Log file: {log_file}")
+        print(f"Monitor: tail -f {log_file}")
+        print(f"TensorBoard: tensorboard --logdir experiments/runs")
+        sys.exit(0)  # Explicitly exit parent process
     
     # Print available tokenizers
     print(f"Available tokenizers: {list_tokenizers()}")
@@ -657,16 +700,31 @@ def main():
                             viz_reconstructed.append(std_out['reconstructed'].cpu())
                         if 'tokens' in std_out:
                             tokens = std_out['tokens']
-                            # Handle RVQ multi-layer tokens [num_quantizers, B, ...] -> [B]
-                            if tokens.dim() > 1:
-                                if tokens.dim() == 2 and tokens.shape[0] < tokens.shape[1]:
-                                    # RVQ format: use first layer
-                                    tokens = tokens[0]
-                                else:
-                                    tokens = tokens.flatten()
-                            viz_indices.append(tokens.cpu())
+                            # Handle different token formats
+                            if isinstance(tokens, list):
+                                # NeuroRVQ returns list of tensors (one per branch)
+                                # Flatten to single list for visualization
+                                if len(tokens) > 0 and torch.is_tensor(tokens[0]):
+                                    # Stack: [num_branches, ...] -> flatten
+                                    tokens = torch.cat([t.flatten() for t in tokens])
+                            elif torch.is_tensor(tokens):
+                                # Handle RVQ multi-layer tokens [num_quantizers, B, ...] -> [B]
+                                if tokens.dim() > 1:
+                                    if tokens.dim() == 2 and tokens.shape[0] < tokens.shape[1]:
+                                        # RVQ format: use first layer
+                                        tokens = tokens[0]
+                                    else:
+                                        tokens = tokens.flatten()
+                            viz_indices.append(tokens.cpu() if torch.is_tensor(tokens) else tokens)
                         if 'quantized' in std_out:
-                            viz_latents.append(std_out['quantized'].cpu())
+                            quantized = std_out['quantized']
+                            # Handle list format (NeuroRVQ returns list of tensors)
+                            if isinstance(quantized, list):
+                                if len(quantized) > 0 and torch.is_tensor(quantized[0]):
+                                    # Concatenate all quantized tensors
+                                    quantized = torch.cat([q.flatten(1) for q in quantized], dim=-1)
+                            if torch.is_tensor(quantized):
+                                viz_latents.append(quantized.cpu())
                         elif 'pre_quant' in outputs:
                             viz_latents.append(outputs['pre_quant'].cpu())
                         
@@ -693,8 +751,11 @@ def main():
                 # Log codebook usage
                 if viz_indices:
                     indices_viz = torch.cat(viz_indices, dim=0)
-                    codebook_size = config['model'].get('quantizer', {}).get('codebook_size',
-                                   config['model'].get('quantizer', {}).get('num_codes', 2048))
+                    # Get codebook size - check multiple possible config keys
+                    quant_cfg = config['model'].get('quantizer', {})
+                    codebook_size = (quant_cfg.get('n_embed') or 
+                                     quant_cfg.get('codebook_size') or 
+                                     quant_cfg.get('num_codes', 2048))
                     tb_logger.log_codebook_usage(indices_viz, codebook_size, step)
                 
                 # Log t-SNE of codebook embeddings

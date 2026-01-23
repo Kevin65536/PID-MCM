@@ -10,10 +10,11 @@ from .patch_vqvae import PatchVQVAETokenizer
 from .freq_patch_vqvae import FreqDomainPatchVQVAE, FreqDomainPatchVQVAE_V2
 from .neurorvq import (
     NeuroRVQTokenizer,
-    NeuroRVQTokenizer_V2,
+    NeuroRVQTokenizerFNIRS,
     NormEMAVectorQuantizer,
     ResidualVectorQuantization,
     MultiScaleTemporalEncoder,
+    MultiScaleTemporalEncoderFNIRS,
 )
 from .registry import (
     register_tokenizer,
@@ -30,7 +31,7 @@ _TOKENIZER_REGISTRY['time_patch_vqvae'] = PatchVQVAETokenizer  # alias
 _TOKENIZER_REGISTRY['freq_patch_vqvae'] = FreqDomainPatchVQVAE
 _TOKENIZER_REGISTRY['freq_patch_vqvae_v2'] = FreqDomainPatchVQVAE_V2
 _TOKENIZER_REGISTRY['neurorvq'] = NeuroRVQTokenizer
-_TOKENIZER_REGISTRY['neurorvq_v2'] = NeuroRVQTokenizer_V2
+_TOKENIZER_REGISTRY['neurorvq_fnirs'] = NeuroRVQTokenizerFNIRS
 
 __all__ = [
     # Base
@@ -43,11 +44,12 @@ __all__ = [
     'FreqDomainPatchVQVAE',
     'FreqDomainPatchVQVAE_V2',
     'NeuroRVQTokenizer',
-    'NeuroRVQTokenizer_V2',
+    'NeuroRVQTokenizerFNIRS',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',
     'MultiScaleTemporalEncoder',
+    'MultiScaleTemporalEncoderFNIRS',
     # Registry
     'register_tokenizer',
     'get_tokenizer_class',
