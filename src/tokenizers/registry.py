@@ -124,6 +124,52 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'kmeans_init': quantizer_cfg.get('kmeans_init', True),
         }
     
+    elif tokenizer_type in ['labram_vqnsp', 'labram_vqnsp_eeg']:
+        return {
+            'patch_size': patch_cfg.get('size', 200),
+            'seq_length': model_cfg.get('seq_length', 800),
+            'encoder_embed_dim': encoder_cfg.get('embed_dim', 256),
+            'encoder_depth': encoder_cfg.get('depth', 6),
+            'encoder_num_heads': encoder_cfg.get('num_heads', 8),
+            'decoder_embed_dim': decoder_cfg.get('embed_dim', 256),
+            'decoder_depth': decoder_cfg.get('depth', 3),
+            'decoder_num_heads': decoder_cfg.get('num_heads', 8),
+            'codebook_size': quantizer_cfg.get('codebook_size', quantizer_cfg.get('n_embed', 8192)),
+            'codebook_dim': quantizer_cfg.get('codebook_dim', quantizer_cfg.get('code_dim', 64)),
+            'beta': quantizer_cfg.get('beta', 1.0),
+            'decay': quantizer_cfg.get('decay', 0.99),
+            'kmeans_init': quantizer_cfg.get('kmeans_init', True),
+            'amplitude_weight': loss_cfg.get('amplitude', {}).get('weight', 1.0),
+            'phase_weight': loss_cfg.get('phase', {}).get('weight', 1.0),
+            'time_weight': loss_cfg.get('time', {}).get('weight', 0.5),
+            'dropout': model_cfg.get('dropout', 0.0),
+            'drop_path': model_cfg.get('drop_path', 0.1),
+            'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),
+        }
+    
+    elif tokenizer_type in ['labram_vqnsp_fnirs']:
+        return {
+            'patch_size': patch_cfg.get('size', 40),
+            'seq_length': model_cfg.get('seq_length', 200),
+            'encoder_embed_dim': encoder_cfg.get('embed_dim', 128),
+            'encoder_depth': encoder_cfg.get('depth', 4),
+            'encoder_num_heads': encoder_cfg.get('num_heads', 4),
+            'decoder_embed_dim': decoder_cfg.get('embed_dim', 128),
+            'decoder_depth': decoder_cfg.get('depth', 2),
+            'decoder_num_heads': decoder_cfg.get('num_heads', 4),
+            'codebook_size': quantizer_cfg.get('codebook_size', quantizer_cfg.get('n_embed', 4096)),
+            'codebook_dim': quantizer_cfg.get('codebook_dim', quantizer_cfg.get('code_dim', 32)),
+            'beta': quantizer_cfg.get('beta', 0.5),
+            'decay': quantizer_cfg.get('decay', 0.99),
+            'kmeans_init': quantizer_cfg.get('kmeans_init', True),
+            'amplitude_weight': loss_cfg.get('amplitude', {}).get('weight', 1.0),
+            'phase_weight': loss_cfg.get('phase', {}).get('weight', 0.5),
+            'time_weight': loss_cfg.get('time', {}).get('weight', 1.0),
+            'dropout': model_cfg.get('dropout', 0.0),
+            'drop_path': model_cfg.get('drop_path', 0.0),
+            'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),
+        }
+    
     else:
         raise ValueError(f"Unknown tokenizer type for kwargs building: {tokenizer_type}")
 

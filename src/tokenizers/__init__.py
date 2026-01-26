@@ -16,6 +16,11 @@ from .neurorvq import (
     MultiScaleTemporalEncoder,
     MultiScaleTemporalEncoderFNIRS,
 )
+from .labram_vqnsp import (
+    LaBraMVQNSP,
+    LaBraMVQNSP_EEG,
+    LaBraMVQNSP_fNIRS,
+)
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -32,6 +37,9 @@ _TOKENIZER_REGISTRY['freq_patch_vqvae'] = FreqDomainPatchVQVAE
 _TOKENIZER_REGISTRY['freq_patch_vqvae_v2'] = FreqDomainPatchVQVAE_V2
 _TOKENIZER_REGISTRY['neurorvq'] = NeuroRVQTokenizer
 _TOKENIZER_REGISTRY['neurorvq_fnirs'] = NeuroRVQTokenizerFNIRS
+_TOKENIZER_REGISTRY['labram_vqnsp'] = LaBraMVQNSP
+_TOKENIZER_REGISTRY['labram_vqnsp_eeg'] = LaBraMVQNSP_EEG
+_TOKENIZER_REGISTRY['labram_vqnsp_fnirs'] = LaBraMVQNSP_fNIRS
 
 __all__ = [
     # Base
@@ -45,6 +53,10 @@ __all__ = [
     'FreqDomainPatchVQVAE_V2',
     'NeuroRVQTokenizer',
     'NeuroRVQTokenizerFNIRS',
+    # LaBraM VQNSP
+    'LaBraMVQNSP',
+    'LaBraMVQNSP_EEG',
+    'LaBraMVQNSP_fNIRS',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',
