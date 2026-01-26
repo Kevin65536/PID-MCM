@@ -751,11 +751,14 @@ def main():
                 # Log codebook usage
                 if viz_indices:
                     indices_viz = torch.cat(viz_indices, dim=0)
-                    # Get codebook size - check multiple possible config keys
-                    quant_cfg = config['model'].get('quantizer', {})
-                    codebook_size = (quant_cfg.get('n_embed') or 
-                                     quant_cfg.get('codebook_size') or 
-                                     quant_cfg.get('num_codes', 2048))
+                    # Get codebook size - prefer model method over config
+                    if hasattr(tokenizer, 'get_codebook_size'):
+                        codebook_size = tokenizer.get_codebook_size()
+                    else:
+                        quant_cfg = config['model'].get('quantizer', {})
+                        codebook_size = (quant_cfg.get('n_embed') or 
+                                         quant_cfg.get('codebook_size') or 
+                                         quant_cfg.get('num_codes', 2048))
                     tb_logger.log_codebook_usage(indices_viz, codebook_size, step)
                 
                 # Log t-SNE of codebook embeddings
@@ -955,8 +958,12 @@ def main():
         # 5. Codebook usage histogram
         if all_indices:
             indices = torch.cat(all_indices, dim=0)
-            codebook_size = config['model'].get('quantizer', {}).get('codebook_size', 
-                           config['model'].get('quantizer', {}).get('num_codes', 2048))
+            # Get codebook size - prefer model method over config
+            if hasattr(tokenizer, 'get_codebook_size'):
+                codebook_size = tokenizer.get_codebook_size()
+            else:
+                codebook_size = config['model'].get('quantizer', {}).get('codebook_size', 
+                               config['model'].get('quantizer', {}).get('num_codes', 2048))
             visualizer.plot_codebook_usage(indices, codebook_size)
             
             # 6. Token embeddings (if available)

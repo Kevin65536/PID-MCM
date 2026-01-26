@@ -956,7 +956,26 @@ class NeuroRVQTokenizer(nn.Module):
                 usage[f'{branch_name}_layer{i}_utilization'] = active / layer.num_tokens
         
         return usage
-
+    
+    def get_codebook_size(self) -> int:
+        """
+        Return the codebook size (n_embed).
+        
+        For NeuroRVQ, all 4 branches × 8 RVQ layers share the same codebook size.
+        """
+        return self.n_embed
+    
+    def get_codebook_embeddings(self) -> torch.Tensor:
+        """
+        Return codebook embeddings from the first branch, first RVQ layer.
+        
+        For visualization purposes, we use branch1's first layer as representative
+        since all layers share the same codebook dimension.
+        
+        Returns:
+            embeddings: [n_embed, code_dim] tensor
+        """
+        return self.quantize_1.layers[0].embedding.detach()
 
 # =============================================================================
 # fNIRS-adapted NeuroRVQ (smaller kernels for lower sampling rate)
