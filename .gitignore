@@ -21,3 +21,6 @@ __pycache__
 /.vscode
 
 /docs/report
+
+# temp log directory    
+/logs
