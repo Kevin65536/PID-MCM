@@ -975,7 +975,7 @@ class NeuroRVQTokenizer(nn.Module):
         Returns:
             embeddings: [n_embed, code_dim] tensor
         """
-        return self.quantize_1.layers[0].embedding.detach()
+        return self.quantize_1.layers[0].weight.detach()
 
 # =============================================================================
 # fNIRS-adapted NeuroRVQ (smaller kernels for lower sampling rate)
