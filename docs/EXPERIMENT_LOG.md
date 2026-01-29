@@ -8,6 +8,7 @@
 
 | Date | ID | Phase | Description | Status |
 |------|-----|-------|-------------|--------|
+| 2026-01-29 | EXP-014 | P0+ | LaBraM VQNSP v2: Freq-only Loss Ablation | ❌ Failed |
 | 2026-01-27 | EXP-013 | P0+ | fNIRS LaBraM VQNSP Tokenizer | ✅ Complete |
 | 2026-01-26 | EXP-012 | P0+ | EEG LaBraM VQNSP Tokenizer | ✅ Complete |
 | 2026-01-15 | EXP-011 | P1A | Dual-Modality (4s MI window) | ⚠️ 46.7% |
@@ -22,6 +23,85 @@
 | 2026-01-15 | EXP-002 | P1A | EEG Raw Baseline Classification | ⚠️ Chance level |
 | 2026-01-15 | EXP-001 | P1A | EEG Token Classification (single-channel) | ⚠️ Chance level |
 | 2026-01-14 | EXP-000 | P0 | Tokenizer Comparison (FSQ vs VQ-VAE) | ✅ Complete |
+
+---
+
+## EXP-014: LaBraM VQNSP v2 - Frequency-Only Loss Ablation (2026-01-29)
+
+### Objective
+测试完全移除时域损失（遵循LaBraM原论文设计）对重建质量的影响。
+
+### Motivation
+EXP-012/013的v1实验中，码本使用率起初低于50%。用户希望：
+1. 移除时域损失（LaBraM原论文仅使用频域损失）
+2. 降低β值（commitment loss权重）
+3. 增大batch size以改善训练稳定性
+
+### Configuration Changes (v1 → v2)
+
+| Parameter | v1 EEG | v2 EEG | v1 fNIRS | v2 fNIRS |
+|-----------|--------|--------|----------|----------|
+| time_weight | 0.5 | **0.0** | 1.0 | **0.0** |
+| beta | 1.0 | **0.25** | 1.0 | **0.25** |
+| batch_size | 128 | **256** | 256 | **512** |
+| lr | 0.0003 | **0.0005** | 0.0002 | **0.0005** |
+| use_smooth_l1 | false | **true** | false | **true** |
+
+### Training Results
+
+**EEG v2 Run:** `experiments/runs/eeg_labram_vqnsp_v2_20260129_172418`
+- Early stopped at epoch 112 (best at epoch 82)
+- Best val_loss: 0.3752
+
+**fNIRS v2 Run:** `experiments/runs/fnirs_labram_vqnsp_v2_20260129_172449`
+- Completed 150 epochs (best at epoch 146)
+- Best val_loss: 0.1468
+
+### Results Comparison (Test Set)
+
+| Modality | Version | Time Corr | Spectral Corr | Utilization |
+|----------|---------|-----------|---------------|-------------|
+| **EEG** | v1 (time_weight=0.5) | **0.7441** | **0.8744** | 100% |
+| EEG | v2 (time_weight=0.0) | 0.0522 | 0.3462 | 100% |
+| | **Δ Change** | **-0.6919** | **-0.5282** | - |
+| **fNIRS** | v1 (time_weight=1.0) | **0.8295** | **0.8184** | 100% |
+| fNIRS | v2 (time_weight=0.0) | 0.0454 | 0.2304 | 100% |
+| | **Δ Change** | **-0.7841** | **-0.5879** | - |
+
+### Analysis
+
+**关键发现：移除时域损失导致重建质量灾难性下降**
+
+1. **时间域相关性骤降**：
+   - EEG: 0.74 → 0.05 (降低93%)
+   - fNIRS: 0.83 → 0.05 (降低95%)
+   - 接近随机重建水平
+
+2. **频谱相关性也大幅下降**：
+   - EEG: 0.87 → 0.35 (降低60%)
+   - fNIRS: 0.82 → 0.23 (降低72%)
+   - 即使仅优化频域损失，频谱重建也不如v1
+
+3. **为什么v2失败？**
+   - 纯频域损失无法约束时域相位一致性
+   - 解码器可能找到了"欺骗"频域损失的解
+   - amplitude + phase loss并不等同于完美时域重建
+
+4. **LaBraM原设计的考量**：
+   - LaBraM使用BERT-style masked prediction，不需要完美重建
+   - 其目标是学习语义表示，而非信号重建
+   - 我们的目标是tokenizer，需要高质量重建
+
+### Conclusion
+
+❌ **实验失败** - 移除时域损失严重损害重建质量
+
+**建议**：
+- ✅ 继续使用v1配置 (time_weight > 0)
+- ✅ v1已达到100%码本使用率（通过dead code revival）
+- ✅ v1重建质量优秀：EEG 0.74, fNIRS 0.83 时间相关性
+
+**下一步**：使用v1 tokenizer进行下游分类任务
 
 ---
 
