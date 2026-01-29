@@ -26,9 +26,10 @@ import sys
 import os
 import argparse
 import traceback
+import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -75,6 +76,198 @@ def setup_logging(run_dir: Path) -> TeeLogger:
     sys.stdout = tee
     sys.stderr = tee
     return tee
+
+
+# ============================================================================
+# GPU Selection Utilities
+# ============================================================================
+
+def get_gpu_info() -> List[Dict[str, Any]]:
+    """
+    Get GPU information using nvidia-smi.
+    
+    Returns:
+        List of dicts with keys: 
+        - index: GPU index
+        - name: GPU name
+        - memory_used: Memory used in MB
+        - memory_total: Total memory in MB
+        - memory_free: Free memory in MB
+        - utilization: GPU utilization percentage
+        - processes: Number of running processes
+    """
+    try:
+        # Query GPU info
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=index,name,memory.used,memory.total,memory.free,utilization.gpu',
+             '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if result.returncode != 0:
+            return []
+        
+        gpus = []
+        for line in result.stdout.strip().split('\n'):
+            if not line.strip():
+                continue
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 6:
+                gpus.append({
+                    'index': int(parts[0]),
+                    'name': parts[1],
+                    'memory_used': float(parts[2]),
+                    'memory_total': float(parts[3]),
+                    'memory_free': float(parts[4]),
+                    'utilization': float(parts[5]) if parts[5] != '[N/A]' else 0.0,
+                    'processes': 0,  # Will be updated below
+                })
+        
+        # Query process count per GPU
+        proc_result = subprocess.run(
+            ['nvidia-smi', '--query-compute-apps=gpu_uuid,pid', '--format=csv,noheader'],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if proc_result.returncode == 0 and proc_result.stdout.strip():
+            # Count processes per GPU by getting UUID mapping
+            uuid_result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=index,uuid', '--format=csv,noheader'],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if uuid_result.returncode == 0:
+                uuid_to_idx = {}
+                for line in uuid_result.stdout.strip().split('\n'):
+                    if line.strip():
+                        parts = [p.strip() for p in line.split(',')]
+                        if len(parts) >= 2:
+                            uuid_to_idx[parts[1]] = int(parts[0])
+                
+                # Count processes
+                process_counts = {gpu['index']: 0 for gpu in gpus}
+                for line in proc_result.stdout.strip().split('\n'):
+                    if line.strip():
+                        parts = [p.strip() for p in line.split(',')]
+                        if len(parts) >= 1:
+                            uuid = parts[0]
+                            if uuid in uuid_to_idx:
+                                process_counts[uuid_to_idx[uuid]] += 1
+                
+                for gpu in gpus:
+                    gpu['processes'] = process_counts.get(gpu['index'], 0)
+        
+        return gpus
+        
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        print(f"Warning: Failed to query GPU info: {e}")
+        return []
+
+
+def select_best_gpu(verbose: bool = True) -> Optional[int]:
+    """
+    Select the best available GPU based on utilization, memory, and running processes.
+    
+    Selection criteria (in order of priority):
+    1. Fewer running processes (idle GPUs preferred)
+    2. Lower GPU utilization
+    3. More free memory
+    
+    Args:
+        verbose: Whether to print GPU selection info
+        
+    Returns:
+        Index of the best GPU, or None if no GPUs available
+    """
+    gpus = get_gpu_info()
+    
+    if not gpus:
+        if verbose:
+            print("No GPUs found via nvidia-smi, falling back to default")
+        return None
+    
+    if verbose:
+        print("\n" + "=" * 70)
+        print("GPU Status:")
+        print("-" * 70)
+        print(f"{'GPU':<6} {'Name':<25} {'Util%':<8} {'Memory':<20} {'Procs':<6}")
+        print("-" * 70)
+        
+        for gpu in gpus:
+            mem_str = f"{gpu['memory_used']:.0f}/{gpu['memory_total']:.0f} MB"
+            print(f"{gpu['index']:<6} {gpu['name'][:24]:<25} {gpu['utilization']:<8.1f} {mem_str:<20} {gpu['processes']:<6}")
+        
+        print("-" * 70)
+    
+    # Score each GPU (lower is better)
+    # Scoring formula: 
+    #   - 1000 * num_processes (heavily penalize GPUs with running processes)
+    #   - 10 * utilization (penalize high utilization)
+    #   - memory_used / memory_total * 100 (penalize high memory usage)
+    def gpu_score(gpu: Dict) -> float:
+        return (
+            1000 * gpu['processes'] + 
+            10 * gpu['utilization'] + 
+            (gpu['memory_used'] / gpu['memory_total'] * 100 if gpu['memory_total'] > 0 else 100)
+        )
+    
+    # Sort by score (lower is better)
+    sorted_gpus = sorted(gpus, key=gpu_score)
+    best_gpu = sorted_gpus[0]
+    
+    if verbose:
+        print(f"Selected GPU {best_gpu['index']}: {best_gpu['name']}")
+        print(f"  - Utilization: {best_gpu['utilization']:.1f}%")
+        print(f"  - Memory: {best_gpu['memory_free']:.0f} MB free / {best_gpu['memory_total']:.0f} MB total")
+        print(f"  - Running processes: {best_gpu['processes']}")
+        print("=" * 70 + "\n")
+    
+    return best_gpu['index']
+
+
+def setup_device(config: dict, verbose: bool = True) -> torch.device:
+    """
+    Setup the training device, automatically selecting the best GPU if available.
+    
+    Args:
+        config: Experiment configuration dict
+        verbose: Whether to print device selection info
+        
+    Returns:
+        torch.device for training
+    """
+    device_cfg = config['experiment'].get('device', 'cuda')
+    
+    # Check if specific GPU is requested in config (e.g., "cuda:1")
+    if device_cfg.startswith('cuda:'):
+        gpu_idx = int(device_cfg.split(':')[1])
+        if torch.cuda.is_available() and gpu_idx < torch.cuda.device_count():
+            device = torch.device(device_cfg)
+            if verbose:
+                print(f"Using specified GPU {gpu_idx}: {torch.cuda.get_device_name(gpu_idx)}")
+            return device
+        else:
+            if verbose:
+                print(f"Warning: Specified GPU {gpu_idx} not available, auto-selecting...")
+    
+    # Auto-select best GPU
+    if torch.cuda.is_available():
+        best_gpu = select_best_gpu(verbose=verbose)
+        if best_gpu is not None:
+            device = torch.device(f'cuda:{best_gpu}')
+            # Set as default device for CUDA tensors
+            torch.cuda.set_device(best_gpu)
+            return device
+        else:
+            # Fall back to default CUDA device
+            device = torch.device('cuda')
+            if verbose:
+                print(f"Using default CUDA device: {torch.cuda.get_device_name(0)}")
+            return device
+    else:
+        if verbose:
+            print("CUDA not available, using CPU")
+        return torch.device('cpu')
 
 
 # ============================================================================
@@ -515,10 +708,9 @@ def main():
     print(f"Modality: {config['data']['modality']}")
     print(f"Tokenizer type: {config['model'].get('type', 'patch_vqvae')}")
     
-    # Device
-    device = torch.device(config['experiment'].get('device', 'cuda') 
-                          if torch.cuda.is_available() else 'cpu')
-    print(f"Device: {device}")
+    # Device - Auto-select best GPU
+    device = setup_device(config, verbose=True)
+    print(f"Training device: {device}")
     
     # Seed
     seed = config['experiment'].get('seed', 42)
