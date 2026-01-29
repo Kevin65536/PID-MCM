@@ -8,6 +8,8 @@
 
 | Date | ID | Phase | Description | Status |
 |------|-----|-------|-------------|--------|
+| 2026-01-27 | EXP-013 | P0+ | fNIRS LaBraM VQNSP Tokenizer | ✅ Complete |
+| 2026-01-26 | EXP-012 | P0+ | EEG LaBraM VQNSP Tokenizer | ✅ Complete |
 | 2026-01-15 | EXP-011 | P1A | Dual-Modality (4s MI window) | ⚠️ 46.7% |
 | 2026-01-15 | EXP-010 | P1A | fNIRS Classification (4s MI window) | ⚠️ 49.2% |
 | 2026-01-15 | EXP-009 | P1A | EEG Classification (4s MI window) | ⚠️ 55.0% |
@@ -23,10 +25,208 @@
 
 ---
 
+## EXP-012: LaBraM VQNSP Tokenizer Implementation (2026-01-26)
+
+### Objective
+实现 LaBraM 风格的 VQNSP tokenizer 作为 NeuroRVQ 的替代方案。NeuroRVQ 由于其复杂的多分支多层 RVQ 设计难以训练，重建损失收敛较差。
+
+### Motivation
+NeuroRVQ 训练结果分析 (eeg_neurorvq_20260123_100117):
+- 150 个 epoch 后 val_rec_loss = 1.57 (较高)
+- 时间域重建相关性 ≈ 0 (非常差)
+- 复杂的多分支设计导致优化困难
+
+### Solution: LaBraM VQNSP
+基于 LaBraM 论文的 VQNSP 架构，关键简化：
+1. **简单架构**: Transformer Encoder → Single VQ → Transformer Decoder
+2. **NormEMA VQ**: L2 归一化 + EMA 更新的 codebook（更稳定）
+3. **频域重建**: 分别预测幅度和相位（跟随 LaBraM）
+4. **单层 VQ**: 不使用多层 RVQ，更容易训练
+
+### Implementation
+新增文件：
+- `src/tokenizers/labram_vqnsp.py`: 主要实现
+- `experiments/configs/phase0/P0_eeg_labram_vqnsp.yaml`: EEG 配置
+- `experiments/configs/phase0/P0_fnirs_labram_vqnsp.yaml`: fNIRS 配置
+
+注册的 tokenizer 类型：
+- `labram_vqnsp`: 基础版本
+- `labram_vqnsp_eeg`: EEG 优化版 (200Hz, 200 samples/patch)
+- `labram_vqnsp_fnirs`: fNIRS 优化版 (10Hz, 40 samples/patch)
+
+### Architecture Summary
+```
+Input [B, T] → Split to Patches [B, N, P]
+                    ↓
+              FFT Features (amp + phase)
+                    ↓
+              Patch Embedding [B, N, D]
+                    ↓
+              Transformer Encoder (6 layers)
+                    ↓
+              Project to Codebook Dim
+                    ↓
+              NormEMA VQ (8192 codes x 64D)
+                    ↓
+              Project to Decoder Dim
+                    ↓
+              Transformer Decoder (3 layers)
+                    ↓
+              Amplitude Head + Phase Head
+                    ↓
+              iFFT → Reconstructed [B, T]
+```
+
+### Key Features
+- **K-means 初始化**: Codebook 使用 k-means 初始化而非随机初始化
+- **L2 归一化**: 输入和 codebook 都进行 L2 归一化，使用余弦相似度
+- **EMA 更新**: Codebook 通过 EMA 更新，不需要梯度传播
+- **频域损失**: amplitude_loss + phase_loss + (optional) time_loss
+
+### Model Size
+- EEG version: ~7.4M parameters
+- fNIRS version: ~1.3M parameters
+
+### Usage
+```python
+from src.tokenizers import LaBraMVQNSP_EEG, create_tokenizer
+
+# Direct usage
+model = LaBraMVQNSP_EEG(
+    patch_size=200,
+    seq_length=800,
+    codebook_size=8192,
+)
+
+# Via registry
+config = {'model': {'type': 'labram_vqnsp_eeg', ...}}
+model = create_tokenizer(config)
+
+# Training
+python train_tokenizer.py --config phase0/P0_eeg_labram_vqnsp.yaml
+```
+
+### Status
+✅ 训练完成，效果优于 NeuroRVQ
+
+### Training Results (2026-01-26)
+**Run:** `experiments/runs/eeg_labram_vqnsp_20260126_212630`
+
+**配置:**
+- Epochs: 150
+- Batch Size: 128
+- Learning Rate: 3e-4 (cosine schedule)
+- Codebook: 8192 codes × 64D
+- 新增: 死码复活机制 (dead_code_threshold=10)
+
+**最终指标:**
+| Metric | Val Set | Test Set | vs NeuroRVQ |
+|--------|---------|----------|-------------|
+| Loss | **0.9675** | **0.9745** | ↓40% (1.6261) |
+| Time Correlation | 0.6737 | **0.7441 ± 0.15** | ↑显著 (~0) |
+| Spectral Correlation | 0.8324 | **0.8744 ± 0.10** | 新指标 |
+| Code Utilization | 100% | **100%** | ↑625× (0.16%) |
+
+**关键改进:**
+1. ✅ **死码复活机制完美工作** - 全部8192个码字都被使用
+2. ✅ **重建质量大幅提升** - 时间相关性从~0提升到0.67
+3. ✅ **频谱保真度优秀** - 频谱相关性达到0.83
+4. ✅ **训练稳定** - 150 epoch平稳收敛
+
+### Comparison with NeuroRVQ
+
+| Aspect | NeuroRVQ | LaBraM VQNSP |
+|--------|----------|--------------|
+| Architecture | Multi-branch Inception + 8-layer RVQ | Transformer + Single VQ |
+| Training | 难以优化，损失较高 | 简单稳定，快速收敛 |
+| Reconstruction | 时间域相关性~0 | 时间域相关性0.67 |
+| Codebook | 严重崩塌 (0.16%) | 完全利用 (100%) |
+| Parameters | ~10M | 7.4M |
+
+### Next Steps
+1. ✅ ~~使用真实 EEG/fNIRS 数据训练~~ (完成)
+2. ✅ ~~与 NeuroRVQ 对比重建质量~~ (完成，显著更优)
+3. ✅ ~~fNIRS版本训练~~ (完成，见 EXP-013)
+4. 用于下游分类任务 (P1A phase)
+
+---
+
+## EXP-013: fNIRS LaBraM VQNSP Tokenizer (2026-01-27)
+
+### Objective
+为fNIRS信号训练LaBraM VQNSP tokenizer，测试其在低采样率血氧信号上的重建效果。
+
+### Configuration
+**Run:** `experiments/runs/fnirs_labram_vqnsp_20260127_124919`
+
+```yaml
+Model: LaBraMVQNSP_fNIRS
+- Sampling Rate: 10Hz
+- Window: 40 samples (4s)
+- Patch Size: 10 samples (1s)
+- Patches per window: 4
+
+Architecture:
+- Encoder: 4 layers, 128D, 4 heads
+- Decoder: 2 layers, 128D, 4 heads
+- Codebook: 4096 codes × 32D
+- Parameters: 1.25M
+
+Loss Weights:
+- Amplitude: 1.0
+- Phase: 0.5 (less important for fNIRS)
+- Time: 1.0 (more important for fNIRS)
+
+Training:
+- Epochs: 150
+- Batch Size: 256
+- Learning Rate: 3e-4 (cosine)
+```
+
+### Results
+
+**验证集 (Best @ Epoch 128):**
+| Metric | Value |
+|--------|-------|
+| Val Loss | 0.6017 |
+| Amp Loss | 0.1963 |
+| Phase Loss | 0.1764 |
+| Time Loss | 0.3159 |
+| Code Utilization | 100% |
+
+**测试集 (4 subjects, 240 windows × 36 channels = 8640 samples):**
+| Metric | Value |
+|--------|-------|
+| Test Loss | **0.6071** |
+| Time Correlation | **0.8295 ± 0.15** |
+| Spectral Correlation | **0.8184 ± 0.22** |
+| Code Utilization | **100%** |
+
+### Comparison: EEG vs fNIRS LaBraM VQNSP
+
+| Metric | EEG | fNIRS |
+|--------|-----|-------|
+| Parameters | 7.4M | 1.25M |
+| Codebook Size | 8192 | 4096 |
+| Val Loss | 0.97 | 0.60 |
+| Test Loss | 0.97 | 0.61 |
+| Time Correlation | 0.74 | **0.83** |
+| Spectral Correlation | **0.87** | 0.82 |
+| Training Time | ~66 min | ~13 min |
+
+### Conclusions
+1. ✅ **fNIRS重建质量更高** - 时间相关性0.83 > EEG的0.74（fNIRS信号更平滑，更易重建）
+2. ✅ **模型更小更快** - 1.25M参数，训练仅13分钟
+3. ✅ **码本完全利用** - 死码复活机制同样有效
+4. ✅ **较小码本足够** - 4096个码字对fNIRS足够（信号动态范围较小）
+
+---
+
 ## EXP-011: Dual-Modality Classification with 4s MI Window (2026-01-15)
 
 ### Objective
 使用4秒MI标准窗口和LaBraM风格tokenizer进行双模态融合分类。
+
 
 ### Configuration
 ```yaml
