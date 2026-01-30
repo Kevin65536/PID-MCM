@@ -666,7 +666,8 @@ class TensorBoardLogger:
         clean_metrics = {k: float(v) for k, v in metrics.items() 
                         if isinstance(v, (int, float))}
         
-        self.writer.add_hparams(clean_hparams, clean_metrics)
+        # Use run_name="." to prevent add_hparams from creating a subdirectory
+        self.writer.add_hparams(clean_hparams, clean_metrics, run_name=".")
     
     def flush(self):
         """Flush the TensorBoard writer."""
