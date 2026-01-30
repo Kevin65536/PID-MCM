@@ -506,6 +506,357 @@ class MultiLeadProcessor(nn.Module):
             return x[:, 0, :]
 
 
+class RawMultiLeadClassifier(nn.Module):
+    """
+    Baseline classifier that operates on raw signals directly without tokenization.
+    Uses 1D CNN for temporal feature extraction followed by cross-lead aggregation.
+    
+    This serves as a baseline to compare against tokenizer-based approaches.
+    """
+    
+    def __init__(
+        self,
+        num_classes: int = 2,
+        num_leads: int = 30,
+        input_length: int = 800,
+        aggregation: Literal['mean', 'attention', 'transformer'] = 'attention',
+        hidden_dim: int = 128,
+        num_heads: int = 4,
+        num_layers: int = 2,
+        dropout: float = 0.1,
+    ):
+        """
+        Args:
+            num_classes: Number of output classes
+            num_leads: Number of EEG/fNIRS channels
+            input_length: Length of input signal per lead
+            aggregation: How to aggregate across leads
+            hidden_dim: Hidden dimension
+            num_heads: Number of attention heads
+            num_layers: Number of transformer layers
+            dropout: Dropout probability
+        """
+        super().__init__()
+        
+        self.num_leads = num_leads
+        self.aggregation = aggregation
+        self.hidden_dim = hidden_dim
+        
+        # Temporal feature extraction CNN (per lead)
+        # Design: progressively reduce temporal dimension while increasing channels
+        self.temporal_encoder = nn.Sequential(
+            # Input: [B*C, 1, T]
+            nn.Conv1d(1, 32, kernel_size=25, stride=4, padding=12),  # T -> T/4
+            nn.BatchNorm1d(32),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            
+            nn.Conv1d(32, 64, kernel_size=11, stride=2, padding=5),  # T/4 -> T/8
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            
+            nn.Conv1d(64, hidden_dim, kernel_size=5, stride=2, padding=2),  # T/8 -> T/16
+            nn.BatchNorm1d(hidden_dim),
+            nn.GELU(),
+            
+            nn.AdaptiveAvgPool1d(4),  # Fixed output length
+        )
+        
+        # Project pooled features
+        self.lead_proj = nn.Sequential(
+            nn.Linear(hidden_dim * 4, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        
+        if aggregation == 'mean':
+            self.aggregator = nn.Identity()
+            aggregated_dim = hidden_dim
+            
+        elif aggregation == 'attention':
+            self.lead_attention = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.Tanh(),
+                nn.Linear(hidden_dim // 2, 1),
+            )
+            aggregated_dim = hidden_dim
+            
+        elif aggregation == 'transformer':
+            self.pos_encoding = PositionalEncoding(hidden_dim, max_len=num_leads + 1, dropout=dropout)
+            self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
+            
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=hidden_dim,
+                nhead=num_heads,
+                dim_feedforward=hidden_dim * 4,
+                dropout=dropout,
+                activation='gelu',
+                batch_first=True,
+            )
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+            aggregated_dim = hidden_dim
+        else:
+            raise ValueError(f"Unknown aggregation: {aggregation}")
+        
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(aggregated_dim),
+            nn.Dropout(dropout),
+            nn.Linear(aggregated_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, num_classes),
+        )
+        
+    def forward(
+        self,
+        x: torch.Tensor,
+        return_lead_features: bool = False,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            x: Multi-lead signal [B, C, T]
+            return_lead_features: Whether to return per-lead features
+            
+        Returns:
+            Dict with 'logits', optionally 'lead_features'
+        """
+        B, C, T = x.shape
+        
+        # Reshape for per-lead processing
+        x_flat = x.view(B * C, 1, T)  # [B*C, 1, T]
+        
+        # Extract temporal features
+        temporal_features = self.temporal_encoder(x_flat)  # [B*C, hidden_dim, 4]
+        temporal_features = temporal_features.flatten(1)  # [B*C, hidden_dim*4]
+        
+        # Project to hidden dim
+        lead_features = self.lead_proj(temporal_features)  # [B*C, hidden_dim]
+        lead_features = lead_features.view(B, C, self.hidden_dim)  # [B, C, hidden_dim]
+        
+        # Aggregate across leads
+        aggregated = self._aggregate_leads(lead_features)  # [B, hidden_dim]
+        
+        # Classify
+        logits = self.classifier(aggregated)  # [B, num_classes]
+        
+        result = {'logits': logits}
+        
+        if return_lead_features:
+            result['lead_features'] = lead_features
+            
+        return result
+    
+    def _aggregate_leads(self, lead_features: torch.Tensor) -> torch.Tensor:
+        """Aggregate features across leads."""
+        B, C, D = lead_features.shape
+        
+        if self.aggregation == 'mean':
+            return lead_features.mean(dim=1)
+            
+        elif self.aggregation == 'attention':
+            attn_scores = self.lead_attention(lead_features)  # [B, C, 1]
+            attn_weights = F.softmax(attn_scores, dim=1)
+            aggregated = (lead_features * attn_weights).sum(dim=1)
+            return aggregated
+            
+        elif self.aggregation == 'transformer':
+            cls_tokens = self.cls_token.expand(B, -1, -1)
+            x = torch.cat([cls_tokens, lead_features], dim=1)
+            x = self.pos_encoding(x)
+            x = self.transformer(x)
+            return x[:, 0, :]
+
+
+class RawDualModalityClassifier(nn.Module):
+    """
+    Baseline dual-modality classifier using raw signals without tokenization.
+    """
+    
+    def __init__(
+        self,
+        num_classes: int = 2,
+        eeg_num_leads: int = 30,
+        fnirs_num_leads: int = 36,
+        eeg_input_length: int = 800,
+        fnirs_input_length: int = 40,
+        aggregation: Literal['mean', 'attention', 'transformer'] = 'attention',
+        fusion: Literal['early', 'late', 'cross_attention'] = 'early',
+        hidden_dim: int = 128,
+        num_heads: int = 4,
+        num_layers: int = 2,
+        dropout: float = 0.1,
+    ):
+        super().__init__()
+        
+        self.hidden_dim = hidden_dim
+        self.fusion = fusion
+        
+        # EEG temporal encoder
+        self.eeg_encoder = nn.Sequential(
+            nn.Conv1d(1, 32, kernel_size=25, stride=4, padding=12),
+            nn.BatchNorm1d(32),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(32, 64, kernel_size=11, stride=2, padding=5),
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(64, hidden_dim, kernel_size=5, stride=2, padding=2),
+            nn.BatchNorm1d(hidden_dim),
+            nn.GELU(),
+            nn.AdaptiveAvgPool1d(4),
+        )
+        
+        # fNIRS temporal encoder (smaller kernel sizes for shorter signals)
+        self.fnirs_encoder = nn.Sequential(
+            nn.Conv1d(1, 32, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm1d(32),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(64),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(64, hidden_dim, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(hidden_dim),
+            nn.GELU(),
+            nn.AdaptiveAvgPool1d(4),
+        )
+        
+        # Lead projections
+        self.eeg_proj = nn.Sequential(
+            nn.Linear(hidden_dim * 4, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        
+        self.fnirs_proj = nn.Sequential(
+            nn.Linear(hidden_dim * 4, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+        
+        # Lead aggregation modules
+        self.eeg_num_leads = eeg_num_leads
+        self.fnirs_num_leads = fnirs_num_leads
+        self.aggregation = aggregation
+        
+        if aggregation == 'attention':
+            self.eeg_lead_attn = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.Tanh(),
+                nn.Linear(hidden_dim // 2, 1),
+            )
+            self.fnirs_lead_attn = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.Tanh(),
+                nn.Linear(hidden_dim // 2, 1),
+            )
+        elif aggregation == 'transformer':
+            self.pos_encoding = PositionalEncoding(hidden_dim, max_len=max(eeg_num_leads, fnirs_num_leads) + 1, dropout=dropout)
+            self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=hidden_dim, nhead=num_heads, dim_feedforward=hidden_dim * 4,
+                dropout=dropout, activation='gelu', batch_first=True,
+            )
+            self.eeg_transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+            self.fnirs_transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
+        # Fusion and classification
+        if fusion == 'early':
+            self.fusion_proj = nn.Sequential(
+                nn.Linear(hidden_dim * 2, hidden_dim),
+                nn.GELU(),
+                nn.Dropout(dropout),
+            )
+            classifier_input_dim = hidden_dim
+        elif fusion == 'late':
+            classifier_input_dim = hidden_dim * 2
+        elif fusion == 'cross_attention':
+            self.cross_attn = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
+            self.fusion_proj = nn.Sequential(
+                nn.Linear(hidden_dim * 2, hidden_dim),
+                nn.GELU(),
+                nn.Dropout(dropout),
+            )
+            classifier_input_dim = hidden_dim
+        else:
+            raise ValueError(f"Unknown fusion: {fusion}")
+        
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(classifier_input_dim),
+            nn.Dropout(dropout),
+            nn.Linear(classifier_input_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, num_classes),
+        )
+        
+    def _process_modality(self, x: torch.Tensor, encoder: nn.Module, proj: nn.Module, 
+                          lead_attn: Optional[nn.Module] = None, 
+                          transformer: Optional[nn.Module] = None) -> torch.Tensor:
+        """Process a single modality."""
+        B, C, T = x.shape
+        
+        x_flat = x.view(B * C, 1, T)
+        temporal_features = encoder(x_flat)
+        temporal_features = temporal_features.flatten(1)
+        lead_features = proj(temporal_features)
+        lead_features = lead_features.view(B, C, self.hidden_dim)
+        
+        if self.aggregation == 'mean':
+            return lead_features.mean(dim=1)
+        elif self.aggregation == 'attention':
+            attn_scores = lead_attn(lead_features)
+            attn_weights = F.softmax(attn_scores, dim=1)
+            return (lead_features * attn_weights).sum(dim=1)
+        elif self.aggregation == 'transformer':
+            cls_tokens = self.cls_token.expand(B, -1, -1)
+            x = torch.cat([cls_tokens, lead_features], dim=1)
+            x = self.pos_encoding(x)
+            x = transformer(x)
+            return x[:, 0, :]
+    
+    def forward(self, eeg: torch.Tensor, fnirs: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            eeg: [B, C_eeg, T_eeg] EEG signals
+            fnirs: [B, C_fnirs, T_fnirs] fNIRS signals
+            
+        Returns:
+            Dict with 'logits'
+        """
+        # Process each modality
+        if self.aggregation == 'attention':
+            eeg_features = self._process_modality(eeg, self.eeg_encoder, self.eeg_proj, self.eeg_lead_attn)
+            fnirs_features = self._process_modality(fnirs, self.fnirs_encoder, self.fnirs_proj, self.fnirs_lead_attn)
+        elif self.aggregation == 'transformer':
+            eeg_features = self._process_modality(eeg, self.eeg_encoder, self.eeg_proj, transformer=self.eeg_transformer)
+            fnirs_features = self._process_modality(fnirs, self.fnirs_encoder, self.fnirs_proj, transformer=self.fnirs_transformer)
+        else:
+            eeg_features = self._process_modality(eeg, self.eeg_encoder, self.eeg_proj)
+            fnirs_features = self._process_modality(fnirs, self.fnirs_encoder, self.fnirs_proj)
+        
+        # Fusion
+        if self.fusion == 'early':
+            combined = torch.cat([eeg_features, fnirs_features], dim=-1)
+            fused = self.fusion_proj(combined)
+        elif self.fusion == 'late':
+            fused = torch.cat([eeg_features, fnirs_features], dim=-1)
+        elif self.fusion == 'cross_attention':
+            eeg_expanded = eeg_features.unsqueeze(1)
+            fnirs_expanded = fnirs_features.unsqueeze(1)
+            attn_out, _ = self.cross_attn(eeg_expanded, fnirs_expanded, fnirs_expanded)
+            combined = torch.cat([eeg_features, attn_out.squeeze(1)], dim=-1)
+            fused = self.fusion_proj(combined)
+        
+        logits = self.classifier(fused)
+        
+        return {'logits': logits}
+
+
 if __name__ == '__main__':
     import sys
     sys.path.insert(0, str(__file__).replace('\\', '/').rsplit('/', 3)[0])
