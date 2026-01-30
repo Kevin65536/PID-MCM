@@ -1159,12 +1159,36 @@ def main():
             visualizer.plot_codebook_usage(indices, codebook_size)
             
             # 6. Token embeddings (if available)
-            if hasattr(tokenizer, 'get_codebook_embeddings'):
-                embeddings = tokenizer.get_codebook_embeddings()
-                if embeddings is not None:
-                    flat_indices = indices.flatten()
-                    usage = torch.bincount(flat_indices.long(), minlength=codebook_size)
-                    visualizer.plot_token_embeddings(embeddings, usage)
+            # --- Generate t-SNE for all validation data ---
+            try:
+                if hasattr(tokenizer, 'get_codebook_embeddings'):
+                    embeddings = tokenizer.get_codebook_embeddings()
+                    if embeddings is not None:
+                        # Collect all codebook indices from validation set
+                        all_indices = []
+                        for batch in val_loader:
+                            if isinstance(batch, dict):
+                                x = batch['data']
+                            else:
+                                x = batch[0]
+                            x = x.to(device)
+                            patch_size = get_patch_size(tokenizer, config)
+                            tokenizer_type = config['model'].get('type', 'patch_vqvae')
+                            x_input = prepare_input(x, patch_size, tokenizer_type)
+                            outputs = tokenizer(x_input)
+                            std_out = StandardizedOutput.standardize(outputs)
+                            if 'indices' in std_out:
+                                idx = std_out['indices']
+                                if isinstance(idx, (list, tuple)):
+                                    idx = idx[0]
+                                all_indices.append(idx.detach().cpu().flatten())
+                        if all_indices:
+                            all_indices = torch.cat(all_indices, dim=0)
+                            codebook_size = embeddings.shape[0]
+                            usage = torch.bincount(all_indices.long(), minlength=codebook_size)
+                            visualizer.plot_token_embeddings(embeddings, usage, method='tsne', filename='token_embeddings_tsne.png')
+            except Exception as e:
+                print(f"[Summary] t-SNE generation failed: {e}")
         
         # 7. Summary figure
         visualizer.generate_summary_figure(final_val, config)
