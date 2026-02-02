@@ -26,6 +26,30 @@ pid-mcm-implementation/
 
 **Rule:** `src` should contain **classes and functions** only. `experiments/scripts` should contain **executable scripts** that use `src`.
 
+## 1.5 Dataset Usage Requirements
+
+**⚠️ IMPORTANT: Before using any dataset, you MUST read the dataset description file first.**
+
+All datasets in the `data/` directory have their own documentation. A centralized description is available at:
+- **`data/DATASETS_DESCRIPTION.md`** - Overview of all datasets with key parameters
+
+### Dataset-Specific Documentation
+
+| Dataset | Documentation File | Format |
+|---------|-------------------|--------|
+| EEG+NIRS Single-Trial | `Open access dataset for...BCIs.html` | HTML |
+| REFED-dataset | `README.md` | Markdown |
+| Visual Cognitive Motivation | `readme.txt` | Text |
+| Simultaneous EEG&NIRS | `Dataset description_*.pdf` | PDF |
+
+### Required Checks Before Using a Dataset
+1. [ ] Read `data/DATASETS_DESCRIPTION.md` for overview
+2. [ ] Read the dataset's original documentation file
+3. [ ] Verify sampling rates match your configuration
+4. [ ] Check data format (raw vs preprocessed)
+5. [ ] Note any preprocessing already applied
+6. [ ] Confirm license/citation requirements
+
 ## 2. Configuration Standards
 
 All experiments must be configurable via YAML files located in `experiments/configs/`.
