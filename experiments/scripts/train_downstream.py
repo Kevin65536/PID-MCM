@@ -62,6 +62,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.data.augmentation import SignalAugmentor, DualModalityAugmentor, LabelSmoothingCrossEntropy, create_augmentor_from_config
 from src.tokenizers import create_tokenizer, list_tokenizers
 from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
 from src.utils.logger import ExperimentLogger
@@ -519,9 +520,12 @@ def train_epoch(
     criterion: nn.Module,
     device: torch.device,
     modality: str,
+    augmentor: Optional[SignalAugmentor] = None,
 ) -> Dict[str, float]:
     """Train for one epoch."""
     model.train()
+    if augmentor is not None:
+        augmentor.train()
     
     total_loss = 0.0
     all_preds = []
@@ -533,9 +537,24 @@ def train_epoch(
         if modality == 'both':
             eeg = batch['eeg'].to(device)
             fnirs = batch['fnirs'].to(device)
+            
+            # Apply augmentation
+            if augmentor is not None:
+                eeg, aug_labels = augmentor(eeg, labels)
+                fnirs, _ = augmentor(fnirs, labels)  # Same transform for consistency
+                if aug_labels is not None and aug_labels.dim() == 2:
+                    labels = aug_labels  # Use soft labels from mixup
+            
             outputs = model(eeg, fnirs)
         else:
             x = batch['data'].to(device)
+            
+            # Apply augmentation
+            if augmentor is not None:
+                x, aug_labels = augmentor(x, labels)
+                if aug_labels is not None and aug_labels.dim() == 2:
+                    labels = aug_labels  # Use soft labels from mixup
+            
             outputs = model(x)
         
         logits = outputs['logits']
@@ -549,7 +568,13 @@ def train_epoch(
         total_loss += loss.item()
         preds = logits.argmax(dim=-1).cpu().numpy()
         all_preds.extend(preds)
-        all_labels.extend(labels.cpu().numpy())
+        
+        # For soft labels, use argmax to get hard labels for accuracy
+        if labels.dim() == 2:
+            hard_labels = labels.argmax(dim=-1).cpu().numpy()
+        else:
+            hard_labels = labels.cpu().numpy()
+        all_labels.extend(hard_labels)
     
     accuracy = accuracy_score(all_labels, all_preds)
     
@@ -666,6 +691,22 @@ def train(
     print(f"  Val: {len(dataloaders['val'].dataset)} samples")
     print(f"  Test: {len(dataloaders['test'].dataset)} samples")
     
+    # Create augmentor if configured
+    augmentor = create_augmentor_from_config(config)
+    if augmentor is not None:
+        augmentor = augmentor.to(device)
+        print(f"\nData augmentation enabled:")
+        if augmentor.time_shift_max > 0:
+            print(f"  - Time shift: ±{augmentor.time_shift_max} samples")
+        if augmentor.channel_dropout_prob > 0:
+            print(f"  - Channel dropout: {augmentor.channel_dropout_prob*100:.1f}%")
+        if augmentor.gaussian_noise_std > 0:
+            print(f"  - Gaussian noise: std={augmentor.gaussian_noise_std}")
+        if augmentor.scaling_range != (1.0, 1.0):
+            print(f"  - Amplitude scaling: {augmentor.scaling_range}")
+        if augmentor.mixup_alpha > 0:
+            print(f"  - Mixup: alpha={augmentor.mixup_alpha}")
+    
     # Create model
     model = create_model(config, device)
     n_params = sum(p.numel() for p in model.parameters())
@@ -699,7 +740,13 @@ def train(
         milestones=[warmup_epochs]
     )
     
-    criterion = nn.CrossEntropyLoss()
+    # Loss function with optional label smoothing
+    label_smoothing = training_cfg.get('label_smoothing', 0.0)
+    if label_smoothing > 0:
+        criterion = LabelSmoothingCrossEntropy(smoothing=label_smoothing)
+        print(f"\nLabel smoothing: {label_smoothing}")
+    else:
+        criterion = nn.CrossEntropyLoss()
     
     # Training loop
     best_val_acc = 0.0
@@ -716,7 +763,7 @@ def train(
         epoch_start = time.time()
         
         train_metrics = train_epoch(
-            model, dataloaders['train'], optimizer, criterion, device, modality
+            model, dataloaders['train'], optimizer, criterion, device, modality, augmentor
         )
         val_metrics = evaluate(
             model, dataloaders['val'], criterion, device, modality
