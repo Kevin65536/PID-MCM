@@ -163,3 +163,16 @@ When adding a new model or experiment:
 2.  [ ] **Add Config**: Create a new config in `experiments/configs/` (inherit from `base.yaml` if possible).
 3.  [ ] **Create Script**: Create a training script in `experiments/scripts/` using `ExperimentLogger`.
 4.  [ ] **Verify**: Run a short test (e.g., 2 epochs) to ensure `runs/` folder is populated correctly with `config.yaml`, `metrics.json`, and figures.
+
+## 6. Documentation & Archiving Protocol
+
+### 6.1 Human-Readable Logging
+While `metrics.json` and automated logs capture exact numbers, context must be captured manually:
+*   Any significant new experiment **must** be appended to `docs/EXPERIMENT_LOG.md`.
+*   Follow the template exactly: include clear definitions of `Objective`, `Configuration`, `Results`, `Analysis`, and `Conclusion`.
+
+### 6.2 Phase Archiving
+When an experimental phase reaches a major conclusion (whether successful or hitting a defined bottleneck/dead end):
+1.  **Document Learnings**: Summarize the critical bottleneck or successful breakthrough at the top of the main experiment log.
+2.  **Archive Runs**: Move the associated run folders into `experiments/runs/archive/<phase_or_topic_name>/`.
+3.  **Archive Logs**: Move the raw text block of those experiments into a dedicated archive doc (e.g., `docs/ARCHIVED_PRE_EXPERIMENTS.md`) to keep the primary log clean and readable for the next phase.
