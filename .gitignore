@@ -24,3 +24,6 @@ __pycache__
 
 # temp log directory    
 /logs
+
+# comparative methods
+/comparative_methods
