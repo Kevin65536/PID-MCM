@@ -1,0 +1,74 @@
+# ==============================================================================
+# UMAP Finetune Configuration — EEG + fNIRS Classification
+# ==============================================================================
+#
+# Finetune the pretrained UMAP model for downstream classification.
+# Supports three modality modes:
+#   - "multi": both EEG + fNIRS (full multimodal)
+#   - "eeg":   EEG only (simulate missing fNIRS)
+#   - "eye":   fNIRS only (simulate missing EEG), uses "eye" in UMAP naming
+#
+# The classification head uses CLS tokens fused from both modality branches.
+# ==============================================================================
+
+experiment:
+  name: "UMAP_finetune_eeg_fnirs"
+  description: "UMAP finetuning for motor imagery classification"
+  seed: 42
+
+# ---- Data ----
+data:
+  root: "data/EEG+NIRS Single-Trial"
+  task: "motor_imagery"           # motor_imagery | mental_arithmetic
+  seq_length: 5
+  window_duration_s: 10.0
+  feature_mode: "channel_avg"
+  normalize: true
+
+  train_subjects: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+  val_subjects: [21,22,23,24,25]
+  test_subjects: [26,27,28,29]
+
+# ---- Model ----
+model:
+  # Architecture (must match pretrained model)
+  hidden_size: 64
+  intermediate_size: 256
+  num_attention_heads: 4
+  num_hidden_layers: 4
+  hidden_act: "gelu"
+  hidden_dropout_prob: 0.1
+  attention_probs_dropout_prob: 0.1
+  initializer_range: 0.02
+  layer_norm_eps: 1.0e-12
+  chunk_size_feed_forward: 0
+  output_hidden_states: true
+
+  # Classification
+  n_class: 2                      # Motor imagery: Left vs Right
+  modality: "multi"               # multi | eeg | eye
+
+# ---- Pretrained checkpoint ----
+pretrain:
+  checkpoint: null                # Path to pretrain checkpoint, null = train from scratch
+  freeze_modality_missing: true   # Freeze params of the missing modality
+
+# ---- Training ----
+training:
+  batch_size: 64
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 0.01
+  gradient_clip: 1.0
+
+  early_stopping:
+    enabled: true
+    patience: 20
+    metric: "val_accuracy"
+    mode: "max"
+
+# ---- Logging ----
+logging:
+  checkpoint_every_n: 20
+  plot_every_n: 10
+  run_name: null

@@ -1,0 +1,29 @@
+if_DDP: False # Set to True when using DDP
+lr: 
+blr: 1.e-4
+min_lr: 0
+batch_size: 256
+weight_decay: 0.05
+warmup_epochs: 10
+epochs: 200
+
+seq_length: 5
+eeg_input_dim: 310
+eye_input_dim: 33
+
+chunk_size_feed_forward: 0
+attention_probs_dropout_prob: 0.1
+output_hidden_states: True
+
+hidden_act: "gelu"
+hidden_dropout_prob: 0.1
+hidden_size: 64
+intermediate_size: 256
+num_attention_heads: 4
+num_hidden_layers: 4
+
+initializer_range: 0.02
+layer_norm_eps: 1.e-12
+
+model_type: "blip_2_qformer"
+
