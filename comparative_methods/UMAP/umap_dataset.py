@@ -21,11 +21,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-# Add project root to path
+# Add project root to path (NOT src/ directly, to avoid shadowing 'tokenizers' package)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset
+from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset
 
 
 class UMAPDataset(Dataset):
