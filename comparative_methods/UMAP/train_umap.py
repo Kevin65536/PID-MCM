@@ -42,11 +42,14 @@ import yaml
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(SCRIPT_DIR))
-sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+# Add project root (NOT src/ directly, to avoid shadowing 'tokenizers' package)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from umap_dataset import UMAPDataset, create_umap_dataloaders, collate_missing_modality
 from model import UMAPPretrain, UMAPFinetune
 from model.umap_utils import adjust_learning_rate, compute_acc
+import umap_plots
 
 
 # ===========================================================================
@@ -229,10 +232,19 @@ def create_finetune_model(dataset_info: dict, model_cfg: dict, device='cuda'):
 def load_pretrain_weights(model, checkpoint_path):
     ckpt = torch.load(checkpoint_path, map_location='cpu')
     state = model.state_dict()
+    pt_state = ckpt['model']
+
+    # Build mapping: pretrain uses "UMAP." prefix, finetune uses "Qformer."
+    mapped = {}
+    for pk, pv in pt_state.items():
+        mapped[pk] = pv
+        if pk.startswith('UMAP.'):
+            mapped['Qformer.' + pk[5:]] = pv
+
     loaded = 0
     for k in state:
-        if k in ckpt['model']:
-            state[k] = ckpt['model'][k]
+        if k in mapped and state[k].shape == mapped[k].shape:
+            state[k] = mapped[k]
             loaded += 1
     model.load_state_dict(state)
     print(f"Loaded {loaded}/{len(state)} params from pretrain checkpoint")
@@ -415,6 +427,28 @@ def run_pretrain(cfg: dict):
         'final_train': {k: v[-1] for k, v in logger.history['train'].items()},
         'final_val': {k: v[-1] for k, v in logger.history['val'].items()},
     })
+
+    # ── Comprehensive plots ──
+    # Save history before generating plots
+    h = {p: {k: [float(v) for v in vs] for k, vs in d.items()} for p, d in logger.history.items()}
+    with open(run_dir / 'history.json', 'w') as f:
+        json.dump(h, f, indent=2)
+
+    logger.log("Generating comprehensive pretrain plots...")
+    try:
+        # Load best model for model-dependent plots
+        best_ckpt = run_dir / 'checkpoints' / 'best_checkpoint.pth'
+        if best_ckpt.exists():
+            ckpt = torch.load(best_ckpt, map_location=device)
+            model.load_state_dict(ckpt['model'])
+        umap_plots.generate_pretrain_plots(
+            run_dir, model=model,
+            dataloader=dataloaders['val'], device=device
+        )
+        logger.log("Pretrain plots saved.")
+    except Exception as e:
+        logger.log(f"Warning: some plots failed: {e}")
+
     logger.finalize()
     return run_dir
 
@@ -517,6 +551,25 @@ def run_finetune(cfg: dict):
 
     logger.plot_curves(['loss', 'accuracy'], title='Finetune', filename='finetune_curves.png')
     logger.save_results(results)
+
+    # ── Comprehensive plots ──
+    # Save history before generating plots so generate_finetune_plots can read it
+    h = {p: {k: [float(v) for v in vs] for k, vs in d.items()} for p, d in logger.history.items()}
+    with open(run_dir / 'history.json', 'w') as f:
+        json.dump(h, f, indent=2)
+
+    logger.log("Generating comprehensive finetune plots...")
+    try:
+        dl_for_plots = dataloaders['test'] if modality == 'multi' else None
+        umap_plots.generate_finetune_plots(
+            run_dir, model=model if modality == 'multi' else None,
+            dataloader=dl_for_plots, device=device,
+            preds=test_preds, labels=test_labels, subj_accs=subj_accs,
+        )
+        logger.log("Finetune plots saved.")
+    except Exception as e:
+        logger.log(f"Warning: some plots failed: {e}")
+
     logger.finalize()
     return run_dir
 
