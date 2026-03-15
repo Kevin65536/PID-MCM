@@ -6,6 +6,15 @@
 
 ---
 
+## Update Notice (2026-03-15)
+
+For the next-stage foundation-model direction (subject/task factor separation, multi-scale temporal-spatial fusion, and cross-task transfer), see:
+
+- [docs/THEORY_V2_FOUNDATION_MODEL.md](THEORY_V2_FOUNDATION_MODEL.md)
+- [docs/EXPERIMENT_PLAN_V2_FOUNDATION.md](EXPERIMENT_PLAN_V2_FOUNDATION.md)
+
+---
+
 ## 1. Motivation: Why Tokenization?
 
 EEG 与 fNIRS 是两种互补的神经信号模态：

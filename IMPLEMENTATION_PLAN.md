@@ -5,6 +5,9 @@
 > **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)  
 > **Experiment Log**: [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md)
 
+> **Next-Stage Theory (V2)**: [`docs/THEORY_V2_FOUNDATION_MODEL.md`](docs/THEORY_V2_FOUNDATION_MODEL.md)  
+> **Next-Stage Plan (V2)**: [`docs/EXPERIMENT_PLAN_V2_FOUNDATION.md`](docs/EXPERIMENT_PLAN_V2_FOUNDATION.md)
+
 ---
 
 ## 0. Overview
