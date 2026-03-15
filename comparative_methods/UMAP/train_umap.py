@@ -46,7 +46,12 @@ sys.path.insert(0, str(SCRIPT_DIR))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from umap_dataset import UMAPDataset, create_umap_dataloaders, collate_missing_modality
+from umap_dataset import (
+    UMAPDataset,
+    create_umap_dataloaders,
+    create_umap_subject_dependent_dataloaders,
+    collate_missing_modality,
+)
 from model import UMAPPretrain, UMAPFinetune
 from model.umap_utils import adjust_learning_rate, compute_acc
 import umap_plots
@@ -70,6 +75,7 @@ def apply_cli_overrides(cfg: dict, args: argparse.Namespace) -> dict:
         'data.task': args.task,
         'data.seq_length': args.seq_length,
         'data.feature_mode': args.feature_mode,
+        'data.split_mode': args.split_mode,
         'logging.run_name': args.run_name,
     }
     if hasattr(args, 'modality') and args.modality is not None:
@@ -374,17 +380,33 @@ def run_pretrain(cfg: dict):
     dcfg = cfg['data']
     tcfg = cfg['training']
 
-    dataloaders, dinfo = create_umap_dataloaders(
-        data_root=str(PROJECT_ROOT / dcfg['root']),
-        task=dcfg['task'],
-        seq_length=dcfg['seq_length'],
-        window_duration_s=dcfg.get('window_duration_s', 10.0),
-        feature_mode=dcfg['feature_mode'],
-        batch_size=tcfg['batch_size'],
-        train_subjects=dcfg.get('train_subjects'),
-        val_subjects=dcfg.get('val_subjects'),
-        test_subjects=dcfg.get('test_subjects'),
-    )
+    split_mode = dcfg.get('split_mode', 'cross_subject')
+    if split_mode == 'subject_dependent':
+        dataloaders, dinfo = create_umap_subject_dependent_dataloaders(
+            data_root=str(PROJECT_ROOT / dcfg['root']),
+            task=dcfg['task'],
+            seq_length=dcfg['seq_length'],
+            window_duration_s=dcfg.get('window_duration_s', 10.0),
+            feature_mode=dcfg['feature_mode'],
+            batch_size=tcfg['batch_size'],
+            subject_ids=dcfg.get('subject_ids'),
+            train_sessions=dcfg.get('train_sessions'),
+            test_sessions=dcfg.get('test_sessions'),
+            val_ratio=dcfg.get('val_ratio', 0.1),
+            random_seed=cfg.get('experiment', {}).get('seed', 42),
+        )
+    else:
+        dataloaders, dinfo = create_umap_dataloaders(
+            data_root=str(PROJECT_ROOT / dcfg['root']),
+            task=dcfg['task'],
+            seq_length=dcfg['seq_length'],
+            window_duration_s=dcfg.get('window_duration_s', 10.0),
+            feature_mode=dcfg['feature_mode'],
+            batch_size=tcfg['batch_size'],
+            train_subjects=dcfg.get('train_subjects'),
+            val_subjects=dcfg.get('val_subjects'),
+            test_subjects=dcfg.get('test_subjects'),
+        )
 
     model, qf_cfg = create_pretrain_model(dinfo, cfg['model'], device=str(device))
     n_params = sum(p.numel() for p in model.parameters())
@@ -395,7 +417,10 @@ def run_pretrain(cfg: dict):
     exp_cfg = {**cfg, 'dataset_info': dinfo, 'n_params': n_params, 'device': str(device)}
     logger = ExperimentLogger(run_dir, exp_cfg)
     logger.log(f"Parameters: {n_params:,}")
-    logger.log(f"Train: {dinfo['n_train']} samples | EEG dim={dinfo['eeg_input_dim']} | fNIRS dim={dinfo['fnirs_input_dim']}")
+    logger.log(
+        f"Train: {dinfo['n_train']} samples | EEG dim={dinfo['eeg_input_dim']} | fNIRS dim={dinfo['fnirs_input_dim']}"
+    )
+    logger.log(f"Split mode: {split_mode}")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=tcfg['lr'], weight_decay=tcfg['weight_decay'])
 
@@ -460,17 +485,33 @@ def run_finetune(cfg: dict):
     mcfg = cfg['model']
     modality = mcfg.get('modality', 'multi')
 
-    dataloaders, dinfo = create_umap_dataloaders(
-        data_root=str(PROJECT_ROOT / dcfg['root']),
-        task=dcfg['task'],
-        seq_length=dcfg['seq_length'],
-        window_duration_s=dcfg.get('window_duration_s', 10.0),
-        feature_mode=dcfg['feature_mode'],
-        batch_size=tcfg['batch_size'],
-        train_subjects=dcfg.get('train_subjects'),
-        val_subjects=dcfg.get('val_subjects'),
-        test_subjects=dcfg.get('test_subjects'),
-    )
+    split_mode = dcfg.get('split_mode', 'cross_subject')
+    if split_mode == 'subject_dependent':
+        dataloaders, dinfo = create_umap_subject_dependent_dataloaders(
+            data_root=str(PROJECT_ROOT / dcfg['root']),
+            task=dcfg['task'],
+            seq_length=dcfg['seq_length'],
+            window_duration_s=dcfg.get('window_duration_s', 10.0),
+            feature_mode=dcfg['feature_mode'],
+            batch_size=tcfg['batch_size'],
+            subject_ids=dcfg.get('subject_ids'),
+            train_sessions=dcfg.get('train_sessions'),
+            test_sessions=dcfg.get('test_sessions'),
+            val_ratio=dcfg.get('val_ratio', 0.1),
+            random_seed=cfg.get('experiment', {}).get('seed', 42),
+        )
+    else:
+        dataloaders, dinfo = create_umap_dataloaders(
+            data_root=str(PROJECT_ROOT / dcfg['root']),
+            task=dcfg['task'],
+            seq_length=dcfg['seq_length'],
+            window_duration_s=dcfg.get('window_duration_s', 10.0),
+            feature_mode=dcfg['feature_mode'],
+            batch_size=tcfg['batch_size'],
+            train_subjects=dcfg.get('train_subjects'),
+            val_subjects=dcfg.get('val_subjects'),
+            test_subjects=dcfg.get('test_subjects'),
+        )
 
     model, qf_cfg = create_finetune_model(dinfo, mcfg, device=str(device))
     n_params = sum(p.numel() for p in model.parameters())
@@ -486,6 +527,7 @@ def run_finetune(cfg: dict):
     exp_cfg = {**cfg, 'dataset_info': dinfo, 'n_params': n_params, 'device': str(device)}
     logger = ExperimentLogger(run_dir, exp_cfg)
     logger.log(f"Parameters: {n_params:,} | Modality: {modality} | Pretrained: {bool(pt_ckpt)}")
+    logger.log(f"Split mode: {split_mode}")
 
     # Re-wrap dataloaders with missing-modality collate
     collate_fn = partial(collate_missing_modality, mode=modality)
@@ -590,6 +632,7 @@ def build_parser():
     common.add_argument('--task', type=str, default=None)
     common.add_argument('--seq_length', type=int, default=None)
     common.add_argument('--feature_mode', type=str, default=None)
+    common.add_argument('--split_mode', type=str, default=None, choices=['cross_subject', 'subject_dependent'])
     common.add_argument('--run_name', type=str, default=None)
 
     sub.add_parser('pretrain', parents=[common])

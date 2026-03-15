@@ -1,0 +1,60 @@
+# ==============================================================================
+# UMAP Finetune Configuration — Subject-Dependent (single fold)
+# ==============================================================================
+
+experiment:
+  name: "UMAP_finetune_subject_dependent"
+  description: "Subject-dependent finetuning for motor imagery classification"
+  seed: 42
+
+data:
+  root: "data/EEG+NIRS Single-Trial"
+  task: "motor_imagery"
+  seq_length: 5
+  window_duration_s: 10.0
+  feature_mode: "channel_avg"
+  normalize: true
+
+  split_mode: "subject_dependent"
+  subject_ids: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
+  train_sessions: [0, 2]
+  test_sessions: [4]
+  val_ratio: 0.1
+
+model:
+  hidden_size: 64
+  intermediate_size: 256
+  num_attention_heads: 4
+  num_hidden_layers: 4
+  hidden_act: "gelu"
+  hidden_dropout_prob: 0.1
+  attention_probs_dropout_prob: 0.1
+  initializer_range: 0.02
+  layer_norm_eps: 1.0e-12
+  chunk_size_feed_forward: 0
+  output_hidden_states: true
+
+  n_class: 2
+  modality: "multi"
+
+pretrain:
+  checkpoint: null
+  freeze_modality_missing: true
+
+training:
+  batch_size: 64
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 0.01
+  gradient_clip: 1.0
+
+  early_stopping:
+    enabled: true
+    patience: 20
+    metric: "val_accuracy"
+    mode: "max"
+
+logging:
+  checkpoint_every_n: 20
+  plot_every_n: 10
+  run_name: null

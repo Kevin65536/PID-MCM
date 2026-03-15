@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Literal, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 
 # Add project root to path (NOT src/ directly, to avoid shadowing 'tokenizers' package)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -42,7 +42,7 @@ class UMAPDataset(Dataset):
         task: Literal['motor_imagery', 'mental_arithmetic'] = 'motor_imagery',
         seq_length: int = 5,
         window_duration_s: float = 10.0,
-        feature_mode: Literal['channel_avg', 'band_power'] = 'channel_avg',
+        feature_mode: Literal['channel_avg', 'band_power', 'de'] = 'channel_avg',
         normalize: bool = True,
         exclude_eog: bool = True,
         hbo_only: bool = True,
@@ -71,7 +71,7 @@ class UMAPDataset(Dataset):
         if feature_mode == 'channel_avg':
             self.eeg_input_dim = self.eeg_channels
             self.fnirs_input_dim = self.fnirs_channels
-        elif feature_mode == 'band_power':
+        elif feature_mode in ('band_power', 'de'):
             self.eeg_input_dim = self.eeg_channels * 5   # 5 frequency bands
             self.fnirs_input_dim = self.fnirs_channels * 3  # mean, slope, std
         else:
@@ -123,6 +123,37 @@ class UMAPDataset(Dataset):
 
         return torch.stack(features, dim=0)
 
+    def _extract_de_features(self, eeg_data: torch.Tensor, n_segments: int) -> torch.Tensor:
+        """
+        Extract EEG differential entropy (DE) features over canonical bands.
+        DE per channel-band is computed as: 0.5 * log(2*pi*e*sigma^2).
+        Returns: (n_segments, n_channels * 5)
+        """
+        n_channels, n_samples = eeg_data.shape
+        seg_len = n_samples // n_segments
+        eeg_data = eeg_data[:, :seg_len * n_segments]
+
+        bands = [(0.5, 4), (4, 8), (8, 13), (13, 30), (30, 45)]
+        fs = self.eeg_fs
+        eps = 1e-8
+        features = []
+
+        for seg_idx in range(n_segments):
+            segment = eeg_data[:, seg_idx * seg_len:(seg_idx + 1) * seg_len]
+            fft_vals = torch.fft.rfft(segment, dim=1)
+            freqs = torch.fft.rfftfreq(seg_len, d=1.0 / fs)
+            seg_features = []
+
+            for low, high in bands:
+                mask = (freqs >= low) & (freqs <= high)
+                band_power = (torch.abs(fft_vals[:, mask]) ** 2).mean(dim=1)
+                de = 0.5 * torch.log(2.0 * np.pi * np.e * (band_power + eps))
+                seg_features.append(de)
+
+            features.append(torch.cat(seg_features, dim=0))
+
+        return torch.stack(features, dim=0)
+
     def _extract_fnirs_stats(self, fnirs_data: torch.Tensor, n_segments: int) -> torch.Tensor:
         """
         Extract fNIRS statistical features: mean, slope, std.
@@ -157,6 +188,9 @@ class UMAPDataset(Dataset):
             fnirs_features = self._segment_channel_avg(fnirs, self.seq_length)
         elif self.feature_mode == 'band_power':
             eeg_features = self._extract_band_power(eeg, self.seq_length)
+            fnirs_features = self._extract_fnirs_stats(fnirs, self.seq_length)
+        elif self.feature_mode == 'de':
+            eeg_features = self._extract_de_features(eeg, self.seq_length)
             fnirs_features = self._extract_fnirs_stats(fnirs, self.seq_length)
 
         if self.normalize:
@@ -221,6 +255,107 @@ def create_umap_dataloaders(
                 'seq_length': seq_length,
                 'n_train': len(ds),
             }
+
+    return dataloaders, dataset_info
+
+
+def create_umap_subject_dependent_dataloaders(
+    data_root: str,
+    task: str = 'motor_imagery',
+    seq_length: int = 5,
+    window_duration_s: float = 10.0,
+    feature_mode: str = 'channel_avg',
+    batch_size: int = 64,
+    subject_ids: Optional[List[int]] = None,
+    train_sessions: Optional[List[int]] = None,
+    test_sessions: Optional[List[int]] = None,
+    val_ratio: float = 0.1,
+    random_seed: int = 42,
+    num_workers: int = 0,
+) -> Tuple[Dict[str, DataLoader], dict]:
+    """
+    Create train/val/test DataLoaders under subject-dependent protocol.
+
+    Each subject contributes train/test samples according to session split.
+    Validation split is sampled from the training pool with per-subject stratification.
+    """
+    if subject_ids is None:
+        subject_ids = list(range(1, 30))
+    if train_sessions is None:
+        train_sessions = [0, 2]
+    if test_sessions is None:
+        test_sessions = [4]
+
+    full_ds = UMAPDataset(
+        data_root=data_root,
+        subject_ids=subject_ids,
+        task=task,
+        seq_length=seq_length,
+        window_duration_s=window_duration_s,
+        feature_mode=feature_mode,
+    )
+
+    train_candidates = []
+    test_indices = []
+    for idx, trial in enumerate(full_ds.mm_dataset.trials):
+        if trial.session_idx in test_sessions:
+            test_indices.append(idx)
+        elif trial.session_idx in train_sessions:
+            train_candidates.append(idx)
+
+    rng = np.random.default_rng(random_seed)
+    train_indices = []
+    val_indices = []
+
+    by_subject = {}
+    for idx in train_candidates:
+        sid = int(full_ds.mm_dataset.trials[idx].subject_id)
+        by_subject.setdefault(sid, []).append(idx)
+
+    for sid, idxs in by_subject.items():
+        idxs = list(idxs)
+        rng.shuffle(idxs)
+        n_val = max(1, int(round(len(idxs) * val_ratio)))
+        n_val = min(n_val, len(idxs) - 1) if len(idxs) > 1 else 0
+        val_indices.extend(idxs[:n_val])
+        train_indices.extend(idxs[n_val:])
+
+    dataloaders = {
+        'train': DataLoader(
+            Subset(full_ds, train_indices),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=True,
+        ),
+        'val': DataLoader(
+            Subset(full_ds, val_indices),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=False,
+        ),
+        'test': DataLoader(
+            Subset(full_ds, test_indices),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=False,
+        ),
+    }
+
+    dataset_info = {
+        'eeg_input_dim': full_ds.eeg_input_dim,
+        'fnirs_input_dim': full_ds.fnirs_input_dim,
+        'seq_length': seq_length,
+        'n_train': len(train_indices),
+        'n_val': len(val_indices),
+        'n_test': len(test_indices),
+        'split_mode': 'subject_dependent',
+    }
 
     return dataloaders, dataset_info
 
