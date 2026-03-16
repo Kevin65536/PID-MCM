@@ -678,6 +678,35 @@ def collect_embeddings(
     """Collect split-level embeddings and labels for probe analysis."""
     model.eval()
 
+    def _reduce_to_2d(tensor: torch.Tensor) -> torch.Tensor:
+        """Reduce arbitrary feature shape [B, ...] to [B, D] by mean pooling non-batch dims."""
+        if tensor.dim() == 2:
+            return tensor
+        reduce_dims = tuple(range(1, tensor.dim() - 1))
+        if len(reduce_dims) == 0:
+            return tensor
+        return tensor.mean(dim=reduce_dims)
+
+    def _extract_single_modality_embedding(outputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+        if 'embeddings' in outputs:
+            return _reduce_to_2d(outputs['embeddings'])
+        if 'lead_features' in outputs:
+            return _reduce_to_2d(outputs['lead_features'])
+        if 'token_embeddings' in outputs:
+            return _reduce_to_2d(outputs['token_embeddings'])
+        raise KeyError(f"No usable embedding key found in outputs: {list(outputs.keys())}")
+
+    def _extract_dual_modality_embedding(outputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+        if 'eeg_embeddings' in outputs and 'fnirs_embeddings' in outputs:
+            eeg_emb = _reduce_to_2d(outputs['eeg_embeddings'])
+            fnirs_emb = _reduce_to_2d(outputs['fnirs_embeddings'])
+            return torch.cat([eeg_emb, fnirs_emb], dim=-1)
+        if 'eeg_features' in outputs and 'fnirs_features' in outputs:
+            eeg_feat = _reduce_to_2d(outputs['eeg_features'])
+            fnirs_feat = _reduce_to_2d(outputs['fnirs_features'])
+            return torch.cat([eeg_feat, fnirs_feat], dim=-1)
+        raise KeyError(f"No usable dual-modality embedding keys found in outputs: {list(outputs.keys())}")
+
     embeddings = []
     labels_all = []
     subjects_all = []
@@ -689,14 +718,14 @@ def collect_embeddings(
             eeg = batch['eeg'].to(device)
             fnirs = batch['fnirs'].to(device)
             outputs = model(eeg, fnirs)
-
-            eeg_emb = outputs['eeg_embeddings'].mean(dim=1)
-            fnirs_emb = outputs['fnirs_embeddings'].mean(dim=1)
-            emb = torch.cat([eeg_emb, fnirs_emb], dim=-1)
+            emb = _extract_dual_modality_embedding(outputs)
         else:
             x = batch['data'].to(device)
-            outputs = model(x)
-            emb = outputs['embeddings'].mean(dim=1)
+            try:
+                outputs = model(x, return_lead_features=True)
+            except TypeError:
+                outputs = model(x)
+            emb = _extract_single_modality_embedding(outputs)
 
         embeddings.append(emb.cpu().numpy())
         labels_all.append(labels.cpu().numpy())

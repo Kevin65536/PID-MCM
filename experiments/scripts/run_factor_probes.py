@@ -16,13 +16,14 @@ Each NPZ should contain:
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold
 
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -43,7 +44,7 @@ def _fit_and_eval_classifier(
 ) -> Dict[str, float]:
     clf = Pipeline([
         ('scaler', StandardScaler()),
-        ('lr', LogisticRegression(max_iter=3000, n_jobs=-1)),
+        ('lr', LogisticRegression(max_iter=3000)),
     ])
     clf.fit(x_train, y_train)
     y_pred = clf.predict(x_eval)
@@ -52,6 +53,51 @@ def _fit_and_eval_classifier(
         'accuracy': float(accuracy_score(y_eval, y_pred)),
         'balanced_accuracy': float(balanced_accuracy_score(y_eval, y_pred)),
         'macro_f1': float(f1_score(y_eval, y_pred, average='macro', zero_division=0)),
+    }
+
+
+def _cross_validated_probe(
+    x: np.ndarray,
+    y: np.ndarray,
+    n_splits: int = 5,
+) -> Dict[str, Any]:
+    unique_labels, counts = np.unique(y, return_counts=True)
+    if unique_labels.shape[0] < 2:
+        return {
+            'status': 'skipped',
+            'reason': 'Need at least 2 classes for probe.',
+        }
+
+    max_splits = int(counts.min())
+    if max_splits < 2:
+        return {
+            'status': 'skipped',
+            'reason': 'Not enough samples per class for cross-validation.',
+        }
+
+    actual_splits = min(n_splits, max_splits)
+    splitter = StratifiedKFold(n_splits=actual_splits, shuffle=True, random_state=42)
+
+    fold_metrics: List[Dict[str, float]] = []
+    for train_idx, test_idx in splitter.split(x, y):
+        metrics = _fit_and_eval_classifier(
+            x[train_idx],
+            y[train_idx],
+            x[test_idx],
+            y[test_idx],
+        )
+        fold_metrics.append(metrics)
+
+    return {
+        'status': 'ok',
+        'n_splits': actual_splits,
+        'accuracy_mean': float(np.mean([m['accuracy'] for m in fold_metrics])),
+        'accuracy_std': float(np.std([m['accuracy'] for m in fold_metrics])),
+        'balanced_accuracy_mean': float(np.mean([m['balanced_accuracy'] for m in fold_metrics])),
+        'balanced_accuracy_std': float(np.std([m['balanced_accuracy'] for m in fold_metrics])),
+        'macro_f1_mean': float(np.mean([m['macro_f1'] for m in fold_metrics])),
+        'macro_f1_std': float(np.std([m['macro_f1'] for m in fold_metrics])),
+        'fold_metrics': fold_metrics,
     }
 
 
@@ -81,17 +127,34 @@ def run_probes(run_dir: Path) -> Dict[str, Any]:
         'task_probe': {
             'name': 'Probe(Zt_proxy -> task)',
             **task_probe,
+        },
+        'task_probe_train_cv': {
+            'name': 'Probe(Zt_proxy -> task) within-train CV',
+            **_cross_validated_probe(x_train, y_train_task),
         }
     }
+
+    if 'subject_id' in train:
+        probes['subject_probe_train_cv'] = {
+            'name': 'Probe(Zt_proxy -> subject) within-train CV',
+            **_cross_validated_probe(x_train, train['subject_id']),
+        }
 
     if 'subject_id' in train and 'subject_id' in test:
         y_train_subj = train['subject_id']
         y_test_subj = test['subject_id']
-        subj_probe = _fit_and_eval_classifier(x_train, y_train_subj, x_test, y_test_subj)
-        probes['subject_probe'] = {
-            'name': 'Probe(Zt_proxy -> subject)',
-            **subj_probe,
-        }
+        if set(np.unique(y_test_subj)).issubset(set(np.unique(y_train_subj))):
+            subj_probe = _fit_and_eval_classifier(x_train, y_train_subj, x_test, y_test_subj)
+            probes['subject_probe'] = {
+                'name': 'Probe(Zt_proxy -> subject)',
+                **subj_probe,
+            }
+        else:
+            probes['subject_probe'] = {
+                'name': 'Probe(Zt_proxy -> subject)',
+                'status': 'incompatible',
+                'reason': 'Eval subject IDs are unseen in train split under cross-subject protocol.',
+            }
 
     if val is not None:
         x_val = val['embedding']
@@ -102,10 +165,17 @@ def run_probes(run_dir: Path) -> Dict[str, Any]:
         }
 
         if 'subject_id' in train and 'subject_id' in val:
-            probes['subject_probe_val'] = {
-                'name': 'Probe(Zt_proxy -> subject) on val',
-                **_fit_and_eval_classifier(x_train, train['subject_id'], x_val, val['subject_id']),
-            }
+            if set(np.unique(val['subject_id'])).issubset(set(np.unique(train['subject_id']))):
+                probes['subject_probe_val'] = {
+                    'name': 'Probe(Zt_proxy -> subject) on val',
+                    **_fit_and_eval_classifier(x_train, train['subject_id'], x_val, val['subject_id']),
+                }
+            else:
+                probes['subject_probe_val'] = {
+                    'name': 'Probe(Zt_proxy -> subject) on val',
+                    'status': 'incompatible',
+                    'reason': 'Val subject IDs are unseen in train split under cross-subject protocol.',
+                }
 
     report = {
         'run_dir': str(run_dir),
