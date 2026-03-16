@@ -668,6 +668,75 @@ def evaluate(
     return result
 
 
+@torch.no_grad()
+def collect_embeddings(
+    model: nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    modality: str,
+) -> Dict[str, np.ndarray]:
+    """Collect split-level embeddings and labels for probe analysis."""
+    model.eval()
+
+    embeddings = []
+    labels_all = []
+    subjects_all = []
+
+    for batch in dataloader:
+        labels = batch['label'].to(device)
+
+        if modality == 'both':
+            eeg = batch['eeg'].to(device)
+            fnirs = batch['fnirs'].to(device)
+            outputs = model(eeg, fnirs)
+
+            eeg_emb = outputs['eeg_embeddings'].mean(dim=1)
+            fnirs_emb = outputs['fnirs_embeddings'].mean(dim=1)
+            emb = torch.cat([eeg_emb, fnirs_emb], dim=-1)
+        else:
+            x = batch['data'].to(device)
+            outputs = model(x)
+            emb = outputs['embeddings'].mean(dim=1)
+
+        embeddings.append(emb.cpu().numpy())
+        labels_all.append(labels.cpu().numpy())
+
+        if 'subject_id' in batch:
+            subj = batch['subject_id']
+            if isinstance(subj, torch.Tensor):
+                subj = subj.cpu().numpy()
+            subjects_all.append(np.array(subj))
+
+    result = {
+        'embedding': np.concatenate(embeddings, axis=0),
+        'label': np.concatenate(labels_all, axis=0),
+    }
+    if subjects_all:
+        result['subject_id'] = np.concatenate(subjects_all, axis=0)
+    return result
+
+
+def export_probe_data(
+    model: nn.Module,
+    dataloaders: Dict[str, DataLoader],
+    run_dir: Path,
+    device: torch.device,
+    modality: str,
+) -> Dict[str, str]:
+    """Export train/val/test embeddings for factor probe scripts."""
+    probe_dir = run_dir / 'probes'
+    probe_dir.mkdir(exist_ok=True)
+
+    exported = {}
+    for split in ['train', 'val', 'test']:
+        payload = collect_embeddings(model, dataloaders[split], device, modality)
+        out_path = probe_dir / f'{split}_embeddings.npz'
+        np.savez_compressed(out_path, **payload)
+        exported[split] = str(out_path)
+
+    return exported
+
+
 def train(
     config: dict,
     run_dir: Path,
@@ -844,6 +913,18 @@ def train(
     print(f"  ROC-AUC: {test_metrics['roc_auc']:.4f}")
     print(f"  Confusion Matrix: {test_metrics['confusion_matrix']}")
     print(f"{'='*60}")
+
+    probe_data_paths = None
+    if config.get('logging', {}).get('export_probe_data', True):
+        print("\nExporting probe data (train/val/test embeddings)...")
+        probe_data_paths = export_probe_data(
+            model=model,
+            dataloaders=dataloaders,
+            run_dir=run_dir,
+            device=device,
+            modality=modality,
+        )
+        print(f"Probe data exported to: {run_dir / 'probes'}")
     
     # Save results
     results = {
@@ -857,6 +938,7 @@ def train(
         'test_metrics': test_metrics,
         'subject_accuracies': subject_accuracies,
         'history': history,
+        'probe_data_paths': probe_data_paths,
     }
     
     with open(run_dir / 'results.json', 'w') as f:
