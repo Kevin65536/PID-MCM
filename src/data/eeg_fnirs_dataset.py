@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import scipy.io as sio
+from scipy.signal import butter, sosfiltfilt
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -101,6 +102,102 @@ def get_fnirs_channel_mask(
             # If neither pattern matches, keep the channel (conservative)
     
     return mask
+
+
+def resolve_preprocessing_config(preprocessing: Optional[dict], modality: str) -> Dict[str, float]:
+    """Resolve effective temporal filtering settings for a modality."""
+    config = dict(preprocessing or {})
+    normalized_modality = modality.lower()
+    resolved: Dict[str, float] = {}
+
+    if normalized_modality == 'eeg':
+        bandpass = config.get('bandpass')
+        if isinstance(bandpass, (list, tuple)) and len(bandpass) == 2:
+            resolved['low_hz'] = float(bandpass[0])
+            resolved['high_hz'] = float(bandpass[1])
+        else:
+            if 'highpass' in config:
+                resolved['low_hz'] = float(config['highpass'])
+            if 'lowpass' in config:
+                resolved['high_hz'] = float(config['lowpass'])
+    elif normalized_modality == 'fnirs':
+        if 'highpass' in config:
+            resolved['low_hz'] = float(config['highpass'])
+        if 'lowpass' in config:
+            resolved['high_hz'] = float(config['lowpass'])
+        elif 'low_hz' not in resolved:
+            bandpass = config.get('bandpass')
+            if isinstance(bandpass, (list, tuple)) and len(bandpass) == 2:
+                resolved['low_hz'] = float(bandpass[0])
+                resolved['high_hz'] = float(bandpass[1])
+    else:
+        raise ValueError(f"Unsupported modality: {modality}")
+
+    return resolved
+
+
+def apply_temporal_filter(
+    signal: np.ndarray,
+    sample_rate: float,
+    modality: str,
+    preprocessing: Optional[dict],
+    order: int = 4,
+) -> np.ndarray:
+    """Apply config-driven temporal filtering to continuous data.
+
+    Args:
+        signal: Continuous data with shape (n_samples, n_channels)
+    """
+    resolved = resolve_preprocessing_config(preprocessing, modality)
+    if not resolved:
+        return signal.astype(np.float64, copy=True)
+
+    filtered = signal.astype(np.float64, copy=True)
+    nyquist = sample_rate * 0.5
+    low_hz = max(0.0, float(resolved.get('low_hz', 0.0)))
+    high_hz = min(float(resolved.get('high_hz', nyquist * 0.99)), nyquist * 0.99)
+
+    if high_hz <= 0:
+        return filtered
+    if low_hz <= 0 and high_hz >= nyquist * 0.99:
+        return filtered
+
+    if low_hz <= 0:
+        sos = butter(order, high_hz / nyquist, btype='lowpass', output='sos')
+    elif high_hz >= nyquist * 0.99:
+        sos = butter(order, low_hz / nyquist, btype='highpass', output='sos')
+    elif low_hz >= high_hz:
+        return filtered
+    else:
+        sos = butter(order, [low_hz / nyquist, high_hz / nyquist], btype='bandpass', output='sos')
+
+    try:
+        return sosfiltfilt(sos, filtered, axis=0)
+    except ValueError:
+        return filtered
+
+
+def normalize_window(
+    window: np.ndarray,
+    mode: str,
+    session_mean: Optional[np.ndarray] = None,
+    session_std: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Normalize channel-first window using either window or session statistics."""
+    if mode == 'none':
+        return window
+
+    if mode == 'window':
+        mean = window.mean(axis=1, keepdims=True)
+        std = window.std(axis=1, keepdims=True) + 1e-8
+        return (window - mean) / std
+
+    if mode == 'session':
+        if session_mean is None or session_std is None:
+            raise ValueError('Session statistics are required for session normalization')
+        return (window - session_mean[:, None]) / (session_std[:, None] + 1e-8)
+
+    raise ValueError(f'Unsupported normalization mode: {mode}')
 
 
 @dataclass
@@ -312,6 +409,8 @@ class EEGfNIRSDataset(Dataset):
         window_samples: int = 512,  # 2.56s @ 200Hz for EEG, ~51s @ 10Hz for NIRS
         window_offset_ms: float = 0,  # Offset from event onset (can be negative for pre-stimulus)
         normalize: bool = True,
+        normalization_mode: Literal['window', 'session', 'none'] = 'window',
+        preprocessing: Optional[dict] = None,
         use_artifact_data: bool = True,
         # Channel filtering options
         exclude_eog: bool = True,  # For EEG: exclude EOG channels
@@ -341,6 +440,8 @@ class EEGfNIRSDataset(Dataset):
         self.window_samples = window_samples
         self.window_offset_ms = window_offset_ms
         self.normalize = normalize
+        self.normalization_mode = normalization_mode
+        self.preprocessing = dict(preprocessing or {})
         self.use_artifact_data = use_artifact_data
         
         # Channel filtering options
@@ -367,8 +468,10 @@ class EEGfNIRSDataset(Dataset):
         self.trials: List[TrialInfo] = []
         self._build_trial_index()
         
-        # Cache for loaded data (will store filtered data)
-        self._data_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        # Cache for loaded data
+        self._raw_data_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._processed_data_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._session_stats_cache: Dict[int, List[Tuple[np.ndarray, np.ndarray]]] = {}
         
         # Cache for channel mask (computed once per subject)
         self._channel_mask_cache: Dict[int, np.ndarray] = {}
@@ -411,9 +514,9 @@ class EEGfNIRSDataset(Dataset):
             except Exception as e:
                 print(f"Warning: Could not load subject {subject_id}: {e}")
                 
-    def _get_subject_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load subject data with channel filtering applied."""
-        if subject_id not in self._data_cache:
+    def _cache_subject_data(self, subject_id: int):
+        """Load, filter, and cache both raw-filtered and temporally processed session data."""
+        if subject_id not in self._raw_data_cache:
             cnt_list, mrk_list, info = self.loader.load_subject_data(subject_id, self.modality)
             
             # Get channel mask for filtering
@@ -428,11 +531,26 @@ class EEGfNIRSDataset(Dataset):
                 )
             
             # Apply channel filtering to all sessions
-            filtered_cnt_list = []
+            raw_filtered_cnt_list = []
+            processed_cnt_list = []
+            session_stats = []
+            fs = float(info['fs'])
             for cnt in cnt_list:
                 # cnt shape: (n_samples, n_channels) -> filter channels
-                filtered_cnt = cnt[:, channel_mask]
-                filtered_cnt_list.append(filtered_cnt)
+                filtered_cnt = cnt[:, channel_mask].astype(np.float64, copy=False)
+                raw_filtered_cnt_list.append(filtered_cnt)
+
+                processed_cnt = apply_temporal_filter(
+                    filtered_cnt,
+                    sample_rate=fs,
+                    modality=self.modality,
+                    preprocessing=self.preprocessing,
+                )
+                processed_cnt_list.append(processed_cnt)
+
+                channel_mean = processed_cnt.mean(axis=0)
+                channel_std = processed_cnt.std(axis=0) + 1e-8
+                session_stats.append((channel_mean, channel_std))
             
             # Update channel info
             filtered_info = info.copy()
@@ -441,11 +559,83 @@ class EEGfNIRSDataset(Dataset):
             filtered_info['original_clab'] = channel_names
             filtered_info['channel_mask'] = channel_mask
             
-            self._data_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
+            self._raw_data_cache[subject_id] = (raw_filtered_cnt_list, mrk_list, filtered_info)
+            self._processed_data_cache[subject_id] = (processed_cnt_list, mrk_list, filtered_info)
+            self._session_stats_cache[subject_id] = session_stats
             self._channel_mask_cache[subject_id] = channel_mask
             self._filtered_channel_names_cache[subject_id] = filtered_channel_names
-            
-        return self._data_cache[subject_id]
+
+    def _get_subject_data(
+        self,
+        subject_id: int,
+        processed: bool = True,
+    ) -> Tuple[List[np.ndarray], List[dict], dict]:
+        """Get cached subject data after channel filtering and optional temporal preprocessing."""
+        self._cache_subject_data(subject_id)
+        if processed:
+            return self._processed_data_cache[subject_id]
+        return self._raw_data_cache[subject_id]
+
+    def _get_session_statistics(self, subject_id: int, session_idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        self._cache_subject_data(subject_id)
+        return self._session_stats_cache[subject_id][session_idx]
+
+    def get_session_continuous_data(
+        self,
+        subject_id: int,
+        session_idx: int,
+        processed: bool = True,
+        normalized: bool = False,
+    ) -> np.ndarray:
+        """Get continuous session data as channel-first array for visualization or analysis."""
+        cnt_list, _, _ = self._get_subject_data(subject_id, processed=processed)
+        session = cnt_list[session_idx].T.copy()
+
+        if normalized and self.normalize and self.normalization_mode == 'session':
+            session_mean, session_std = self._get_session_statistics(subject_id, session_idx)
+            session = normalize_window(session, 'session', session_mean, session_std)
+
+        return session
+
+    def get_session_markers(self, subject_id: int, session_idx: int) -> dict:
+        """Get raw marker dict for a given session."""
+        _, mrk_list, _ = self._get_subject_data(subject_id, processed=False)
+        return mrk_list[session_idx]
+
+    def get_session_trial_regions(
+        self,
+        subject_id: int,
+        session_idx: int,
+        window_duration_s: float,
+        offset_ms: float = 0.0,
+    ) -> List[Dict[str, Union[int, float, str]]]:
+        """Return time regions that would be extracted as trial windows on a full session timeline."""
+        markers = self.get_session_markers(subject_id, session_idx)
+        labels = np.argmax(markers['y'], axis=0)
+        class_names = markers.get('className')
+        regions = []
+
+        for trial_idx, onset_ms in enumerate(np.asarray(markers['time'], dtype=float)):
+            label = int(labels[trial_idx])
+            if class_names is not None and len(class_names) > label:
+                label_name = str(class_names[label])
+            else:
+                label_name = str(label)
+
+            start_s = (float(onset_ms) + offset_ms) / 1000.0
+            end_s = start_s + float(window_duration_s)
+            regions.append(
+                {
+                    'trial_idx': trial_idx,
+                    'label': label,
+                    'label_name': label_name,
+                    'start_s': start_s,
+                    'end_s': end_s,
+                    'onset_s': float(onset_ms) / 1000.0,
+                }
+            )
+
+        return regions
     
     def __len__(self) -> int:
         return len(self.trials)
@@ -463,7 +653,7 @@ class EEGfNIRSDataset(Dataset):
                 - 'trial_idx': int
         """
         trial = self.trials[idx]
-        cnt_list, _, _ = self._get_subject_data(trial.subject_id)
+        cnt_list, _, _ = self._get_subject_data(trial.subject_id, processed=True)
         
         # Get continuous data for this session
         cnt = cnt_list[trial.session_idx]  # shape: (n_samples, n_channels)
@@ -495,10 +685,12 @@ class EEGfNIRSDataset(Dataset):
         window = window.T
         
         # Normalize
-        if self.normalize:
-            mean = window.mean(axis=1, keepdims=True)
-            std = window.std(axis=1, keepdims=True) + 1e-8
-            window = (window - mean) / std
+        normalization_mode = self.normalization_mode if self.normalize else 'none'
+        if normalization_mode == 'session':
+            session_mean, session_std = self._get_session_statistics(trial.subject_id, trial.session_idx)
+            window = normalize_window(window, 'session', session_mean, session_std)
+        elif normalization_mode == 'window':
+            window = normalize_window(window, 'window')
         
         return {
             'data': torch.from_numpy(window).float(),
@@ -513,7 +705,7 @@ class EEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return []
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_subject_data(first_subject)
+        _, _, info = self._get_subject_data(first_subject, processed=True)
         return list(info['clab'])
     
     def get_num_channels(self) -> int:
@@ -525,7 +717,7 @@ class EEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return []
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_subject_data(first_subject)
+        _, _, info = self._get_subject_data(first_subject, processed=True)
         return list(info.get('original_clab', info['clab']))
     
     def get_sample_rate(self) -> float:
@@ -533,7 +725,7 @@ class EEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return 0.0
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_subject_data(first_subject)
+        _, _, info = self._get_subject_data(first_subject, processed=True)
         return float(info['fs'])
 
 

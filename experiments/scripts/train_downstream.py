@@ -231,6 +231,23 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
+    """Resolve whether normalization is enabled and which mode to use."""
+    norm_cfg = data_cfg.get('normalization', {})
+
+    if isinstance(norm_cfg, dict):
+        enabled = bool(norm_cfg.get('enabled', data_cfg.get('normalize', True)))
+        mode = norm_cfg.get('mode', 'session' if enabled else 'none')
+    else:
+        enabled = bool(data_cfg.get('normalize', True))
+        mode = 'session' if enabled else 'none'
+
+    if not enabled:
+        mode = 'none'
+
+    return enabled, mode
+
+
 # ============================================================================
 # Dataset Creation
 # ============================================================================
@@ -246,6 +263,8 @@ class MultiLeadDataset(torch.utils.data.Dataset):
         window_samples: int,
         task: str = 'motor_imagery',
         normalize: bool = True,
+        normalization_mode: str = 'session',
+        preprocessing: Optional[dict] = None,
         window_offset_ms: float = 500,
         exclude_eog: bool = True,
         hbo_only: bool = True,
@@ -257,6 +276,8 @@ class MultiLeadDataset(torch.utils.data.Dataset):
             modality=modality,
             window_samples=window_samples,
             normalize=normalize,
+            normalization_mode=normalization_mode,
+            preprocessing=preprocessing,
             window_offset_ms=window_offset_ms,
             exclude_eog=exclude_eog,
             hbo_only=hbo_only,
@@ -280,6 +301,7 @@ class DualModalityDataset(torch.utils.data.Dataset):
         fnirs_config: dict,
         task: str = 'motor_imagery',
         normalize: bool = True,
+        normalization_mode: str = 'session',
         window_offset_ms: float = 500,
     ):
         self.eeg_dataset = EEGfNIRSDataset(
@@ -289,6 +311,8 @@ class DualModalityDataset(torch.utils.data.Dataset):
             modality='eeg',
             window_samples=eeg_config['window_samples'],
             normalize=normalize,
+            normalization_mode=normalization_mode,
+            preprocessing=eeg_config.get('preprocessing', {}),
             window_offset_ms=window_offset_ms,
             exclude_eog=eeg_config.get('exclude_eog', True),
         )
@@ -300,6 +324,8 @@ class DualModalityDataset(torch.utils.data.Dataset):
             modality='fnirs',
             window_samples=fnirs_config['window_samples'],
             normalize=normalize,
+            normalization_mode=normalization_mode,
+            preprocessing=fnirs_config.get('preprocessing', {}),
             window_offset_ms=window_offset_ms,
             hbo_only=fnirs_config.get('hbo_only', True),
         )
@@ -340,6 +366,7 @@ def create_dataloaders(config: dict) -> Dict[str, DataLoader]:
     """Create train/val/test dataloaders based on config."""
     data_cfg = config['data']
     modality = config.get('modality', 'eeg')
+    normalize, normalization_mode = resolve_normalization_config(data_cfg)
     
     splits = {
         'train': data_cfg['split']['train_subjects'],
@@ -357,7 +384,8 @@ def create_dataloaders(config: dict) -> Dict[str, DataLoader]:
                 eeg_config=data_cfg['eeg'],
                 fnirs_config=data_cfg['fnirs'],
                 task=data_cfg.get('task', 'motor_imagery'),
-                normalize=data_cfg.get('normalize', True),
+                normalize=normalize,
+                normalization_mode=normalization_mode,
                 window_offset_ms=data_cfg['window'].get('offset_ms', 500),
             )
         else:
@@ -368,7 +396,9 @@ def create_dataloaders(config: dict) -> Dict[str, DataLoader]:
                 modality=modality,
                 window_samples=mod_cfg['window_samples'],
                 task=data_cfg.get('task', 'motor_imagery'),
-                normalize=data_cfg.get('normalize', True),
+                normalize=normalize,
+                normalization_mode=normalization_mode,
+                preprocessing=mod_cfg.get('preprocessing', data_cfg.get('preprocessing', {})),
                 window_offset_ms=data_cfg['window'].get('offset_ms', 500),
                 exclude_eog=mod_cfg.get('exclude_eog', True),
                 hbo_only=mod_cfg.get('hbo_only', True),

@@ -274,9 +274,26 @@ def setup_device(config: dict, verbose: bool = True) -> torch.device:
 # Data Loading
 # ============================================================================
 
+def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
+    """Resolve whether normalization is enabled and which mode to use."""
+    norm_cfg = data_cfg.get('normalization', {})
+
+    if isinstance(norm_cfg, dict):
+        enabled = bool(norm_cfg.get('enabled', data_cfg.get('normalize', True)))
+        mode = norm_cfg.get('mode', 'session' if enabled else 'none')
+    else:
+        enabled = bool(data_cfg.get('normalize', True))
+        mode = 'session' if enabled else 'none'
+
+    if not enabled:
+        mode = 'none'
+
+    return enabled, mode
+
 def create_dataloader(config: dict, split: str) -> DataLoader:
     """Create dataloader for specified split."""
     data_cfg = config['data']
+    normalize, normalization_mode = resolve_normalization_config(data_cfg)
     
     if split == 'train':
         subjects = data_cfg['split']['train_subjects']
@@ -295,7 +312,9 @@ def create_dataloader(config: dict, split: str) -> DataLoader:
         task=data_cfg.get('task', 'motor_imagery'),
         window_samples=data_cfg['window']['length'],
         window_offset_ms=data_cfg['window'].get('offset_ms', 0),
-        normalize=True,
+        normalize=normalize,
+        normalization_mode=normalization_mode,
+        preprocessing=data_cfg.get('preprocessing', {}),
         exclude_eog=data_cfg.get('exclude_eog', False),
         hbo_only=data_cfg.get('hbo_only', False),
         hbr_only=data_cfg.get('hbr_only', False),
