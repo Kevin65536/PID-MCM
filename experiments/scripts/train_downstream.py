@@ -37,6 +37,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
+from functools import lru_cache
 
 # Fix OMP duplicate library error
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -61,7 +62,12 @@ from sklearn.metrics import (
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.data.eeg_fnirs_dataset import (
+    BBCIDataLoader,
+    EEGfNIRSDataset,
+    get_eeg_channel_mask,
+    get_fnirs_channel_mask,
+)
 from src.data.augmentation import SignalAugmentor, DualModalityAugmentor, LabelSmoothingCrossEntropy, create_augmentor_from_config
 from src.tokenizers import create_tokenizer, list_tokenizers
 from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
@@ -217,7 +223,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         
         config = deep_merge(base_config, config)
     
-    return config
+    return normalize_downstream_config(config)
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -229,6 +235,143 @@ def deep_merge(base: dict, override: dict) -> dict:
         else:
             result[key] = value
     return result
+
+
+def resolve_data_root(data_root: str) -> Path:
+    """Resolve dataset root relative to project root when needed."""
+    candidate = Path(data_root)
+    if candidate.is_absolute():
+        return candidate
+    return project_root / candidate
+
+
+def get_config_subject_ids(data_cfg: dict) -> List[int]:
+    """Collect subject ids from nested split config or legacy flat config."""
+    subject_ids: List[int] = []
+    split_cfg = build_split_config(data_cfg)
+    for key in ['train_subjects', 'val_subjects', 'test_subjects']:
+        subject_ids.extend(split_cfg.get(key, []))
+
+    if not subject_ids and 'subject_ids' in data_cfg:
+        subject_ids.extend(data_cfg.get('subject_ids', []))
+
+    # Preserve order while removing duplicates.
+    return list(dict.fromkeys(int(subject_id) for subject_id in subject_ids))
+
+
+@lru_cache(maxsize=16)
+def infer_num_channels_from_data(
+    data_root: str,
+    subject_id: int,
+    modality: str,
+    exclude_eog: bool,
+    hbo_only: bool,
+    hbr_only: bool,
+) -> int:
+    """Infer channel count from actual dataset metadata and channel filtering rules."""
+    loader = BBCIDataLoader(str(resolve_data_root(data_root)), subject_ids=[subject_id], modality=modality)
+    _, _, info = loader.load_subject_data(subject_id, modality)
+    channel_names = list(info['clab'])
+
+    if modality == 'eeg':
+        channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=exclude_eog)
+    elif modality == 'fnirs':
+        channel_mask = get_fnirs_channel_mask(channel_names, hbo_only=hbo_only, hbr_only=hbr_only)
+    else:
+        raise ValueError(f"Unsupported modality: {modality}")
+
+    return int(channel_mask.sum())
+
+
+def infer_num_channels(modality: str, modality_cfg: dict, data_cfg: dict) -> int:
+    """Infer actual lead count after channel filtering from dataset metadata."""
+    if 'num_channels' in modality_cfg:
+        return int(modality_cfg['num_channels'])
+
+    data_root = data_cfg.get('data_root') or data_cfg.get('root')
+    if not data_root:
+        raise KeyError('data_root')
+
+    subject_ids = get_config_subject_ids(data_cfg)
+    if not subject_ids:
+        raise ValueError('Cannot infer num_channels without at least one configured subject')
+
+    return infer_num_channels_from_data(
+        data_root=str(data_root),
+        subject_id=int(subject_ids[0]),
+        modality=modality,
+        exclude_eog=bool(modality_cfg.get('exclude_eog', True)),
+        hbo_only=bool(modality_cfg.get('hbo_only', True)),
+        hbr_only=bool(modality_cfg.get('hbr_only', False)),
+    )
+
+
+def build_split_config(data_cfg: dict) -> dict:
+    """Support both nested split config and flat train/val/test subject lists."""
+    if 'split' in data_cfg:
+        return data_cfg['split']
+
+    split = {}
+    if 'train_subjects' in data_cfg:
+        split['train_subjects'] = data_cfg['train_subjects']
+    if 'val_subjects' in data_cfg:
+        split['val_subjects'] = data_cfg['val_subjects']
+    if 'test_subjects' in data_cfg:
+        split['test_subjects'] = data_cfg['test_subjects']
+    return split
+
+
+def build_modality_section(modality: str, source_cfg: dict) -> dict:
+    """Create the modality-specific subsection expected by the training script."""
+    window_cfg = source_cfg.get('window', {})
+    section = {
+        'window_samples': source_cfg.get('window_samples', window_cfg.get('length')),
+        'preprocessing': source_cfg.get('preprocessing', {}),
+    }
+
+    if modality == 'eeg':
+        section['exclude_eog'] = source_cfg.get('exclude_eog', True)
+    if modality == 'fnirs':
+        section['hbo_only'] = source_cfg.get('hbo_only', True)
+        section['hbr_only'] = source_cfg.get('hbr_only', False)
+
+    section['num_channels'] = infer_num_channels(modality, section, source_cfg)
+    return section
+
+
+def normalize_downstream_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Canonicalize legacy and current downstream configs to one internal schema."""
+    normalized = dict(config)
+    data_cfg = dict(normalized['data'])
+
+    modality = normalized.get('modality', data_cfg.get('modality', 'eeg'))
+    normalized['modality'] = modality
+
+    if 'data_root' not in data_cfg and 'root' in data_cfg:
+        data_cfg['data_root'] = data_cfg['root']
+
+    data_cfg['split'] = build_split_config(data_cfg)
+
+    if modality != 'both' and modality not in data_cfg:
+        data_cfg[modality] = build_modality_section(modality, data_cfg)
+    elif modality == 'both':
+        for mod in ['eeg', 'fnirs']:
+            if mod in data_cfg:
+                nested_cfg = dict(data_cfg[mod])
+                data_cfg[mod] = build_modality_section(mod, deep_merge(data_cfg, nested_cfg))
+
+    normalized['data'] = data_cfg
+
+    classifier_cfg = dict(normalized.get('classifier', {}))
+    classifier_type = classifier_cfg.get('type', 'end_to_end')
+    normalized['use_raw'] = bool(normalized.get('use_raw', classifier_type == 'raw'))
+
+    tokenizer_cfg = normalized.get('tokenizer', {})
+    if not normalized['use_raw'] and modality != 'both':
+        if isinstance(tokenizer_cfg, dict) and modality not in tokenizer_cfg:
+            normalized['tokenizer'] = {modality: tokenizer_cfg}
+
+    return normalized
 
 
 def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:

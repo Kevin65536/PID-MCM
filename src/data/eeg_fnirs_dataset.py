@@ -11,7 +11,7 @@ Key findings from data exploration (2026-01-14):
 - Session 0,2,4: Motor Imagery (LMI/RMI), Session 1,3,5: Mental Arithmetic (MA/BL)
 
 Channel Structure:
-- EEG: 30 channels total (28 EEG + 2 EOG: 'EOGv', 'EOGh')
+- EEG: 32 channels total (30 EEG + 2 EOG: 'VEOG', 'HEOG')
 - fNIRS: 72 channels (36 HbO + 36 HbR, HbO channels end with '_O', HbR channels end with '_R')
   - Current implementation supports filtering to use only HbO channels
 """
@@ -148,11 +148,12 @@ def apply_temporal_filter(
     Args:
         signal: Continuous data with shape (n_samples, n_channels)
     """
+    working_dtype = np.float32
     resolved = resolve_preprocessing_config(preprocessing, modality)
     if not resolved:
-        return signal.astype(np.float64, copy=True)
+        return signal.astype(working_dtype, copy=True)
 
-    filtered = signal.astype(np.float64, copy=True)
+    filtered = signal.astype(working_dtype, copy=True)
     nyquist = sample_rate * 0.5
     low_hz = max(0.0, float(resolved.get('low_hz', 0.0)))
     high_hz = min(float(resolved.get('high_hz', nyquist * 0.99)), nyquist * 0.99)
@@ -171,8 +172,16 @@ def apply_temporal_filter(
     else:
         sos = butter(order, [low_hz / nyquist, high_hz / nyquist], btype='bandpass', output='sos')
 
+    sos = sos.astype(working_dtype, copy=False)
+
     try:
-        return sosfiltfilt(sos, filtered, axis=0)
+        if filtered.ndim == 1:
+            return sosfiltfilt(sos, filtered, axis=0).astype(working_dtype, copy=False)
+
+        filtered_output = np.empty_like(filtered)
+        for channel_idx in range(filtered.shape[1]):
+            filtered_output[:, channel_idx] = sosfiltfilt(sos, filtered[:, channel_idx], axis=0)
+        return filtered_output
     except ValueError:
         return filtered
 
@@ -537,7 +546,7 @@ class EEGfNIRSDataset(Dataset):
             fs = float(info['fs'])
             for cnt in cnt_list:
                 # cnt shape: (n_samples, n_channels) -> filter channels
-                filtered_cnt = cnt[:, channel_mask].astype(np.float64, copy=False)
+                filtered_cnt = cnt[:, channel_mask].astype(np.float32, copy=False)
                 raw_filtered_cnt_list.append(filtered_cnt)
 
                 processed_cnt = apply_temporal_filter(
