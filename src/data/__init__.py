@@ -15,6 +15,23 @@ from .eeg_fnirs_dataset import (
     TrialInfo,
     SyncInfo,
 )
+from .signal_visualization import (
+    SegmentSnapshot,
+    SignalSegmentVisualizer,
+    EEG_FREQUENCY_BANDS,
+    FNIRS_FREQUENCY_BANDS,
+    resolve_preprocessing_config,
+    summarize_preprocessing_config,
+    apply_preprocessing_config,
+    compute_power_spectrum,
+    compute_differential_entropy,
+    extract_dataset_segment,
+    extract_multimodal_dataset_segment,
+    visualize_dataset_sample,
+    visualize_filtered_dataset_sample,
+    visualize_multimodal_dataset_sample,
+    visualize_synchronized_filtered_sample,
+)
 from .synthetic_timeseries import PIDTimeSeriesDataset
 
 __all__ = [
@@ -24,5 +41,20 @@ __all__ = [
     'create_dataloaders',
     'TrialInfo',
     'SyncInfo',
+    'SegmentSnapshot',
+    'SignalSegmentVisualizer',
+    'EEG_FREQUENCY_BANDS',
+    'FNIRS_FREQUENCY_BANDS',
+    'resolve_preprocessing_config',
+    'summarize_preprocessing_config',
+    'apply_preprocessing_config',
+    'compute_power_spectrum',
+    'compute_differential_entropy',
+    'extract_dataset_segment',
+    'extract_multimodal_dataset_segment',
+    'visualize_dataset_sample',
+    'visualize_filtered_dataset_sample',
+    'visualize_multimodal_dataset_sample',
+    'visualize_synchronized_filtered_sample',
     'PIDTimeSeriesDataset',
 ]
