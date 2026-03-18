@@ -21,6 +21,7 @@ Reference:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 from typing import Dict, Tuple, Optional
 
 from .base import BaseTokenizer
@@ -61,7 +62,7 @@ class PatchEncoder(nn.Module):
                     nn.BatchNorm1d(out_dim),
                     nn.GELU(),
                 ])
-                current_len = current_len // 2
+                current_len = math.floor((current_len + 2 * 3 - 7) / 2 + 1)
             
             self.conv = nn.Sequential(*layers)
             self.flatten_dim = hidden_dim * current_len
@@ -155,7 +156,7 @@ class PatchDecoder(nn.Module):
         
         if decoder_type == "cnn":
             # Calculate starting size
-            self.start_len = patch_size // (2 ** num_layers)
+            self.start_len = math.ceil(patch_size / (2 ** num_layers))
             self.proj = nn.Linear(input_dim, hidden_dim * self.start_len)
             
             layers = []

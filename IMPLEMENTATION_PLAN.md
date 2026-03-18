@@ -5,9 +5,6 @@
 > **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)  
 > **Experiment Log**: [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md)
 
-> **Next-Stage Theory (V2)**: [`docs/THEORY_V2_FOUNDATION_MODEL.md`](docs/THEORY_V2_FOUNDATION_MODEL.md)  
-> **Next-Stage Plan (V2)**: [`docs/EXPERIMENT_PLAN_V2_FOUNDATION.md`](docs/EXPERIMENT_PLAN_V2_FOUNDATION.md)
-
 ---
 
 ## 0. Overview
@@ -187,37 +184,38 @@ NIRS_01-29/subject XX/
 2. fNIRS 时长过短，未覆盖血流动力学响应峰值 (~5-6s)
 3. fNIRS token 序列过短 (~3-4 tokens)，难以分析时序模式
 
-**新方案**：对齐到 **5.0s** 窗口
+**当前方案**：先对齐到 **10.0s** 全 trial 窗口，并在滤波后重新训练单模态 tokenizer
 
 | 模态 | 采样率 | 窗口 samples | 时长 | Token 数 (stride=2·3) | Token 时间分辨率 |
 |------|--------|--------------|------|--------------------|-----------------|
-| EEG | 200Hz | **1000** | **5.0s** | ~125 | ~40ms/token |
-| fNIRS | 10Hz | **50** | **5.0s** | ~6-8 | ~625-833ms/token |
+| EEG | 200Hz | **2000** | **10.0s** | ~250 | ~40ms/token |
+| fNIRS | 10Hz | **100** | **10.0s** | ~25 | ~400ms/token |
 
 **对齐优势**：
-- 两模态 token 对应相同时段，便于跨模态分析
-- fNIRS 覆盖 HRF 峰值时段 (5-6s)
-- token 序列更长，可分析时序耦合
+- 两模态 token 对应完整任务时段，便于后续 trial-level 对齐分析
+- fNIRS 覆盖更完整的 HRF 上升段与峰值附近时段
+- 更长上下文有助于检验此前差重构是否主要来自窗口过短
+- 预处理已支持时域滤波，可在相同脚本下直接比较滤波前后 codebook 健康度
 
 **重要参数**：
 
 ```yaml
-# EEG Tokenizer (VQ-VAE, 5.0s window)
+# EEG Tokenizer (VQ-VAE, 10.0s window)
 eeg:
-  seq_length: 1000        # 5.0s @ 200Hz
+  seq_length: 2000        # 10.0s @ 200Hz
   encoder_dims: [32, 64, 128]
   encoder_kernel: 7
-  encoder_stride: 2       # 3 layers → T' = 1000/8 = 125
+  encoder_stride: 2       # 3 layers → T' = 2000/8 = 250
   codebook_size: 512
   embedding_dim: 64
 
-# fNIRS Tokenizer (FSQ, 5.0s window)
+# fNIRS Tokenizer (VQ-VAE, 10.0s window)
 fnirs:
-  seq_length: 50          # 5.0s @ 10Hz
+  seq_length: 100         # 10.0s @ 10Hz
   encoder_dims: [32, 64]
   encoder_kernel: 5
-  encoder_stride: 2       # 2 layers → T' = 50/4 ≈ 12-13
-  levels: [8, 8, 8]       # 512 codes
+  encoder_stride: 2       # 2 layers → T' = 100/4 = 25
+  codebook_size: 512
 ```
 
 #### 1.3.3 P0+.2: 序列长度分析
@@ -225,14 +223,25 @@ fnirs:
 | 时长 | EEG tokens | fNIRS tokens | 优势 | 劣势 |
 |------|------------|--------------|------|------|
 | 2.5s | ~32 | ~3 | 数据量大 | fNIRS 序列过短 |
-| **5.0s** | ~125 | ~12 | 平衡 | — |
+| 5.0s | ~125 | ~12 | 平衡 | — |
 | 8.0s | ~200 | ~20 | HRF 完整 | 跨 trial 重叠 |
-| 10s | ~250 | ~25 | 整个 trial | 无重叠样本 |
+| **10s** | ~250 | ~25 | 整个 trial，直接做 trial-level probe | 无重叠样本 |
 
-**选择 5.0s** 的理由：
-- 一个 trial 为 10s，5s 窗口可以有 50% 重叠，增加样本数
-- 覆盖 HRF 主要响应时段 (0-5s 或 2-7s)
-- fNIRS 生成足够长度的 token 序列 (~12 tokens)
+**先选择 10.0s** 的理由：
+- 当前目标先验证“滤波 + 更长时间上下文”能否改善重构与 codebook 质量
+- 与任务定义完全一致，每个 trial 对应一个完整训练片段，便于解释 probe 结果
+- fNIRS 在 10 秒窗口下可得到约 25 个离散 token，足够做 usage / entropy / conditional MI 分析
+
+**本轮运行命令**：
+
+```bash
+python experiments/scripts/train_tokenizer.py --config phase0plus/P0plus_eeg_vqvae_10s_30ch.yaml
+python experiments/scripts/train_tokenizer.py --config phase0plus/P0plus_fnirs_vqvae_10s_36ch.yaml
+
+python experiments/scripts/probe/probe_eeg_fnirs_coupling.py \
+  --eeg-checkpoint experiments/runs/P0plus_eeg_vqvae_10s_30ch_*/checkpoints/best_model.pt \
+  --fnirs-checkpoint experiments/runs/P0plus_fnirs_vqvae_10s_36ch_*/checkpoints/best_model.pt
+```
 
 #### 1.3.4 P0+.3: 跨被试泛化验证
 
@@ -511,7 +520,7 @@ experiments/
 ### 📋 短期行动计划 (本周)
 
 **Step 1: P0+ Tokenizer 时间对齐**
-1. [ ] 创建新配置：EEG 1000 samples (5s)，fNIRS 50 samples (5s)
+1. [x] 创建新配置：EEG 2000 samples (10s)，fNIRS 100 samples (10s)
 2. [ ] 训练对齐后的 tokenizer
 3. [ ] 验证重构质量和 codebook 健康度
 

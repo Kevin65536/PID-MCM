@@ -1,19 +1,22 @@
 """
-Probe Experiment for EEG-fNIRS Tokenizer Coupling Analysis
+Probe Experiment for EEG-fNIRS Tokenizer Coupling Analysis.
 
 This script implements the diagnostic experiments described in:
 docs/reliable_survey/probe_experiment_design_for_tokenizer.md
 
 Experiments:
-1. Codebook usage and entropy analysis (single modality)
+1. Codebook usage, perplexity, entropy, and threshold checks (single modality)
 2. Token interpretability check (time-frequency / hemodynamic patterns)
 3. Cross-modal conditional distribution P(z^fNIRS | z^EEG)
 
 Usage:
-    python probe_eeg_fnirs_coupling.py
+    python probe_eeg_fnirs_coupling.py \
+        --eeg-checkpoint experiments/runs/.../checkpoints/best_model.pt \
+        --fnirs-checkpoint experiments/runs/.../checkpoints/best_model.pt
 """
 
 import sys
+import argparse
 from pathlib import Path
 import numpy as np
 import torch
@@ -25,11 +28,29 @@ from collections import defaultdict
 import json
 from datetime import datetime
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add repo root to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from src.tokenizers.patch_vqvae import PatchVQVAETokenizer
+from src.tokenizers import create_tokenizer
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.metrics.codebook_health import compute_codebook_health, check_health_thresholds
+
+
+def resolve_dataset_normalization(data_cfg: dict):
+    """Resolve whether normalization is enabled and which mode to use."""
+    norm_cfg = data_cfg.get('normalization', {})
+
+    if isinstance(norm_cfg, dict):
+        enabled = bool(norm_cfg.get('enabled', data_cfg.get('normalize', True)))
+        mode = norm_cfg.get('mode', 'session' if enabled else 'none')
+    else:
+        enabled = bool(data_cfg.get('normalize', True))
+        mode = 'session' if enabled else 'none'
+
+    if not enabled:
+        mode = 'none'
+
+    return enabled, mode
 
 
 class ProbeExperiment:
@@ -50,68 +71,79 @@ class ProbeExperiment:
         
         # Load tokenizers
         print("Loading EEG tokenizer...")
-        self.eeg_tokenizer = self._load_tokenizer(eeg_checkpoint, modality='eeg')
+        self.eeg_tokenizer, self.eeg_config, self.eeg_spec = self._load_tokenizer(
+            eeg_checkpoint,
+            modality='eeg',
+        )
         print("Loading fNIRS tokenizer...")
-        self.fnirs_tokenizer = self._load_tokenizer(fnirs_checkpoint, modality='fnirs')
-        
-        # Tokenizer specs
-        self.eeg_fs = 200  # Hz
-        self.fnirs_fs = 10  # Hz
-        self.eeg_patch_size = 200  # 1 second
-        self.fnirs_patch_size = 20  # 2 seconds
-        
-    def _load_tokenizer(self, checkpoint_path: str, modality: str) -> PatchVQVAETokenizer:
-        """Load a tokenizer from checkpoint."""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        
-        # Infer config from state dict
-        state_dict = checkpoint['model_state_dict']
-        
-        # Get embedding dimension from quantizer
-        embedding_weight = state_dict['quantizer.embedding.weight']
-        codebook_size, embedding_dim = embedding_weight.shape
-        
-        # Determine encoder type and hidden dim
-        if 'encoder.conv.0.weight' in state_dict:
-            encoder_type = 'cnn'
-            encoder_conv_weight = state_dict['encoder.conv.0.weight']
-            hidden_dim = encoder_conv_weight.shape[0]
-        elif 'encoder.encoder.0.weight' in state_dict:
-            encoder_type = 'mlp'
-            encoder_weight = state_dict['encoder.encoder.0.weight']
-            hidden_dim = encoder_weight.shape[0]
-        else:
-            encoder_type = 'cnn'
-            hidden_dim = 256
-        
-        # Determine patch size based on modality
-        if modality == 'eeg':
-            seq_length = 800
-            patch_size = 200
-        else:  # fnirs
-            seq_length = 40
-            patch_size = 20
-        
-        tokenizer = PatchVQVAETokenizer(
-            seq_length=seq_length,
-            patch_size=patch_size,
-            codebook_size=codebook_size,
-            embedding_dim=embedding_dim,
-            hidden_dim=hidden_dim,
-            num_layers=2 if encoder_type == 'cnn' else 3,
-            encoder_type=encoder_type,
+        self.fnirs_tokenizer, self.fnirs_config, self.fnirs_spec = self._load_tokenizer(
+            fnirs_checkpoint,
+            modality='fnirs',
         )
         
-        tokenizer.load_state_dict(state_dict)
+        # Tokenizer specs
+        self.eeg_fs = self.eeg_spec['sample_rate']
+        self.fnirs_fs = self.fnirs_spec['sample_rate']
+    
+    def _resolve_codebook_size(self, tokenizer) -> int:
+        if hasattr(tokenizer, 'get_codebook_size'):
+            return int(tokenizer.get_codebook_size())
+        return int(getattr(tokenizer, 'codebook_size', 0))
+    
+    def _load_tokenizer(self, checkpoint_path: str, modality: str):
+        """Load a tokenizer and its training config from checkpoint."""
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        config = checkpoint.get('config')
+        if config is None:
+            raise ValueError(f"Checkpoint {checkpoint_path} does not include training config")
+
+        tokenizer = create_tokenizer(config)
+        tokenizer.load_state_dict(checkpoint['model_state_dict'])
         tokenizer.to(self.device)
         tokenizer.eval()
+
+        data_cfg = config.get('data', {})
+        model_cfg = config.get('model', {})
+        window_cfg = data_cfg.get('window', {})
+        preprocessing_cfg = data_cfg.get('preprocessing', {})
+
+        spec = {
+            'tokenizer_type': model_cfg.get('type', 'unknown'),
+            'window_samples': int(model_cfg.get('seq_length', window_cfg.get('length', 0))),
+            'window_offset_ms': float(window_cfg.get('offset_ms', 0.0)),
+            'sample_rate': float(preprocessing_cfg.get('resample_rate', 200 if modality == 'eeg' else 10)),
+            'codebook_size': self._resolve_codebook_size(tokenizer),
+        }
+
+        print(
+            f"  Loaded {modality} tokenizer: "
+            f"type={spec['tokenizer_type']}, "
+            f"window={spec['window_samples']} samples, "
+            f"codebook={spec['codebook_size']}"
+        )
+        return tokenizer, config, spec
         
-        print(f"  Loaded {modality} tokenizer: codebook={codebook_size}, dim={embedding_dim}, type={encoder_type}")
-        return tokenizer
+    def _get_threshold_config(self, modality: str, codebook_size: int):
+        """Resolve codebook quality thresholds from training config."""
+        config = self.eeg_config if modality.lower() == 'eeg' else self.fnirs_config
+        threshold_cfg = config.get('evaluation', {}).get('thresholds', {})
+        perplexity_min = float(threshold_cfg.get('perplexity_min', 0.3 * codebook_size))
+        utilization_min = float(threshold_cfg.get('code_utilization_min', 0.2))
+        dead_ratio_max = float(threshold_cfg.get('dead_codes_max_ratio', 0.3))
+        return {
+            'perplexity_min': perplexity_min,
+            'perplexity_ratio': perplexity_min / max(codebook_size, 1),
+            'utilization_min': utilization_min,
+            'dead_ratio_max': dead_ratio_max,
+        }
     
     def load_paired_data(self, subject_ids: list, task: str = 'motor_imagery'):
         """Load paired EEG and fNIRS data."""
         print(f"Loading paired data for subjects {subject_ids}...")
+        eeg_data_cfg = self.eeg_config.get('data', {})
+        fnirs_data_cfg = self.fnirs_config.get('data', {})
+        eeg_normalize, eeg_norm_mode = resolve_dataset_normalization(eeg_data_cfg)
+        fnirs_normalize, fnirs_norm_mode = resolve_dataset_normalization(fnirs_data_cfg)
         
         # Load EEG
         eeg_dataset = EEGfNIRSDataset(
@@ -119,10 +151,12 @@ class ProbeExperiment:
             modality='eeg',
             subject_ids=subject_ids,
             task=task,
-            window_samples=800,
-            window_offset_ms=500,
-            normalize=True,
-            exclude_eog=True,
+            window_samples=self.eeg_spec['window_samples'],
+            window_offset_ms=self.eeg_spec['window_offset_ms'],
+            normalize=eeg_normalize,
+            normalization_mode=eeg_norm_mode,
+            preprocessing=eeg_data_cfg.get('preprocessing', {}),
+            exclude_eog=eeg_data_cfg.get('exclude_eog', True),
         )
         
         # Load fNIRS
@@ -131,10 +165,13 @@ class ProbeExperiment:
             modality='fnirs',
             subject_ids=subject_ids,
             task=task,
-            window_samples=40,
-            window_offset_ms=500,
-            normalize=True,
-            hbo_only=True,
+            window_samples=self.fnirs_spec['window_samples'],
+            window_offset_ms=self.fnirs_spec['window_offset_ms'],
+            normalize=fnirs_normalize,
+            normalization_mode=fnirs_norm_mode,
+            preprocessing=fnirs_data_cfg.get('preprocessing', {}),
+            hbo_only=fnirs_data_cfg.get('hbo_only', True),
+            hbr_only=fnirs_data_cfg.get('hbr_only', False),
         )
         
         print(f"  EEG samples: {len(eeg_dataset)}")
@@ -202,16 +239,22 @@ class ProbeExperiment:
         print(f"{'='*60}")
         
         # Flatten all tokens
-        flat_tokens = tokens.flatten().numpy()
+        flat_tokens = tokens.flatten().cpu()
+        health = compute_codebook_health(flat_tokens, codebook_size, include_distribution=True, top_k=20)
+        threshold_cfg = self._get_threshold_config(modality, codebook_size)
+        threshold_checks = check_health_thresholds(
+            health,
+            codebook_size,
+            perplexity_ratio=threshold_cfg['perplexity_ratio'],
+            utilization_min=threshold_cfg['utilization_min'],
+            dead_ratio_max=threshold_cfg['dead_ratio_max'],
+        )
+        flat_tokens_np = flat_tokens.numpy()
         
         # Token frequency histogram
-        counts = np.bincount(flat_tokens, minlength=codebook_size)
+        counts = np.bincount(flat_tokens_np, minlength=codebook_size)
         total = len(flat_tokens)
         probs = counts / total
-        
-        # Metrics
-        used_codes = np.sum(counts > 0)
-        usage_rate = used_codes / codebook_size
         
         # Entropy
         mask = probs > 0
@@ -226,9 +269,13 @@ class ProbeExperiment:
         top_probs = probs[top_indices]
         
         print(f"  Codebook size: {codebook_size}")
-        print(f"  Used codes: {used_codes} ({usage_rate*100:.1f}%)")
+        print(f"  Used codes: {health['active_codes']} ({health['code_utilization']*100:.1f}%)")
+        print(f"  Dead codes: {health['dead_codes']} ({health['dead_codes']/codebook_size*100:.1f}%)")
+        print(f"  Perplexity: {health['perplexity']:.2f} / {threshold_cfg['perplexity_min']:.2f} target")
         print(f"  Entropy: {entropy:.3f} (max: {max_entropy:.3f})")
         print(f"  Normalized entropy: {normalized_entropy:.3f}")
+        print(f"  Gini coefficient: {health['gini_coefficient']:.3f}")
+        print(f"  Threshold checks: {threshold_checks}")
         print(f"  Top-5 codes: {top_indices[:5]} with probs {top_probs[:5]}")
         
         # Visualization
@@ -268,10 +315,16 @@ class ProbeExperiment:
         
         return {
             'codebook_size': codebook_size,
-            'used_codes': int(used_codes),
-            'usage_rate': float(usage_rate),
+            'used_codes': int(health['active_codes']),
+            'usage_rate': float(health['code_utilization']),
+            'perplexity': float(health['perplexity']),
+            'dead_codes': int(health['dead_codes']),
             'entropy': float(entropy),
             'normalized_entropy': float(normalized_entropy),
+            'gini_coefficient': float(health['gini_coefficient']),
+            'top_20_coverage': float(health.get('top_20_coverage', 0.0)),
+            'thresholds': threshold_cfg,
+            'threshold_checks': threshold_checks,
             'top_codes': top_indices.tolist(),
             'top_probs': top_probs.tolist(),
         }
@@ -637,6 +690,77 @@ class ProbeExperiment:
         plt.close()
         
         print(f"    Task-specific MI: {task_mi}")
+
+        # =====================================================================
+        # 3.7 Lag-aware temporal coupling analysis
+        # =====================================================================
+        print("  3.7 Computing lag-aware token coupling...")
+
+        max_lag = min(5, eeg_tokens.shape[-1] - 1, fnirs_tokens.shape[-1] - 1)
+        lag_results = {}
+        lag_values = list(range(-max_lag, max_lag + 1))
+
+        for lag in lag_values:
+            cooc_lag = np.zeros((eeg_codebook_size, fnirs_codebook_size), dtype=np.float64)
+
+            if lag >= 0:
+                eeg_time_idx = range(0, eeg_tokens.shape[-1] - lag)
+                fnirs_shift = lag
+            else:
+                eeg_time_idx = range(-lag, eeg_tokens.shape[-1])
+                fnirs_shift = lag
+
+            for n in range(N):
+                for t in eeg_time_idx:
+                    eeg_slice = eeg_tokens[n, :, t].numpy()
+                    fnirs_slice = fnirs_tokens[n, :, t + fnirs_shift].numpy()
+                    pair_ids = (eeg_slice[:, None] * fnirs_codebook_size + fnirs_slice[None, :]).reshape(-1)
+                    pair_counts = np.bincount(
+                        pair_ids,
+                        minlength=eeg_codebook_size * fnirs_codebook_size,
+                    )
+                    cooc_lag += pair_counts.reshape(eeg_codebook_size, fnirs_codebook_size)
+
+            if cooc_lag.sum() == 0:
+                lag_results[int(lag)] = {'mutual_information': 0.0, 'normalized_mi': 0.0}
+                continue
+
+            joint_lag = cooc_lag / cooc_lag.sum()
+            p_eeg_lag = joint_lag.sum(axis=1)
+            p_fnirs_lag = joint_lag.sum(axis=0)
+
+            mask_joint = joint_lag > 0
+            h_joint_lag = -np.sum(joint_lag[mask_joint] * np.log(joint_lag[mask_joint] + 1e-10))
+
+            mask_e = p_eeg_lag > 0
+            h_eeg_lag = -np.sum(p_eeg_lag[mask_e] * np.log(p_eeg_lag[mask_e] + 1e-10))
+
+            mask_f = p_fnirs_lag > 0
+            h_fnirs_lag = -np.sum(p_fnirs_lag[mask_f] * np.log(p_fnirs_lag[mask_f] + 1e-10))
+
+            h_fnirs_given_eeg_lag = h_joint_lag - h_eeg_lag
+            mi_lag = h_fnirs_lag - h_fnirs_given_eeg_lag
+            norm_mi_lag = mi_lag / h_fnirs_lag if h_fnirs_lag > 0 else 0.0
+
+            lag_results[int(lag)] = {
+                'mutual_information': float(mi_lag),
+                'normalized_mi': float(norm_mi_lag),
+            }
+
+        best_lag = max(lag_results, key=lambda lag: lag_results[lag]['mutual_information'])
+        best_lag_mi = lag_results[best_lag]['mutual_information']
+        print(f"    Best lag: {best_lag} tokens ({best_lag_mi:.4f} MI)")
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.plot(lag_values, [lag_results[lag]['mutual_information'] for lag in lag_values], marker='o')
+        ax.axvline(best_lag, color='red', linestyle='--', label=f'Best lag={best_lag}')
+        ax.set_xlabel('Lag (EEG tokens relative to fNIRS tokens)')
+        ax.set_ylabel('Mutual Information (nats)')
+        ax.set_title('Lag-aware EEG-fNIRS Token Coupling')
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(self.output_dir / 'exp3_lagged_coupling.png', dpi=150)
+        plt.close()
         
         return {
             'h_fnirs': float(h_fnirs),
@@ -648,6 +772,9 @@ class ProbeExperiment:
             'mi_shuffle_baseline': float(mi_shuffle),
             'mi_improvement': float(mutual_info - mi_shuffle),
             'task_mi': task_mi,
+            'lag_analysis': lag_results,
+            'best_lag': int(best_lag),
+            'best_lag_mi': float(best_lag_mi),
             'kl_divergences': {k: float(v) for k, v in kl_divergences.items()},
         }
     
@@ -706,20 +833,31 @@ class ProbeExperiment:
 
 
 def main():
-    # Paths to trained tokenizers
-    eeg_checkpoint = "experiments/runs/eeg_patch_vqvae_1s_20260116_185829/checkpoints/best_model.pt"
-    fnirs_checkpoint = "experiments/runs/fnirs_patch_vqvae_2s_v2_20260119_115413/checkpoints/best_model.pt"
-    
-    # Initialize experiment
+    parser = argparse.ArgumentParser(description="Probe codebook quality and coupling of EEG/fNIRS tokenizers")
+    parser.add_argument('--eeg-checkpoint', type=str, required=True,
+                        help='Path to trained EEG tokenizer checkpoint')
+    parser.add_argument('--fnirs-checkpoint', type=str, required=True,
+                        help='Path to trained fNIRS tokenizer checkpoint')
+    parser.add_argument('--data-root', type=str, default="data/EEG+NIRS Single-Trial",
+                        help='Dataset root path')
+    parser.add_argument('--output-dir', type=str, default="experiments/probe_results",
+                        help='Directory to save probe outputs')
+    parser.add_argument('--device', type=str, default='cuda',
+                        help='Preferred device')
+    parser.add_argument('--subject-ids', nargs='+', type=int, default=list(range(1, 26)),
+                        help='Subject ids to include in the probe set')
+    args = parser.parse_args()
+
     probe = ProbeExperiment(
-        eeg_checkpoint=eeg_checkpoint,
-        fnirs_checkpoint=fnirs_checkpoint,
-        data_root="data/EEG+NIRS Single-Trial",
-        output_dir="experiments/probe_results",
+        eeg_checkpoint=args.eeg_checkpoint,
+        fnirs_checkpoint=args.fnirs_checkpoint,
+        data_root=args.data_root,
+        output_dir=args.output_dir,
+        device=args.device,
     )
     
     # Run all experiments
-    results = probe.run_all_experiments(subject_ids=list(range(1, 26)))
+    results = probe.run_all_experiments(subject_ids=args.subject_ids)
     
     # Print summary
     print("\n" + "="*60)
@@ -727,10 +865,14 @@ def main():
     print("="*60)
     print(f"\nEEG Codebook:")
     print(f"  Usage rate: {results['exp1_eeg']['usage_rate']*100:.1f}%")
+    print(f"  Perplexity: {results['exp1_eeg']['perplexity']:.2f}")
+    print(f"  Dead codes: {results['exp1_eeg']['dead_codes']}")
     print(f"  Normalized entropy: {results['exp1_eeg']['normalized_entropy']:.3f}")
     
     print(f"\nfNIRS Codebook:")
     print(f"  Usage rate: {results['exp1_fnirs']['usage_rate']*100:.1f}%")
+    print(f"  Perplexity: {results['exp1_fnirs']['perplexity']:.2f}")
+    print(f"  Dead codes: {results['exp1_fnirs']['dead_codes']}")
     print(f"  Normalized entropy: {results['exp1_fnirs']['normalized_entropy']:.3f}")
     
     print(f"\nCross-Modal Coupling:")
@@ -738,6 +880,8 @@ def main():
     print(f"  Normalized MI: {results['exp3_coupling']['normalized_mi']:.4f}")
     print(f"  Entropy Reduction: {results['exp3_coupling']['entropy_reduction']*100:.1f}%")
     print(f"  MI vs Shuffle: {results['exp3_coupling']['mi_improvement']:.4f} improvement")
+    print(f"  Best Lag: {results['exp3_coupling']['best_lag']} tokens")
+    print(f"  Best Lag MI: {results['exp3_coupling']['best_lag_mi']:.4f}")
 
 
 if __name__ == '__main__':

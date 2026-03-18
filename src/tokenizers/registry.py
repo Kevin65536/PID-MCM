@@ -72,6 +72,29 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
         'patch_size': patch_cfg.get('size', 200),
         'input_channels': model_cfg.get('input_channels', 1),
     }
+
+    if tokenizer_type == 'vqvae':
+        return {
+            'seq_length': model_cfg.get('seq_length', 800),
+            'input_channels': model_cfg.get('input_channels', 1),
+            'codebook_size': quantizer_cfg.get('codebook_size', 512),
+            'embedding_dim': quantizer_cfg.get('embedding_dim', 64),
+            'commitment_cost': quantizer_cfg.get('commitment_cost', 0.25),
+            'ema_decay': quantizer_cfg.get('ema_decay', 0.99),
+            'encoder_dims': encoder_cfg.get('hidden_dims', [64, 128, 256]),
+            'encoder_kernel': encoder_cfg.get('kernel_size', 7),
+            'encoder_stride': encoder_cfg.get('stride', 2),
+        }
+
+    elif tokenizer_type == 'fsq':
+        return {
+            'seq_length': model_cfg.get('seq_length', 800),
+            'input_channels': model_cfg.get('input_channels', 1),
+            'levels': quantizer_cfg.get('levels', [8, 8, 8, 8]),
+            'encoder_dims': encoder_cfg.get('hidden_dims', [64, 128, 256]),
+            'encoder_kernel': encoder_cfg.get('kernel_size', 7),
+            'encoder_stride': encoder_cfg.get('stride', 2),
+        }
     
     if tokenizer_type in ['patch_vqvae', 'time_patch_vqvae']:
         return {
@@ -80,6 +103,7 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'embedding_dim': quantizer_cfg.get('embedding_dim', 64),
             'hidden_dim': encoder_cfg.get('hidden_dim', 256),
             'num_layers': encoder_cfg.get('num_layers', 2),
+            'encoder_type': encoder_cfg.get('type', 'cnn'),
             'commitment_cost': quantizer_cfg.get('commitment_cost', 0.25),
             'ema_decay': quantizer_cfg.get('ema_decay', 0.99),
         }

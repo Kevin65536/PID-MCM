@@ -43,6 +43,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.utils.logger import ExperimentLogger
 from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.metrics.reconstruction import (
+    compute_band_power_loss,
+    compute_multi_stft_loss,
+    compute_smoothness_loss,
+    compute_spectral_mse,
+)
 from src.visualization import TokenizerVisualizer, TensorBoardLogger
 
 
@@ -237,6 +243,10 @@ def setup_device(config: dict, verbose: bool = True) -> torch.device:
         torch.device for training
     """
     device_cfg = config['experiment'].get('device', 'cuda')
+    visible_devices_env = os.environ.get('CUDA_VISIBLE_DEVICES', '').strip()
+    visible_devices = []
+    if visible_devices_env:
+        visible_devices = [int(device.strip()) for device in visible_devices_env.split(',') if device.strip()]
     
     # Check if specific GPU is requested in config (e.g., "cuda:1")
     if device_cfg.startswith('cuda:'):
@@ -254,9 +264,18 @@ def setup_device(config: dict, verbose: bool = True) -> torch.device:
     if torch.cuda.is_available():
         best_gpu = select_best_gpu(verbose=verbose)
         if best_gpu is not None:
-            device = torch.device(f'cuda:{best_gpu}')
+            local_gpu_idx = best_gpu
+            if visible_devices:
+                if best_gpu in visible_devices:
+                    local_gpu_idx = visible_devices.index(best_gpu)
+                else:
+                    local_gpu_idx = 0
+                if verbose:
+                    print(f"Mapping physical GPU {best_gpu} to local CUDA device {local_gpu_idx} due to CUDA_VISIBLE_DEVICES={visible_devices_env}")
+
+            device = torch.device(f'cuda:{local_gpu_idx}')
             # Set as default device for CUDA tensors
-            torch.cuda.set_device(best_gpu)
+            torch.cuda.set_device(local_gpu_idx)
             return device
         else:
             # Fall back to default CUDA device
@@ -379,6 +398,72 @@ def prepare_input(x: torch.Tensor, patch_size: int, tokenizer_type: str) -> torc
         return x.view(B * C, T)
 
 
+def compute_auxiliary_reconstruction_loss(
+    original: torch.Tensor,
+    reconstructed: Optional[torch.Tensor],
+    config: dict,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    """Compute optional reconstruction-side auxiliary losses from config."""
+    if reconstructed is None:
+        return torch.tensor(0.0, device=original.device), {}
+
+    loss_cfg = config.get('loss', {})
+    aux_loss = torch.tensor(0.0, device=original.device)
+    aux_metrics: Dict[str, float] = {}
+
+    spectral_cfg = loss_cfg.get('spectral', {})
+    if spectral_cfg.get('enabled', False):
+        spectral_weight = float(spectral_cfg.get('weight', 0.0))
+        if spectral_weight > 0:
+            spectral_type = spectral_cfg.get('type', 'multi_stft')
+            if spectral_type == 'multi_stft':
+                spectral_loss = compute_multi_stft_loss(
+                    original,
+                    reconstructed,
+                    fft_sizes=spectral_cfg.get('fft_sizes', [64, 128, 256]),
+                    hop_sizes=spectral_cfg.get('hop_sizes'),
+                    win_sizes=spectral_cfg.get('win_sizes'),
+                )
+            elif spectral_type == 'fft_mse':
+                spectral_loss = compute_spectral_mse(
+                    original,
+                    reconstructed,
+                    n_fft=int(spectral_cfg.get('n_fft', 256)),
+                )
+            else:
+                raise ValueError(f"Unsupported spectral loss type: {spectral_type}")
+
+            aux_loss = aux_loss + spectral_weight * spectral_loss
+            aux_metrics['spectral_loss'] = float(spectral_loss.item())
+
+    band_cfg = loss_cfg.get('band_power', {})
+    if band_cfg.get('enabled', False):
+        band_weight = float(band_cfg.get('weight', 0.0))
+        if band_weight > 0:
+            band_losses = compute_band_power_loss(
+                original,
+                reconstructed,
+                fs=float(config.get('data', {}).get('preprocessing', {}).get('resample_rate', 200.0)),
+            )
+            if band_losses:
+                band_loss = torch.stack(list(band_losses.values())).mean()
+                aux_loss = aux_loss + band_weight * band_loss
+                aux_metrics['band_power_loss'] = float(band_loss.item())
+
+    smooth_cfg = loss_cfg.get('smoothness', {})
+    if smooth_cfg.get('enabled', False):
+        smooth_weight = float(smooth_cfg.get('weight', 0.0))
+        if smooth_weight > 0:
+            smoothness_loss = compute_smoothness_loss(reconstructed)
+            aux_loss = aux_loss + smooth_weight * smoothness_loss
+            aux_metrics['smoothness_loss'] = float(smoothness_loss.item())
+
+    if aux_metrics:
+        aux_metrics['aux_loss'] = float(aux_loss.item())
+
+    return aux_loss, aux_metrics
+
+
 def train_epoch(
     tokenizer,
     dataloader: DataLoader,
@@ -428,10 +513,14 @@ def train_epoch(
                 f"All tokenizers must return 'loss' for unified training. "
                 f"Available keys: {list(outputs.keys())}"
             )
+
+        reconstructed = std_outputs.get('reconstructed')
+        aux_loss, aux_metrics = compute_auxiliary_reconstruction_loss(x_input, reconstructed, config)
+        total_optimized_loss = loss + aux_loss
         
         # Backward
         optimizer.zero_grad()
-        loss.backward()
+        total_optimized_loss.backward()
         
         # Gradient clipping
         if grad_clip > 0:
@@ -440,12 +529,15 @@ def train_epoch(
         optimizer.step()
         
         # Accumulate metrics
-        total_loss += loss.item() * B
+        total_loss += total_optimized_loss.item() * B
         total_samples += B
         n_batches += 1
         
         # Accumulate loss breakdown
         breakdown = StandardizedOutput.get_loss_breakdown(outputs)
+        if aux_metrics:
+            breakdown.update(aux_metrics)
+        breakdown['tokenizer_loss'] = float(loss.item())
         for k, v in breakdown.items():
             loss_accum[k] = loss_accum.get(k, 0.0) + v * B
         
@@ -497,13 +589,20 @@ def validate(
         
         # Get loss from tokenizer output
         loss = std_outputs.get('loss')
-        if loss is not None:
-            total_loss += loss.item() * B
+        reconstructed = std_outputs.get('reconstructed')
+        aux_loss, aux_metrics = compute_auxiliary_reconstruction_loss(x_input, reconstructed, config)
+        total_eval_loss = loss + aux_loss if loss is not None else aux_loss
+        if total_eval_loss is not None:
+            total_loss += total_eval_loss.item() * B
         
         total_samples += B
         n_batches += 1
         
         breakdown = StandardizedOutput.get_loss_breakdown(outputs)
+        if aux_metrics:
+            breakdown.update(aux_metrics)
+        if loss is not None:
+            breakdown['tokenizer_loss'] = float(loss.item())
         for k, v in breakdown.items():
             loss_accum[k] = loss_accum.get(k, 0.0) + v * B
         
@@ -571,6 +670,8 @@ def load_checkpoint(
 def compute_spectral_metrics(original: torch.Tensor, reconstructed: torch.Tensor) -> Dict[str, float]:
     """Compute spectral comparison metrics."""
     try:
+        original = original.detach()
+        reconstructed = reconstructed.detach()
         orig_fft = torch.fft.rfft(original, dim=-1)
         rec_fft = torch.fft.rfft(reconstructed, dim=-1)
         
@@ -782,7 +883,9 @@ def main():
     es_cfg = train_cfg.get('early_stopping', {})
     patience = es_cfg.get('patience', 20)
     min_delta = es_cfg.get('min_delta', 0.0001)
-    best_val_loss = float('inf')
+    monitor_metric = es_cfg.get('metric', 'val_loss')
+    monitor_mode = es_cfg.get('mode', 'min')
+    best_monitor_value = float('inf') if monitor_mode == 'min' else float('-inf')
     epochs_without_improvement = 0
     
     # Checkpoint config
@@ -816,6 +919,7 @@ def main():
     print(f"  Batch size: {train_cfg['batch_size']}")
     print(f"  Learning rate: {actual_lr}")
     print(f"  Early stopping patience: {patience}")
+    print(f"  Early stopping metric: {monitor_metric} ({monitor_mode})")
     print(f"  Checkpoints saved to: {checkpoints_dir}")
     print(f"  Visualization interval: every {viz_interval} epochs")
     
@@ -841,7 +945,7 @@ def main():
         train_str = f"Loss={train_metrics['loss']:.4f}"
         val_str = f"Loss={val_metrics['val_loss']:.4f}"
         
-        for key in ['amp_loss', 'phase_loss', 'time_loss', 'vq_loss', 'rec_loss']:
+        for key in ['amp_loss', 'phase_loss', 'time_loss', 'vq_loss', 'rec_loss', 'spectral_loss', 'band_power_loss', 'smoothness_loss', 'aux_loss']:
             if key in train_metrics:
                 train_str += f" {key.replace('_loss', '').title()}={train_metrics[key]:.4f}"
             val_key = f'val_{key}'
@@ -1020,9 +1124,15 @@ def main():
                 tokenizer.train()
         
         # Check for improvement
+        monitor_value = val_metrics.get(monitor_metric, val_metrics['val_loss'])
+        if monitor_mode == 'max':
+            improved = monitor_value > best_monitor_value + min_delta
+        else:
+            improved = monitor_value < best_monitor_value - min_delta
+
         val_loss = val_metrics['val_loss']
-        if val_loss < best_val_loss - min_delta:
-            best_val_loss = val_loss
+        if improved:
+            best_monitor_value = monitor_value
             epochs_without_improvement = 0
             
             # Save best model (in checkpoints directory)
@@ -1044,7 +1154,7 @@ def main():
     
     print(f"\n{'='*60}")
     print("Training completed!")
-    print(f"Best validation loss: {best_val_loss:.4f}")
+    print(f"Best {monitor_metric}: {best_monitor_value:.4f}")
     
     # ========================
     # Post-training Analysis
@@ -1225,7 +1335,8 @@ def main():
     try:
         final_metrics = {
             'model_type': config['model'].get('type', 'unknown'),
-            'best_val_loss': best_val_loss,
+            'best_monitor_metric': monitor_metric,
+            'best_monitor_value': best_monitor_value,
             **final_val,
         }
         logger.log_final(final_metrics)
@@ -1241,7 +1352,7 @@ def main():
                             config['model'].get('quantizer', {}).get('num_codes', 2048)),
         }
         tb_logger.log_hparams(hparams, {
-            'best_val_loss': best_val_loss,
+            'best_monitor_value': best_monitor_value,
             'final_val_loss': final_val.get('val_loss', 0.0),
             'final_utilization': final_val.get('val_utilization', 0.0),
         })

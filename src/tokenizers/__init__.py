@@ -31,6 +31,8 @@ from .registry import (
 
 # Register all tokenizers
 from .registry import _TOKENIZER_REGISTRY
+_TOKENIZER_REGISTRY['vqvae'] = VQVAETokenizer
+_TOKENIZER_REGISTRY['fsq'] = FSQTokenizer
 _TOKENIZER_REGISTRY['patch_vqvae'] = PatchVQVAETokenizer
 _TOKENIZER_REGISTRY['time_patch_vqvae'] = PatchVQVAETokenizer  # alias
 _TOKENIZER_REGISTRY['freq_patch_vqvae'] = FreqDomainPatchVQVAE
