@@ -25,6 +25,7 @@ TensorBoard:
 import sys
 import os
 import argparse
+import json
 import traceback
 import subprocess
 from pathlib import Path
@@ -45,10 +46,14 @@ from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
 from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
 from src.metrics.reconstruction import (
     compute_band_power_loss,
+    compute_mae,
     compute_multi_stft_loss,
+    compute_reconstruction_mse,
     compute_smoothness_loss,
+    compute_snr,
     compute_spectral_mse,
 )
+from src.metrics.codebook_health import compute_codebook_health
 from src.visualization import TokenizerVisualizer, TensorBoardLogger
 
 
@@ -619,6 +624,156 @@ def validate(
     return metrics
 
 
+@torch.no_grad()
+def analyze_tokenizer_split(
+    tokenizer,
+    dataloader: DataLoader,
+    device: torch.device,
+    config: dict,
+    split: str,
+) -> Dict[str, Any]:
+    """Run detailed reconstruction/codebook analysis on a dataset split."""
+    tokenizer.eval()
+
+    tokenizer_type = config['model'].get('type', 'patch_vqvae')
+    patch_size = get_patch_size(tokenizer, config)
+    sample_rate = float(config['data']['preprocessing'].get('resample_rate', 200.0))
+
+    totals: Dict[str, float] = {}
+    total_samples = 0
+    token_change_num = 0.0
+    token_change_den = 0.0
+    all_tokens = []
+    per_subject: Dict[int, Dict[str, float]] = {}
+
+    codebook_size = None
+    if hasattr(tokenizer, 'get_codebook_size'):
+        codebook_size = int(tokenizer.get_codebook_size())
+    else:
+        quant_cfg = config['model'].get('quantizer', {})
+        codebook_size = int(quant_cfg.get('n_embed') or quant_cfg.get('codebook_size') or quant_cfg.get('num_codes', 0))
+
+    for batch in dataloader:
+        if isinstance(batch, dict):
+            x = batch['data']
+            subject_ids = batch.get('subject_id')
+        else:
+            x = batch[0]
+            subject_ids = None
+
+        x = x.to(device)
+        x_input = prepare_input(x, patch_size, tokenizer_type)
+        outputs = tokenizer(x_input)
+        std_outputs = StandardizedOutput.standardize(outputs)
+        reconstructed = std_outputs.get('reconstructed')
+        if reconstructed is None:
+            continue
+
+        batch_n = x_input.shape[0]
+        total_samples += batch_n
+
+        batch_metrics = {
+            'mse': compute_reconstruction_mse(x_input, reconstructed),
+            'mae': compute_mae(x_input, reconstructed),
+            'snr_db': compute_snr(x_input, reconstructed),
+            'spectral_mse': compute_spectral_mse(x_input, reconstructed, n_fft=256),
+            'multi_stft': compute_multi_stft_loss(
+                x_input,
+                reconstructed,
+                fft_sizes=[64, 128, 256],
+                hop_sizes=[16, 32, 64],
+                win_sizes=[64, 128, 256],
+            ),
+        }
+        for key, value in batch_metrics.items():
+            totals[key] = totals.get(key, 0.0) + float(value.item()) * batch_n
+
+        band_losses = compute_band_power_loss(x_input, reconstructed, fs=sample_rate)
+        for key, value in band_losses.items():
+            totals[key] = totals.get(key, 0.0) + float(value.item()) * batch_n
+
+        tokens = std_outputs.get('tokens')
+        if tokens is None and 'indices' in outputs:
+            tokens = outputs['indices']
+        if isinstance(tokens, list):
+            tokens = tokens[0] if tokens else None
+        if torch.is_tensor(tokens):
+            tokens_cpu = tokens.detach().cpu()
+            all_tokens.append(tokens_cpu.reshape(-1))
+            if tokens_cpu.dim() >= 2 and tokens_cpu.shape[1] > 1:
+                token_change_num += (tokens_cpu[:, 1:] != tokens_cpu[:, :-1]).float().sum().item()
+                token_change_den += tokens_cpu[:, 1:].numel()
+
+        if subject_ids is not None:
+            subject_ids = subject_ids.detach().cpu()
+            sample_mse = ((reconstructed - x_input) ** 2).mean(dim=-1).detach().cpu()
+            if sample_mse.dim() > 1:
+                sample_mse = sample_mse.mean(dim=-1)
+            sample_mse = sample_mse.view(x.shape[0], -1).mean(dim=1)
+            for subject_id, mse in zip(subject_ids.tolist(), sample_mse.tolist()):
+                stats = per_subject.setdefault(int(subject_id), {'mse_sum': 0.0, 'count': 0})
+                stats['mse_sum'] += float(mse)
+                stats['count'] += 1
+
+    averaged = {key: value / max(total_samples, 1) for key, value in totals.items()}
+    health = None
+    if all_tokens and codebook_size > 0:
+        flat_tokens = torch.cat(all_tokens, dim=0)
+        health = compute_codebook_health(flat_tokens, codebook_size, include_distribution=True, top_k=20)
+
+    subject_summary = {}
+    for subject_id, stats in sorted(per_subject.items()):
+        if stats['count'] > 0:
+            subject_summary[str(subject_id)] = stats['mse_sum'] / stats['count']
+
+    result: Dict[str, Any] = {
+        'split': split,
+        'num_samples': int(total_samples),
+        **averaged,
+        'token_change_ratio': float(token_change_num / token_change_den) if token_change_den > 0 else 0.0,
+        'subject_mse': subject_summary,
+    }
+    if health is not None:
+        result['codebook'] = {
+            'active_codes': int(health['active_codes']),
+            'usage_rate': float(health['code_utilization']),
+            'dead_codes': int(health['dead_codes']),
+            'perplexity': float(health['perplexity']),
+            'gini_coefficient': float(health.get('gini_coefficient', 0.0)),
+            'top_20_coverage': float(health.get('top_20_coverage', 0.0)),
+        }
+
+    return result
+
+
+def save_detailed_analysis(
+    tokenizer,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    device: torch.device,
+    config: dict,
+    run_dir: Path,
+    sample_spectral_metrics: Optional[Dict[str, float]] = None,
+) -> Path:
+    """Save detailed analysis report into the current run directory."""
+    analysis_dir = run_dir / 'analysis'
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        'generated_at': datetime.now().isoformat(),
+        'experiment_name': config.get('experiment', {}).get('name', 'unknown'),
+        'model_type': config.get('model', {}).get('type', 'unknown'),
+        'val': analyze_tokenizer_split(tokenizer, val_loader, device, config, split='val'),
+        'test': analyze_tokenizer_split(tokenizer, test_loader, device, config, split='test'),
+    }
+    if sample_spectral_metrics:
+        report['sample_spectral_metrics'] = sample_spectral_metrics
+
+    report_path = analysis_dir / 'detailed_analysis.json'
+    report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    return report_path
+
+
 # ============================================================================
 # Checkpointing
 # ============================================================================
@@ -841,8 +996,10 @@ def main():
     print("\nLoading data...")
     train_loader = create_dataloader(config, 'train')
     val_loader = create_dataloader(config, 'val')
+    test_loader = create_dataloader(config, 'test')
     print(f"Train samples: {len(train_loader.dataset)}")
     print(f"Val samples: {len(val_loader.dataset)}")
+    print(f"Test samples: {len(test_loader.dataset)}")
     
     # Create tokenizer via registry
     print("\nCreating tokenizer...")
@@ -1180,6 +1337,7 @@ def main():
     # Spectral metrics on sample
     print("\nComputing spectral metrics on sample...")
     try:
+        sample_spectral_metrics = None
         sample_batch = next(iter(val_loader))
         if isinstance(sample_batch, dict):
             sample = sample_batch['data']
@@ -1202,12 +1360,28 @@ def main():
             # Match shapes for comparison
             if reconstructed.shape == x_input.shape:
                 spectral_metrics = compute_spectral_metrics(x_input, reconstructed)
+                sample_spectral_metrics = spectral_metrics
                 print(f"\nReconstruction Quality (sample):")
                 for k, v in spectral_metrics.items():
                     print(f"  {k}: {v:.4f}")
                 final_val.update({f'spectral_{k}': v for k, v in spectral_metrics.items()})
     except Exception as e:
         print(f"Warning: Spectral analysis failed: {e}")
+        traceback.print_exc()
+
+    try:
+        analysis_path = save_detailed_analysis(
+            tokenizer,
+            val_loader,
+            test_loader,
+            device,
+            config,
+            logger.run_dir,
+            sample_spectral_metrics=sample_spectral_metrics,
+        )
+        print(f"Detailed analysis saved to: {analysis_path}")
+    except Exception as e:
+        print(f"Warning: Detailed analysis generation failed: {e}")
         traceback.print_exc()
     
     # ========================
