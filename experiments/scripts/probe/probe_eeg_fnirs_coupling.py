@@ -655,13 +655,16 @@ class ProbeExperiment:
             fnirs_task = fnirs_tokens[mask]
             
             # Compute task-specific cooccurrence
-            cooc_task = np.zeros((eeg_codebook_size, fnirs_codebook_size))
+            cooc_task = np.zeros((eeg_codebook_size, fnirs_codebook_size), dtype=np.float64)
             for n in range(eeg_task.shape[0]):
                 eeg_flat = eeg_task[n].flatten().numpy()
                 fnirs_flat = fnirs_task[n].flatten().numpy()
-                for e in eeg_flat:
-                    for f in fnirs_flat:
-                        cooc_task[e, f] += 1
+                pair_ids = (eeg_flat[:, None] * fnirs_codebook_size + fnirs_flat[None, :]).reshape(-1)
+                pair_counts = np.bincount(
+                    pair_ids,
+                    minlength=eeg_codebook_size * fnirs_codebook_size,
+                )
+                cooc_task += pair_counts.reshape(eeg_codebook_size, fnirs_codebook_size)
             
             joint_task = cooc_task / (cooc_task.sum() + 1e-10)
             p_eeg_task = joint_task.sum(axis=1)
@@ -699,27 +702,30 @@ class ProbeExperiment:
         max_lag = min(5, eeg_tokens.shape[-1] - 1, fnirs_tokens.shape[-1] - 1)
         lag_results = {}
         lag_values = list(range(-max_lag, max_lag + 1))
+        eeg_len = eeg_tokens.shape[-1]
+        fnirs_len = fnirs_tokens.shape[-1]
 
         for lag in lag_values:
             cooc_lag = np.zeros((eeg_codebook_size, fnirs_codebook_size), dtype=np.float64)
 
-            if lag >= 0:
-                eeg_time_idx = range(0, eeg_tokens.shape[-1] - lag)
-                fnirs_shift = lag
-            else:
-                eeg_time_idx = range(-lag, eeg_tokens.shape[-1])
-                fnirs_shift = lag
+            eeg_start = max(0, -lag)
+            eeg_end = min(eeg_len, fnirs_len - lag)
 
-            for n in range(N):
-                for t in eeg_time_idx:
-                    eeg_slice = eeg_tokens[n, :, t].numpy()
-                    fnirs_slice = fnirs_tokens[n, :, t + fnirs_shift].numpy()
-                    pair_ids = (eeg_slice[:, None] * fnirs_codebook_size + fnirs_slice[None, :]).reshape(-1)
-                    pair_counts = np.bincount(
-                        pair_ids,
-                        minlength=eeg_codebook_size * fnirs_codebook_size,
-                    )
-                    cooc_lag += pair_counts.reshape(eeg_codebook_size, fnirs_codebook_size)
+            if eeg_start >= eeg_end:
+                lag_results[int(lag)] = {'mutual_information': 0.0, 'normalized_mi': 0.0}
+                continue
+
+            for t in range(eeg_start, eeg_end):
+                eeg_slice = eeg_tokens[:, :, t].numpy()  # [N, C_eeg]
+                fnirs_slice = fnirs_tokens[:, :, t + lag].numpy()  # [N, C_fnirs]
+                pair_ids = (
+                    eeg_slice[:, :, None] * fnirs_codebook_size + fnirs_slice[:, None, :]
+                ).reshape(-1)
+                pair_counts = np.bincount(
+                    pair_ids,
+                    minlength=eeg_codebook_size * fnirs_codebook_size,
+                )
+                cooc_lag += pair_counts.reshape(eeg_codebook_size, fnirs_codebook_size)
 
             if cooc_lag.sum() == 0:
                 lag_results[int(lag)] = {'mutual_information': 0.0, 'normalized_mi': 0.0}
