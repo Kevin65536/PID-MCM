@@ -6,7 +6,7 @@ on:
       runner_label:
         description: Custom runner label or ubuntu-latest
         required: true
-        default: ubuntu-latest
+        default: neural-token-gpu
         type: string
       python_version:
         description: Python version
@@ -51,6 +51,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-copilot.txt
 
+      - name: Make local assets visible in workspace
+        shell: bash
+        run: bash ./.github/scripts/prepare-local-agent-env.sh "$PWD"
+
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
@@ -78,14 +82,23 @@ jobs:
       - name: Install repository Python dependencies
         run: python -m pip install -r requirements-copilot.txt
 
+      - name: Select Python interpreter
+        shell: bash
+        run: |
+          if [[ -x "/home/uais5/hkw/neural_token/.venv/bin/python" ]]; then
+            echo "PYTHON_BIN=/home/uais5/hkw/neural_token/.venv/bin/python" >> "$GITHUB_ENV"
+          else
+            echo "PYTHON_BIN=python" >> "$GITHUB_ENV"
+          fi
+
       - name: Run experiment command
         shell: bash
         run: |
           set -e
           if [ -n "${{ inputs.config_path }}" ]; then
-            python "${{ inputs.script_path }}" --config "${{ inputs.config_path }}" ${{ inputs.extra_args }}
+            "$PYTHON_BIN" "${{ inputs.script_path }}" --config "${{ inputs.config_path }}" ${{ inputs.extra_args }}
           else
-            python "${{ inputs.script_path }}" ${{ inputs.extra_args }}
+            "$PYTHON_BIN" "${{ inputs.script_path }}" ${{ inputs.extra_args }}
           fi
 
       - name: Upload experiment artifacts

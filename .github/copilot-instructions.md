@@ -14,6 +14,14 @@
 - When editing alignment training, start from `experiments/scripts/train_shared_tokenizer.py` and `src/tokenizers/shared_labram_vqnsp.py` unless the task explicitly requires a different route.
 - When proposing or implementing new alignment experiments, add configs under `experiments/configs/phase0plus/` or a clearly named subdirectory.
 
+## Self-hosted Runner Context
+
+- Copilot should run on the self-hosted runner labeled `neural-token-gpu`.
+- The canonical local repository root on that runner is `/home/uais5/hkw/neural_token`.
+- The preferred Python interpreter on that runner is `/home/uais5/hkw/neural_token/.venv/bin/python` when present.
+- Non-Git assets such as `data/`, `experiments/configs/`, `experiments/runs/`, and `experiments/probe_results/` are available locally on the runner and may be symlinked into the GitHub Actions workspace by setup scripts.
+- When a workflow or shell command can use the local virtual environment or local asset directories, prefer that over rebuilding from scratch.
+
 ## Long-Running Work
 
 - For long experiments, prefer GitHub Actions workflows or other durable execution paths over keeping an interactive shell open.
