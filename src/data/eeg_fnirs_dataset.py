@@ -758,6 +758,9 @@ class MultiModalEEGfNIRSDataset(Dataset):
         window_duration_s: float = 2.5,  # Window duration in seconds
         window_offset_ms: float = 0,
         normalize: bool = True,
+        normalization_mode: Literal['window', 'session', 'none'] = 'window',
+        eeg_preprocessing: Optional[dict] = None,
+        fnirs_preprocessing: Optional[dict] = None,
         use_artifact_data: bool = True,
         # Channel filtering options
         exclude_eog: bool = True,  # For EEG: exclude EOG channels
@@ -785,6 +788,9 @@ class MultiModalEEGfNIRSDataset(Dataset):
         self.window_duration_s = window_duration_s
         self.window_offset_ms = window_offset_ms
         self.normalize = normalize
+        self.normalization_mode = normalization_mode
+        self.eeg_preprocessing = dict(eeg_preprocessing or {})
+        self.fnirs_preprocessing = dict(fnirs_preprocessing or {})
         
         # Channel filtering options
         self.exclude_eog = exclude_eog
@@ -818,8 +824,12 @@ class MultiModalEEGfNIRSDataset(Dataset):
         self._build_trial_index()
         
         # Cache for loaded data
-        self._eeg_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
-        self._nirs_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._eeg_raw_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._eeg_processed_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._eeg_session_stats_cache: Dict[int, List[Tuple[np.ndarray, np.ndarray]]] = {}
+        self._nirs_raw_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._nirs_processed_cache: Dict[int, Tuple[List[np.ndarray], List[dict], dict]] = {}
+        self._nirs_session_stats_cache: Dict[int, List[Tuple[np.ndarray, np.ndarray]]] = {}
         
     def _build_trial_index(self):
         """Build an index of all available trials with both modalities."""
@@ -878,38 +888,58 @@ class MultiModalEEGfNIRSDataset(Dataset):
             except Exception as e:
                 print(f"Warning: Could not load subject {subject_id}: {e}")
     
-    def _get_eeg_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load EEG data with channel filtering applied."""
-        if subject_id not in self._eeg_cache:
+    def _cache_eeg_data(self, subject_id: int):
+        if subject_id not in self._eeg_processed_cache:
             cnt_list, mrk_list, info = self.eeg_loader.load_subject_data(subject_id, 'eeg')
             
-            # Get channel mask for filtering
             channel_names = list(info['clab'])
             channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=self.exclude_eog)
             
-            # Apply channel filtering to all sessions
-            filtered_cnt_list = []
+            raw_filtered_cnt_list = []
+            processed_cnt_list = []
+            session_stats = []
+            fs = float(info['fs'])
             for cnt in cnt_list:
                 filtered_cnt = cnt[:, channel_mask]
-                filtered_cnt_list.append(filtered_cnt)
+                raw_filtered_cnt_list.append(filtered_cnt.astype(np.float32, copy=False))
+
+                processed_cnt = apply_temporal_filter(
+                    filtered_cnt,
+                    sample_rate=fs,
+                    modality='eeg',
+                    preprocessing=self.eeg_preprocessing,
+                )
+                processed_cnt_list.append(processed_cnt)
+
+                channel_mean = processed_cnt.mean(axis=0)
+                channel_std = processed_cnt.std(axis=0) + 1e-8
+                session_stats.append((channel_mean, channel_std))
             
-            # Update channel info
             filtered_info = info.copy()
             filtered_channel_names = [name for i, name in enumerate(channel_names) if channel_mask[i]]
             filtered_info['clab'] = filtered_channel_names
             filtered_info['original_clab'] = channel_names
             filtered_info['channel_mask'] = channel_mask
             
-            self._eeg_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
-            
-        return self._eeg_cache[subject_id]
+            self._eeg_raw_cache[subject_id] = (raw_filtered_cnt_list, mrk_list, filtered_info)
+            self._eeg_processed_cache[subject_id] = (processed_cnt_list, mrk_list, filtered_info)
+            self._eeg_session_stats_cache[subject_id] = session_stats
+
+    def _get_eeg_data(
+        self,
+        subject_id: int,
+        processed: bool = True,
+    ) -> Tuple[List[np.ndarray], List[dict], dict]:
+        """Get cached EEG data after channel filtering and optional temporal preprocessing."""
+        self._cache_eeg_data(subject_id)
+        if processed:
+            return self._eeg_processed_cache[subject_id]
+        return self._eeg_raw_cache[subject_id]
     
-    def _get_nirs_data(self, subject_id: int) -> Tuple[List[np.ndarray], List[dict], dict]:
-        """Get cached or load NIRS data with channel filtering applied."""
-        if subject_id not in self._nirs_cache:
+    def _cache_nirs_data(self, subject_id: int):
+        if subject_id not in self._nirs_processed_cache:
             cnt_list, mrk_list, info = self.nirs_loader.load_subject_data(subject_id, 'fnirs')
             
-            # Get channel mask for filtering
             channel_names = list(info['clab'])
             channel_mask = get_fnirs_channel_mask(
                 channel_names, 
@@ -917,22 +947,54 @@ class MultiModalEEGfNIRSDataset(Dataset):
                 hbr_only=self.hbr_only
             )
             
-            # Apply channel filtering to all sessions
-            filtered_cnt_list = []
+            raw_filtered_cnt_list = []
+            processed_cnt_list = []
+            session_stats = []
+            fs = float(info['fs'])
             for cnt in cnt_list:
                 filtered_cnt = cnt[:, channel_mask]
-                filtered_cnt_list.append(filtered_cnt)
+                raw_filtered_cnt_list.append(filtered_cnt.astype(np.float32, copy=False))
+
+                processed_cnt = apply_temporal_filter(
+                    filtered_cnt,
+                    sample_rate=fs,
+                    modality='fnirs',
+                    preprocessing=self.fnirs_preprocessing,
+                )
+                processed_cnt_list.append(processed_cnt)
+
+                channel_mean = processed_cnt.mean(axis=0)
+                channel_std = processed_cnt.std(axis=0) + 1e-8
+                session_stats.append((channel_mean, channel_std))
             
-            # Update channel info
             filtered_info = info.copy()
             filtered_channel_names = [name for i, name in enumerate(channel_names) if channel_mask[i]]
             filtered_info['clab'] = filtered_channel_names
             filtered_info['original_clab'] = channel_names
             filtered_info['channel_mask'] = channel_mask
             
-            self._nirs_cache[subject_id] = (filtered_cnt_list, mrk_list, filtered_info)
-            
-        return self._nirs_cache[subject_id]
+            self._nirs_raw_cache[subject_id] = (raw_filtered_cnt_list, mrk_list, filtered_info)
+            self._nirs_processed_cache[subject_id] = (processed_cnt_list, mrk_list, filtered_info)
+            self._nirs_session_stats_cache[subject_id] = session_stats
+
+    def _get_nirs_data(
+        self,
+        subject_id: int,
+        processed: bool = True,
+    ) -> Tuple[List[np.ndarray], List[dict], dict]:
+        """Get cached NIRS data after channel filtering and optional temporal preprocessing."""
+        self._cache_nirs_data(subject_id)
+        if processed:
+            return self._nirs_processed_cache[subject_id]
+        return self._nirs_raw_cache[subject_id]
+
+    def _get_eeg_session_statistics(self, subject_id: int, session_idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        self._cache_eeg_data(subject_id)
+        return self._eeg_session_stats_cache[subject_id][session_idx]
+
+    def _get_nirs_session_statistics(self, subject_id: int, session_idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        self._cache_nirs_data(subject_id)
+        return self._nirs_session_stats_cache[subject_id][session_idx]
     
     def _extract_window(
         self, 
@@ -960,12 +1022,6 @@ class MultiModalEEGfNIRSDataset(Dataset):
         # Transpose to (n_channels, window_samples)
         window = window.T
         
-        # Normalize
-        if self.normalize:
-            mean = window.mean(axis=1, keepdims=True)
-            std = window.std(axis=1, keepdims=True) + 1e-8
-            window = (window - mean) / std
-            
         return window
     
     def __len__(self) -> int:
@@ -987,20 +1043,32 @@ class MultiModalEEGfNIRSDataset(Dataset):
         trial = self.trials[idx]
         
         # Get EEG data
-        eeg_cnt_list, _, eeg_info = self._get_eeg_data(trial.subject_id)
+        eeg_cnt_list, _, eeg_info = self._get_eeg_data(trial.subject_id, processed=True)
         eeg_cnt = eeg_cnt_list[trial.session_idx]
         eeg_window_samples = int(self.window_duration_s * eeg_info['fs'])
         eeg_window = self._extract_window(
             eeg_cnt, trial.eeg_start_sample, trial.eeg_end_sample, eeg_window_samples
         )
+        eeg_norm_mode = self.normalization_mode if self.normalize else 'none'
+        if eeg_norm_mode == 'session':
+            eeg_mean, eeg_std = self._get_eeg_session_statistics(trial.subject_id, trial.session_idx)
+            eeg_window = normalize_window(eeg_window, 'session', eeg_mean, eeg_std)
+        elif eeg_norm_mode == 'window':
+            eeg_window = normalize_window(eeg_window, 'window')
         
         # Get NIRS data
-        nirs_cnt_list, _, nirs_info = self._get_nirs_data(trial.subject_id)
+        nirs_cnt_list, _, nirs_info = self._get_nirs_data(trial.subject_id, processed=True)
         nirs_cnt = nirs_cnt_list[trial.session_idx]
         nirs_window_samples = int(self.window_duration_s * nirs_info['fs'])
         nirs_window = self._extract_window(
             nirs_cnt, trial.nirs_start_sample, trial.nirs_end_sample, nirs_window_samples
         )
+        nirs_norm_mode = self.normalization_mode if self.normalize else 'none'
+        if nirs_norm_mode == 'session':
+            nirs_mean, nirs_std = self._get_nirs_session_statistics(trial.subject_id, trial.session_idx)
+            nirs_window = normalize_window(nirs_window, 'session', nirs_mean, nirs_std)
+        elif nirs_norm_mode == 'window':
+            nirs_window = normalize_window(nirs_window, 'window')
         
         return {
             'eeg': torch.from_numpy(eeg_window).float(),
@@ -1016,7 +1084,7 @@ class MultiModalEEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return []
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_eeg_data(first_subject)
+        _, _, info = self._get_eeg_data(first_subject, processed=True)
         return list(info['clab'])
     
     def get_fnirs_channel_names(self) -> List[str]:
@@ -1024,7 +1092,7 @@ class MultiModalEEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return []
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_nirs_data(first_subject)
+        _, _, info = self._get_nirs_data(first_subject, processed=True)
         return list(info['clab'])
     
     def get_num_eeg_channels(self) -> int:
@@ -1040,7 +1108,7 @@ class MultiModalEEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return 0.0
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_eeg_data(first_subject)
+        _, _, info = self._get_eeg_data(first_subject, processed=True)
         return float(info['fs'])
     
     def get_fnirs_sample_rate(self) -> float:
@@ -1048,7 +1116,7 @@ class MultiModalEEGfNIRSDataset(Dataset):
         if len(self.trials) == 0:
             return 0.0
         first_subject = self.trials[0].subject_id
-        _, _, info = self._get_nirs_data(first_subject)
+        _, _, info = self._get_nirs_data(first_subject, processed=True)
         return float(info['fs'])
 
 
