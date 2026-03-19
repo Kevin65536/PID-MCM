@@ -193,7 +193,53 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'drop_path': model_cfg.get('drop_path', 0.0),
             'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),
         }
-    
+
+    elif tokenizer_type in ['shared_labram_vqnsp']:
+        eeg_cfg = model_cfg.get('eeg', {})
+        fnirs_cfg = model_cfg.get('fnirs', {})
+        align_cfg = loss_cfg.get('alignment', {})
+        eeg_loss_cfg = loss_cfg.get('eeg', {})
+        fnirs_loss_cfg = loss_cfg.get('fnirs', {})
+        return {
+            'eeg_seq_length': eeg_cfg.get('seq_length', 2000),
+            'eeg_patch_size': eeg_cfg.get('patch_size', 400),
+            'eeg_channels': eeg_cfg.get('channels', 30),
+            'eeg_encoder_embed_dim': eeg_cfg.get('encoder_embed_dim', 256),
+            'eeg_encoder_depth': eeg_cfg.get('encoder_depth', 8),
+            'eeg_encoder_num_heads': eeg_cfg.get('encoder_num_heads', 8),
+            'eeg_decoder_embed_dim': eeg_cfg.get('decoder_embed_dim', 256),
+            'eeg_decoder_depth': eeg_cfg.get('decoder_depth', 4),
+            'eeg_decoder_num_heads': eeg_cfg.get('decoder_num_heads', 8),
+            'fnirs_seq_length': fnirs_cfg.get('seq_length', 100),
+            'fnirs_patch_size': fnirs_cfg.get('patch_size', 20),
+            'fnirs_channels': fnirs_cfg.get('channels', 36),
+            'fnirs_encoder_embed_dim': fnirs_cfg.get('encoder_embed_dim', 160),
+            'fnirs_encoder_depth': fnirs_cfg.get('encoder_depth', 6),
+            'fnirs_encoder_num_heads': fnirs_cfg.get('encoder_num_heads', 4),
+            'fnirs_decoder_embed_dim': fnirs_cfg.get('decoder_embed_dim', 160),
+            'fnirs_decoder_depth': fnirs_cfg.get('decoder_depth', 3),
+            'fnirs_decoder_num_heads': fnirs_cfg.get('decoder_num_heads', 4),
+            'codebook_size': quantizer_cfg.get('codebook_size', 4096),
+            'codebook_dim': quantizer_cfg.get('codebook_dim', 64),
+            'beta': quantizer_cfg.get('beta', 1.0),
+            'decay': quantizer_cfg.get('decay', 0.99),
+            'kmeans_init': quantizer_cfg.get('kmeans_init', True),
+            'revive_dead_codes': quantizer_cfg.get('revive_dead_codes', True),
+            'dead_code_threshold': quantizer_cfg.get('dead_code_threshold', 10),
+            'eeg_amplitude_weight': eeg_loss_cfg.get('amplitude_weight', 1.0),
+            'eeg_phase_weight': eeg_loss_cfg.get('phase_weight', 1.0),
+            'eeg_time_weight': eeg_loss_cfg.get('time_weight', 0.75),
+            'fnirs_amplitude_weight': fnirs_loss_cfg.get('amplitude_weight', 1.0),
+            'fnirs_phase_weight': fnirs_loss_cfg.get('phase_weight', 0.25),
+            'fnirs_time_weight': fnirs_loss_cfg.get('time_weight', 1.25),
+            'latent_alignment_weight': align_cfg.get('latent_weight', 0.1),
+            'assignment_alignment_weight': align_cfg.get('assignment_weight', 0.05),
+            'assignment_temperature': align_cfg.get('temperature', 0.2),
+            'dropout': model_cfg.get('dropout', 0.0),
+            'drop_path': model_cfg.get('drop_path', 0.1),
+            'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),
+        }
+     
     else:
         raise ValueError(f"Unknown tokenizer type for kwargs building: {tokenizer_type}")
 
