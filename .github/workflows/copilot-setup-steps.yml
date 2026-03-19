@@ -1,0 +1,80 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - .github/copilot-instructions.md
+      - .github/hooks/**
+      - requirements-copilot.txt
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - .github/copilot-instructions.md
+      - .github/hooks/**
+      - requirements-copilot.txt
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-copilot.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Ensure torch is available
+        shell: bash
+        run: |
+          set -e
+          python - <<'PY'
+          import importlib.util
+          import subprocess
+          import sys
+
+          if importlib.util.find_spec('torch') is None:
+              subprocess.check_call([
+                  sys.executable,
+                  '-m',
+                  'pip',
+                  'install',
+                  'torch',
+                  '--index-url',
+                  'https://download.pytorch.org/whl/cpu',
+              ])
+          PY
+
+      - name: Install repository Python dependencies
+        run: python -m pip install -r requirements-copilot.txt
+
+      - name: Validate imports used by training entry points
+        run: |
+          python - <<'PY'
+          import numpy
+          import scipy
+          import yaml
+          import matplotlib
+          import sklearn
+          import einops
+          import pandas
+          import tensorboard
+          import h5py
+          import torch
+          print('Copilot environment imports validated successfully.')
+          PY
+
+      - name: Create Copilot log directory
+        run: mkdir -p logs/copilot

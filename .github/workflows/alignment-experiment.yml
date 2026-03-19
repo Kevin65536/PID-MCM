@@ -1,0 +1,97 @@
+name: Alignment Experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Custom runner label or ubuntu-latest
+        required: true
+        default: ubuntu-latest
+        type: string
+      python_version:
+        description: Python version
+        required: true
+        default: '3.13'
+        type: string
+      script_path:
+        description: Training or analysis entry point
+        required: true
+        default: experiments/scripts/train_shared_tokenizer.py
+        type: string
+      config_path:
+        description: Config path or empty for scripts that do not require one
+        required: false
+        default: experiments/configs/phase0plus/shared_labram_vqnsp_eeg_fnirs_10s_2s.yaml
+        type: string
+      extra_args:
+        description: Additional CLI arguments
+        required: false
+        default: ''
+        type: string
+      artifact_path:
+        description: Artifact path to upload at the end of the run
+        required: true
+        default: experiments/runs
+        type: string
+
+jobs:
+  run-experiment:
+    runs-on: ${{ inputs.runner_label }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+          cache-dependency-path: requirements-copilot.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Ensure torch is available
+        shell: bash
+        run: |
+          set -e
+          python - <<'PY'
+          import importlib.util
+          import subprocess
+          import sys
+
+          if importlib.util.find_spec('torch') is None:
+              subprocess.check_call([
+                  sys.executable,
+                  '-m',
+                  'pip',
+                  'install',
+                  'torch',
+                  '--index-url',
+                  'https://download.pytorch.org/whl/cpu',
+              ])
+          PY
+
+      - name: Install repository Python dependencies
+        run: python -m pip install -r requirements-copilot.txt
+
+      - name: Run experiment command
+        shell: bash
+        run: |
+          set -e
+          if [ -n "${{ inputs.config_path }}" ]; then
+            python "${{ inputs.script_path }}" --config "${{ inputs.config_path }}" ${{ inputs.extra_args }}
+          else
+            python "${{ inputs.script_path }}" ${{ inputs.extra_args }}
+          fi
+
+      - name: Upload experiment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alignment-experiment-${{ github.run_id }}
+          path: ${{ inputs.artifact_path }}
+          if-no-files-found: warn

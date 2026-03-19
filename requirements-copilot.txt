@@ -1,0 +1,11 @@
+numpy
+scipy
+matplotlib
+pyyaml
+einops
+scikit-learn
+pandas
+tensorboard
+seaborn
+tqdm
+h5py
