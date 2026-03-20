@@ -3,7 +3,7 @@ Shared-codebook LaBraM-style tokenizer for aligned EEG and fNIRS signals.
 """
 
 import math
-from typing import Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -135,6 +135,7 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         self.assignment_temperature = assignment_temperature
         self.loss_fn = F.smooth_l1_loss if use_smooth_l1 else F.mse_loss
         self.alignment_loss = AlignmentLoss()
+        self._alignment_scale = 1.0
 
         self.eeg_patch_embed = MultiChannelPatchEmbedding(
             input_channels=eeg_channels,
@@ -291,6 +292,73 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         kl_ba = F.kl_div(log_probs_b, probs_a, reduction='batchmean')
         return 0.5 * (kl_ab + kl_ba)
 
+    def set_alignment_scale(self, scale: float) -> None:
+        """Dynamically scale alignment loss weights.
+
+        Multiplies *both* alignment loss weights by ``scale`` relative to the
+        constructor-provided base values.  Call this each epoch to implement
+        alignment warmup scheduling (ramp ``scale`` from 0 → 1 over the first
+        few epochs so reconstruction is stabilised before alignment pressure
+        is applied).
+
+        Args:
+            scale: Multiplier in [0, 1].  0.0 disables alignment entirely;
+                   1.0 restores the original weights from the config.
+        """
+        self._alignment_scale = float(scale)
+
+    def lag_token_agreement(
+        self,
+        eeg_indices: torch.Tensor,
+        fnirs_indices: torch.Tensor,
+        lags: Optional[List[int]] = None,
+    ) -> Dict[str, float]:
+        """Compute token-level agreement between EEG and fNIRS at multiple lags.
+
+        Because neural activity drives the haemodynamic response with a delay
+        of several seconds, synchronous token matching is typically weaker than
+        lag-shifted matching.  This utility computes the fraction of token
+        positions that share the same code index for a range of integer shifts
+        on the fNIRS side.
+
+        Args:
+            eeg_indices:  [B, N] integer tensor of EEG code indices.
+            fnirs_indices: [B, N] integer tensor of fNIRS code indices.
+            lags: List of lag values (number of fNIRS tokens to shift).
+                  Positive lag means fNIRS is shifted *forward* in time
+                  (i.e. fNIRS[t+lag] is compared with EEG[t]).  If ``None``
+                  defaults to ``[0, 1, 2, 3, 4]``.
+
+        Returns:
+            Dict mapping ``"lag_{k}"`` to the mean token-agreement fraction
+            at that lag, plus ``"best_lag"`` and ``"best_lag_agreement"``.
+        """
+        if lags is None:
+            lags = [0, 1, 2, 3, 4]
+
+        n = eeg_indices.shape[1]
+        results: Dict[str, float] = {}
+        best_val = -1.0
+        best_lag = 0
+
+        for lag in lags:
+            if lag == 0:
+                match = (eeg_indices == fnirs_indices).float().mean().item()
+            elif lag > 0 and n > lag:
+                match = (eeg_indices[:, :n - lag] == fnirs_indices[:, lag:]).float().mean().item()
+            elif lag < 0 and n > -lag:
+                match = (eeg_indices[:, -lag:] == fnirs_indices[:, :n + lag]).float().mean().item()
+            else:
+                match = 0.0
+            results[f"lag_{lag}"] = match
+            if match > best_val:
+                best_val = match
+                best_lag = lag
+
+        results["best_lag"] = float(best_lag)
+        results["best_lag_agreement"] = best_val
+        return results
+
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError("Use encode_modalities(eeg, fnirs) for the shared tokenizer")
 
@@ -381,12 +449,14 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         )
 
         vq_loss = quant_info['vq_loss']
+        eff_latent_weight = self.latent_alignment_weight * self._alignment_scale
+        eff_assign_weight = self.assignment_alignment_weight * self._alignment_scale
         total_loss = (
             eeg_rec_loss +
             fnirs_rec_loss +
             vq_loss +
-            self.latent_alignment_weight * latent_align_loss +
-            self.assignment_alignment_weight * assignment_align_loss
+            eff_latent_weight * latent_align_loss +
+            eff_assign_weight * assignment_align_loss
         )
 
         token_match = (eeg_indices == fnirs_indices).float().mean()
@@ -412,6 +482,7 @@ class SharedLaBraMVQNSP(BaseTokenizer):
             'vq_loss': vq_loss,
             'latent_align_loss': latent_align_loss,
             'assignment_align_loss': assignment_align_loss,
+            'alignment_scale': torch.tensor(self._alignment_scale, device=eeg.device),
             'token_match': token_match,
             'code_overlap': overlap,
             'perplexity': quant_info['perplexity'],
