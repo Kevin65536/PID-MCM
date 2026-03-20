@@ -1,0 +1,97 @@
+# Neuro-Tokenization Experiment Base Configuration
+# All experiments inherit from this config
+
+experiment:
+  name: "base"
+  description: "Base configuration - override in specific configs"
+  seed: 42
+  device: "cuda"
+
+# Data configuration
+data:
+  modality: "eeg"  # eeg | fnirs
+  dataset: "TBD"   # Dataset name or path
+  preprocessing:
+    resample_rate: 200    # Hz
+    bandpass: [0.5, 45]   # Hz, for EEG
+    # fNIRS specific
+    # lowpass: 0.1
+  window:
+    length: 512           # samples (e.g., 512 samples @ 200Hz = 2.56s)
+    stride: 256           # samples (50% overlap)
+  split:
+    train: 0.8
+    val: 0.1
+    test: 0.1
+  num_workers: 4
+
+# Model configuration
+model:
+  type: "fsq"             # fsq | vqvae
+  input_channels: 1       # Number of input channels (1 for single-channel, N for multi-channel)
+  seq_length: 512         # Should match data.window.length
+  
+  encoder:
+    hidden_dims: [64, 128, 256]
+    kernel_size: 7
+    stride: 2
+  
+  quantizer:
+    # FSQ specific
+    levels: [8, 8, 8, 8]  # 8^4 = 4096 effective codes
+    # VQ-VAE specific (uncomment when using vqvae)
+    # codebook_size: 512
+    # embedding_dim: 64
+    # commitment_cost: 0.25
+    # ema_decay: 0.99
+  
+  decoder:
+    hidden_dims: [256, 128, 64]
+    kernel_size: 7
+    stride: 2
+
+# Loss configuration
+loss:
+  reconstruction:
+    weight: 1.0
+    type: "mse"           # mse | huber
+  spectral:
+    weight: 0.1
+    enabled: true
+    type: "multi_stft"
+    fft_sizes: [64, 128, 256]
+    hop_sizes: [16, 32, 64]
+    win_sizes: [64, 128, 256]
+  # VQ-VAE specific (uncomment when using vqvae)
+  # commitment:
+  #   weight: 0.25
+
+# Training configuration
+training:
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  warmup_epochs: 5
+  gradient_clip: 1.0
+  early_stopping:
+    enabled: true
+    patience: 20
+    metric: "val_reconstruction_mse"
+    mode: "min"
+
+# Logging configuration
+logging:
+  log_every_n_steps: 100
+  save_checkpoint_every: 10
+  metrics:
+    - reconstruction_mse
+    - spectral_mse
+    - perplexity
+    - code_utilization
+    - dead_codes
+  wandb:
+    enabled: false
+    project: "neuro-tokenization"
+    entity: null

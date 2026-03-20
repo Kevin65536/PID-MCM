@@ -1,0 +1,133 @@
+_base_: "base.yaml"
+
+experiment:
+  name: "shared_labram_warmstart_eeg_fnirs_10s_2s"
+  description: >
+    Shared-codebook EEG+fNIRS tokenizer with warm-start from validated
+    single-modality checkpoints (EEG 10s/1s, fNIRS 10s/2s) plus
+    alignment-loss warmup scheduling.  The alignment weights ramp linearly
+    from 0 → full over the first 30 epochs so reconstruction quality is
+    stabilised before cross-modal pressure is applied.
+  seed: 42
+  device: "cuda"
+
+data:
+  modality: "both"
+  dataset: "eeg_fnirs_single_trial"
+  data_root: "data/EEG+NIRS Single-Trial"
+  eeg_preprocessing:
+    bandpass: [0.5, 45]
+  fnirs_preprocessing:
+    highpass: 0.01
+    lowpass: 0.2
+  normalization:
+    enabled: true
+    mode: "session"
+  window:
+    duration_s: 10.0
+    offset_ms: 500
+  split:
+    train_subjects: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    val_subjects: [21,22,23,24,25]
+    test_subjects: [26,27,28,29]
+  task: "motor_imagery"
+  exclude_eog: true
+  hbo_only: true
+  hbr_only: false
+  num_workers: 4
+
+model:
+  type: "shared_labram_vqnsp"
+  eeg:
+    seq_length: 2000
+    patch_size: 400
+    channels: 30
+    encoder_embed_dim: 256
+    encoder_depth: 8
+    encoder_num_heads: 8
+    decoder_embed_dim: 256
+    decoder_depth: 4
+    decoder_num_heads: 8
+  fnirs:
+    seq_length: 100
+    patch_size: 20
+    channels: 36
+    encoder_embed_dim: 160
+    encoder_depth: 6
+    encoder_num_heads: 4
+    decoder_embed_dim: 160
+    decoder_depth: 3
+    decoder_num_heads: 4
+  quantizer:
+    codebook_size: 4096
+    codebook_dim: 64
+    beta: 1.0
+    decay: 0.99
+    kmeans_init: true
+    revive_dead_codes: true
+    dead_code_threshold: 10
+  dropout: 0.0
+  drop_path: 0.1
+
+token_spec:
+  eeg_patch_size_samples: 400
+  eeg_patch_size_seconds: 2.0
+  fnirs_patch_size_samples: 20
+  fnirs_patch_size_seconds: 2.0
+  tokens_per_window: 5
+  codebook_size: 4096
+
+loss:
+  eeg:
+    amplitude_weight: 1.0
+    phase_weight: 1.0
+    time_weight: 0.75
+  fnirs:
+    amplitude_weight: 1.0
+    phase_weight: 0.25
+    time_weight: 1.25
+  alignment:
+    latent_weight: 0.10
+    assignment_weight: 0.05
+    temperature: 0.20
+  use_smooth_l1: false
+
+# Warm-start from validated single-modality checkpoints.
+# These paths are resolved relative to the working directory when the
+# training script runs; on the self-hosted runner they resolve through the
+# symlink created by prepare-local-agent-env.sh.
+warm_start:
+  eeg_checkpoint: "experiments/runs/eeg_labram_vqnsp_10s_1s_20260319_141551/checkpoints/best_model.pt"
+  fnirs_checkpoint: "experiments/runs/fnirs_labram_vqnsp_10s_2s_20260318_192520/checkpoints/best_model.pt"
+
+training:
+  epochs: 300
+  batch_size: 24
+  learning_rate: 0.00015
+  weight_decay: 0.01
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  gradient:
+    clip_norm: 1.0
+  # Alignment warmup: ramp from 0 → full weight over 30 epochs starting at epoch 1.
+  # This prevents alignment pressure from dominating before reconstruction stabilises.
+  alignment_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 30
+    start_scale: 0.0
+  early_stopping:
+    enabled: true
+    patience: 50
+    metric: "val_loss"
+    mode: "min"
+  checkpoint:
+    save_every: 1
+
+# Lag-aware validation: compute token agreement at these lag offsets (tokens).
+# Lag 4 corresponds to ~8 s neurovascular delay at 2 s/token.
+validation:
+  lag_set: [0, 1, 2, 3, 4, 5]
+
+logging:
+  save_checkpoint_every: 1
