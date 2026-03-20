@@ -18,7 +18,7 @@ Before starting a task, confirm the following:
 1. GitHub CLI version is at least 2.80
 2. Copilot coding agent is enabled for the repository
 3. `.github/workflows/copilot-setup-steps.yml` is present on the default branch
-4. If long experiments must run on your server, a self-hosted runner exists with a single stable label such as `neural-token-gpu`
+4. If long experiments must run on your server, a self-hosted runner exists with the stable label `neural-token-gpu`
 5. If Copilot-triggered workflows should run without manual approval, repository settings have been updated accordingly
 
 ## Recommended Task Scope
@@ -41,11 +41,12 @@ The safest first automated task is:
 Use the GitHub CLI entry point:
 
 ```bash
+cd /home/uais5/hkw/neural_token
+
 gh agent-task create \
-  --repo Kevin65536/PID-MCM \
   --base main \
   --follow \
-  "Read docs/NEXT_STAGE_ALIGNMENT_PLAN.md and .github/copilot-instructions.md. Create a new branch from main. Implement the first stage of the alignment plan with minimal, additive changes: add warm-start support to shared training, add alignment warmup controls, add lag-aware validation outputs, create any new configs needed under experiments/configs/phase0plus, and use durable workflows instead of fragile foreground shells for long-running experiments. Start one experiment, monitor its logs and artifacts, analyze the result, then make one follow-up iteration if justified. Keep all changes reviewable in a pull request and report output directories, workflow runs, and residual risks clearly." 
+  -F docs/agent-task-prompts/first_alignment_task.md
 ```
 
 ## Tracking Commands
@@ -53,19 +54,22 @@ gh agent-task create \
 List recent sessions:
 
 ```bash
-gh agent-task list --repo Kevin65536/PID-MCM
+cd /home/uais5/hkw/neural_token
+gh agent-task list
 ```
 
 View one session:
 
 ```bash
-gh agent-task view TASK_ID --repo Kevin65536/PID-MCM
+cd /home/uais5/hkw/neural_token
+gh agent-task view TASK_ID
 ```
 
 Stream live logs:
 
 ```bash
-gh agent-task view TASK_ID --repo Kevin65536/PID-MCM --log --follow
+cd /home/uais5/hkw/neural_token
+gh agent-task view TASK_ID --log --follow
 ```
 
 ## Workflow Dispatch Example
@@ -82,7 +86,21 @@ gh workflow run alignment-experiment.yml \
   -f artifact_path=experiments/runs
 ```
 
-If no self-hosted runner label is ready yet, replace `neural-token-gpu` with `ubuntu-latest` for lightweight checks only.
+This repository is now configured to use the local self-hosted runner `neural-token-gpu`. Replace it only for lightweight fallback checks.
+
+## Local Asset Bridging
+
+Because important working assets in this repository are intentionally excluded from Git, the self-hosted runner setup bridges the following local directories from `/home/uais5/hkw/neural_token` into the GitHub Actions workspace when they exist:
+
+- `data/`
+- `experiments/configs/`
+- `experiments/runs/`
+- `experiments/probe_results/`
+- `logs/`
+
+The preferred Python interpreter on the self-hosted runner is `/home/uais5/hkw/neural_token/.venv/bin/python`.
+
+The runner itself should inherit the server's current networking environment. Do not hardcode a repository-specific proxy address into the runner configuration. If the server currently uses a local proxy such as `127.0.0.1:7890`, the runner should pick that up from the user's normal shell environment at startup.
 
 ## Practical Notes
 
