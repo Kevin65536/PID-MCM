@@ -27,3 +27,6 @@ __pycache__
 
 # comparative methods' runs
 /comparative_methods/UMAP/runs
+
+# temporarily sealed local archive for retired Copilot agent guidance
+/docs/archive
