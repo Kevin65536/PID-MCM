@@ -603,6 +603,226 @@ def _save_token_embeddings_plot(
     plt.close(fig)
 
 
+def _collect_code_patches(
+    signals: np.ndarray,
+    tokens: np.ndarray,
+    code: int,
+    patch_size: int,
+    max_patches: int = 256,
+) -> np.ndarray:
+    patches = []
+    for sample_index in range(min(signals.shape[0], tokens.shape[0])):
+        code_positions = np.where(tokens[sample_index] == code)[0]
+        for position in code_positions.tolist():
+            start = position * patch_size
+            end = start + patch_size
+            patch = signals[sample_index, :, start:end].mean(axis=0)
+            patches.append(patch)
+            if len(patches) >= max_patches:
+                return np.stack(patches, axis=0)
+    if not patches:
+        return np.empty((0, patch_size), dtype=np.float64)
+    return np.stack(patches, axis=0)
+
+
+def _save_token_pattern_plot(
+    path: Path,
+    tokens: np.ndarray,
+    signals: np.ndarray,
+    codebook_size: int,
+    patch_size: int,
+    modality_name: str,
+    fs: float,
+    max_freq: Optional[float] = None,
+):
+    counts = np.bincount(tokens.reshape(-1), minlength=codebook_size)
+    top_codes = np.argsort(counts)[::-1][:8]
+    fig, axes = plt.subplots(len(top_codes), 3, figsize=(15, max(2, len(top_codes)) * 2.5))
+    if len(top_codes) == 1:
+        axes = axes[None, :]
+
+    time = np.arange(patch_size) / max(fs, 1e-6)
+    for row_index, code in enumerate(top_codes.tolist()):
+        patches = _collect_code_patches(signals, tokens, int(code), patch_size)
+        if patches.shape[0] == 0:
+            continue
+
+        mean_patch = patches.mean(axis=0)
+        std_patch = patches.std(axis=0)
+        axes[row_index, 0].plot(time, mean_patch, color='steelblue', linewidth=2)
+        axes[row_index, 0].fill_between(time, mean_patch - std_patch, mean_patch + std_patch, alpha=0.25, color='steelblue')
+        axes[row_index, 0].set_title(f'Code {int(code)} (n={patches.shape[0]})')
+        axes[row_index, 0].set_xlabel('Time (s)')
+        axes[row_index, 0].set_ylabel('Amplitude')
+
+        freqs = np.fft.rfftfreq(patch_size, d=1.0 / max(fs, 1e-6))
+        spectra = np.abs(np.fft.rfft(patches, axis=1)) ** 2
+        mean_spectrum = spectra.mean(axis=0)
+        if max_freq is not None:
+            freq_mask = freqs <= max_freq
+            freqs = freqs[freq_mask]
+            mean_spectrum = mean_spectrum[freq_mask]
+        axes[row_index, 1].semilogy(freqs, mean_spectrum, color='forestgreen', linewidth=2)
+        axes[row_index, 1].set_title('Average Spectrum')
+        axes[row_index, 1].set_xlabel('Frequency (Hz)')
+        axes[row_index, 1].set_ylabel('Power')
+
+        for patch in patches[:20]:
+            axes[row_index, 2].plot(time, patch, alpha=0.2, linewidth=0.8, color='gray')
+        axes[row_index, 2].plot(time, mean_patch, color='crimson', linewidth=2)
+        axes[row_index, 2].set_title('Patch Overlay')
+        axes[row_index, 2].set_xlabel('Time (s)')
+        axes[row_index, 2].set_ylabel('Amplitude')
+
+        for axis in axes[row_index]:
+            axis.grid(True, alpha=0.25)
+
+    fig.suptitle(f'{modality_name} Token Patterns', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _pair_count_matrix(eeg_tokens: np.ndarray, fnirs_tokens: np.ndarray, codebook_size: int, lag: int = 0) -> np.ndarray:
+    usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - lag)
+    if usable <= 0:
+        return np.zeros((codebook_size, codebook_size), dtype=np.float64)
+    eeg_aligned = eeg_tokens[:, :usable].reshape(-1)
+    fnirs_aligned = fnirs_tokens[:, lag:lag + usable].reshape(-1)
+    pair_ids = eeg_aligned.astype(np.int64) * codebook_size + fnirs_aligned.astype(np.int64)
+    counts = np.bincount(pair_ids, minlength=codebook_size * codebook_size)
+    return counts.reshape(codebook_size, codebook_size).astype(np.float64)
+
+
+def _mutual_information_from_counts(cooccurrence: np.ndarray) -> Tuple[float, float, np.ndarray, np.ndarray]:
+    total = cooccurrence.sum()
+    if total <= 0:
+        zeros = np.zeros(cooccurrence.shape[0], dtype=np.float64)
+        return 0.0, 0.0, zeros, zeros
+
+    joint_prob = cooccurrence / total
+    p_eeg = joint_prob.sum(axis=1)
+    p_fnirs = joint_prob.sum(axis=0)
+    nonzero = joint_prob > 0
+    h_joint = -np.sum(joint_prob[nonzero] * np.log(joint_prob[nonzero] + 1e-10))
+    mask_eeg = p_eeg > 0
+    h_eeg = -np.sum(p_eeg[mask_eeg] * np.log(p_eeg[mask_eeg] + 1e-10))
+    mask_fnirs = p_fnirs > 0
+    h_fnirs = -np.sum(p_fnirs[mask_fnirs] * np.log(p_fnirs[mask_fnirs] + 1e-10))
+    mi = h_fnirs - (h_joint - h_eeg)
+    normalized_mi = mi / h_fnirs if h_fnirs > 0 else 0.0
+    return float(mi), float(normalized_mi), p_eeg, p_fnirs
+
+
+def _save_cross_modal_coupling_plot(
+    path: Path,
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    codebook_size: int,
+    split_name: str,
+) -> Dict[str, float]:
+    cooccurrence = _pair_count_matrix(eeg_tokens, fnirs_tokens, codebook_size, lag=0)
+    mutual_info, normalized_mi, p_eeg, p_fnirs = _mutual_information_from_counts(cooccurrence)
+
+    shuffle_idx = np.random.permutation(eeg_tokens.shape[0])
+    shuffled_counts = _pair_count_matrix(eeg_tokens, fnirs_tokens[shuffle_idx], codebook_size, lag=0)
+    mi_shuffle, _, _, _ = _mutual_information_from_counts(shuffled_counts)
+
+    top_eeg_codes = np.argsort(p_eeg)[::-1][:10]
+    conditional_dists = {}
+    kl_divergences = {}
+    for eeg_code in top_eeg_codes.tolist():
+        row = cooccurrence[eeg_code]
+        if row.sum() <= 0:
+            continue
+        cond_prob = row / row.sum()
+        conditional_dists[int(eeg_code)] = cond_prob
+        kl = 0.0
+        for fnirs_code in range(codebook_size):
+            if cond_prob[fnirs_code] > 0 and p_fnirs[fnirs_code] > 0:
+                kl += cond_prob[fnirs_code] * np.log(cond_prob[fnirs_code] / p_fnirs[fnirs_code])
+        kl_divergences[int(eeg_code)] = float(kl)
+
+    max_display = 100
+    step = max(1, codebook_size // max_display)
+    fig = plt.figure(figsize=(18, 12))
+    ax1 = fig.add_subplot(2, 3, 1)
+    im = ax1.imshow(np.log1p(cooccurrence[::step, ::step]), cmap='hot', aspect='auto')
+    fig.colorbar(im, ax=ax1)
+    ax1.set_title(f'{split_name.upper()} Co-occurrence Matrix')
+    ax1.set_xlabel('fNIRS Token')
+    ax1.set_ylabel('EEG Token')
+
+    ax2 = fig.add_subplot(2, 3, 2)
+    ax2.bar(np.arange(min(100, p_eeg.shape[0])), np.sort(p_eeg)[::-1][:100], color='steelblue', alpha=0.75)
+    ax2.set_title('Marginal Distribution P(z_EEG)')
+    ax2.set_xlabel('Rank')
+    ax2.set_ylabel('Probability')
+    ax2.set_yscale('log')
+
+    ax3 = fig.add_subplot(2, 3, 3)
+    ax3.bar(np.arange(min(100, p_fnirs.shape[0])), np.sort(p_fnirs)[::-1][:100], color='forestgreen', alpha=0.75)
+    ax3.set_title('Marginal Distribution P(z_fNIRS)')
+    ax3.set_xlabel('Rank')
+    ax3.set_ylabel('Probability')
+    ax3.set_yscale('log')
+
+    ax4 = fig.add_subplot(2, 3, 4)
+    for eeg_code in list(conditional_dists.keys())[:5]:
+        cond = conditional_dists[eeg_code]
+        top_fnirs = np.argsort(cond)[::-1][:20]
+        ax4.plot(np.arange(top_fnirs.shape[0]), cond[top_fnirs], marker='o', alpha=0.7, label=f'EEG={eeg_code}, KL={kl_divergences[eeg_code]:.2f}')
+    if p_fnirs.size > 0:
+        ax4.axhline(float(p_fnirs.max()), color='black', linestyle='--', linewidth=1)
+    ax4.set_title('Conditional Distributions for Top EEG Codes')
+    ax4.set_xlabel('fNIRS Token Rank')
+    ax4.set_ylabel('P(fNIRS | EEG)')
+    ax4.legend(fontsize=8)
+
+    ax5 = fig.add_subplot(2, 3, 5)
+    kl_values = list(kl_divergences.values()) or [0.0]
+    ax5.hist(kl_values, bins=min(20, max(5, len(kl_values))), color='mediumpurple', alpha=0.8)
+    ax5.axvline(np.mean(kl_values), color='red', linestyle='--', linewidth=1)
+    ax5.set_title('KL(P(fNIRS|EEG) || P(fNIRS))')
+    ax5.set_xlabel('KL Divergence')
+    ax5.set_ylabel('Count')
+
+    ax6 = fig.add_subplot(2, 3, 6)
+    bars = ax6.bar(['Real', 'Shuffled'], [mutual_info, mi_shuffle], color=['forestgreen', 'lightcoral'])
+    ax6.set_title('EEG-fNIRS Coupling Strength')
+    ax6.set_ylabel('Mutual Information (nats)')
+    ax6.bar_label(bars, fmt='%.3f')
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return {
+        'mutual_information': float(mutual_info),
+        'normalized_mi': float(normalized_mi),
+        'mi_shuffle_baseline': float(mi_shuffle),
+        'mi_improvement': float(mutual_info - mi_shuffle),
+    }
+
+
+def _save_probe_style_lag_plot(path: Path, lag_metrics: List[Dict[str, object]], split_name: str):
+    lags = [int(entry['lag']) for entry in lag_metrics]
+    mi_values = [float(entry['mutual_information']) for entry in lag_metrics]
+    best_index = int(np.argmax(mi_values)) if mi_values else 0
+    best_lag = lags[best_index] if lags else 0
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(lags, mi_values, marker='o', color='slateblue')
+    ax.axvline(best_lag, color='red', linestyle='--', label=f'Best lag={best_lag}')
+    ax.set_xlabel('Lag (tokens)')
+    ax.set_ylabel('Mutual Information (nats)')
+    ax.set_title(f'{split_name.upper()} Lag-aware EEG-fNIRS Token Coupling')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 @torch.no_grad()
 def analyze_shared_alignment(
     model,
@@ -635,6 +855,8 @@ def analyze_shared_alignment(
         scalar_totals: Dict[str, float] = {}
         eeg_batches = []
         fnirs_batches = []
+        eeg_signal_batches = []
+        fnirs_signal_batches = []
         total_batches = 0
         reconstruction_snapshot = None
 
@@ -650,6 +872,9 @@ def analyze_shared_alignment(
 
             eeg_batches.append(outputs['eeg_indices'].detach().cpu().numpy())
             fnirs_batches.append(outputs['fnirs_indices'].detach().cpu().numpy())
+            if sum(batch_array.shape[0] for batch_array in eeg_signal_batches) < 128:
+                eeg_signal_batches.append(eeg.detach().cpu().numpy())
+                fnirs_signal_batches.append(fnirs.detach().cpu().numpy())
 
             if reconstruction_snapshot is None:
                 reconstruction_snapshot = {
@@ -665,6 +890,8 @@ def analyze_shared_alignment(
         mean_metrics = {key: value / total_batches for key, value in scalar_totals.items()}
         eeg_tokens = np.concatenate(eeg_batches, axis=0)
         fnirs_tokens = np.concatenate(fnirs_batches, axis=0)
+        eeg_signals = np.concatenate(eeg_signal_batches, axis=0) if eeg_signal_batches else np.empty((0, 0, 0), dtype=np.float64)
+        fnirs_signals = np.concatenate(fnirs_signal_batches, axis=0) if fnirs_signal_batches else np.empty((0, 0, 0), dtype=np.float64)
         eeg_summary = _codebook_summary(eeg_tokens.reshape(-1), codebook_size)
         fnirs_summary = _codebook_summary(fnirs_tokens.reshape(-1), codebook_size)
         overlap_summary = _active_overlap_summary(eeg_summary, fnirs_summary)
@@ -680,6 +907,14 @@ def analyze_shared_alignment(
         _save_lag_plot(split_dir / 'lag_metrics.png', lag_metrics, split_name)
         _save_heatmap(split_dir / 'top_pair_heatmap.png', best_lag, split_name)
         _save_pairing_dashboard(split_dir / 'pairing_diagnostics.png', split_name, lag_zero, best_lag, overlap_summary)
+        coupling_summary = _save_cross_modal_coupling_plot(
+            split_dir / 'exp3_cross_modal_coupling.png',
+            eeg_tokens,
+            fnirs_tokens,
+            codebook_size,
+            split_name,
+        )
+        _save_probe_style_lag_plot(split_dir / 'exp3_lagged_coupling.png', lag_metrics, split_name)
         if reconstruction_snapshot is not None:
             eeg_fs = _estimate_sampling_rate(reconstruction_snapshot['eeg_signal'], window_duration_s)
             fnirs_fs = _estimate_sampling_rate(reconstruction_snapshot['fnirs_signal'], window_duration_s)
@@ -703,6 +938,28 @@ def analyze_shared_alignment(
                 eeg_max_freq=float(eeg_lowpass) if eeg_lowpass is not None else None,
                 fnirs_max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
             )
+            if eeg_signals.size > 0:
+                _save_token_pattern_plot(
+                    split_dir / 'exp2_token_patterns_EEG.png',
+                    eeg_tokens[:eeg_signals.shape[0]],
+                    eeg_signals,
+                    codebook_size,
+                    patch_size=int(model.eeg_patch_size),
+                    modality_name='EEG',
+                    fs=eeg_fs,
+                    max_freq=float(eeg_lowpass) if eeg_lowpass is not None else 50.0,
+                )
+            if fnirs_signals.size > 0:
+                _save_token_pattern_plot(
+                    split_dir / 'exp2_token_patterns_fNIRS.png',
+                    fnirs_tokens[:fnirs_signals.shape[0]],
+                    fnirs_signals,
+                    codebook_size,
+                    patch_size=int(model.fnirs_patch_size),
+                    modality_name='fNIRS',
+                    fs=fnirs_fs,
+                    max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
+                )
         _save_token_embeddings_plot(
             split_dir / 'token_embeddings.png',
             codebook_embeddings,
@@ -722,6 +979,7 @@ def analyze_shared_alignment(
             'best_lag_match_rate': float(best_lag['match_rate']),
             'lag0_weighted_top1_concentration': float(lag_zero['weighted_top1_concentration']),
             'best_lag_weighted_top1_concentration': float(best_lag['weighted_top1_concentration']),
+            'cross_modal_coupling': coupling_summary,
             'top_pair_mapping': best_lag['top_mapping_rows'],
         }
         results['splits'][split_name] = split_result
