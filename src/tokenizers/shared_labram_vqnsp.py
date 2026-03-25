@@ -133,6 +133,7 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         self.latent_alignment_weight = latent_alignment_weight
         self.assignment_alignment_weight = assignment_alignment_weight
         self.assignment_temperature = assignment_temperature
+        self.alignment_scale = 1.0
         self.loss_fn = F.smooth_l1_loss if use_smooth_l1 else F.mse_loss
         self.alignment_loss = AlignmentLoss()
 
@@ -385,8 +386,8 @@ class SharedLaBraMVQNSP(BaseTokenizer):
             eeg_rec_loss +
             fnirs_rec_loss +
             vq_loss +
-            self.latent_alignment_weight * latent_align_loss +
-            self.assignment_alignment_weight * assignment_align_loss
+            (self.latent_alignment_weight * self.alignment_scale) * latent_align_loss +
+            (self.assignment_alignment_weight * self.alignment_scale) * assignment_align_loss
         )
 
         token_match = (eeg_indices == fnirs_indices).float().mean()
@@ -412,6 +413,7 @@ class SharedLaBraMVQNSP(BaseTokenizer):
             'vq_loss': vq_loss,
             'latent_align_loss': latent_align_loss,
             'assignment_align_loss': assignment_align_loss,
+            'alignment_scale': torch.tensor(self.alignment_scale, device=eeg.device, dtype=torch.float32),
             'token_match': token_match,
             'code_overlap': overlap,
             'perplexity': quant_info['perplexity'],
@@ -431,3 +433,9 @@ class SharedLaBraMVQNSP(BaseTokenizer):
 
     def get_embedding(self, indices: torch.Tensor) -> torch.Tensor:
         return self.quantizer.get_codebook_entry(indices)
+
+    def set_alignment_scale(self, scale: float):
+        self.alignment_scale = max(float(scale), 0.0)
+
+    def get_alignment_scale(self) -> float:
+        return float(self.alignment_scale)

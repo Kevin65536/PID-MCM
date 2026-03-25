@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 from src.data.eeg_fnirs_dataset import create_dataloaders
 from src.tokenizers import create_tokenizer
 from src.utils.logger import ExperimentLogger
+from src.visualization.shared_alignment_analysis import analyze_shared_alignment
 
 
 class TeeLogger:
@@ -172,10 +173,72 @@ def load_checkpoint(path: Path, model, optimizer, device: torch.device) -> Dict[
     return checkpoint
 
 
+def compute_alignment_scale(epoch: int, config: dict) -> float:
+    warm_cfg = config.get('training', {}).get('alignment_warmup', {})
+    if not warm_cfg.get('enabled', False):
+        return 1.0
+
+    start_epoch = int(warm_cfg.get('start_epoch', 1))
+    ramp_epochs = max(int(warm_cfg.get('ramp_epochs', 1)), 1)
+    start_scale = float(warm_cfg.get('start_scale', 0.0))
+    if epoch < start_epoch:
+        return start_scale
+    if ramp_epochs == 1:
+        return 1.0
+
+    progress = min(max((epoch - start_epoch) / (ramp_epochs - 1), 0.0), 1.0)
+    return start_scale + (1.0 - start_scale) * progress
+
+
+def maybe_apply_warm_start(model, config: dict, device: torch.device):
+    warm_cfg = config.get('warm_start', {})
+    if not warm_cfg:
+        return
+
+    def load_branch(checkpoint_path: str, branch_prefix: str):
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        source_state = checkpoint['model_state_dict']
+        target_state = model.state_dict()
+
+        prefix_map = {
+            'encoder.': f'{branch_prefix}_encoder.',
+            'encode_task_layer.': f'{branch_prefix}_encode_proj.',
+            'decode_input_proj.': f'{branch_prefix}_decode_input_proj.',
+            'decoder.': f'{branch_prefix}_decoder.',
+        }
+
+        loaded_count = 0
+        skipped_count = 0
+        for source_prefix, target_prefix in prefix_map.items():
+            for source_key, value in source_state.items():
+                if not source_key.startswith(source_prefix):
+                    continue
+                target_key = target_prefix + source_key[len(source_prefix):]
+                if target_key not in target_state or target_state[target_key].shape != value.shape:
+                    skipped_count += 1
+                    continue
+                target_state[target_key] = value
+                loaded_count += 1
+
+        model.load_state_dict(target_state, strict=False)
+        print(
+            f'Warm-start {branch_prefix}: loaded {loaded_count} tensors, '
+            f'skipped {skipped_count} incompatible tensors from {checkpoint_path}'
+        )
+
+    eeg_checkpoint = warm_cfg.get('eeg_checkpoint')
+    fnirs_checkpoint = warm_cfg.get('fnirs_checkpoint')
+    if eeg_checkpoint:
+        load_branch(eeg_checkpoint, 'eeg')
+    if fnirs_checkpoint:
+        load_branch(fnirs_checkpoint, 'fnirs')
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train shared EEG+fNIRS tokenizer")
     parser.add_argument('--config', required=True, help='Config path relative to experiments/configs')
     parser.add_argument('--resume', default=None, help='Optional checkpoint path')
+    parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default shared alignment analysis at the end of training')
     args = parser.parse_args()
 
     logger = ExperimentLogger(config_path=args.config)
@@ -213,6 +276,7 @@ def main():
         model = create_tokenizer(config).to(device)
         print(f"Model: {model.__class__.__name__}")
         print(f"Shared codebook size: {model.get_codebook_size()}")
+        maybe_apply_warm_start(model, config, device)
 
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -244,6 +308,10 @@ def main():
 
         best_epoch = start_epoch
         for epoch in range(start_epoch + 1, total_epochs + 1):
+            alignment_scale = compute_alignment_scale(epoch, config)
+            if hasattr(model, 'set_alignment_scale'):
+                model.set_alignment_scale(alignment_scale)
+
             train_metrics = train_epoch(model, train_loader, optimizer, device, grad_clip)
             val_metrics = validate_epoch(model, val_loader, device)
 
@@ -253,7 +321,7 @@ def main():
             lr = optimizer.param_groups[0]['lr']
             train_loss = train_metrics.get('loss', float('nan'))
             val_loss = val_metrics.get('val_loss', float('nan'))
-            merged_metrics = {'lr': lr}
+            merged_metrics = {'lr': lr, 'alignment_scale': alignment_scale}
             merged_metrics.update({k: v for k, v in val_metrics.items() if k != 'val_loss'})
             logger.log_epoch(
                 epoch=epoch,
@@ -297,6 +365,9 @@ def main():
             best_checkpoint = torch.load(best_path, map_location=device)
             model.load_state_dict(best_checkpoint['model_state_dict'])
 
+        if hasattr(model, 'set_alignment_scale'):
+            model.set_alignment_scale(1.0)
+
         test_metrics = validate_epoch(model, test_loader, device)
         final_metrics = {
             'best_epoch': best_epoch,
@@ -310,6 +381,19 @@ def main():
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         with open(summary_path, 'w', encoding='utf-8') as handle:
             json.dump(final_metrics, handle, indent=2)
+
+        if not args.skip_post_analysis:
+            analysis_dir = logger.run_dir / 'analysis' / 'shared_alignment'
+            print(f"Running default shared alignment analysis -> {analysis_dir}")
+            analysis_results = analyze_shared_alignment(
+                model=model,
+                dataloaders={'val': val_loader, 'test': test_loader},
+                config=config,
+                output_dir=analysis_dir,
+                device=device,
+            )
+            with open(analysis_dir / 'analysis_summary.json', 'w', encoding='utf-8') as handle:
+                json.dump(analysis_results, handle, indent=2)
 
         print("\nTraining complete.")
         print(f"Best epoch: {best_epoch}")
