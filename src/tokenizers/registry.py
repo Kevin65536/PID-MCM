@@ -200,6 +200,7 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
         align_cfg = loss_cfg.get('alignment', {})
         eeg_loss_cfg = loss_cfg.get('eeg', {})
         fnirs_loss_cfg = loss_cfg.get('fnirs', {})
+        validation_cfg = config.get('validation', {})
         return {
             'eeg_seq_length': eeg_cfg.get('seq_length', 2000),
             'eeg_patch_size': eeg_cfg.get('patch_size', 400),
@@ -235,6 +236,8 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'latent_alignment_weight': align_cfg.get('latent_weight', 0.1),
             'assignment_alignment_weight': align_cfg.get('assignment_weight', 0.05),
             'assignment_temperature': align_cfg.get('temperature', 0.2),
+            'alignment_lag_candidates': align_cfg.get('lag_candidates', validation_cfg.get('lag_set', [0])),
+            'alignment_selection': align_cfg.get('selection', 'min'),
             'dropout': model_cfg.get('dropout', 0.0),
             'drop_path': model_cfg.get('drop_path', 0.1),
             'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),
