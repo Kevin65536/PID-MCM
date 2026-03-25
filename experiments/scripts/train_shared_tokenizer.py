@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 from src.data.eeg_fnirs_dataset import create_dataloaders
 from src.tokenizers import create_tokenizer
 from src.utils.logger import ExperimentLogger
+from src.visualization import TensorBoardLogger
 from src.visualization.shared_alignment_analysis import analyze_shared_alignment
 
 
@@ -108,6 +109,143 @@ def tensor_to_float(value: Any) -> float:
     if hasattr(value, 'item'):
         return float(value.item())
     return float(value)
+
+
+def strip_metric_prefix(metrics: Dict[str, float], prefix: str) -> Dict[str, float]:
+    return {
+        (key[len(prefix):] if key.startswith(prefix) else key): value
+        for key, value in metrics.items()
+    }
+
+
+def resolve_sampling_rate(data_cfg: dict, modality: str, default: float) -> float:
+    modality_cfg = data_cfg.get(f'{modality}_preprocessing', {})
+    for key in ('target_sampling_rate', 'resample_rate', 'sampling_rate', 'sample_rate'):
+        value = modality_cfg.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return float(default)
+
+
+def extract_tensorboard_hparams(config: dict) -> Dict[str, Any]:
+    experiment_cfg = config.get('experiment', {})
+    training_cfg = config.get('training', {})
+    model_cfg = config.get('model', {})
+    data_cfg = config.get('data', {})
+    quantizer_cfg = model_cfg.get('quantizer', {})
+    window_cfg = data_cfg.get('window', {})
+
+    hparams = {
+        'experiment_name': experiment_cfg.get('name', 'unknown'),
+        'seed': experiment_cfg.get('seed', 42),
+        'device': experiment_cfg.get('device', 'auto'),
+        'epochs': training_cfg.get('epochs'),
+        'batch_size': training_cfg.get('batch_size'),
+        'learning_rate': training_cfg.get('learning_rate'),
+        'weight_decay': training_cfg.get('weight_decay', 0.0),
+        'warmup_epochs': training_cfg.get('warmup_epochs', 0),
+        'min_lr': training_cfg.get('min_lr', 1e-6),
+        'window_duration_s': window_cfg.get('duration_s'),
+        'window_offset_ms': window_cfg.get('offset_ms', 0),
+        'task': data_cfg.get('task', 'motor_imagery'),
+        'tokenizer_type': model_cfg.get('type', 'unknown'),
+        'codebook_size': quantizer_cfg.get('n_embed', quantizer_cfg.get('codebook_size', quantizer_cfg.get('num_codes'))),
+        'quantizer_beta': quantizer_cfg.get('beta'),
+    }
+
+    return {key: value for key, value in hparams.items() if value is not None}
+
+
+@torch.no_grad()
+def collect_visualization_artifacts(model, dataloader, device: torch.device) -> Dict[str, torch.Tensor]:
+    try:
+        batch = next(iter(dataloader))
+    except StopIteration:
+        return {}
+
+    was_training = model.training
+    model.eval()
+    try:
+        eeg = batch['eeg'].to(device)
+        fnirs = batch['fnirs'].to(device)
+        outputs = model(eeg, fnirs)
+    finally:
+        if was_training:
+            model.train()
+
+    artifacts: Dict[str, torch.Tensor] = {
+        'eeg': eeg.detach().cpu(),
+        'fnirs': fnirs.detach().cpu(),
+    }
+    for key in (
+        'eeg_reconstructed',
+        'fnirs_reconstructed',
+        'eeg_indices',
+        'fnirs_indices',
+        'eeg_z',
+        'fnirs_z',
+    ):
+        value = outputs.get(key)
+        if torch.is_tensor(value):
+            artifacts[key] = value.detach().cpu()
+
+    return artifacts
+
+
+def log_tensorboard_visualizations(
+    tb_logger: TensorBoardLogger,
+    model,
+    artifacts: Dict[str, torch.Tensor],
+    step: int,
+    eeg_fs: float,
+    fnirs_fs: float,
+):
+    if not tb_logger.enabled or not artifacts:
+        return
+
+    if 'eeg' in artifacts and 'eeg_reconstructed' in artifacts:
+        tb_logger.log_reconstruction(
+            artifacts['eeg'],
+            artifacts['eeg_reconstructed'],
+            step,
+            n_samples=4,
+            fs=eeg_fs,
+            tag='shared_eeg_reconstruction',
+        )
+
+    if 'fnirs' in artifacts and 'fnirs_reconstructed' in artifacts:
+        tb_logger.log_reconstruction(
+            artifacts['fnirs'],
+            artifacts['fnirs_reconstructed'],
+            step,
+            n_samples=4,
+            fs=fnirs_fs,
+            tag='shared_fnirs_reconstruction',
+        )
+
+    if 'eeg_z' in artifacts:
+        tb_logger.log_latent_distribution(artifacts['eeg_z'], step, tag='shared_eeg_latents')
+    if 'fnirs_z' in artifacts:
+        tb_logger.log_latent_distribution(artifacts['fnirs_z'], step, tag='shared_fnirs_latents')
+
+    shared_indices = []
+    for key in ('eeg_indices', 'fnirs_indices'):
+        value = artifacts.get(key)
+        if value is not None:
+            shared_indices.append(value.reshape(-1).long())
+
+    if not shared_indices:
+        return
+
+    combined_indices = torch.cat(shared_indices, dim=0)
+    codebook_size = int(model.get_codebook_size())
+    tb_logger.log_codebook_usage(combined_indices, codebook_size, step, tag='shared_codebook')
+
+    quantizer = getattr(model, 'quantizer', None)
+    if quantizer is not None and hasattr(quantizer, 'weight'):
+        embeddings = quantizer.weight.detach().cpu()
+        usage = torch.bincount(combined_indices.clamp(0, codebook_size - 1), minlength=codebook_size)
+        tb_logger.log_embedding_tsne(embeddings, usage, step, tag='shared_codebook_embeddings')
 
 
 def train_epoch(
@@ -244,6 +382,7 @@ def main():
     logger = ExperimentLogger(config_path=args.config)
     config = logger.config
     tee_logger = setup_logging(logger.run_dir)
+    tb_logger = TensorBoardLogger(run_dir=logger.run_dir)
 
     try:
         print("=" * 70)
@@ -253,6 +392,8 @@ def main():
         print(f"Run directory: {logger.run_dir}")
         print(f"Experiment: {config['experiment']['name']}")
         print(f"Description: {config['experiment'].get('description', 'N/A')}")
+        if tb_logger.enabled:
+            print(f"TensorBoard: tensorboard --logdir {logger.run_dir / 'tensorboard'}")
 
         device = setup_device(config)
         print(f"Training device: {device}")
@@ -285,11 +426,31 @@ def main():
         )
         warmup_epochs = int(config['training'].get('warmup_epochs', 0))
         total_epochs = int(config['training']['epochs'])
+        tb_cfg = config['training'].get('tensorboard', {})
+        tb_viz_interval = max(int(tb_cfg.get('visualization_interval', 10)), 1)
+        tb_flush_interval = max(int(tb_cfg.get('flush_interval', 1)), 1)
+        tb_log_visualizations = bool(tb_cfg.get('log_visualizations', True))
+        eeg_fs = resolve_sampling_rate(config.get('data', {}), 'eeg', default=200.0)
+        fnirs_fs = resolve_sampling_rate(config.get('data', {}), 'fnirs', default=10.0)
         scheduler = CosineAnnealingLR(
             optimizer,
             T_max=max(total_epochs - warmup_epochs, 1),
             eta_min=float(config['training'].get('min_lr', 1e-6)),
         )
+
+        if tb_logger.enabled:
+            tb_logger.log_text_summary(
+                json.dumps(
+                    {
+                        'config': args.config,
+                        'run_dir': str(logger.run_dir),
+                        'device': str(device),
+                    },
+                    indent=2,
+                ),
+                step=0,
+                tag='run_info',
+            )
 
         start_epoch = 0
         if args.resume:
@@ -330,6 +491,30 @@ def main():
                 loss_breakdown={k: v for k, v in train_metrics.items() if k != 'loss'},
                 metrics=merged_metrics,
             )
+
+            step = epoch
+            tb_logger.log_scalars('train', train_metrics, step)
+            tb_logger.log_scalars('val', strip_metric_prefix(val_metrics, 'val_'), step)
+            tb_logger.log_learning_rate(lr, step)
+
+            train_loss_breakdown = {k: v for k, v in train_metrics.items() if k.endswith('_loss')}
+            if train_loss_breakdown:
+                tb_logger.log_loss_breakdown(train_loss_breakdown, step, prefix='train_loss_components')
+
+            val_loss_breakdown = {
+                key: value
+                for key, value in strip_metric_prefix(val_metrics, 'val_').items()
+                if key.endswith('_loss')
+            }
+            if val_loss_breakdown:
+                tb_logger.log_loss_breakdown(val_loss_breakdown, step, prefix='val_loss_components')
+
+            if tb_log_visualizations and (epoch == start_epoch + 1 or step % tb_viz_interval == 0):
+                artifacts = collect_visualization_artifacts(model, val_loader, device)
+                log_tensorboard_visualizations(tb_logger, model, artifacts, step, eeg_fs=eeg_fs, fnirs_fs=fnirs_fs)
+
+            if step % tb_flush_interval == 0:
+                tb_logger.flush()
 
             monitor_value = val_metrics.get(monitor_metric)
             if monitor_value is None:
@@ -374,6 +559,16 @@ def main():
             'best_monitor': best_monitor,
             **test_metrics,
         }
+        tb_logger.log_scalars('test', strip_metric_prefix(test_metrics, 'val_'), best_epoch)
+        tb_logger.log_hparams(
+            extract_tensorboard_hparams(config),
+            {
+                key: value
+                for key, value in final_metrics.items()
+                if isinstance(value, (int, float)) and np.isfinite(value)
+            },
+        )
+        tb_logger.flush()
         logger.log_final(final_metrics)
         logger.generate_figures()
 
@@ -399,6 +594,7 @@ def main():
         print(f"Best epoch: {best_epoch}")
         print(f"Final metrics saved to: {logger.run_dir / 'metrics.json'}")
     finally:
+        tb_logger.close()
         tee_logger.close()
 
 
