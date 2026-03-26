@@ -147,10 +147,14 @@ class ExperimentLogger:
             "metrics": metrics or {}
         }
         self.metrics["epochs"].append(epoch_data)
+        self._save_metrics()
         
         # Print progress
         metrics_str = ", ".join(f"{k}: {v:.4f}" for k, v in (metrics or {}).items())
-        print(f"[Epoch {epoch}] loss: {train_loss:.4f} | {metrics_str}")
+        if val_loss is not None:
+            print(f"[Epoch {epoch}] train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f} | {metrics_str}")
+        else:
+            print(f"[Epoch {epoch}] train_loss: {train_loss:.4f} | {metrics_str}")
     
     def log_final(self, final_metrics: Dict[str, float]):
         """Log final evaluation metrics."""
