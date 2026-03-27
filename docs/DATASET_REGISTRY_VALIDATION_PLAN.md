@@ -76,6 +76,7 @@ The validation plan below was derived from the original dataset documents under 
 - EEG and fNIRS task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.
 - EEG markers and fNIRS markers use different numeric codes and need dataset-specific mapping.
 - Current adapter progress: a low-level continuous loader is available in src/data/simultaneous_eeg_nirs_dataset.py. Early smoke tests show that n-back and DSR cannot yet be treated like Single-Trial because their fNIRS markers are session-level while EEG markers are trial-level. WG is structurally closer, but still needs task-specific onset alignment logic before it can be promoted to a full multimodal training dataset.
+- Updated alignment conclusion for n-back and DSR: the correct first step is session-level alignment, not trial-level alignment. For subject VP001, n-back session labels match exactly across EEG and fNIRS with three stable offset blocks of 9 sessions each. DSR also aligns at session level after skipping one extra EEG session marker, producing three stable offset blocks of 6, 5, and 6 sessions. This supports a blockwise session-alignment strategy derived from the original session-folder organization in the dataset documentation.
 
 ## Validation strategy
 

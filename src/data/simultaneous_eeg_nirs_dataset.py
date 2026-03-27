@@ -25,6 +25,34 @@ SUPPORTED_MODALITIES = ('eeg', 'fnirs')
 SUPPORTED_FNIRS_SIGNALS = ('oxy', 'deoxy')
 
 
+SESSION_MARKER_CODES: Dict[str, Dict[str, Dict[int, str]]] = {
+    'nback': {
+        'eeg': {
+            112: '0-back session',
+            128: '2-back session',
+            144: '3-back session',
+        },
+        'fnirs': {
+            7: '0-back session',
+            8: '2-back session',
+            9: '3-back session',
+        },
+    },
+    'dsr': {
+        'eeg': {
+            48: 'session',
+        },
+        'fnirs': {
+            3: 'session',
+        },
+    },
+    'wg': {
+        'eeg': {},
+        'fnirs': {},
+    },
+}
+
+
 def resolve_task_name(task: str) -> str:
     normalized = task.strip().lower().replace('-', '').replace('_', '')
     mapping = {
@@ -86,6 +114,63 @@ def normalize_marker_struct(marker_struct: Any) -> Dict[str, Any]:
         'className': class_names,
         'event_desc': event_desc,
     }
+
+
+def get_session_marker_codebook(task: str, modality: str) -> Dict[int, str]:
+    task_name = resolve_task_name(task)
+    if modality not in ('eeg', 'fnirs'):
+        raise ValueError(f'Unsupported modality: {modality}')
+    return dict(SESSION_MARKER_CODES.get(task_name, {}).get(modality, {}))
+
+
+def detect_offset_blocks(residual_ms: np.ndarray, jump_threshold_ms: float = 20_000.0) -> List[Dict[str, Any]]:
+    if residual_ms.size == 0:
+        return []
+
+    block_start = 0
+    blocks: List[Dict[str, Any]] = []
+    for index in range(1, len(residual_ms)):
+        if abs(float(residual_ms[index] - residual_ms[index - 1])) > float(jump_threshold_ms):
+            block_residuals = residual_ms[block_start:index]
+            blocks.append(
+                {
+                    'start_index': int(block_start),
+                    'end_index': int(index - 1),
+                    'count': int(index - block_start),
+                    'offset_mean_ms': float(np.mean(block_residuals)),
+                    'offset_std_ms': float(np.std(block_residuals)),
+                }
+            )
+            block_start = index
+
+    block_residuals = residual_ms[block_start:]
+    blocks.append(
+        {
+            'start_index': int(block_start),
+            'end_index': int(len(residual_ms) - 1),
+            'count': int(len(residual_ms) - block_start),
+            'offset_mean_ms': float(np.mean(block_residuals)),
+            'offset_std_ms': float(np.std(block_residuals)),
+        }
+    )
+    return blocks
+
+
+def _select_best_skip_alignment(longer: np.ndarray, shorter: np.ndarray) -> Tuple[int, np.ndarray]:
+    best_skip_index = 0
+    best_residual = shorter - np.delete(longer, 0)
+    best_score = float('inf')
+
+    for skip_index in range(len(longer)):
+        candidate = shorter - np.delete(longer, skip_index)
+        candidate_blocks = detect_offset_blocks(candidate)
+        score = sum(block['offset_std_ms'] for block in candidate_blocks)
+        if score < best_score:
+            best_score = score
+            best_skip_index = skip_index
+            best_residual = candidate
+
+    return best_skip_index, best_residual
 
 
 class SimultaneousCognitiveLoader:
@@ -189,6 +274,86 @@ class SimultaneousCognitiveLoader:
             'label_index_match': bool(np.array_equal(eeg_labels, nirs_labels)) if common_count else False,
             'eeg_class_names': eeg_markers['className'],
             'fnirs_class_names': nirs_markers['className'],
+        }
+
+    def get_session_markers(self, subject_id: int, modality: Literal['eeg', 'fnirs']) -> Dict[str, Any]:
+        marker_info = self.load_subject_data(subject_id, modality)[1]
+        codebook = get_session_marker_codebook(self.task, modality)
+        if not codebook:
+            return marker_info
+
+        event_desc = marker_info.get('event_desc')
+        if event_desc is None:
+            return marker_info
+
+        event_desc = np.asarray(event_desc)
+        mask = np.isin(event_desc, list(codebook.keys()))
+        session_y = marker_info['y'][:, mask]
+        session_time = np.asarray(marker_info['time'], dtype=np.float64)[mask]
+        session_desc = event_desc[mask]
+
+        labels = np.argmax(session_y, axis=0) if session_y.size else np.asarray([], dtype=int)
+        class_names = [codebook.get(int(session_desc[index]), str(labels[index])) for index in range(len(session_time))]
+
+        return {
+            'time': session_time,
+            'y': session_y,
+            'className': class_names,
+            'event_desc': session_desc,
+        }
+
+    def align_session_markers(self, subject_id: int, jump_threshold_ms: float = 20_000.0) -> Dict[str, Any]:
+        eeg_sessions = self.get_session_markers(subject_id, 'eeg')
+        fnirs_sessions = self.get_session_markers(subject_id, 'fnirs')
+
+        eeg_times = np.asarray(eeg_sessions['time'], dtype=np.float64)
+        fnirs_times = np.asarray(fnirs_sessions['time'], dtype=np.float64)
+        eeg_labels = list(eeg_sessions.get('className', []))
+        fnirs_labels = list(fnirs_sessions.get('className', []))
+
+        skipped = {'eeg_indices': [], 'fnirs_indices': []}
+        if len(eeg_times) == len(fnirs_times):
+            aligned_eeg_times = eeg_times
+            aligned_fnirs_times = fnirs_times
+            aligned_eeg_labels = eeg_labels
+            aligned_fnirs_labels = fnirs_labels
+        elif len(eeg_times) == len(fnirs_times) + 1:
+            skip_index, residual_ms = _select_best_skip_alignment(eeg_times, fnirs_times)
+            aligned_eeg_times = np.delete(eeg_times, skip_index)
+            aligned_fnirs_times = fnirs_times
+            aligned_eeg_labels = [label for index, label in enumerate(eeg_labels) if index != skip_index]
+            aligned_fnirs_labels = fnirs_labels
+            skipped['eeg_indices'] = [int(skip_index)]
+        elif len(fnirs_times) == len(eeg_times) + 1:
+            skip_index, residual_ms = _select_best_skip_alignment(fnirs_times, eeg_times)
+            aligned_eeg_times = eeg_times
+            aligned_fnirs_times = np.delete(fnirs_times, skip_index)
+            aligned_eeg_labels = eeg_labels
+            aligned_fnirs_labels = [label for index, label in enumerate(fnirs_labels) if index != skip_index]
+            skipped['fnirs_indices'] = [int(skip_index)]
+        else:
+            common = min(len(eeg_times), len(fnirs_times))
+            aligned_eeg_times = eeg_times[:common]
+            aligned_fnirs_times = fnirs_times[:common]
+            aligned_eeg_labels = eeg_labels[:common]
+            aligned_fnirs_labels = fnirs_labels[:common]
+
+        residual_ms = aligned_fnirs_times - aligned_eeg_times
+        blocks = detect_offset_blocks(residual_ms, jump_threshold_ms=jump_threshold_ms)
+
+        return {
+            'task': self.task,
+            'num_eeg_session_markers': int(len(eeg_times)),
+            'num_fnirs_session_markers': int(len(fnirs_times)),
+            'num_aligned_pairs': int(len(residual_ms)),
+            'skipped_marker_indices': skipped,
+            'label_sequence_match': aligned_eeg_labels == aligned_fnirs_labels,
+            'eeg_labels': aligned_eeg_labels,
+            'fnirs_labels': aligned_fnirs_labels,
+            'residual_mean_ms': float(np.mean(residual_ms)) if residual_ms.size else None,
+            'residual_std_ms': float(np.std(residual_ms)) if residual_ms.size else None,
+            'residual_series_ms': residual_ms.tolist(),
+            'offset_blocks': blocks,
         }
 
 
