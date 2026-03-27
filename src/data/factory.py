@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
+import torch
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
-from .registry import resolve_dataset_id
+from .registry import normalize_data_config, resolve_dataset_id
 from .simultaneous_eeg_nirs_dataset import (
     SimultaneousContinuousDataset,
     SimultaneousEEGfNIRSDataset,
@@ -15,6 +18,152 @@ from .simultaneous_eeg_nirs_dataset import (
     resolve_fnirs_signal,
     resolve_segmentation_mode,
 )
+
+
+class CombinedMultiModalDataset(Dataset):
+    """Concatenate multiple multimodal datasets into one training view.
+
+    EEG channels can be remapped into a shared union by channel name, while fNIRS
+    currently assumes a shared channel count across sources.
+    """
+
+    def __init__(
+        self,
+        datasets: List[Tuple[str, Dict[str, Any], Dataset]],
+        *,
+        eeg_channel_strategy: str = 'union_pad',
+        fnirs_channel_strategy: str = 'identity',
+    ):
+        if not datasets:
+            raise ValueError('CombinedMultiModalDataset requires at least one source dataset.')
+
+        self.sources = []
+        self.cumulative_sizes: List[int] = []
+        total = 0
+        for source_name, source_cfg, dataset in datasets:
+            self.sources.append({
+                'name': source_name,
+                'config': dict(source_cfg),
+                'dataset': dataset,
+                'length': len(dataset),
+            })
+            total += len(dataset)
+            self.cumulative_sizes.append(total)
+
+        self.eeg_channel_strategy = eeg_channel_strategy
+        self.fnirs_channel_strategy = fnirs_channel_strategy
+        self.eeg_channel_names, self._eeg_source_index_maps = self._build_channel_layout('eeg', eeg_channel_strategy)
+        self.fnirs_channel_names, self._fnirs_source_index_maps = self._build_channel_layout('fnirs', fnirs_channel_strategy)
+        self.eeg_sample_rate = float(self.sources[0]['dataset'].get_eeg_sample_rate())
+        self.fnirs_sample_rate = float(self.sources[0]['dataset'].get_fnirs_sample_rate())
+
+    def _source_channel_names(self, source: Dict[str, Any], modality: str) -> List[str]:
+        dataset = source['dataset']
+        if modality == 'eeg':
+            return list(dataset.get_eeg_channel_names())
+        return list(dataset.get_fnirs_channel_names())
+
+    def _build_channel_layout(self, modality: str, strategy: str) -> Tuple[List[str], List[Optional[List[int]]]]:
+        per_source_names = [self._source_channel_names(source, modality) for source in self.sources]
+
+        if strategy == 'identity':
+            reference = per_source_names[0]
+            reference_count = len(reference)
+            for names in per_source_names[1:]:
+                if len(names) != reference_count:
+                    raise ValueError(
+                        f'{modality} channel count mismatch across combined sources with identity strategy: '
+                        f'{reference_count} vs {len(names)}'
+                    )
+            return reference, [None] * len(self.sources)
+
+        if strategy != 'union_pad':
+            raise ValueError(f'Unsupported {modality} channel strategy: {strategy}')
+
+        ordered = OrderedDict()
+        for names in per_source_names:
+            for name in names:
+                ordered.setdefault(name, len(ordered))
+        target_names = list(ordered.keys())
+        source_maps: List[List[int]] = []
+        for names in per_source_names:
+            name_to_index = {name: index for index, name in enumerate(names)}
+            source_maps.append([name_to_index.get(name, -1) for name in target_names])
+        return target_names, source_maps
+
+    def _resolve_source_index(self, idx: int) -> Tuple[int, int]:
+        if idx < 0:
+            idx += len(self)
+        if idx < 0 or idx >= len(self):
+            raise IndexError(idx)
+        source_index = 0
+        while idx >= self.cumulative_sizes[source_index]:
+            source_index += 1
+        previous = 0 if source_index == 0 else self.cumulative_sizes[source_index - 1]
+        return source_index, idx - previous
+
+    def _remap_channels(self, tensor: torch.Tensor, source_index: int, modality: str) -> torch.Tensor:
+        if modality == 'eeg':
+            strategy = self.eeg_channel_strategy
+            target_names = self.eeg_channel_names
+            index_maps = self._eeg_source_index_maps
+        else:
+            strategy = self.fnirs_channel_strategy
+            target_names = self.fnirs_channel_names
+            index_maps = self._fnirs_source_index_maps
+
+        if strategy == 'identity':
+            return tensor
+
+        remapped = torch.zeros((len(target_names), tensor.shape[1]), dtype=tensor.dtype)
+        source_map = index_maps[source_index]
+        for target_index, source_channel_index in enumerate(source_map):
+            if source_channel_index >= 0:
+                remapped[target_index] = tensor[source_channel_index]
+        return remapped
+
+    def __len__(self) -> int:
+        return self.cumulative_sizes[-1]
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        source_index, local_index = self._resolve_source_index(idx)
+        source = self.sources[source_index]
+        item = dict(source['dataset'][local_index])
+        item['eeg'] = self._remap_channels(item['eeg'], source_index, 'eeg')
+        item['fnirs'] = self._remap_channels(item['fnirs'], source_index, 'fnirs')
+        item['source_name'] = source['name']
+        item['source_dataset'] = source['config'].get('dataset')
+        item['source_task'] = source['config'].get('task')
+        return item
+
+    def get_num_eeg_channels(self) -> int:
+        return len(self.eeg_channel_names)
+
+    def get_num_fnirs_channels(self) -> int:
+        return len(self.fnirs_channel_names)
+
+    def get_eeg_channel_names(self) -> List[str]:
+        return list(self.eeg_channel_names)
+
+    def get_fnirs_channel_names(self) -> List[str]:
+        return list(self.fnirs_channel_names)
+
+    def get_eeg_sample_rate(self) -> float:
+        return self.eeg_sample_rate
+
+    def get_fnirs_sample_rate(self) -> float:
+        return self.fnirs_sample_rate
+
+    def describe_sources(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                'name': source['name'],
+                'dataset': source['config'].get('dataset'),
+                'task': source['config'].get('task'),
+                'length': source['length'],
+            }
+            for source in self.sources
+        ]
 
 
 def resolve_normalization_config(data_cfg: Dict[str, Any]) -> Tuple[bool, str]:
@@ -144,6 +293,54 @@ def create_multimodal_window_dataset(
     raise NotImplementedError(f'Unified multimodal dataset factory does not support dataset {dataset_id!r} yet.')
 
 
+def _build_multisource_config(source_cfg: Dict[str, Any], parent_data_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(parent_data_cfg)
+    merged.pop('sources', None)
+    merged.pop('multi_source', None)
+    merged = {**merged, **dict(source_cfg)}
+    return normalize_data_config(merged)
+
+
+def _build_multisource_dataset(
+    data_cfg: Dict[str, Any],
+    split_name: str,
+    *,
+    normalize: bool,
+    normalization_mode: str,
+) -> CombinedMultiModalDataset:
+    sources_cfg = data_cfg.get('sources', [])
+    if not isinstance(sources_cfg, list) or not sources_cfg:
+        raise ValueError('data.sources must be a non-empty list for multi-source multimodal loading.')
+
+    built_sources: List[Tuple[str, Dict[str, Any], Dataset]] = []
+    for source_index, source_cfg in enumerate(sources_cfg):
+        source_data_cfg = _build_multisource_config(source_cfg, data_cfg)
+        split_cfg = source_data_cfg.get('split', {})
+        subject_key = f'{split_name}_subjects'
+        subject_ids = split_cfg.get(subject_key)
+        if not isinstance(subject_ids, list) or not subject_ids:
+            continue
+        dataset = create_multimodal_window_dataset(
+            source_data_cfg,
+            subject_ids,
+            window_duration_s=float(source_data_cfg['window']['duration_s']),
+            normalize=normalize,
+            normalization_mode=normalization_mode,
+        )
+        source_name = source_cfg.get('name', f'source_{source_index}')
+        built_sources.append((str(source_name), source_data_cfg, dataset))
+
+    if not built_sources:
+        raise ValueError(f'No source dataset produced any subjects for split {split_name!r}.')
+
+    multi_source_cfg = data_cfg.get('multi_source', {})
+    return CombinedMultiModalDataset(
+        built_sources,
+        eeg_channel_strategy=str(multi_source_cfg.get('eeg_channel_strategy', 'union_pad')),
+        fnirs_channel_strategy=str(multi_source_cfg.get('fnirs_channel_strategy', 'identity')),
+    )
+
+
 def create_configured_dataloader(config: Dict[str, Any], split: str) -> DataLoader:
     data_cfg = config['data']
     normalize, normalization_mode = resolve_normalization_config(data_cfg)
@@ -180,6 +377,25 @@ def create_configured_dataloader(config: Dict[str, Any], split: str) -> DataLoad
 def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str, DataLoader]:
     data_cfg = config['data']
     normalize, normalization_mode = resolve_normalization_config(data_cfg)
+    if isinstance(data_cfg.get('sources'), list) and data_cfg.get('sources'):
+        dataloaders: Dict[str, DataLoader] = {}
+        for split_name in ('train', 'val', 'test'):
+            dataset = _build_multisource_dataset(
+                data_cfg,
+                split_name,
+                normalize=normalize,
+                normalization_mode=normalization_mode,
+            )
+            dataloaders[split_name] = DataLoader(
+                dataset,
+                batch_size=config['training']['batch_size'],
+                shuffle=(split_name == 'train'),
+                num_workers=data_cfg.get('num_workers', 0),
+                pin_memory=True,
+                drop_last=(split_name == 'train'),
+            )
+        return dataloaders
+
     dataset_id = resolve_dataset_id(data_cfg)
 
     if dataset_id == 'eeg_fnirs_single_trial':

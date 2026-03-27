@@ -511,6 +511,12 @@ def main():
         print(f"Test trials: {len(test_loader.dataset)}")
         print(f"EEG channels: {train_loader.dataset.get_num_eeg_channels()}")
         print(f"fNIRS channels: {train_loader.dataset.get_num_fnirs_channels()}")
+        if hasattr(train_loader.dataset, 'describe_sources'):
+            print('Train source mix:')
+            for source in train_loader.dataset.describe_sources():
+                print(
+                    f"  - {source['name']}: dataset={source['dataset']}, task={source['task']}, samples={source['length']}"
+                )
 
         print("\nCreating tokenizer...")
         model = create_tokenizer(config).to(device)

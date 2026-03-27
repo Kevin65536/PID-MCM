@@ -247,6 +247,10 @@ def infer_dataset_id_from_root(data_root: str) -> Optional[str]:
 
 
 def resolve_dataset_id(data_cfg: Mapping[str, Any]) -> str:
+    sources = data_cfg.get('sources')
+    if isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)) and len(sources) > 0:
+        return 'multi_source'
+
     explicit = data_cfg.get('dataset')
     if isinstance(explicit, str) and explicit.strip() and explicit.strip().upper() != 'TBD':
         return get_dataset_registration(explicit).dataset_id
@@ -287,6 +291,28 @@ def normalize_data_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
         normalized['data_root'] = normalized['root']
 
     dataset_id = resolve_dataset_id(normalized)
+    if dataset_id == 'multi_source':
+        normalized['dataset'] = dataset_id
+        normalized.setdefault('dataset_params', {})
+        normalized['split'] = normalize_split_config(normalized)
+        normalized['dataset_registry'] = {
+            'dataset_id': 'multi_source',
+            'display_name': 'Multi-source multimodal mix',
+            'data_root': normalized.get('data_root'),
+            'default_root': None,
+            'supported_modalities': ['both'],
+            'eeg_sample_rate_hz': None,
+            'fnirs_sample_rate_hz': None,
+            'eeg_channels': None,
+            'fnirs_channels': None,
+            'default_task': None,
+            'sync_strategy': 'source_defined',
+            'loader_status': 'implemented',
+            'documentation': [],
+            'notes': ['This config combines multiple registered datasets/tasks through data.sources.'],
+        }
+        return normalized
+
     registration = get_dataset_registration(dataset_id)
     normalized['dataset'] = dataset_id
     normalized.setdefault('data_root', registration.default_root)
