@@ -68,6 +68,8 @@ from src.data.eeg_fnirs_dataset import (
     get_eeg_channel_mask,
     get_fnirs_channel_mask,
 )
+from src.data.registry import load_experiment_config, normalize_data_config
+from src.data.factory import create_multimodal_window_dataset, create_unimodal_window_dataset
 from src.data.augmentation import SignalAugmentor, DualModalityAugmentor, LabelSmoothingCrossEntropy, create_augmentor_from_config
 from src.tokenizers import create_tokenizer, list_tokenizers
 from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
@@ -202,27 +204,7 @@ def setup_device(config: dict, verbose: bool = True) -> torch.device:
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load experiment configuration with base config inheritance."""
-    configs_dir = project_root / "experiments" / "configs"
-    exp_path = configs_dir / config_path
-    
-    if not exp_path.exists():
-        raise FileNotFoundError(f"Config not found: {exp_path}")
-    
-    with open(exp_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    # Handle base config inheritance
-    if '_base_' in config:
-        base_name = config.pop('_base_')
-        base_path = configs_dir / "downstream" / base_name
-        if not base_path.exists():
-            base_path = configs_dir / base_name
-        
-        with open(base_path, 'r', encoding='utf-8') as f:
-            base_config = yaml.safe_load(f)
-        
-        config = deep_merge(base_config, config)
-    
+    config = load_experiment_config(config_path, configs_dir=project_root / 'experiments' / 'configs')
     return normalize_downstream_config(config)
 
 
@@ -342,7 +324,7 @@ def build_modality_section(modality: str, source_cfg: dict) -> dict:
 def normalize_downstream_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Canonicalize legacy and current downstream configs to one internal schema."""
     normalized = dict(config)
-    data_cfg = dict(normalized['data'])
+    data_cfg = normalize_data_config(normalized['data'])
 
     modality = normalized.get('modality', data_cfg.get('modality', 'eeg'))
     normalized['modality'] = modality
@@ -521,30 +503,22 @@ def create_dataloaders(config: dict) -> Dict[str, DataLoader]:
     
     for split_name, subjects in splits.items():
         if modality == 'both':
-            dataset = DualModalityDataset(
-                data_root=data_cfg['data_root'],
-                subject_ids=subjects,
-                eeg_config=data_cfg['eeg'],
-                fnirs_config=data_cfg['fnirs'],
-                task=data_cfg.get('task', 'motor_imagery'),
+            dataset = create_multimodal_window_dataset(
+                data_cfg,
+                subjects,
+                window_duration_s=float(data_cfg['eeg']['window_samples']) / float(data_cfg['eeg']['sample_rate']),
                 normalize=normalize,
                 normalization_mode=normalization_mode,
-                window_offset_ms=data_cfg['window'].get('offset_ms', 500),
             )
         else:
             mod_cfg = data_cfg['eeg'] if modality == 'eeg' else data_cfg['fnirs']
-            dataset = MultiLeadDataset(
-                data_root=data_cfg['data_root'],
-                subject_ids=subjects,
-                modality=modality,
+            dataset = create_unimodal_window_dataset(
+                data_cfg,
+                subjects,
+                modality,
                 window_samples=mod_cfg['window_samples'],
-                task=data_cfg.get('task', 'motor_imagery'),
                 normalize=normalize,
                 normalization_mode=normalization_mode,
-                preprocessing=mod_cfg.get('preprocessing', data_cfg.get('preprocessing', {})),
-                window_offset_ms=data_cfg['window'].get('offset_ms', 500),
-                exclude_eog=mod_cfg.get('exclude_eog', True),
-                hbo_only=mod_cfg.get('hbo_only', True),
             )
         
         dataloaders[split_name] = DataLoader(

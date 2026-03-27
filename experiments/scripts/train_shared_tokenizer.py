@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.data.eeg_fnirs_dataset import create_dataloaders
+from src.data import create_configured_multimodal_dataloaders
 from src.tokenizers import create_tokenizer
 from src.utils.logger import ExperimentLogger
 from src.visualization import TensorBoardLogger
@@ -81,27 +81,7 @@ def setup_device(config: dict) -> torch.device:
 
 
 def create_multimodal_dataloaders(config: dict):
-    data_cfg = config['data']
-    normalize, normalization_mode = resolve_normalization_config(data_cfg)
-    return create_dataloaders(
-        data_root=data_cfg['data_root'],
-        modality='both',
-        task=data_cfg.get('task', 'motor_imagery'),
-        train_subjects=data_cfg['split']['train_subjects'],
-        val_subjects=data_cfg['split']['val_subjects'],
-        test_subjects=data_cfg['split']['test_subjects'],
-        window_duration_s=float(data_cfg['window']['duration_s']),
-        batch_size=config['training']['batch_size'],
-        num_workers=data_cfg.get('num_workers', 0),
-        window_offset_ms=float(data_cfg['window'].get('offset_ms', 0)),
-        normalize=normalize,
-        normalization_mode=normalization_mode,
-        eeg_preprocessing=data_cfg.get('eeg_preprocessing', {}),
-        fnirs_preprocessing=data_cfg.get('fnirs_preprocessing', {}),
-        exclude_eog=data_cfg.get('exclude_eog', True),
-        hbo_only=data_cfg.get('hbo_only', True),
-        hbr_only=data_cfg.get('hbr_only', False),
-    )
+    return create_configured_multimodal_dataloaders(config)
 
 
 def tensor_to_float(value: Any) -> float:
@@ -531,6 +511,12 @@ def main():
         print(f"Test trials: {len(test_loader.dataset)}")
         print(f"EEG channels: {train_loader.dataset.get_num_eeg_channels()}")
         print(f"fNIRS channels: {train_loader.dataset.get_num_fnirs_channels()}")
+        if hasattr(train_loader.dataset, 'describe_sources'):
+            print('Train source mix:')
+            for source in train_loader.dataset.describe_sources():
+                print(
+                    f"  - {source['name']}: dataset={source['dataset']}, task={source['task']}, samples={source['length']}"
+                )
 
         print("\nCreating tokenizer...")
         model = create_tokenizer(config).to(device)

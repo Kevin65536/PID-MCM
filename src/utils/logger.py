@@ -12,6 +12,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import numpy as np
 
+from src.data.registry import load_experiment_config
+
 # Try to import visualization libraries
 try:
     import matplotlib.pyplot as plt
@@ -77,28 +79,8 @@ class ExperimentLogger:
         print(f"[ExperimentLogger] Run directory: {self.run_dir}")
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load config with inheritance support."""
-        config_path = Path(config_path)
-        
-        # If relative path and not already in configs dir, look there
-        if not config_path.is_absolute():
-            full_path = self.configs_dir / config_path
-            if full_path.exists():
-                config_path = full_path
-            # else assume the path is already correct (e.g., already absolute)
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
-        # Handle inheritance
-        if "_base_" in config:
-            base_filename = config.pop("_base_")
-            # Base is always relative to configs_dir
-            base_path = self.configs_dir / base_filename
-            base_config = self._load_config(base_path)
-            config = self._merge_configs(base_config, config)
-        
-        return config
+        """Load config through the shared experiment config interface."""
+        return load_experiment_config(config_path, configs_dir=self.configs_dir)
     
     def _merge_configs(self, base: Dict, override: Dict) -> Dict:
         """Deep merge two config dictionaries."""

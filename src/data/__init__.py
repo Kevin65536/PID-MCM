@@ -1,11 +1,4 @@
-"""
-Data loading and preprocessing modules.
-
-Available datasets:
-- EEGfNIRSDataset: Single modality (EEG or fNIRS) dataset
-- MultiModalEEGfNIRSDataset: Synchronized EEG+fNIRS dataset
-- PIDTimeSeriesDataset: Synthetic data for debugging
-"""
+"""Data loading, dataset registry, and preprocessing modules."""
 
 from .eeg_fnirs_dataset import (
     BBCIDataLoader,
@@ -32,7 +25,39 @@ from .signal_visualization import (
     visualize_multimodal_dataset_sample,
     visualize_synchronized_filtered_sample,
 )
+from .factory import (
+    create_configured_dataloader,
+    create_configured_multimodal_dataloaders,
+    create_continuous_visualization_dataset,
+    create_multimodal_window_dataset,
+    create_unimodal_window_dataset,
+    resolve_normalization_config,
+)
+from .registry import (
+    DatasetRegistration,
+    DocumentationReference,
+    dataset_loader_is_implemented,
+    get_dataset_registration,
+    list_registered_datasets,
+    load_experiment_config,
+    normalize_data_config,
+    normalize_experiment_config,
+    require_dataset_loader,
+)
+from .simultaneous_eeg_nirs_dataset import (
+    SimultaneousCognitiveLoader,
+    SimultaneousContinuousDataset,
+    SimultaneousEEGfNIRSDataset,
+    SimultaneousMultiModalDataset,
+    is_deprecated_task,
+    require_supported_task,
+)
 from .synthetic_timeseries import PIDTimeSeriesDataset
+from .validation import (
+    build_all_validation_plans,
+    build_dataset_validation_plan,
+    render_validation_plan_markdown,
+)
 
 __all__ = [
     'BBCIDataLoader',
@@ -56,5 +81,29 @@ __all__ = [
     'visualize_filtered_dataset_sample',
     'visualize_multimodal_dataset_sample',
     'visualize_synchronized_filtered_sample',
+    'create_unimodal_window_dataset',
+    'create_multimodal_window_dataset',
+    'create_configured_dataloader',
+    'create_configured_multimodal_dataloaders',
+    'create_continuous_visualization_dataset',
+    'resolve_normalization_config',
+    'DatasetRegistration',
+    'DocumentationReference',
+    'list_registered_datasets',
+    'get_dataset_registration',
+    'normalize_data_config',
+    'normalize_experiment_config',
+    'load_experiment_config',
+    'dataset_loader_is_implemented',
+    'require_dataset_loader',
+    'SimultaneousCognitiveLoader',
+    'SimultaneousContinuousDataset',
+    'SimultaneousEEGfNIRSDataset',
+    'SimultaneousMultiModalDataset',
+    'is_deprecated_task',
+    'require_supported_task',
+    'build_dataset_validation_plan',
+    'build_all_validation_plans',
+    'render_validation_plan_markdown',
     'PIDTimeSeriesDataset',
 ]
