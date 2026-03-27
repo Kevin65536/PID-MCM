@@ -7,12 +7,16 @@ visualization, and future task-specific window extraction.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
+import torch
+from torch.utils.data import Dataset
 
 from .eeg_fnirs_dataset import (
+    TrialInfo,
     apply_temporal_filter,
     get_eeg_channel_mask,
     load_mat_struct,
@@ -23,6 +27,26 @@ from .eeg_fnirs_dataset import (
 SUPPORTED_TASKS = ('nback', 'dsr', 'wg')
 SUPPORTED_MODALITIES = ('eeg', 'fnirs')
 SUPPORTED_FNIRS_SIGNALS = ('oxy', 'deoxy')
+DEPRECATED_TASKS = ('dsr',)
+
+
+TASK_SEGMENTATION_MODES: Dict[str, Dict[str, str]] = {
+    'nback': {
+        'eeg': 'trial',
+        'fnirs': 'session',
+        'both': 'session',
+    },
+    'wg': {
+        'eeg': 'trial',
+        'fnirs': 'trial',
+        'both': 'trial',
+    },
+    'dsr': {
+        'eeg': 'session',
+        'fnirs': 'session',
+        'both': 'session',
+    },
+}
 
 
 SESSION_MARKER_CODES: Dict[str, Dict[str, Dict[int, str]]] = {
@@ -65,6 +89,43 @@ def resolve_task_name(task: str) -> str:
     if normalized not in mapping:
         raise ValueError(f'Unsupported task: {task}')
     return mapping[normalized]
+
+
+def is_deprecated_task(task: str) -> bool:
+    return resolve_task_name(task) in DEPRECATED_TASKS
+
+
+def require_supported_task(task: str, allow_deprecated: bool = False) -> str:
+    task_name = resolve_task_name(task)
+    if task_name in DEPRECATED_TASKS and not allow_deprecated:
+        raise NotImplementedError(
+            f"Simultaneous EEG&NIRS task '{task_name}' is deprecated in this repository and is excluded from training-ready loaders."
+        )
+    return task_name
+
+
+def resolve_segmentation_mode(
+    task: str,
+    modality: Literal['eeg', 'fnirs', 'both'],
+    segmentation_mode: Literal['auto', 'trial', 'session'] = 'auto',
+) -> str:
+    task_name = resolve_task_name(task)
+    if segmentation_mode != 'auto':
+        return segmentation_mode
+    return TASK_SEGMENTATION_MODES[task_name][modality]
+
+
+def resolve_fnirs_signal(
+    fnirs_signal: Literal['oxy', 'deoxy'] = 'oxy',
+    *,
+    hbo_only: bool = True,
+    hbr_only: bool = False,
+) -> Literal['oxy', 'deoxy']:
+    if hbo_only and hbr_only:
+        raise ValueError('Cannot enable both hbo_only and hbr_only for Simultaneous fNIRS loading.')
+    if hbr_only:
+        return 'deoxy'
+    return fnirs_signal
 
 
 def _normalize_class_names(class_name_value: Any) -> List[str]:
@@ -183,9 +244,10 @@ class SimultaneousCognitiveLoader:
         subject_ids: Optional[List[int]] = None,
         modality: Literal['eeg', 'fnirs', 'both'] = 'both',
         fnirs_signal: Literal['oxy', 'deoxy'] = 'oxy',
+        allow_deprecated: bool = True,
     ):
         self.data_root = Path(data_root)
-        self.task = resolve_task_name(task)
+        self.task = require_supported_task(task, allow_deprecated=allow_deprecated)
         self.subject_ids = subject_ids or list(range(1, 27))
         self.modality = modality
         self.fnirs_signal = fnirs_signal
@@ -376,9 +438,11 @@ class SimultaneousContinuousDataset:
         preprocessing: Optional[dict] = None,
         exclude_eog: bool = True,
         fnirs_signal: Literal['oxy', 'deoxy'] = 'oxy',
+        segmentation_mode: Literal['auto', 'trial', 'session'] = 'auto',
+        allow_deprecated: bool = False,
     ):
         self.data_root = Path(data_root)
-        self.task = resolve_task_name(task)
+        self.task = require_supported_task(task, allow_deprecated=allow_deprecated)
         self.modality = modality
         self.subject_ids = subject_ids or list(range(1, 27))
         self.normalize = normalize
@@ -386,6 +450,7 @@ class SimultaneousContinuousDataset:
         self.preprocessing = dict(preprocessing or {})
         self.exclude_eog = exclude_eog
         self.fnirs_signal = fnirs_signal
+        self.segmentation_mode = resolve_segmentation_mode(self.task, modality, segmentation_mode)
 
         self.loader = SimultaneousCognitiveLoader(
             data_root=data_root,
@@ -393,6 +458,7 @@ class SimultaneousContinuousDataset:
             subject_ids=self.subject_ids,
             modality=modality,
             fnirs_signal=fnirs_signal,
+            allow_deprecated=allow_deprecated,
         )
 
         self._raw_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
@@ -464,6 +530,12 @@ class SimultaneousContinuousDataset:
         _, markers, _ = self._get_subject_data(subject_id, processed=False)
         return markers
 
+    def get_session_segmentation_markers(self, subject_id: int, session_idx: int) -> Dict[str, Any]:
+        self._validate_session_idx(session_idx)
+        if self.segmentation_mode == 'session':
+            return self.loader.get_session_markers(subject_id, self.modality)
+        return self.get_session_markers(subject_id, session_idx)
+
     def get_session_trial_regions(
         self,
         subject_id: int,
@@ -472,7 +544,7 @@ class SimultaneousContinuousDataset:
         offset_ms: float = 0.0,
     ) -> List[Dict[str, Any]]:
         self._validate_session_idx(session_idx)
-        markers = self.get_session_markers(subject_id, session_idx)
+        markers = self.get_session_segmentation_markers(subject_id, session_idx)
         labels = np.argmax(markers['y'], axis=0)
         class_names = markers.get('className', [])
         regions: List[Dict[str, Any]] = []
@@ -507,4 +579,435 @@ class SimultaneousContinuousDataset:
         if not self.subject_ids:
             return 0.0
         _, _, info = self._get_subject_data(self.subject_ids[0], processed=True)
+        return float(info['fs'])
+
+
+@dataclass
+class SimultaneousTrialWindowInfo:
+    subject_id: int
+    session_idx: int
+    trial_idx: int
+    label: int
+    label_name: str
+    start_sample: int
+    end_sample: int
+    onset_time_ms: float
+    event_desc: Optional[int]
+
+
+class SimultaneousEEGfNIRSDataset(Dataset):
+    """Training-ready single-modality window dataset for Simultaneous EEG&NIRS."""
+
+    def __init__(
+        self,
+        data_root: str,
+        subject_ids: Optional[List[int]] = None,
+        task: str = 'nback',
+        modality: Literal['eeg', 'fnirs'] = 'eeg',
+        window_samples: int = 512,
+        window_offset_ms: float = 0.0,
+        normalize: bool = True,
+        normalization_mode: Literal['window', 'session', 'none'] = 'window',
+        preprocessing: Optional[dict] = None,
+        exclude_eog: bool = True,
+        hbo_only: bool = True,
+        hbr_only: bool = False,
+        fnirs_signal: Literal['oxy', 'deoxy'] = 'oxy',
+        segmentation_mode: Literal['auto', 'trial', 'session'] = 'auto',
+    ):
+        self.data_root = Path(data_root)
+        self.task = require_supported_task(task, allow_deprecated=False)
+        self.subject_ids = subject_ids or list(range(1, 27))
+        self.modality = modality
+        self.window_samples = int(window_samples)
+        self.window_offset_ms = float(window_offset_ms)
+        self.normalize = normalize
+        self.normalization_mode = normalization_mode
+        self.preprocessing = dict(preprocessing or {})
+        self.exclude_eog = exclude_eog
+        self.fnirs_signal = resolve_fnirs_signal(fnirs_signal, hbo_only=hbo_only, hbr_only=hbr_only)
+        self.segmentation_mode = resolve_segmentation_mode(self.task, modality, segmentation_mode)
+
+        self.loader = SimultaneousCognitiveLoader(
+            data_root=data_root,
+            task=self.task,
+            subject_ids=self.subject_ids,
+            modality=modality,
+            fnirs_signal=self.fnirs_signal,
+            allow_deprecated=False,
+        )
+
+        self.trials: List[SimultaneousTrialWindowInfo] = []
+        self._raw_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._processed_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._session_stats_cache: Dict[int, Tuple[np.ndarray, np.ndarray]] = {}
+        self._build_trial_index()
+
+    def _get_marker_info(self, subject_id: int) -> Dict[str, Any]:
+        if self.segmentation_mode == 'session':
+            return self.loader.get_session_markers(subject_id, self.modality)
+        return self.loader.load_subject_data(subject_id, self.modality)[1]
+
+    def _build_trial_index(self) -> None:
+        for subject_id in self.subject_ids:
+            try:
+                _, _, info = self.loader.load_subject_data(subject_id, self.modality)
+                fs = float(info['fs'])
+                markers = self._get_marker_info(subject_id)
+                labels = np.argmax(markers['y'], axis=0) if markers['y'].size else np.asarray([], dtype=int)
+                class_names = list(markers.get('className', []))
+                event_desc = markers.get('event_desc')
+                offset_samples = int(round(self.window_offset_ms * fs / 1000.0))
+
+                for trial_idx, onset_ms in enumerate(np.asarray(markers['time'], dtype=np.float64)):
+                    start_sample = int(round(onset_ms * fs / 1000.0)) + offset_samples
+                    end_sample = start_sample + self.window_samples
+                    label = int(labels[trial_idx]) if trial_idx < len(labels) else 0
+                    label_name = class_names[label] if label < len(class_names) else str(label)
+                    desc = None if event_desc is None else int(np.asarray(event_desc)[trial_idx])
+                    self.trials.append(
+                        SimultaneousTrialWindowInfo(
+                            subject_id=subject_id,
+                            session_idx=0,
+                            trial_idx=trial_idx,
+                            label=label,
+                            label_name=str(label_name),
+                            start_sample=start_sample,
+                            end_sample=end_sample,
+                            onset_time_ms=float(onset_ms),
+                            event_desc=desc,
+                        )
+                    )
+            except Exception as error:
+                print(f'Warning: Could not build Simultaneous trial index for subject {subject_id}: {error}')
+
+    def _cache_subject_data(self, subject_id: int) -> None:
+        if subject_id in self._processed_cache:
+            return
+
+        cnt, markers, info = self.loader.load_subject_data(subject_id, self.modality)
+        channel_names = list(info['clab'])
+        if self.modality == 'eeg':
+            channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=self.exclude_eog)
+            filtered_cnt = cnt[:, channel_mask]
+            filtered_channel_names = [name for index, name in enumerate(channel_names) if channel_mask[index]]
+        else:
+            filtered_cnt = cnt
+            filtered_channel_names = channel_names
+
+        filtered_cnt = filtered_cnt.astype(np.float32, copy=False)
+        processed_cnt = apply_temporal_filter(
+            filtered_cnt,
+            sample_rate=float(info['fs']),
+            modality=self.modality,
+            preprocessing=self.preprocessing,
+        ).astype(np.float32, copy=False)
+
+        filtered_info = dict(info)
+        filtered_info['clab'] = filtered_channel_names
+        filtered_info['original_clab'] = channel_names
+        self._raw_cache[subject_id] = (filtered_cnt, markers, filtered_info)
+        self._processed_cache[subject_id] = (processed_cnt, markers, filtered_info)
+        self._session_stats_cache[subject_id] = (
+            processed_cnt.mean(axis=0).astype(np.float32, copy=False),
+            (processed_cnt.std(axis=0) + 1e-8).astype(np.float32, copy=False),
+        )
+
+    def _get_subject_data(self, subject_id: int, processed: bool = True) -> Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]:
+        self._cache_subject_data(subject_id)
+        if processed:
+            return self._processed_cache[subject_id]
+        return self._raw_cache[subject_id]
+
+    def _extract_window(self, cnt: np.ndarray, start: int, end: int) -> np.ndarray:
+        if start < 0:
+            start = 0
+            end = self.window_samples
+        if end > cnt.shape[0]:
+            end = cnt.shape[0]
+            start = max(0, end - self.window_samples)
+
+        window = cnt[start:end, :]
+        if window.shape[0] < self.window_samples:
+            pad_size = self.window_samples - window.shape[0]
+            window = np.pad(window, ((0, pad_size), (0, 0)), mode='constant')
+        return window.T
+
+    def __len__(self) -> int:
+        return len(self.trials)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        trial = self.trials[idx]
+        cnt, _, _ = self._get_subject_data(trial.subject_id, processed=True)
+        window = self._extract_window(cnt, trial.start_sample, trial.end_sample)
+
+        normalization_mode = self.normalization_mode if self.normalize else 'none'
+        if normalization_mode == 'session':
+            session_mean, session_std = self._session_stats_cache[trial.subject_id]
+            window = normalize_window(window, 'session', session_mean, session_std)
+        elif normalization_mode == 'window':
+            window = normalize_window(window, 'window')
+
+        return {
+            'data': torch.from_numpy(window).float(),
+            'label': torch.tensor(trial.label, dtype=torch.long),
+            'subject_id': trial.subject_id,
+            'session_idx': trial.session_idx,
+            'trial_idx': trial.trial_idx,
+        }
+
+    def get_channel_names(self) -> List[str]:
+        if not self.trials:
+            return []
+        _, _, info = self._get_subject_data(self.trials[0].subject_id, processed=True)
+        return list(info['clab'])
+
+    def get_num_channels(self) -> int:
+        return len(self.get_channel_names())
+
+    def get_sample_rate(self) -> float:
+        if not self.trials:
+            return 0.0
+        _, _, info = self._get_subject_data(self.trials[0].subject_id, processed=True)
+        return float(info['fs'])
+
+
+class SimultaneousMultiModalDataset(Dataset):
+    """Training-ready multimodal window dataset for Simultaneous EEG&NIRS."""
+
+    def __init__(
+        self,
+        data_root: str,
+        subject_ids: Optional[List[int]] = None,
+        task: str = 'wg',
+        window_duration_s: float = 10.0,
+        window_offset_ms: float = 0.0,
+        normalize: bool = True,
+        normalization_mode: Literal['window', 'session', 'none'] = 'window',
+        eeg_preprocessing: Optional[dict] = None,
+        fnirs_preprocessing: Optional[dict] = None,
+        exclude_eog: bool = True,
+        hbo_only: bool = True,
+        hbr_only: bool = False,
+        fnirs_signal: Literal['oxy', 'deoxy'] = 'oxy',
+        segmentation_mode: Literal['auto', 'trial', 'session'] = 'auto',
+    ):
+        self.data_root = Path(data_root)
+        self.task = require_supported_task(task, allow_deprecated=False)
+        self.subject_ids = subject_ids or list(range(1, 27))
+        self.window_duration_s = float(window_duration_s)
+        self.window_offset_ms = float(window_offset_ms)
+        self.normalize = normalize
+        self.normalization_mode = normalization_mode
+        self.eeg_preprocessing = dict(eeg_preprocessing or {})
+        self.fnirs_preprocessing = dict(fnirs_preprocessing or {})
+        self.exclude_eog = exclude_eog
+        self.fnirs_signal = resolve_fnirs_signal(fnirs_signal, hbo_only=hbo_only, hbr_only=hbr_only)
+        self.segmentation_mode = resolve_segmentation_mode(self.task, 'both', segmentation_mode)
+
+        self.eeg_loader = SimultaneousCognitiveLoader(
+            data_root=data_root,
+            task=self.task,
+            subject_ids=self.subject_ids,
+            modality='eeg',
+            allow_deprecated=False,
+        )
+        self.fnirs_loader = SimultaneousCognitiveLoader(
+            data_root=data_root,
+            task=self.task,
+            subject_ids=self.subject_ids,
+            modality='fnirs',
+            fnirs_signal=self.fnirs_signal,
+            allow_deprecated=False,
+        )
+
+        self.trials: List[TrialInfo] = []
+        self._eeg_raw_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._eeg_processed_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._eeg_session_stats_cache: Dict[int, Tuple[np.ndarray, np.ndarray]] = {}
+        self._fnirs_raw_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._fnirs_processed_cache: Dict[int, Tuple[np.ndarray, Dict[str, Any], Dict[str, Any]]] = {}
+        self._fnirs_session_stats_cache: Dict[int, Tuple[np.ndarray, np.ndarray]] = {}
+        self._build_trial_index()
+
+    def _get_markers(self, subject_id: int, modality: Literal['eeg', 'fnirs']) -> Dict[str, Any]:
+        loader = self.eeg_loader if modality == 'eeg' else self.fnirs_loader
+        if self.segmentation_mode == 'session':
+            return loader.get_session_markers(subject_id, modality)
+        return loader.load_subject_data(subject_id, modality)[1]
+
+    def _build_trial_index(self) -> None:
+        for subject_id in self.subject_ids:
+            try:
+                _, _, eeg_info = self.eeg_loader.load_subject_data(subject_id, 'eeg')
+                _, _, fnirs_info = self.fnirs_loader.load_subject_data(subject_id, 'fnirs')
+                eeg_fs = float(eeg_info['fs'])
+                fnirs_fs = float(fnirs_info['fs'])
+                eeg_markers = self._get_markers(subject_id, 'eeg')
+                fnirs_markers = self._get_markers(subject_id, 'fnirs')
+
+                eeg_times = np.asarray(eeg_markers['time'], dtype=np.float64)
+                fnirs_times = np.asarray(fnirs_markers['time'], dtype=np.float64)
+                common_count = min(len(eeg_times), len(fnirs_times))
+                eeg_labels = np.argmax(eeg_markers['y'], axis=0)[:common_count]
+                fnirs_labels = np.argmax(fnirs_markers['y'], axis=0)[:common_count]
+                eeg_names = list(eeg_markers.get('className', []))
+                fnirs_names = list(fnirs_markers.get('className', []))
+
+                if common_count == 0:
+                    continue
+
+                for trial_idx in range(common_count):
+                    eeg_label = int(eeg_labels[trial_idx])
+                    fnirs_label = int(fnirs_labels[trial_idx])
+                    eeg_label_name = eeg_names[eeg_label] if eeg_label < len(eeg_names) else str(eeg_label)
+                    fnirs_label_name = fnirs_names[fnirs_label] if fnirs_label < len(fnirs_names) else str(fnirs_label)
+                    if str(eeg_label_name) != str(fnirs_label_name):
+                        raise ValueError(
+                            f'Multimodal segmentation label mismatch for subject {subject_id}, task {self.task}, index {trial_idx}: '
+                            f'{eeg_label_name!r} vs {fnirs_label_name!r}'
+                        )
+
+                    eeg_window_samples = int(round(self.window_duration_s * eeg_fs))
+                    fnirs_window_samples = int(round(self.window_duration_s * fnirs_fs))
+                    eeg_start = int(round((eeg_times[trial_idx] + self.window_offset_ms) * eeg_fs / 1000.0))
+                    fnirs_start = int(round((fnirs_times[trial_idx] + self.window_offset_ms) * fnirs_fs / 1000.0))
+                    self.trials.append(
+                        TrialInfo(
+                            subject_id=subject_id,
+                            session_idx=0,
+                            trial_idx=trial_idx,
+                            label=eeg_label,
+                            task_type=self.task,
+                            eeg_start_sample=eeg_start,
+                            eeg_end_sample=eeg_start + eeg_window_samples,
+                            nirs_start_sample=fnirs_start,
+                            nirs_end_sample=fnirs_start + fnirs_window_samples,
+                            onset_time_ms=float(eeg_times[trial_idx]),
+                        )
+                    )
+            except Exception as error:
+                print(f'Warning: Could not build Simultaneous multimodal trial index for subject {subject_id}: {error}')
+
+    def _cache_eeg(self, subject_id: int) -> None:
+        if subject_id in self._eeg_processed_cache:
+            return
+        cnt, markers, info = self.eeg_loader.load_subject_data(subject_id, 'eeg')
+        channel_names = list(info['clab'])
+        channel_mask = get_eeg_channel_mask(channel_names, exclude_eog=self.exclude_eog)
+        filtered_cnt = cnt[:, channel_mask].astype(np.float32, copy=False)
+        processed_cnt = apply_temporal_filter(
+            filtered_cnt,
+            sample_rate=float(info['fs']),
+            modality='eeg',
+            preprocessing=self.eeg_preprocessing,
+        ).astype(np.float32, copy=False)
+        filtered_info = dict(info)
+        filtered_info['clab'] = [name for index, name in enumerate(channel_names) if channel_mask[index]]
+        filtered_info['original_clab'] = channel_names
+        self._eeg_raw_cache[subject_id] = (filtered_cnt, markers, filtered_info)
+        self._eeg_processed_cache[subject_id] = (processed_cnt, markers, filtered_info)
+        self._eeg_session_stats_cache[subject_id] = (
+            processed_cnt.mean(axis=0).astype(np.float32, copy=False),
+            (processed_cnt.std(axis=0) + 1e-8).astype(np.float32, copy=False),
+        )
+
+    def _cache_fnirs(self, subject_id: int) -> None:
+        if subject_id in self._fnirs_processed_cache:
+            return
+        cnt, markers, info = self.fnirs_loader.load_subject_data(subject_id, 'fnirs')
+        filtered_cnt = cnt.astype(np.float32, copy=False)
+        processed_cnt = apply_temporal_filter(
+            filtered_cnt,
+            sample_rate=float(info['fs']),
+            modality='fnirs',
+            preprocessing=self.fnirs_preprocessing,
+        ).astype(np.float32, copy=False)
+        filtered_info = dict(info)
+        filtered_info['original_clab'] = list(info['clab'])
+        self._fnirs_raw_cache[subject_id] = (filtered_cnt, markers, filtered_info)
+        self._fnirs_processed_cache[subject_id] = (processed_cnt, markers, filtered_info)
+        self._fnirs_session_stats_cache[subject_id] = (
+            processed_cnt.mean(axis=0).astype(np.float32, copy=False),
+            (processed_cnt.std(axis=0) + 1e-8).astype(np.float32, copy=False),
+        )
+
+    def _extract_window(self, cnt: np.ndarray, start: int, end: int, target_samples: int) -> np.ndarray:
+        if start < 0:
+            start = 0
+            end = target_samples
+        if end > cnt.shape[0]:
+            end = cnt.shape[0]
+            start = max(0, end - target_samples)
+        window = cnt[start:end, :]
+        if window.shape[0] < target_samples:
+            pad_size = target_samples - window.shape[0]
+            window = np.pad(window, ((0, pad_size), (0, 0)), mode='constant')
+        return window.T
+
+    def __len__(self) -> int:
+        return len(self.trials)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        trial = self.trials[idx]
+        self._cache_eeg(trial.subject_id)
+        self._cache_fnirs(trial.subject_id)
+        eeg_cnt, _, eeg_info = self._eeg_processed_cache[trial.subject_id]
+        fnirs_cnt, _, fnirs_info = self._fnirs_processed_cache[trial.subject_id]
+        eeg_window_samples = int(round(self.window_duration_s * float(eeg_info['fs'])))
+        fnirs_window_samples = int(round(self.window_duration_s * float(fnirs_info['fs'])))
+        eeg_window = self._extract_window(eeg_cnt, trial.eeg_start_sample, trial.eeg_end_sample, eeg_window_samples)
+        fnirs_window = self._extract_window(fnirs_cnt, trial.nirs_start_sample, trial.nirs_end_sample, fnirs_window_samples)
+
+        normalization_mode = self.normalization_mode if self.normalize else 'none'
+        if normalization_mode == 'session':
+            eeg_mean, eeg_std = self._eeg_session_stats_cache[trial.subject_id]
+            fnirs_mean, fnirs_std = self._fnirs_session_stats_cache[trial.subject_id]
+            eeg_window = normalize_window(eeg_window, 'session', eeg_mean, eeg_std)
+            fnirs_window = normalize_window(fnirs_window, 'session', fnirs_mean, fnirs_std)
+        elif normalization_mode == 'window':
+            eeg_window = normalize_window(eeg_window, 'window')
+            fnirs_window = normalize_window(fnirs_window, 'window')
+
+        return {
+            'eeg': torch.from_numpy(eeg_window).float(),
+            'fnirs': torch.from_numpy(fnirs_window).float(),
+            'label': torch.tensor(trial.label, dtype=torch.long),
+            'subject_id': trial.subject_id,
+            'session_idx': trial.session_idx,
+            'trial_idx': trial.trial_idx,
+        }
+
+    def get_eeg_channel_names(self) -> List[str]:
+        if not self.trials:
+            return []
+        self._cache_eeg(self.trials[0].subject_id)
+        _, _, info = self._eeg_processed_cache[self.trials[0].subject_id]
+        return list(info['clab'])
+
+    def get_fnirs_channel_names(self) -> List[str]:
+        if not self.trials:
+            return []
+        self._cache_fnirs(self.trials[0].subject_id)
+        _, _, info = self._fnirs_processed_cache[self.trials[0].subject_id]
+        return list(info['clab'])
+
+    def get_num_eeg_channels(self) -> int:
+        return len(self.get_eeg_channel_names())
+
+    def get_num_fnirs_channels(self) -> int:
+        return len(self.get_fnirs_channel_names())
+
+    def get_eeg_sample_rate(self) -> float:
+        if not self.trials:
+            return 0.0
+        self._cache_eeg(self.trials[0].subject_id)
+        _, _, info = self._eeg_processed_cache[self.trials[0].subject_id]
+        return float(info['fs'])
+
+    def get_fnirs_sample_rate(self) -> float:
+        if not self.trials:
+            return 0.0
+        self._cache_fnirs(self.trials[0].subject_id)
+        _, _, info = self._fnirs_processed_cache[self.trials[0].subject_id]
         return float(info['fs'])

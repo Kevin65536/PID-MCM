@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.utils.logger import ExperimentLogger
 from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
-from src.data.eeg_fnirs_dataset import EEGfNIRSDataset
+from src.data import create_configured_dataloader
 from src.metrics.reconstruction import (
     compute_band_power_loss,
     compute_mae,
@@ -316,42 +316,7 @@ def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
 
 def create_dataloader(config: dict, split: str) -> DataLoader:
     """Create dataloader for specified split."""
-    data_cfg = config['data']
-    normalize, normalization_mode = resolve_normalization_config(data_cfg)
-    
-    if split == 'train':
-        subjects = data_cfg['split']['train_subjects']
-        shuffle = True
-    elif split == 'val':
-        subjects = data_cfg['split']['val_subjects']
-        shuffle = False
-    else:
-        subjects = data_cfg['split']['test_subjects']
-        shuffle = False
-    
-    dataset = EEGfNIRSDataset(
-        data_root=data_cfg['data_root'],
-        modality=data_cfg['modality'],
-        subject_ids=subjects,
-        task=data_cfg.get('task', 'motor_imagery'),
-        window_samples=data_cfg['window']['length'],
-        window_offset_ms=data_cfg['window'].get('offset_ms', 0),
-        normalize=normalize,
-        normalization_mode=normalization_mode,
-        preprocessing=data_cfg.get('preprocessing', {}),
-        exclude_eog=data_cfg.get('exclude_eog', False),
-        hbo_only=data_cfg.get('hbo_only', False),
-        hbr_only=data_cfg.get('hbr_only', False),
-    )
-    
-    return DataLoader(
-        dataset,
-        batch_size=config['training']['batch_size'],
-        shuffle=shuffle,
-        num_workers=data_cfg.get('num_workers', 0),
-        pin_memory=True,
-        drop_last=split == 'train',
-    )
+    return create_configured_dataloader(config, split)
 
 
 # ============================================================================

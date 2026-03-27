@@ -25,6 +25,14 @@ from .signal_visualization import (
     visualize_multimodal_dataset_sample,
     visualize_synchronized_filtered_sample,
 )
+from .factory import (
+    create_configured_dataloader,
+    create_configured_multimodal_dataloaders,
+    create_continuous_visualization_dataset,
+    create_multimodal_window_dataset,
+    create_unimodal_window_dataset,
+    resolve_normalization_config,
+)
 from .registry import (
     DatasetRegistration,
     DocumentationReference,
@@ -39,6 +47,10 @@ from .registry import (
 from .simultaneous_eeg_nirs_dataset import (
     SimultaneousCognitiveLoader,
     SimultaneousContinuousDataset,
+    SimultaneousEEGfNIRSDataset,
+    SimultaneousMultiModalDataset,
+    is_deprecated_task,
+    require_supported_task,
 )
 from .synthetic_timeseries import PIDTimeSeriesDataset
 from .validation import (
@@ -69,6 +81,12 @@ __all__ = [
     'visualize_filtered_dataset_sample',
     'visualize_multimodal_dataset_sample',
     'visualize_synchronized_filtered_sample',
+    'create_unimodal_window_dataset',
+    'create_multimodal_window_dataset',
+    'create_configured_dataloader',
+    'create_configured_multimodal_dataloaders',
+    'create_continuous_visualization_dataset',
+    'resolve_normalization_config',
     'DatasetRegistration',
     'DocumentationReference',
     'list_registered_datasets',
@@ -80,6 +98,10 @@ __all__ = [
     'require_dataset_loader',
     'SimultaneousCognitiveLoader',
     'SimultaneousContinuousDataset',
+    'SimultaneousEEGfNIRSDataset',
+    'SimultaneousMultiModalDataset',
+    'is_deprecated_task',
+    'require_supported_task',
     'build_dataset_validation_plan',
     'build_all_validation_plans',
     'render_validation_plan_markdown',

@@ -180,7 +180,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         fnirs_channels=36,
         default_task='nback',
         sync_strategy='shared_parallel_port_markers',
-        loader_status='planned',
+        loader_status='implemented',
         documentation=(
             DocumentationReference(
                 title='Original MATLAB description',
@@ -201,7 +201,8 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'Task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.',
             'EEG uses BBCI-like cnt/mrk structs while fNIRS stores oxy/deoxy under nested fields.',
-            'A low-level continuous loader exists in src/data/simultaneous_eeg_nirs_dataset.py, but full multimodal trial alignment is still task-dependent.',
+            'Training-ready loaders now cover single-modality windows plus task-dependent multimodal segmentation for n-back and WG.',
+            'DSR is deprecated in this repository and excluded from training-ready loaders until a stable alignment/use case is defined.',
         ),
     ),
 }
