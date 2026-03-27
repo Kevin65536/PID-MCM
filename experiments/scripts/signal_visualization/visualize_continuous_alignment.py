@@ -30,7 +30,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data import EEGfNIRSDataset, load_experiment_config, require_dataset_loader
+from src.data import create_continuous_visualization_dataset, load_experiment_config, require_dataset_loader
 
 
 DEFAULT_CONFIG = 'phase0plus/shared_labram_lag_warmstart_eeg_fnirs_30s_2s_cb512.yaml'
@@ -82,36 +82,35 @@ def resolve_sample_rate_from_config(data_cfg: Dict[str, Any], modality: str, fal
     return float(fallback)
 
 
-def infer_window_samples(data_cfg: Dict[str, Any], modality: str) -> int:
-    window_cfg = data_cfg.get('window', {})
-    if isinstance(window_cfg.get('length'), int):
-        return int(window_cfg['length'])
-
-    duration_s = float(window_cfg.get('duration_s', 1.0))
-    registry_info = data_cfg.get('dataset_registry', {})
-    fallback = registry_info.get('eeg_sample_rate_hz' if modality == 'eeg' else 'fnirs_sample_rate_hz') or (200.0 if modality == 'eeg' else 10.0)
-    sample_rate = resolve_sample_rate_from_config(data_cfg, modality, fallback)
-    return max(1, int(round(duration_s * sample_rate)))
-
-
-def build_dataset(config: Dict[str, Any], modality: str, subject_id: int) -> EEGfNIRSDataset:
+def build_dataset(config: Dict[str, Any], modality: str, subject_id: int):
     data_cfg = config['data']
     normalize, normalization_mode = resolve_normalization_config(data_cfg)
-    preprocessing_key = 'eeg_preprocessing' if modality == 'eeg' else 'fnirs_preprocessing'
-    return EEGfNIRSDataset(
-        data_root=data_cfg['data_root'],
-        subject_ids=[subject_id],
-        task=data_cfg.get('task', 'motor_imagery'),
-        modality=modality,
-        window_samples=infer_window_samples(data_cfg, modality),
-        window_offset_ms=float(data_cfg.get('window', {}).get('offset_ms', 0)),
+    return create_continuous_visualization_dataset(
+        data_cfg,
+        modality,
+        subject_id,
         normalize=normalize,
         normalization_mode=normalization_mode,
-        preprocessing=data_cfg.get(preprocessing_key, data_cfg.get('preprocessing', {})),
-        exclude_eog=data_cfg.get('exclude_eog', True),
-        hbo_only=data_cfg.get('hbo_only', True),
-        hbr_only=data_cfg.get('hbr_only', False),
     )
+
+
+def get_visualization_markers(dataset: Any, subject_id: int, session_idx: int) -> Dict[str, Any]:
+    if hasattr(dataset, 'get_session_segmentation_markers'):
+        return dataset.get_session_segmentation_markers(subject_id, session_idx)
+    return dataset.get_session_markers(subject_id, session_idx)
+
+
+def infer_region_boundaries(regions: List[Dict[str, Any]], total_duration_s: float) -> List[Dict[str, Any]]:
+    if not regions:
+        return []
+    resolved: List[Dict[str, Any]] = []
+    for index, region in enumerate(regions):
+        next_onset_s = float(regions[index + 1]['onset_s']) if index + 1 < len(regions) else float(total_duration_s)
+        updated = dict(region)
+        updated['start_s'] = float(region.get('start_s', region['onset_s']))
+        updated['end_s'] = max(updated['start_s'], next_onset_s)
+        resolved.append(updated)
+    return resolved
 
 
 def parse_channel_spec(spec: str) -> List[str]:
@@ -164,9 +163,16 @@ def align_time_axis(
 
 def extract_event_info(markers: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     event_times_s = np.asarray(markers['time'], dtype=np.float64) / 1000.0
-    labels = np.argmax(np.asarray(markers['y']), axis=0).astype(int)
     class_names_raw = markers.get('className')
     class_names = [str(name) for name in class_names_raw] if class_names_raw is not None else []
+
+    if class_names and len(class_names) == len(event_times_s):
+        unique_names = list(dict.fromkeys(class_names))
+        name_to_index = {name: index for index, name in enumerate(unique_names)}
+        labels = np.asarray([name_to_index[name] for name in class_names], dtype=int)
+        return event_times_s, labels, unique_names
+
+    labels = np.argmax(np.asarray(markers['y']), axis=0).astype(int)
     return event_times_s, labels, class_names
 
 
@@ -227,8 +233,26 @@ def plot_event_track(
     eeg_labels: np.ndarray,
     eeg_class_names: Sequence[str],
     task_duration_s: float,
+    eeg_regions: Optional[Sequence[Dict[str, Any]]] = None,
+    nirs_regions: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> None:
-    if eeg_events_s.size:
+    if eeg_regions:
+        for region in eeg_regions:
+            onset_s = float(region['onset_s'])
+            label_name = str(region.get('label_name', region.get('label', 'segment')))
+            ax.axvline(onset_s, color='#34495E', linewidth=0.8, alpha=0.3)
+            ax.axvspan(float(region['start_s']), float(region['end_s']), ymin=0.56, ymax=0.88, color='#A9CCE3', alpha=0.18)
+            ax.text(
+                onset_s,
+                1.07,
+                label_name,
+                rotation=90,
+                va='bottom',
+                ha='center',
+                fontsize=8,
+                color='#2C3E50',
+            )
+    elif eeg_events_s.size:
         for onset_s, label in zip(eeg_events_s, eeg_labels):
             ax.axvline(float(onset_s), color='#34495E', linewidth=0.8, alpha=0.3)
             ax.axvspan(float(onset_s), float(onset_s) + task_duration_s, color='#BDC3C7', alpha=0.12)
@@ -243,6 +267,10 @@ def plot_event_track(
                 color='#2C3E50',
             )
 
+    if nirs_regions:
+        for region in nirs_regions:
+            ax.axvspan(float(region['start_s']), float(region['end_s']), ymin=0.12, ymax=0.44, color='#F5B7B1', alpha=0.18)
+
     if eeg_events_s.size:
         ax.scatter(eeg_events_s, np.full_like(eeg_events_s, 0.7), color='#1F77B4', s=26, label='EEG onset')
     if nirs_events_s.size:
@@ -252,7 +280,9 @@ def plot_event_track(
     ax.set_yticklabels(['fNIRS', 'EEG'])
     ax.set_ylim(0.0, 1.15)
     ax.grid(True, axis='x', alpha=0.25)
-    ax.legend(loc='upper right')
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(loc='upper right')
     ax.set_title('Aligned event timeline')
 
 
@@ -303,6 +333,8 @@ def create_alignment_figure(
     eeg_labels: np.ndarray,
     eeg_class_names: Sequence[str],
     task_duration_s: float,
+    eeg_regions: Optional[Sequence[Dict[str, Any]]],
+    nirs_regions: Optional[Sequence[Dict[str, Any]]],
     output_path: Path,
     subject_id: int,
     session_idx: int,
@@ -316,7 +348,16 @@ def create_alignment_figure(
         gridspec_kw={'height_ratios': [1.0, 3.2, 3.2]},
     )
 
-    plot_event_track(axes[0], eeg_events_s, nirs_events_s, eeg_labels, eeg_class_names, task_duration_s)
+    plot_event_track(
+        axes[0],
+        eeg_events_s,
+        nirs_events_s,
+        eeg_labels,
+        eeg_class_names,
+        task_duration_s,
+        eeg_regions=eeg_regions,
+        nirs_regions=nirs_regions,
+    )
 
     plot_stacked_signals(
         axes[1],
@@ -339,11 +380,24 @@ def create_alignment_figure(
         ylabel='Channels',
     )
 
-    for axis in axes[1:]:
-        for event_s in eeg_events_s:
-            axis.axvline(float(event_s), color='#566573', linewidth=0.7, alpha=0.25)
+    for event_s in eeg_events_s:
+        axes[1].axvline(float(event_s), color='#566573', linewidth=0.7, alpha=0.25)
+    for event_s in nirs_events_s:
+        axes[2].axvline(float(event_s), color='#C0392B', linewidth=0.7, alpha=0.25)
+
+    if eeg_regions:
+        for region in eeg_regions:
+            axes[1].axvspan(float(region['start_s']), float(region['end_s']), color='#A9CCE3', alpha=0.18)
+    else:
         for onset_s in eeg_events_s:
-            axis.axvspan(float(onset_s), float(onset_s) + task_duration_s, color='#D5DBDB', alpha=0.10)
+            axes[1].axvspan(float(onset_s), float(onset_s) + task_duration_s, color='#A9CCE3', alpha=0.18)
+
+    if nirs_regions:
+        for region in nirs_regions:
+            axes[2].axvspan(float(region['start_s']), float(region['end_s']), color='#F5B7B1', alpha=0.18)
+    else:
+        for onset_s in nirs_events_s:
+            axes[2].axvspan(float(onset_s), float(onset_s) + task_duration_s, color='#F5B7B1', alpha=0.18)
 
     axes[2].set_xlabel('Aligned time (s)')
 
@@ -397,18 +451,30 @@ def create_local_zoom_figure(
     zoom_pre_s: float,
     zoom_post_s: float,
     task_duration_s: float,
+    eeg_regions: Optional[Sequence[Dict[str, Any]]],
+    nirs_regions: Optional[Sequence[Dict[str, Any]]],
     output_path: Path,
     subject_id: int,
     session_idx: int,
 ) -> Dict[str, Any]:
-    if eeg_events_s.size == 0:
+    eeg_focus_regions = list(eeg_regions or [])
+    nirs_focus_regions = list(nirs_regions or [])
+    if eeg_focus_regions:
+        focus_trial_idx = int(np.clip(focus_trial_idx, 0, len(eeg_focus_regions) - 1))
+        focus_eeg_region = eeg_focus_regions[focus_trial_idx]
+        focus_onset_s = float(focus_eeg_region['onset_s'])
+        focus_label = int(focus_eeg_region.get('label', 0))
+        focus_label_name = str(focus_eeg_region.get('label_name', focus_label))
+        task_duration_s = float(focus_eeg_region['end_s']) - float(focus_eeg_region['start_s'])
+    elif eeg_events_s.size == 0:
         raise ValueError('No EEG events are available for local zoom visualization.')
+    else:
+        focus_trial_idx = int(np.clip(focus_trial_idx, 0, len(eeg_events_s) - 1))
+        focus_onset_s = float(eeg_events_s[focus_trial_idx])
+        focus_label = int(eeg_labels[focus_trial_idx])
+        focus_label_name = label_name_for_index(focus_label, eeg_class_names)
 
-    focus_trial_idx = int(np.clip(focus_trial_idx, 0, len(eeg_events_s) - 1))
-    focus_onset_s = float(eeg_events_s[focus_trial_idx])
-    focus_label = int(eeg_labels[focus_trial_idx])
-    focus_label_name = label_name_for_index(focus_label, eeg_class_names)
-
+    focus_nirs_region = nirs_focus_regions[min(focus_trial_idx, len(nirs_focus_regions) - 1)] if nirs_focus_regions else None
     nirs_focus_onset_s = float(nirs_events_s[min(focus_trial_idx, len(nirs_events_s) - 1)]) if nirs_events_s.size else None
     window_start_s = focus_onset_s - float(zoom_pre_s)
     window_end_s = focus_onset_s + float(zoom_post_s)
@@ -433,7 +499,30 @@ def create_local_zoom_figure(
     else:
         nirs_zoom_events = np.asarray([], dtype=np.float64)
 
-    plot_event_track(axes[0], eeg_zoom_events, nirs_zoom_events, eeg_zoom_labels, eeg_class_names, task_duration_s)
+    zoom_eeg_regions = None
+    if eeg_focus_regions:
+        zoom_eeg_regions = [
+            region for region in eeg_focus_regions
+            if float(region['end_s']) >= window_start_s and float(region['start_s']) <= window_end_s
+        ]
+
+    zoom_nirs_regions = None
+    if nirs_focus_regions:
+        zoom_nirs_regions = [
+            region for region in nirs_focus_regions
+            if float(region['end_s']) >= window_start_s and float(region['start_s']) <= window_end_s
+        ]
+
+    plot_event_track(
+        axes[0],
+        eeg_zoom_events,
+        nirs_zoom_events,
+        eeg_zoom_labels,
+        eeg_class_names,
+        task_duration_s,
+        eeg_regions=zoom_eeg_regions,
+        nirs_regions=zoom_nirs_regions,
+    )
     axes[0].axvline(focus_onset_s, color='#111111', linewidth=1.2, linestyle='--', alpha=0.8)
 
     plot_stacked_signals(
@@ -459,9 +548,18 @@ def create_local_zoom_figure(
 
     for axis in axes[1:]:
         axis.axvline(focus_onset_s, color='#111111', linewidth=1.2, linestyle='--', alpha=0.8)
-        axis.axvspan(focus_onset_s, focus_onset_s + task_duration_s, color='#D5DBDB', alpha=0.14)
-        if nirs_focus_onset_s is not None:
-            axis.axvline(nirs_focus_onset_s, color='#C0392B', linewidth=1.0, linestyle=':', alpha=0.7)
+    if eeg_focus_regions:
+        axes[1].axvspan(float(focus_eeg_region['start_s']), float(focus_eeg_region['end_s']), color='#A9CCE3', alpha=0.22)
+    else:
+        axes[1].axvspan(focus_onset_s, focus_onset_s + task_duration_s, color='#A9CCE3', alpha=0.22)
+
+    if focus_nirs_region is not None:
+        axes[2].axvspan(float(focus_nirs_region['start_s']), float(focus_nirs_region['end_s']), color='#F5B7B1', alpha=0.22)
+    elif nirs_focus_onset_s is not None:
+        axes[2].axvspan(nirs_focus_onset_s, nirs_focus_onset_s + task_duration_s, color='#F5B7B1', alpha=0.22)
+
+    if nirs_focus_onset_s is not None:
+        axes[2].axvline(nirs_focus_onset_s, color='#C0392B', linewidth=1.0, linestyle=':', alpha=0.7)
 
     axes[2].set_xlabel('Aligned time (s)')
     fig.suptitle(
@@ -480,6 +578,10 @@ def create_local_zoom_figure(
         'focus_trial_idx': focus_trial_idx,
         'focus_event_time_s': focus_onset_s,
         'focus_fnirs_event_time_s': nirs_focus_onset_s,
+        'focus_eeg_region_start_s': None if not eeg_focus_regions else float(focus_eeg_region['start_s']),
+        'focus_eeg_region_end_s': None if not eeg_focus_regions else float(focus_eeg_region['end_s']),
+        'focus_fnirs_region_start_s': None if focus_nirs_region is None else float(focus_nirs_region['start_s']),
+        'focus_fnirs_region_end_s': None if focus_nirs_region is None else float(focus_nirs_region['end_s']),
         'focus_label_index': focus_label,
         'focus_label_name': focus_label_name,
         'window_start_s': window_start_s,
@@ -493,12 +595,6 @@ def main() -> None:
     data_cfg = config['data']
     require_dataset_loader(data_cfg['dataset'])
 
-    if data_cfg.get('dataset') != 'eeg_fnirs_single_trial':
-        raise NotImplementedError(
-            'Continuous alignment visualization currently supports only eeg_fnirs_single_trial. '
-            'Extend this script after the corresponding dataset adapter is implemented.'
-        )
-
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     output_dir = (Path(args.output_dir) if args.output_dir else PROJECT_ROOT / 'logs' / 'continuous_alignment' / timestamp).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -509,8 +605,8 @@ def main() -> None:
     eeg_signal = eeg_dataset.get_session_continuous_data(args.subject_id, args.session_idx, processed=False, normalized=False)
     nirs_signal = nirs_dataset.get_session_continuous_data(args.subject_id, args.session_idx, processed=False, normalized=False)
 
-    eeg_markers = eeg_dataset.get_session_markers(args.subject_id, args.session_idx)
-    nirs_markers = nirs_dataset.get_session_markers(args.subject_id, args.session_idx)
+    eeg_markers = get_visualization_markers(eeg_dataset, args.subject_id, args.session_idx)
+    nirs_markers = get_visualization_markers(nirs_dataset, args.subject_id, args.session_idx)
 
     eeg_event_times_s, eeg_labels, eeg_class_names = extract_event_info(eeg_markers)
     nirs_event_times_s, nirs_labels, nirs_class_names = extract_event_info(nirs_markers)
@@ -535,6 +631,31 @@ def main() -> None:
     nirs_channel_names = nirs_dataset.get_channel_names()
     eeg_channel_indices = resolve_channel_indices(eeg_channel_names, args.eeg_channels, DEFAULT_EEG_CHANNELS)
     nirs_channel_indices = resolve_channel_indices(nirs_channel_names, args.fnirs_channels, DEFAULT_FNIRS_CHANNELS)
+    total_duration_s = max(
+        float(eeg_signal.shape[1]) / float(max(eeg_dataset.get_sample_rate(), 1e-8)),
+        float(nirs_signal.shape[1]) / float(max(nirs_dataset.get_sample_rate(), 1e-8)),
+    )
+    eeg_regions = eeg_dataset.get_session_trial_regions(
+        args.subject_id,
+        args.session_idx,
+        window_duration_s=float(args.task_duration_s),
+        offset_ms=0.0,
+    )
+    nirs_regions = nirs_dataset.get_session_trial_regions(
+        args.subject_id,
+        args.session_idx,
+        window_duration_s=float(args.task_duration_s),
+        offset_ms=0.0,
+    )
+    if data_cfg['dataset'] == 'simultaneous_eeg_nirs':
+        eeg_regions = infer_region_boundaries(
+            eeg_regions,
+            float(eeg_signal.shape[1]) / float(max(eeg_dataset.get_sample_rate(), 1e-8)),
+        )
+        nirs_regions = infer_region_boundaries(
+            nirs_regions,
+            float(nirs_signal.shape[1]) / float(max(nirs_dataset.get_sample_rate(), 1e-8)),
+        )
 
     sync_summary = build_sync_summary(
         eeg_event_times_s=eeg_events_aligned_s,
@@ -563,6 +684,8 @@ def main() -> None:
         eeg_labels=eeg_labels,
         eeg_class_names=eeg_class_names,
         task_duration_s=float(args.task_duration_s),
+        eeg_regions=eeg_regions,
+        nirs_regions=nirs_regions,
         output_path=figure_path,
         subject_id=args.subject_id,
         session_idx=args.session_idx,
@@ -587,6 +710,8 @@ def main() -> None:
         zoom_pre_s=float(args.zoom_pre_s),
         zoom_post_s=float(args.zoom_post_s),
         task_duration_s=float(args.task_duration_s),
+        eeg_regions=eeg_regions,
+        nirs_regions=nirs_regions,
         output_path=local_figure_path,
         subject_id=args.subject_id,
         session_idx=args.session_idx,
@@ -615,6 +740,10 @@ def main() -> None:
         'selected_fnirs_channels': [nirs_channel_names[idx] for idx in nirs_channel_indices],
         'eeg_sample_rate_hz': float(eeg_dataset.get_sample_rate()),
         'fnirs_sample_rate_hz': float(nirs_dataset.get_sample_rate()),
+        'eeg_segmentation_mode': getattr(eeg_dataset, 'segmentation_mode', 'trial'),
+        'fnirs_segmentation_mode': getattr(nirs_dataset, 'segmentation_mode', 'trial'),
+        'num_visualized_eeg_segments': len(eeg_regions),
+        'num_visualized_fnirs_segments': len(nirs_regions),
         'local_zoom': local_summary,
         'sync_summary': sync_summary,
     }
