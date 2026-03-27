@@ -21,7 +21,12 @@ The current canonical ids are:
 - visual_cognitive_motivation
 - simultaneous_eeg_nirs
 
-Only eeg_fnirs_single_trial is loader-ready today. The other three are now registered with explicit loader_status=planned so future adapters can plug into a stable interface instead of inventing new config keys.
+Loader-ready datasets now include:
+
+- eeg_fnirs_single_trial
+- simultaneous_eeg_nirs
+
+The remaining two datasets are still registered ahead of implementation so future adapters can plug into a stable interface instead of inventing new config keys.
 
 ## Shared config interface
 
@@ -43,6 +48,13 @@ Normalized data config guarantees:
 This shared interface is now used by:
 
 - src/utils/logger.py
+- experiments/scripts/train_downstream.py
+
+The actual dataset object creation path is now also unified in:
+
+- src/data/factory.py
+- experiments/scripts/train_tokenizer.py
+- experiments/scripts/train_shared_tokenizer.py
 - experiments/scripts/train_downstream.py
 
 Because train_tokenizer.py and train_shared_tokenizer.py already load configs through ExperimentLogger, they also inherit the shared registry interface automatically.
@@ -75,8 +87,12 @@ The validation plan below was derived from the original dataset documents under 
 - Original MATLAB and BrainVision/NIRx descriptions confirm synchronized trigger delivery via parallel port.
 - EEG and fNIRS task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.
 - EEG markers and fNIRS markers use different numeric codes and need dataset-specific mapping.
-- Current adapter progress: a low-level continuous loader is available in src/data/simultaneous_eeg_nirs_dataset.py. Early smoke tests show that n-back and DSR cannot yet be treated like Single-Trial because their fNIRS markers are session-level while EEG markers are trial-level. WG is structurally closer, but still needs task-specific onset alignment logic before it can be promoted to a full multimodal training dataset.
+- Current adapter progress: src/data/simultaneous_eeg_nirs_dataset.py now exposes training-ready single-modality window datasets and task-dependent multimodal datasets through the shared factory in src/data/factory.py.
 - Updated alignment conclusion for n-back and DSR: the correct first step is session-level alignment, not trial-level alignment. For subject VP001, n-back session labels match exactly across EEG and fNIRS with three stable offset blocks of 9 sessions each. DSR also aligns at session level after skipping one extra EEG session marker, producing three stable offset blocks of 6, 5, and 6 sessions. This supports a blockwise session-alignment strategy derived from the original session-folder organization in the dataset documentation.
+- Updated usage conclusion: DSR is now explicitly deprecated in this repository and is excluded from training-ready loaders and future adaptation checks until a stable scientific use case is defined.
+- Updated segmentation conclusion:
+	- n-back uses trial-level segmentation for EEG-only loading, session-level segmentation for fNIRS-only loading, and session-level segmentation for multimodal loading.
+	- WG uses trial-level segmentation for EEG, fNIRS, and multimodal loading.
 
 ## Validation strategy
 
@@ -175,7 +191,11 @@ Purpose:
 Current scope:
 
 - implemented for eeg_fnirs_single_trial
-- intentionally raises NotImplementedError for registered datasets whose loaders are not implemented yet
+- implemented for simultaneous_eeg_nirs
+- for simultaneous_eeg_nirs, the script now visualizes task segmentation directly:
+	- n-back: session-level segmentation regions
+	- WG: trial-level segmentation regions
+	- DSR: intentionally unsupported because the task is deprecated
 
 Example:
 
@@ -192,5 +212,11 @@ Expected output:
 - one PNG figure under logs/continuous_alignment/... showing event track plus stacked raw EEG and fNIRS traces
 - one local PNG figure under logs/continuous_alignment/... showing a zoomed view around the selected event
 - one summary.json file containing selected channels, sample rates, initial offset, residual event drift, and label agreement
+
+Factory smoke-test status:
+
+- unified unimodal Simultaneous WG dataset: subject VP001 smoke-tested successfully
+- unified multimodal Simultaneous WG dataset: subject VP001 smoke-tested successfully with 60 aligned segments
+- continuous alignment visualization for Single-Trial still passes
 
 For future dataset adapters, the visual inspection stage is not optional: each newly adapted dataset should pass both the global continuous plot and the local event zoom inspection before it is considered loader-ready.
