@@ -163,6 +163,15 @@ def align_time_axis(
 
 def extract_event_info(markers: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     event_times_s = np.asarray(markers['time'], dtype=np.float64) / 1000.0
+    event_class_names_raw = markers.get('event_class_names')
+    if event_class_names_raw is not None:
+        event_class_names = [str(name) for name in event_class_names_raw]
+        if len(event_class_names) == len(event_times_s):
+            unique_names = list(dict.fromkeys(event_class_names))
+            name_to_index = {name: index for index, name in enumerate(unique_names)}
+            labels = np.asarray([name_to_index[name] for name in event_class_names], dtype=int)
+            return event_times_s, labels, unique_names
+
     class_names_raw = markers.get('className')
     class_names = [str(name) for name in class_names_raw] if class_names_raw is not None else []
 
@@ -669,6 +678,16 @@ def main() -> None:
         nirs_anchor_s=nirs_anchor_s,
     )
 
+    session_alignment_summary = None
+    if (
+        data_cfg['dataset'] == 'simultaneous_eeg_nirs'
+        and getattr(eeg_dataset, 'segmentation_mode', None) == 'session'
+        and getattr(nirs_dataset, 'segmentation_mode', None) == 'session'
+        and hasattr(eeg_dataset, 'loader')
+        and hasattr(eeg_dataset.loader, 'align_session_markers')
+    ):
+        session_alignment_summary = eeg_dataset.loader.align_session_markers(args.subject_id)
+
     figure_path = output_dir / f'subject{args.subject_id}_session{args.session_idx}_continuous_alignment.png'
     create_alignment_figure(
         eeg_time_axis=eeg_time_axis,
@@ -747,6 +766,8 @@ def main() -> None:
         'local_zoom': local_summary,
         'sync_summary': sync_summary,
     }
+    if session_alignment_summary is not None:
+        summary['session_alignment_summary'] = session_alignment_summary
     summary_path = output_dir / 'summary.json'
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
 

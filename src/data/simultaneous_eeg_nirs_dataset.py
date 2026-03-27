@@ -77,6 +77,16 @@ SESSION_MARKER_CODES: Dict[str, Dict[str, Dict[int, str]]] = {
 }
 
 
+ALIGNMENT_PATTERN_CASES: Dict[str, str] = {
+    'no_common_events': 'No common EEG/fNIRS events were available for alignment.',
+    'stable_fixed_offset': 'All aligned events share one stable offset block.',
+    'piecewise_constant_offset': 'Aligned events form multiple stable offset blocks with step changes between blocks.',
+    'skip_aligned_piecewise_constant_offset': 'A single extra marker was skipped before recovering multiple stable offset blocks.',
+    'continuous_drift': 'Offsets change without stable block boundaries.',
+    'mixed_or_unstable_offset': 'Offsets do not fit a stable fixed or stable blockwise pattern.',
+}
+
+
 def resolve_task_name(task: str) -> str:
     normalized = task.strip().lower().replace('-', '').replace('_', '')
     mapping = {
@@ -184,6 +194,23 @@ def get_session_marker_codebook(task: str, modality: str) -> Dict[int, str]:
     return dict(SESSION_MARKER_CODES.get(task_name, {}).get(modality, {}))
 
 
+def resolve_marker_event_label_names(marker_info: Dict[str, Any]) -> List[str]:
+    event_times = np.asarray(marker_info.get('time', []), dtype=np.float64)
+    if event_times.size == 0:
+        return []
+
+    class_names = [str(name) for name in marker_info.get('className', [])]
+    if len(class_names) == len(event_times):
+        return class_names
+
+    targets = np.asarray(marker_info.get('y'))
+    if targets.ndim != 2 or targets.shape[1] != len(event_times):
+        return [str(index) for index in range(len(event_times))]
+
+    label_indices = np.argmax(targets, axis=0)
+    return [class_names[label] if 0 <= label < len(class_names) else str(label) for label in label_indices]
+
+
 def detect_offset_blocks(residual_ms: np.ndarray, jump_threshold_ms: float = 20_000.0) -> List[Dict[str, Any]]:
     if residual_ms.size == 0:
         return []
@@ -215,6 +242,42 @@ def detect_offset_blocks(residual_ms: np.ndarray, jump_threshold_ms: float = 20_
         }
     )
     return blocks
+
+
+def classify_alignment_pattern(
+    residual_ms: np.ndarray,
+    blocks: Sequence[Dict[str, Any]],
+    skipped_marker_indices: Optional[Dict[str, List[int]]] = None,
+    *,
+    stable_block_std_threshold_ms: float = 100.0,
+) -> Dict[str, Any]:
+    if residual_ms.size == 0:
+        case = 'no_common_events'
+    else:
+        stable_blocks = all(block['offset_std_ms'] <= stable_block_std_threshold_ms for block in blocks)
+        skipped = bool(skipped_marker_indices and any(skipped_marker_indices.values()))
+        if len(blocks) == 1 and stable_blocks:
+            case = 'stable_fixed_offset'
+        elif len(blocks) > 1 and stable_blocks:
+            case = 'skip_aligned_piecewise_constant_offset' if skipped else 'piecewise_constant_offset'
+        elif len(blocks) == 1:
+            case = 'continuous_drift'
+        else:
+            case = 'mixed_or_unstable_offset'
+
+    block_offset_jumps_ms = []
+    for index in range(1, len(blocks)):
+        block_offset_jumps_ms.append(float(blocks[index]['offset_mean_ms'] - blocks[index - 1]['offset_mean_ms']))
+
+    return {
+        'case': case,
+        'description': ALIGNMENT_PATTERN_CASES[case],
+        'num_blocks': int(len(blocks)),
+        'stable_within_blocks': bool(all(block['offset_std_ms'] <= stable_block_std_threshold_ms for block in blocks)),
+        'stable_block_std_threshold_ms': float(stable_block_std_threshold_ms),
+        'block_offset_jumps_ms': block_offset_jumps_ms,
+        'max_abs_residual_ms': float(np.max(np.abs(residual_ms))) if residual_ms.size else None,
+    }
 
 
 def _select_best_skip_alignment(longer: np.ndarray, shorter: np.ndarray) -> Tuple[int, np.ndarray]:
@@ -350,17 +413,21 @@ class SimultaneousCognitiveLoader:
 
         event_desc = np.asarray(event_desc)
         mask = np.isin(event_desc, list(codebook.keys()))
-        session_y = marker_info['y'][:, mask]
         session_time = np.asarray(marker_info['time'], dtype=np.float64)[mask]
         session_desc = event_desc[mask]
 
-        labels = np.argmax(session_y, axis=0) if session_y.size else np.asarray([], dtype=int)
-        class_names = [codebook.get(int(session_desc[index]), str(labels[index])) for index in range(len(session_time))]
+        event_class_names = [codebook.get(int(desc), str(int(desc))) for desc in session_desc.tolist()]
+        class_names = list(dict.fromkeys(event_class_names))
+        class_name_to_index = {name: index for index, name in enumerate(class_names)}
+        session_y = np.zeros((len(class_names), len(session_time)), dtype=np.float32)
+        for event_index, label_name in enumerate(event_class_names):
+            session_y[class_name_to_index[label_name], event_index] = 1.0
 
         return {
             'time': session_time,
             'y': session_y,
             'className': class_names,
+            'event_class_names': event_class_names,
             'event_desc': session_desc,
         }
 
@@ -370,8 +437,8 @@ class SimultaneousCognitiveLoader:
 
         eeg_times = np.asarray(eeg_sessions['time'], dtype=np.float64)
         fnirs_times = np.asarray(fnirs_sessions['time'], dtype=np.float64)
-        eeg_labels = list(eeg_sessions.get('className', []))
-        fnirs_labels = list(fnirs_sessions.get('className', []))
+        eeg_labels = resolve_marker_event_label_names(eeg_sessions)
+        fnirs_labels = resolve_marker_event_label_names(fnirs_sessions)
 
         skipped = {'eeg_indices': [], 'fnirs_indices': []}
         if len(eeg_times) == len(fnirs_times):
@@ -402,6 +469,11 @@ class SimultaneousCognitiveLoader:
 
         residual_ms = aligned_fnirs_times - aligned_eeg_times
         blocks = detect_offset_blocks(residual_ms, jump_threshold_ms=jump_threshold_ms)
+        offset_pattern = classify_alignment_pattern(
+            residual_ms,
+            blocks,
+            skipped_marker_indices=skipped,
+        )
 
         return {
             'task': self.task,
@@ -416,6 +488,7 @@ class SimultaneousCognitiveLoader:
             'residual_std_ms': float(np.std(residual_ms)) if residual_ms.size else None,
             'residual_series_ms': residual_ms.tolist(),
             'offset_blocks': blocks,
+            'offset_pattern': offset_pattern,
         }
 
 
