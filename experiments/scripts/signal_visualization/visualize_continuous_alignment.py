@@ -48,6 +48,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--eeg-channels', default=','.join(DEFAULT_EEG_CHANNELS), help='Comma separated channel names or indices')
     parser.add_argument('--fnirs-channels', default=','.join(DEFAULT_FNIRS_CHANNELS), help='Comma separated channel names or indices')
     parser.add_argument('--max-plot-points', type=int, default=4000, help='Maximum samples rendered per trace after decimation')
+    parser.add_argument('--focus-trial-idx', type=int, default=0, help='Trial index used for local zoom inspection')
+    parser.add_argument('--zoom-pre-s', type=float, default=4.0, help='Seconds shown before the focus event in the local zoom figure')
+    parser.add_argument('--zoom-post-s', type=float, default=12.0, help='Seconds shown after the focus event in the local zoom figure')
     parser.add_argument('--output-dir', default='', help='Optional output directory')
     return parser.parse_args()
 
@@ -361,6 +364,129 @@ def create_alignment_figure(
     plt.close(fig)
 
 
+def crop_time_window(
+    time_axis: np.ndarray,
+    signal: np.ndarray,
+    start_s: float,
+    end_s: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    mask = (time_axis >= float(start_s)) & (time_axis <= float(end_s))
+    if not np.any(mask):
+        nearest_index = int(np.argmin(np.abs(time_axis - ((start_s + end_s) * 0.5))))
+        lo = max(0, nearest_index - 10)
+        hi = min(signal.shape[1], nearest_index + 11)
+        return time_axis[lo:hi], signal[:, lo:hi]
+    return time_axis[mask], signal[:, mask]
+
+
+def create_local_zoom_figure(
+    *,
+    eeg_time_axis: np.ndarray,
+    nirs_time_axis: np.ndarray,
+    eeg_signal: np.ndarray,
+    nirs_signal: np.ndarray,
+    eeg_channel_names: Sequence[str],
+    nirs_channel_names: Sequence[str],
+    eeg_channel_indices: Sequence[int],
+    nirs_channel_indices: Sequence[int],
+    eeg_events_s: np.ndarray,
+    nirs_events_s: np.ndarray,
+    eeg_labels: np.ndarray,
+    eeg_class_names: Sequence[str],
+    focus_trial_idx: int,
+    zoom_pre_s: float,
+    zoom_post_s: float,
+    task_duration_s: float,
+    output_path: Path,
+    subject_id: int,
+    session_idx: int,
+) -> Dict[str, Any]:
+    if eeg_events_s.size == 0:
+        raise ValueError('No EEG events are available for local zoom visualization.')
+
+    focus_trial_idx = int(np.clip(focus_trial_idx, 0, len(eeg_events_s) - 1))
+    focus_onset_s = float(eeg_events_s[focus_trial_idx])
+    focus_label = int(eeg_labels[focus_trial_idx])
+    focus_label_name = label_name_for_index(focus_label, eeg_class_names)
+
+    nirs_focus_onset_s = float(nirs_events_s[min(focus_trial_idx, len(nirs_events_s) - 1)]) if nirs_events_s.size else None
+    window_start_s = focus_onset_s - float(zoom_pre_s)
+    window_end_s = focus_onset_s + float(zoom_post_s)
+
+    eeg_zoom_time, eeg_zoom_signal = crop_time_window(eeg_time_axis, eeg_signal, window_start_s, window_end_s)
+    nirs_zoom_time, nirs_zoom_signal = crop_time_window(nirs_time_axis, nirs_signal, window_start_s, window_end_s)
+
+    fig, axes = plt.subplots(
+        3,
+        1,
+        figsize=(18, 10),
+        sharex=True,
+        gridspec_kw={'height_ratios': [0.9, 2.8, 2.8]},
+    )
+
+    event_mask = (eeg_events_s >= window_start_s) & (eeg_events_s <= window_end_s)
+    eeg_zoom_events = eeg_events_s[event_mask]
+    eeg_zoom_labels = eeg_labels[event_mask]
+    if nirs_events_s.size:
+        nirs_event_mask = (nirs_events_s >= window_start_s) & (nirs_events_s <= window_end_s)
+        nirs_zoom_events = nirs_events_s[nirs_event_mask]
+    else:
+        nirs_zoom_events = np.asarray([], dtype=np.float64)
+
+    plot_event_track(axes[0], eeg_zoom_events, nirs_zoom_events, eeg_zoom_labels, eeg_class_names, task_duration_s)
+    axes[0].axvline(focus_onset_s, color='#111111', linewidth=1.2, linestyle='--', alpha=0.8)
+
+    plot_stacked_signals(
+        axes[1],
+        eeg_zoom_time,
+        eeg_zoom_signal,
+        eeg_channel_names,
+        eeg_channel_indices,
+        color='#1F4E79',
+        title='EEG raw local zoom',
+        ylabel='Channels',
+    )
+    plot_stacked_signals(
+        axes[2],
+        nirs_zoom_time,
+        nirs_zoom_signal,
+        nirs_channel_names,
+        nirs_channel_indices,
+        color='#7A2E1F',
+        title='fNIRS raw local zoom',
+        ylabel='Channels',
+    )
+
+    for axis in axes[1:]:
+        axis.axvline(focus_onset_s, color='#111111', linewidth=1.2, linestyle='--', alpha=0.8)
+        axis.axvspan(focus_onset_s, focus_onset_s + task_duration_s, color='#D5DBDB', alpha=0.14)
+        if nirs_focus_onset_s is not None:
+            axis.axvline(nirs_focus_onset_s, color='#C0392B', linewidth=1.0, linestyle=':', alpha=0.7)
+
+    axes[2].set_xlabel('Aligned time (s)')
+    fig.suptitle(
+        (
+            f'Subject {subject_id} | session {session_idx} | local alignment zoom around trial {focus_trial_idx}\n'
+            f'Focus label: {focus_label_name} | window: [{window_start_s:.2f}, {window_end_s:.2f}] s'
+        ),
+        fontsize=14,
+        fontweight='bold',
+    )
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.95])
+    fig.savefig(output_path, dpi=170, bbox_inches='tight')
+    plt.close(fig)
+
+    return {
+        'focus_trial_idx': focus_trial_idx,
+        'focus_event_time_s': focus_onset_s,
+        'focus_fnirs_event_time_s': nirs_focus_onset_s,
+        'focus_label_index': focus_label,
+        'focus_label_name': focus_label_name,
+        'window_start_s': window_start_s,
+        'window_end_s': window_end_s,
+    }
+
+
 def main() -> None:
     args = parse_args()
     config = load_experiment_config(args.config)
@@ -443,10 +569,38 @@ def main() -> None:
         sync_summary=sync_summary,
     )
 
+    local_figure_path = output_dir / f'subject{args.subject_id}_session{args.session_idx}_continuous_alignment_local.png'
+    local_summary = create_local_zoom_figure(
+        eeg_time_axis=eeg_time_axis,
+        nirs_time_axis=nirs_time_axis,
+        eeg_signal=eeg_signal,
+        nirs_signal=nirs_signal,
+        eeg_channel_names=eeg_channel_names,
+        nirs_channel_names=nirs_channel_names,
+        eeg_channel_indices=eeg_channel_indices,
+        nirs_channel_indices=nirs_channel_indices,
+        eeg_events_s=eeg_events_aligned_s,
+        nirs_events_s=nirs_events_aligned_s,
+        eeg_labels=eeg_labels,
+        eeg_class_names=eeg_class_names,
+        focus_trial_idx=args.focus_trial_idx,
+        zoom_pre_s=float(args.zoom_pre_s),
+        zoom_post_s=float(args.zoom_post_s),
+        task_duration_s=float(args.task_duration_s),
+        output_path=local_figure_path,
+        subject_id=args.subject_id,
+        session_idx=args.session_idx,
+    )
+
     try:
         figure_relative_path = str(figure_path.resolve().relative_to(PROJECT_ROOT)).replace('\\', '/')
     except ValueError:
         figure_relative_path = str(figure_path.resolve())
+
+    try:
+        local_figure_relative_path = str(local_figure_path.resolve().relative_to(PROJECT_ROOT)).replace('\\', '/')
+    except ValueError:
+        local_figure_relative_path = str(local_figure_path.resolve())
 
     summary = {
         'config': args.config,
@@ -456,16 +610,19 @@ def main() -> None:
         'align_mode': args.align_mode,
         'task_duration_s': float(args.task_duration_s),
         'figure': figure_relative_path,
+        'local_figure': local_figure_relative_path,
         'selected_eeg_channels': [eeg_channel_names[idx] for idx in eeg_channel_indices],
         'selected_fnirs_channels': [nirs_channel_names[idx] for idx in nirs_channel_indices],
         'eeg_sample_rate_hz': float(eeg_dataset.get_sample_rate()),
         'fnirs_sample_rate_hz': float(nirs_dataset.get_sample_rate()),
+        'local_zoom': local_summary,
         'sync_summary': sync_summary,
     }
     summary_path = output_dir / 'summary.json'
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
 
     print(f'[ContinuousAlignment] Saved figure: {figure_path}')
+    print(f'[ContinuousAlignment] Saved local figure: {local_figure_path}')
     print(f'[ContinuousAlignment] Saved summary: {summary_path}')
     print('[ContinuousAlignment] Sync summary:')
     print(json.dumps(sync_summary, indent=2, ensure_ascii=False))

@@ -36,6 +36,10 @@ from .registry import (
     normalize_experiment_config,
     require_dataset_loader,
 )
+from .simultaneous_eeg_nirs_dataset import (
+    SimultaneousCognitiveLoader,
+    SimultaneousContinuousDataset,
+)
 from .synthetic_timeseries import PIDTimeSeriesDataset
 from .validation import (
     build_all_validation_plans,
@@ -74,6 +78,8 @@ __all__ = [
     'load_experiment_config',
     'dataset_loader_is_implemented',
     'require_dataset_loader',
+    'SimultaneousCognitiveLoader',
+    'SimultaneousContinuousDataset',
     'build_dataset_validation_plan',
     'build_all_validation_plans',
     'render_validation_plan_markdown',

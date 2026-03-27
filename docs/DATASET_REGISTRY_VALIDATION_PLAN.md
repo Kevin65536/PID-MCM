@@ -75,6 +75,7 @@ The validation plan below was derived from the original dataset documents under 
 - Original MATLAB and BrainVision/NIRx descriptions confirm synchronized trigger delivery via parallel port.
 - EEG and fNIRS task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.
 - EEG markers and fNIRS markers use different numeric codes and need dataset-specific mapping.
+- Current adapter progress: a low-level continuous loader is available in src/data/simultaneous_eeg_nirs_dataset.py. Early smoke tests show that n-back and DSR cannot yet be treated like Single-Trial because their fNIRS markers are session-level while EEG markers are trial-level. WG is structurally closer, but still needs task-specific onset alignment logic before it can be promoted to a full multimodal training dataset.
 
 ## Validation strategy
 
@@ -165,6 +166,7 @@ In addition to unit tests, the repository now includes a human-readable continuo
 Purpose:
 
 - print raw continuous EEG and fNIRS recordings on a shared aligned time axis
+- print a local zoom view around one selected event
 - show EEG and fNIRS event onsets together
 - shade task windows after each onset
 - export a JSON summary with onset-count comparison and residual timing statistics after alignment
@@ -180,10 +182,14 @@ Example:
 python experiments/scripts/signal_visualization/visualize_continuous_alignment.py \
 	--config phase0plus/shared_labram_lag_warmstart_eeg_fnirs_30s_2s_cb512.yaml \
 	--subject-id 1 \
-	--session-idx 0
+	--session-idx 0 \
+	--focus-trial-idx 0
 ```
 
 Expected output:
 
 - one PNG figure under logs/continuous_alignment/... showing event track plus stacked raw EEG and fNIRS traces
+- one local PNG figure under logs/continuous_alignment/... showing a zoomed view around the selected event
 - one summary.json file containing selected channels, sample rates, initial offset, residual event drift, and label agreement
+
+For future dataset adapters, the visual inspection stage is not optional: each newly adapted dataset should pass both the global continuous plot and the local event zoom inspection before it is considered loader-ready.

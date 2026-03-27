@@ -31,6 +31,8 @@ class DatasetRegistryTests(unittest.TestCase):
         check_ids = {check['check_id'] for check in plan['checks']}
         self.assertIn('record-duration-alignment', check_ids)
         self.assertIn('annotation-resample-check', check_ids)
+        self.assertIn('global-visual-alignment', check_ids)
+        self.assertIn('local-visual-alignment', check_ids)
 
     def test_visual_plan_uses_reconstruction_checks(self):
         plan = build_dataset_validation_plan('visual_cognitive_motivation')

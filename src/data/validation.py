@@ -78,6 +78,30 @@ def _base_checks(registration: DatasetRegistration) -> List[ValidationCheck]:
                 'No NaN or Inf appears after preprocessing or normalization.',
             ),
         ),
+        ValidationCheck(
+            check_id='global-visual-alignment',
+            stage='visual_validation',
+            title='Global continuous alignment visualization',
+            objective='Inspect one continuous record with EEG and fNIRS on the same aligned timeline before trusting model training inputs.',
+            method='Run the continuous alignment visualization tool and inspect the global PNG plus JSON timing summary.',
+            pass_criteria=(
+                'Global figure shows EEG and fNIRS events on a shared axis.',
+                'Continuous traces are non-flat and event order is visually consistent.',
+                'JSON summary reports acceptable marker count agreement and timing residuals.',
+            ),
+        ),
+        ValidationCheck(
+            check_id='local-visual-alignment',
+            stage='visual_validation',
+            title='Local event zoom visualization',
+            objective='Inspect one representative event window in detail to confirm local alignment around the task onset.',
+            method='Generate the local zoom figure around a chosen event and compare EEG and fNIRS onsets inside the zoomed window.',
+            pass_criteria=(
+                'Local figure marks the focus event and task interval clearly.',
+                'Selected EEG and fNIRS channels show plausible task-locked responses near the focus event.',
+                'Focus event metadata in summary.json matches the rendered local figure.',
+            ),
+        ),
     ]
 
 

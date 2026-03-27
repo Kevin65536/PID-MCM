@@ -201,6 +201,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'Task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.',
             'EEG uses BBCI-like cnt/mrk structs while fNIRS stores oxy/deoxy under nested fields.',
+            'A low-level continuous loader exists in src/data/simultaneous_eeg_nirs_dataset.py, but full multimodal trial alignment is still task-dependent.',
         ),
     ),
 }
