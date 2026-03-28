@@ -238,6 +238,7 @@ def _build_tokenizer_kwargs(tokenizer_type: str, config: Dict[str, Any]) -> Dict
             'assignment_temperature': align_cfg.get('temperature', 0.2),
             'alignment_lag_candidates': align_cfg.get('lag_candidates', validation_cfg.get('lag_set', [0])),
             'alignment_selection': align_cfg.get('selection', 'min'),
+            'alignment_compare_mode': align_cfg.get('compare_mode', 'variable'),
             'dropout': model_cfg.get('dropout', 0.0),
             'drop_path': model_cfg.get('drop_path', 0.1),
             'use_smooth_l1': loss_cfg.get('use_smooth_l1', False),

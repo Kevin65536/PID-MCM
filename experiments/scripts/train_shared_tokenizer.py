@@ -92,6 +92,60 @@ def tensor_to_float(value: Any) -> float:
     return float(value)
 
 
+def get_gradient_attribution_config(config: dict) -> Dict[str, Any]:
+    grad_cfg = config.get('training', {}).get('gradient_attribution', {})
+    return {
+        'enabled': bool(grad_cfg.get('enabled', False)),
+        'max_batches': max(int(grad_cfg.get('max_batches', 1)), 1),
+    }
+
+
+def compute_gradient_attribution(model, outputs: Dict[str, Any]) -> Dict[str, float]:
+    params = [param for param in model.parameters() if param.requires_grad]
+    if not params:
+        return {}
+
+    alignment_scale = float(getattr(model, 'get_alignment_scale', lambda: 1.0)())
+    component_specs = {
+        'eeg_rec_loss': 1.0,
+        'fnirs_rec_loss': 1.0,
+        'vq_loss': 1.0,
+        'latent_align_loss': float(getattr(model, 'latent_alignment_weight', 0.0)) * alignment_scale,
+        'assignment_align_loss': float(getattr(model, 'assignment_alignment_weight', 0.0)) * alignment_scale,
+    }
+
+    component_norms: Dict[str, float] = {}
+    component_values: Dict[str, float] = {}
+
+    for name, weight in component_specs.items():
+        term = outputs.get(name)
+        if term is None or not torch.is_tensor(term) or term.ndim != 0 or abs(weight) <= 0.0:
+            continue
+        grads = torch.autograd.grad(weight * term, params, retain_graph=True, allow_unused=True)
+        squared_norm = None
+        for grad in grads:
+            if grad is None:
+                continue
+            grad_value = grad.detach()
+            grad_sq = torch.sum(grad_value * grad_value)
+            squared_norm = grad_sq if squared_norm is None else squared_norm + grad_sq
+        if squared_norm is None:
+            continue
+        component_norms[name] = float(torch.sqrt(squared_norm).item())
+        component_values[f'weighted_term_{name}'] = float((weight * term.detach()).item())
+
+    if not component_norms:
+        return component_values
+
+    total_component_norm = sum(component_norms.values()) + 1e-12
+    attribution_metrics: Dict[str, float] = {}
+    for name, norm in component_norms.items():
+        attribution_metrics[f'grad_norm_{name}'] = norm
+        attribution_metrics[f'grad_share_{name}'] = norm / total_component_norm
+    attribution_metrics.update(component_values)
+    return attribution_metrics
+
+
 def strip_metric_prefix(metrics: Dict[str, float], prefix: str) -> Dict[str, float]:
     return {
         (key[len(prefix):] if key.startswith(prefix) else key): value
@@ -235,10 +289,14 @@ def train_epoch(
     optimizer,
     device: torch.device,
     grad_clip: float,
+    gradient_attribution_cfg: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, float]:
     model.train()
     totals: Dict[str, float] = {}
     total_batches = 0
+    grad_totals: Dict[str, float] = {}
+    grad_batches = 0
+    grad_cfg = gradient_attribution_cfg or {'enabled': False, 'max_batches': 1}
 
     for batch in dataloader:
         eeg = batch['eeg'].to(device)
@@ -247,6 +305,14 @@ def train_epoch(
         optimizer.zero_grad()
         outputs = model(eeg, fnirs)
         loss = outputs['loss']
+
+        if grad_cfg.get('enabled', False) and grad_batches < int(grad_cfg.get('max_batches', 1)):
+            grad_metrics = compute_gradient_attribution(model, outputs)
+            if grad_metrics:
+                grad_batches += 1
+                for key, value in grad_metrics.items():
+                    grad_totals[key] = grad_totals.get(key, 0.0) + value
+
         loss.backward()
 
         if grad_clip > 0:
@@ -259,7 +325,10 @@ def train_epoch(
             if torch.is_tensor(value) and value.ndim == 0:
                 totals[key] = totals.get(key, 0.0) + tensor_to_float(value)
 
-    return {key: value / max(total_batches, 1) for key, value in totals.items()}
+    averaged = {key: value / max(total_batches, 1) for key, value in totals.items()}
+    if grad_batches > 0:
+        averaged.update({key: value / grad_batches for key, value in grad_totals.items()})
+    return averaged
 
 
 @torch.no_grad()
@@ -578,6 +647,7 @@ def main():
         epochs_without_improvement = 0
         save_every = int(config['training'].get('checkpoint', {}).get('save_every', 1))
         grad_clip = float(config['training'].get('gradient', {}).get('clip_norm', 1.0))
+        gradient_attribution_cfg = get_gradient_attribution_config(config)
 
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
         interrupted = False
@@ -589,7 +659,14 @@ def main():
                 if hasattr(model, 'set_alignment_scale'):
                     model.set_alignment_scale(alignment_scale)
 
-                train_metrics = train_epoch(model, train_loader, optimizer, device, grad_clip)
+                train_metrics = train_epoch(
+                    model,
+                    train_loader,
+                    optimizer,
+                    device,
+                    grad_clip,
+                    gradient_attribution_cfg=gradient_attribution_cfg,
+                )
                 val_metrics = validate_epoch(model, val_loader, device)
 
                 if epoch > warmup_epochs:
@@ -599,12 +676,21 @@ def main():
                 train_loss = train_metrics.get('loss', float('nan'))
                 val_loss = val_metrics.get('val_loss', float('nan'))
                 merged_metrics = {'lr': lr, 'alignment_scale': alignment_scale}
+                merged_metrics.update({
+                    key: value
+                    for key, value in train_metrics.items()
+                    if key.startswith('grad_') or key.startswith('weighted_term_')
+                })
                 merged_metrics.update({k: v for k, v in val_metrics.items() if k != 'val_loss'})
                 logger.log_epoch(
                     epoch=epoch,
                     train_loss=train_loss,
                     val_loss=val_loss,
-                    loss_breakdown={k: v for k, v in train_metrics.items() if k != 'loss'},
+                    loss_breakdown={
+                        k: v
+                        for k, v in train_metrics.items()
+                        if k != 'loss' and not k.startswith('grad_') and not k.startswith('weighted_term_')
+                    },
                     metrics=merged_metrics,
                 )
 
