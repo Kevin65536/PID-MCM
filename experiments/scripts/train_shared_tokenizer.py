@@ -24,7 +24,7 @@ from src.data import create_configured_multimodal_dataloaders
 from src.tokenizers import create_tokenizer
 from src.utils.logger import ExperimentLogger
 from src.visualization import TensorBoardLogger
-from src.visualization.shared_alignment_analysis import analyze_shared_alignment
+from src.visualization import analyze_factorized_alignment, analyze_shared_alignment
 
 
 class TeeLogger:
@@ -32,19 +32,30 @@ class TeeLogger:
 
     def __init__(self, log_file: Path):
         self.terminal = sys.stdout
+        self.error_terminal = sys.stderr
         self.log_file = open(log_file, 'a', buffering=1)
+        self.closed = False
 
     def write(self, message: str):
+        if self.closed:
+            self.terminal.write(message)
+            return
         self.terminal.write(message)
         self.log_file.write(message)
         self.log_file.flush()
 
     def flush(self):
         self.terminal.flush()
-        self.log_file.flush()
+        if not self.closed:
+            self.log_file.flush()
 
     def close(self):
+        if self.closed:
+            return
+        sys.stdout = self.terminal
+        sys.stderr = self.error_terminal
         self.log_file.close()
+        self.closed = True
 
 
 def setup_logging(run_dir: Path) -> TeeLogger:
@@ -105,14 +116,19 @@ def compute_gradient_attribution(model, outputs: Dict[str, Any]) -> Dict[str, fl
     if not params:
         return {}
 
-    alignment_scale = float(getattr(model, 'get_alignment_scale', lambda: 1.0)())
     component_specs = {
         'eeg_rec_loss': 1.0,
         'fnirs_rec_loss': 1.0,
         'vq_loss': 1.0,
-        'latent_align_loss': float(getattr(model, 'latent_alignment_weight', 0.0)) * alignment_scale,
-        'assignment_align_loss': float(getattr(model, 'assignment_alignment_weight', 0.0)) * alignment_scale,
     }
+    if hasattr(model, 'get_gradient_component_weights'):
+        component_specs.update(getattr(model, 'get_gradient_component_weights')())
+    else:
+        alignment_scale = float(getattr(model, 'get_alignment_scale', lambda: 1.0)())
+        component_specs.update({
+            'latent_align_loss': float(getattr(model, 'latent_alignment_weight', 0.0)) * alignment_scale,
+            'assignment_align_loss': float(getattr(model, 'assignment_alignment_weight', 0.0)) * alignment_scale,
+        })
 
     component_norms: Dict[str, float] = {}
     component_values: Dict[str, float] = {}
@@ -219,6 +235,10 @@ def collect_visualization_artifacts(model, dataloader, device: torch.device) -> 
         'fnirs_indices',
         'eeg_z',
         'fnirs_z',
+        'eeg_private_indices',
+        'fnirs_private_indices',
+        'eeg_private_z',
+        'fnirs_private_z',
     ):
         value = outputs.get(key)
         if torch.is_tensor(value):
@@ -389,6 +409,7 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
         target_state = model.state_dict()
 
         prefix_map = {
+            'patch_embed.proj.': f'{branch_prefix}_patch_embed.proj.',
             'encoder.': f'{branch_prefix}_encoder.',
             'encode_task_layer.': f'{branch_prefix}_encode_proj.',
             'decode_input_proj.': f'{branch_prefix}_decode_input_proj.',
@@ -506,7 +527,8 @@ def finalize_training_run(
     logger.log_final(final_metrics)
     logger.generate_figures()
 
-    summary_path = logger.run_dir / 'analysis' / 'shared_alignment_summary.json'
+    analysis_type = getattr(model, 'get_analysis_type', lambda: 'shared_alignment')()
+    summary_path = logger.run_dir / 'analysis' / f'{analysis_type}_summary.json'
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     with open(summary_path, 'w', encoding='utf-8') as handle:
         json.dump(final_metrics, handle, indent=2)
@@ -514,9 +536,10 @@ def finalize_training_run(
     if skip_post_analysis:
         return final_metrics
 
-    analysis_dir = logger.run_dir / 'analysis' / 'shared_alignment'
-    print(f"Running default shared alignment analysis -> {analysis_dir}")
-    analysis_results = analyze_shared_alignment(
+    analysis_dir = logger.run_dir / 'analysis' / analysis_type
+    print(f"Running default {analysis_type} analysis -> {analysis_dir}")
+    analyzer = analyze_factorized_alignment if analysis_type == 'factorized_alignment' else analyze_shared_alignment
+    analysis_results = analyzer(
         model=model,
         dataloaders={'val': val_loader, 'test': test_loader},
         config=config,
