@@ -66,6 +66,20 @@ python experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_fsq.yaml
 python experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml
 ```
 
+### Launch Long Training Jobs
+
+Use the detached launcher for long-running training so jobs do not depend on the VS Code integrated terminal session:
+
+```bash
+# Default target: experiments/scripts/train_shared_tokenizer.py
+bash experiments/scripts/launch_training_nohup.sh --config phase0plus/factorized_labram_eeg_fnirs_30s_2s.yaml
+
+# Custom training entrypoint
+bash experiments/scripts/launch_training_nohup.sh experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml
+```
+
+The launcher prints the background PID and writes stdout/stderr to `experiments/nohup_logs/`.
+
 ## Current Status
 
 **Phase 0: Real Data Tokenization** (Active)
