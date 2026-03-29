@@ -20,6 +20,28 @@ from .simultaneous_eeg_nirs_dataset import (
 )
 
 
+def _resolve_dataloader_kwargs(data_cfg: Dict[str, Any], *, is_train: bool) -> Dict[str, Any]:
+    dataloader_cfg = data_cfg.get('dataloader', {})
+    num_workers = int(data_cfg.get('num_workers', 0))
+
+    kwargs: Dict[str, Any] = {
+        'num_workers': num_workers,
+        'pin_memory': bool(dataloader_cfg.get('pin_memory', True)),
+    }
+
+    if num_workers > 0 and bool(dataloader_cfg.get('persistent_workers', False)):
+        kwargs['persistent_workers'] = True
+
+    prefetch_factor = dataloader_cfg.get('prefetch_factor')
+    if num_workers > 0 and prefetch_factor is not None:
+        kwargs['prefetch_factor'] = int(prefetch_factor)
+
+    if is_train and 'drop_last' in dataloader_cfg:
+        kwargs['drop_last'] = bool(dataloader_cfg.get('drop_last'))
+
+    return kwargs
+
+
 class CombinedMultiModalDataset(Dataset):
     """Concatenate multiple multimodal datasets into one training view.
 
@@ -386,13 +408,13 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
                 normalize=normalize,
                 normalization_mode=normalization_mode,
             )
+            loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=(split_name == 'train'))
             dataloaders[split_name] = DataLoader(
                 dataset,
                 batch_size=config['training']['batch_size'],
                 shuffle=(split_name == 'train'),
-                num_workers=data_cfg.get('num_workers', 0),
-                pin_memory=True,
                 drop_last=(split_name == 'train'),
+                **loader_kwargs,
             )
         return dataloaders
 
@@ -417,6 +439,7 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
+            dataloader_cfg=data_cfg.get('dataloader', {}),
         )
 
     splits = {
@@ -433,13 +456,13 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
             normalize=normalize,
             normalization_mode=normalization_mode,
         )
+        loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=(split_name == 'train'))
         dataloaders[split_name] = DataLoader(
             dataset,
             batch_size=config['training']['batch_size'],
             shuffle=(split_name == 'train'),
-            num_workers=data_cfg.get('num_workers', 0),
-            pin_memory=True,
             drop_last=(split_name == 'train'),
+            **loader_kwargs,
         )
     return dataloaders
 

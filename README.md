@@ -78,7 +78,7 @@ bash experiments/scripts/launch_training_nohup.sh --config phase0plus/factorized
 bash experiments/scripts/launch_training_nohup.sh experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml
 ```
 
-The launcher prints the background PID and writes stdout/stderr to `experiments/nohup_logs/`.
+The launcher prints the background PID and command. Training logs remain available inside each run directory, for example `experiments/runs/<run_name>/training.log`.
 
 ## Current Status
 

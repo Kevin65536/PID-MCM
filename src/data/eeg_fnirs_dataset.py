@@ -1131,6 +1131,7 @@ def create_dataloaders(
     window_duration_s: float = 2.5,
     batch_size: int = 32,
     num_workers: int = 0,
+    dataloader_cfg: Optional[Dict[str, Union[int, bool]]] = None,
     exclude_eog: bool = True,
     hbo_only: bool = True,
     hbr_only: bool = False,
@@ -1150,6 +1151,7 @@ def create_dataloaders(
         window_duration_s: Window duration for multimodal
         batch_size: Batch size
         num_workers: DataLoader workers
+        dataloader_cfg: Optional DataLoader keyword overrides
         exclude_eog: If True, exclude EOG channels from EEG data (default: True)
         hbo_only: If True, only use HbO channels for fNIRS (default: True)
         hbr_only: If True, only use HbR channels for fNIRS (default: False)
@@ -1165,6 +1167,8 @@ def create_dataloaders(
         val_subjects = list(range(21, 26))  # 21-25
     if test_subjects is None:
         test_subjects = list(range(26, 30))  # 26-29
+
+    dataloader_cfg = dict(dataloader_cfg or {})
     
     dataloaders = {}
     
@@ -1197,12 +1201,20 @@ def create_dataloaders(
                 **kwargs
             )
         
+        loader_kwargs = {
+            'num_workers': num_workers,
+            'pin_memory': bool(dataloader_cfg.get('pin_memory', True)),
+        }
+        if num_workers > 0 and bool(dataloader_cfg.get('persistent_workers', False)):
+            loader_kwargs['persistent_workers'] = True
+        if num_workers > 0 and dataloader_cfg.get('prefetch_factor') is not None:
+            loader_kwargs['prefetch_factor'] = int(dataloader_cfg['prefetch_factor'])
+
         dataloaders[split] = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=(split == 'train'),
-            num_workers=num_workers,
-            pin_memory=True,
+            **loader_kwargs,
         )
     
     return dataloaders

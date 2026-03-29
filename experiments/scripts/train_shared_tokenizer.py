@@ -217,8 +217,8 @@ def collect_visualization_artifacts(model, dataloader, device: torch.device) -> 
     was_training = model.training
     model.eval()
     try:
-        eeg = batch['eeg'].to(device)
-        fnirs = batch['fnirs'].to(device)
+        eeg = batch['eeg'].to(device, non_blocking=True)
+        fnirs = batch['fnirs'].to(device, non_blocking=True)
         outputs = model(eeg, fnirs)
     finally:
         if was_training:
@@ -319,8 +319,8 @@ def train_epoch(
     grad_cfg = gradient_attribution_cfg or {'enabled': False, 'max_batches': 1}
 
     for batch in dataloader:
-        eeg = batch['eeg'].to(device)
-        fnirs = batch['fnirs'].to(device)
+        eeg = batch['eeg'].to(device, non_blocking=True)
+        fnirs = batch['fnirs'].to(device, non_blocking=True)
 
         optimizer.zero_grad()
         outputs = model(eeg, fnirs)
@@ -362,8 +362,8 @@ def validate_epoch(
     total_batches = 0
 
     for batch in dataloader:
-        eeg = batch['eeg'].to(device)
-        fnirs = batch['fnirs'].to(device)
+        eeg = batch['eeg'].to(device, non_blocking=True)
+        fnirs = batch['fnirs'].to(device, non_blocking=True)
         outputs = model(eeg, fnirs)
         total_batches += 1
 
