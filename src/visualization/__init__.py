@@ -4,6 +4,8 @@
 from .tokenizer_plots import TokenizerVisualizer, visualize_tokenizer_run
 from .classifier_plots import ClassifierVisualizer, visualize_classifier_run
 from .tensorboard_logger import TensorBoardLogger
+from .shared_alignment_analysis import analyze_shared_alignment
+from .factorized_alignment_analysis import analyze_factorized_alignment
 
 __all__ = [
     'TokenizerVisualizer',
@@ -11,4 +13,6 @@ __all__ = [
     'ClassifierVisualizer',
     'visualize_classifier_run',
     'TensorBoardLogger',
+    'analyze_shared_alignment',
+    'analyze_factorized_alignment',
 ]
