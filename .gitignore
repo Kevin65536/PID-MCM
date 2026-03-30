@@ -30,3 +30,6 @@ __pycache__
 
 # temporarily sealed local archive for retired Copilot agent guidance
 /docs/archive
+
+# power point for report on group meeting
+/docs/power_point
