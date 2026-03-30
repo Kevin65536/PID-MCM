@@ -55,6 +55,8 @@ class ExperimentLogger:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_name = run_name or f"{exp_name}_{timestamp}"
         self.run_dir = self.runs_dir / self.run_name
+        metrics_path = self.run_dir / "metrics.json"
+        existing_run = self.run_dir.exists()
         self.run_dir.mkdir(parents=True, exist_ok=True)
         
         # Create subdirectories
@@ -64,18 +66,31 @@ class ExperimentLogger:
         self.figures_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize metrics storage
-        self.metrics = {
-            "config_hash": self.config_hash,
-            "started_at": datetime.now().isoformat(),
-            "completed_at": None,
-            "epochs": [],
-            "final_metrics": {}
-        }
+        if existing_run and metrics_path.exists():
+            with open(metrics_path, 'r', encoding='utf-8') as f:
+                self.metrics = json.load(f)
+            self.metrics["config_hash"] = self.config_hash
+            self.metrics.setdefault("epochs", [])
+            self.metrics.setdefault("final_metrics", {})
+            resumed_at = self.metrics.setdefault("resumed_at", [])
+            resumed_at.append(datetime.now().isoformat())
+            self.metrics["completed_at"] = None
+        else:
+            self.metrics = {
+                "config_hash": self.config_hash,
+                "started_at": datetime.now().isoformat(),
+                "completed_at": None,
+                "epochs": [],
+                "final_metrics": {}
+            }
         
         # Save frozen config
         self._save_config()
         
-        print(f"[ExperimentLogger] Initialized run: {self.run_name}")
+        if existing_run and metrics_path.exists():
+            print(f"[ExperimentLogger] Reusing run: {self.run_name}")
+        else:
+            print(f"[ExperimentLogger] Initialized run: {self.run_name}")
         print(f"[ExperimentLogger] Run directory: {self.run_dir}")
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
