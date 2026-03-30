@@ -305,9 +305,19 @@ def analyze_factorized_alignment(
         eeg_private_summary = _codebook_summary(eeg_private_tokens.reshape(-1), eeg_private_codebook_size)
         fnirs_private_summary = _codebook_summary(fnirs_private_tokens.reshape(-1), fnirs_private_codebook_size)
         shared_overlap = _active_overlap_summary(shared_eeg_summary, shared_fnirs_summary)
-        lag_metrics = [_pair_statistics(eeg_shared_tokens, fnirs_shared_tokens, shared_codebook_size, lag) for lag in lag_set]
+        fixed_compare_length = min(max(eeg_shared_tokens.shape[1] - lag, 0) for lag in lag_set) if lag_set else eeg_shared_tokens.shape[1]
+        lag_metrics = [
+            _pair_statistics(
+                eeg_shared_tokens,
+                fnirs_shared_tokens,
+                shared_codebook_size,
+                lag,
+                target_length=fixed_compare_length,
+            )
+            for lag in lag_set
+        ]
         lag_zero = next(item for item in lag_metrics if item['lag'] == 0)
-        best_lag = max(lag_metrics, key=lambda item: item['mutual_information'])
+        best_lag = max(lag_metrics, key=lambda item: (item['mi_improvement'], -item['lag']))
 
         split_dir = output_dir / split_name
         split_dir.mkdir(parents=True, exist_ok=True)
@@ -456,8 +466,10 @@ def analyze_factorized_alignment(
             'fnirs_private_codebook': {k: v for k, v in fnirs_private_summary.items() if k != 'counts'},
             'shared_active_overlap': shared_overlap,
             'shared_lag_metrics': lag_metrics,
+            'lag_compare_length': int(fixed_compare_length),
             'best_lag': int(best_lag['lag']),
             'best_lag_mutual_information': float(best_lag['mutual_information']),
+            'best_lag_mi_improvement': float(best_lag['mi_improvement']),
             'best_lag_match_rate': float(best_lag['match_rate']),
             'shared_cross_modal_coupling': shared_coupling,
             'top_pair_mapping': best_lag['top_mapping_rows'],

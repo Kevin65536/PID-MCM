@@ -7,6 +7,7 @@ import argparse
 import copy
 import json
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -460,6 +461,36 @@ def load_checkpoint(path: Path, model, optimizer, device: torch.device) -> Dict[
     return checkpoint
 
 
+def maybe_seed_best_checkpoint(
+    logger: ExperimentLogger,
+    resume_path: Path,
+    checkpoint: Dict[str, Any],
+):
+    best_path = logger.checkpoints_dir / 'best_model.pt'
+    if best_path.exists():
+        return
+
+    resume_epoch = int(checkpoint.get('epoch', -1))
+    resume_best_epoch = checkpoint.get('best_epoch')
+    resume_is_best = bool(checkpoint.get('is_best', False))
+    if resume_best_epoch is None:
+        return
+
+    if resume_is_best or int(resume_best_epoch) == resume_epoch:
+        shutil.copy2(resume_path, best_path)
+        print(
+            f"Seeded local best checkpoint from resume source: {resume_path} -> {best_path}"
+        )
+        return
+
+    print(
+        "[Warning] Resumed checkpoint is not itself the tracked best checkpoint and the current run "
+        f"has no local best_model.pt. best_epoch={resume_best_epoch}, resumed_epoch={resume_epoch}. "
+        "If no new best is found during continuation, finalization will not have an on-disk best checkpoint "
+        "to reload automatically."
+    )
+
+
 def compute_alignment_scale(epoch: int, config: dict) -> float:
     warm_cfg = config.get('training', {}).get('alignment_warmup', {})
     if not warm_cfg.get('enabled', False):
@@ -735,6 +766,7 @@ def main():
             start_epoch = int(checkpoint.get('epoch', 0))
             resume_best_epoch = checkpoint.get('best_epoch')
             resume_best_monitor = checkpoint.get('best_monitor')
+            maybe_seed_best_checkpoint(logger, Path(args.resume), checkpoint)
             print(f"Resumed from epoch {start_epoch}")
         else:
             resume_best_epoch = None
@@ -879,6 +911,12 @@ def main():
             best_monitor=best_monitor,
             skip_post_analysis=args.skip_post_analysis,
         )
+
+        if args.skip_post_analysis:
+            print(
+                "[Info] Post-analysis was skipped by --skip-post-analysis. Only lightweight final summaries were "
+                "written; full visualization artifacts were not generated for this run."
+            )
 
         if interrupted:
             print("\nTraining interrupted after finalization.")

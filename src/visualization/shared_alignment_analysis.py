@@ -85,10 +85,13 @@ def _aligned_token_arrays(
     eeg_tokens: np.ndarray,
     fnirs_tokens: np.ndarray,
     lag: int,
+    target_length: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     if lag < 0:
         raise ValueError('Only non-negative lag is supported')
     usable = eeg_tokens.shape[1] - lag
+    if target_length is not None:
+        usable = min(usable, int(target_length))
     if usable <= 0:
         return np.empty((0,), dtype=np.int64), np.empty((0,), dtype=np.int64)
     eeg_aligned = eeg_tokens[:, :usable].reshape(-1)
@@ -101,16 +104,23 @@ def _pair_statistics(
     fnirs_tokens: np.ndarray,
     codebook_size: int,
     lag: int,
+    target_length: Optional[int] = None,
 ) -> Dict[str, object]:
-    eeg_aligned, fnirs_aligned = _aligned_token_arrays(eeg_tokens, fnirs_tokens, lag)
-    total_pairs = int(eeg_aligned.size)
-    if total_pairs == 0:
+    if lag < 0:
+        raise ValueError('Only non-negative lag is supported')
+    usable = eeg_tokens.shape[1] - lag
+    if target_length is not None:
+        usable = min(usable, int(target_length))
+    if usable <= 0:
         return {
             'lag': lag,
             'total_pairs': 0,
+            'compare_length': 0,
             'match_rate': 0.0,
             'mutual_information': 0.0,
             'normalized_mi': 0.0,
+            'mi_shuffle_baseline': 0.0,
+            'mi_improvement': 0.0,
             'weighted_top1_concentration': 0.0,
             'mean_top1_concentration': 0.0,
             'top_mapping_rows': [],
@@ -118,6 +128,12 @@ def _pair_statistics(
             'top_fnirs_codes': [],
             'heatmap': [],
         }
+
+    eeg_matrix = eeg_tokens[:, :usable].astype(np.int64, copy=False)
+    fnirs_matrix = fnirs_tokens[:, lag:lag + usable].astype(np.int64, copy=False)
+    eeg_aligned = eeg_matrix.reshape(-1)
+    fnirs_aligned = fnirs_matrix.reshape(-1)
+    total_pairs = int(eeg_aligned.size)
 
     eeg_counts = np.bincount(eeg_aligned, minlength=codebook_size)
     fnirs_counts = np.bincount(fnirs_aligned, minlength=codebook_size)
@@ -130,6 +146,19 @@ def _pair_statistics(
         numerator = count * total_pairs
         denominator = eeg_counts[eeg_code] * fnirs_counts[fnirs_code]
         mi += (count / total_pairs) * math.log((numerator / max(denominator, 1)) + 1e-12)
+
+    shuffle_rng = np.random.default_rng(12345 + int(lag))
+    shuffled_fnirs = fnirs_matrix[shuffle_rng.permutation(fnirs_matrix.shape[0])].reshape(-1)
+    shuffled_counts = np.bincount(shuffled_fnirs, minlength=codebook_size)
+    shuffled_pair_counts: Dict[Tuple[int, int], int] = defaultdict(int)
+    for eeg_code, fnirs_code in zip(eeg_aligned.tolist(), shuffled_fnirs.tolist()):
+        shuffled_pair_counts[(eeg_code, fnirs_code)] += 1
+
+    mi_shuffle = 0.0
+    for (eeg_code, fnirs_code), count in shuffled_pair_counts.items():
+        numerator = count * total_pairs
+        denominator = eeg_counts[eeg_code] * shuffled_counts[fnirs_code]
+        mi_shuffle += (count / total_pairs) * math.log((numerator / max(denominator, 1)) + 1e-12)
 
     fnirs_entropy, _ = _entropy_and_perplexity(fnirs_counts)
     top_eeg_codes = np.argsort(eeg_counts)[::-1][:12]
@@ -172,9 +201,12 @@ def _pair_statistics(
     return {
         'lag': lag,
         'total_pairs': total_pairs,
+        'compare_length': int(usable),
         'match_rate': float((eeg_aligned == fnirs_aligned).mean()),
         'mutual_information': float(mi),
         'normalized_mi': float(mi / fnirs_entropy) if fnirs_entropy > 0 else 0.0,
+        'mi_shuffle_baseline': float(mi_shuffle),
+        'mi_improvement': float(mi - mi_shuffle),
         'weighted_top1_concentration': float(weighted_best_counts / max(total_pairs, 1)),
         'mean_top1_concentration': float(np.mean([row['concentration'] for row in top_mapping_rows])) if top_mapping_rows else 0.0,
         'top_mapping_rows': top_mapping_rows,
@@ -259,25 +291,34 @@ def _save_lag_plot(path: Path, lag_metrics: List[Dict[str, object]], split_name:
     lags = [entry['lag'] for entry in lag_metrics]
     match_rates = [entry['match_rate'] for entry in lag_metrics]
     mi_values = [entry['mutual_information'] for entry in lag_metrics]
-    normalized_mi = [entry['normalized_mi'] for entry in lag_metrics]
+    mi_shuffle = [entry['mi_shuffle_baseline'] for entry in lag_metrics]
+    mi_improvement = [entry['mi_improvement'] for entry in lag_metrics]
     paired_concentration = [entry['weighted_top1_concentration'] for entry in lag_metrics]
+    compare_lengths = [entry['compare_length'] for entry in lag_metrics]
+    best_index = int(np.argmax(mi_improvement)) if mi_improvement else 0
+    best_lag = lags[best_index] if lags else 0
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 4))
     axes[0].plot(lags, match_rates, marker='o', color='darkorange')
-    axes[0].set_title(f'{split_name.upper()} Match Rate vs Lag')
+    axes[0].plot(lags, paired_concentration, marker='s', color='crimson', alpha=0.75)
+    axes[0].set_title(f'{split_name.upper()} Match / Pairing vs Lag')
     axes[0].set_xlabel('Lag (tokens)')
-    axes[0].set_ylabel('Exact match rate')
+    axes[0].set_ylabel('Strength')
 
-    axes[1].plot(lags, mi_values, marker='o', color='purple')
-    axes[1].set_title(f'{split_name.upper()} MI vs Lag')
+    axes[1].plot(lags, mi_values, marker='o', color='mediumpurple', label='Raw MI')
+    axes[1].plot(lags, mi_shuffle, marker='s', color='gray', linestyle='--', label='Shuffle baseline')
+    axes[1].plot(lags, mi_improvement, marker='^', color='teal', label='Corrected MI')
+    axes[1].axvline(best_lag, color='red', linestyle='--', alpha=0.8, label=f'Best corrected lag={best_lag}')
+    axes[1].set_title(f'{split_name.upper()} Fixed-length MI vs Lag')
     axes[1].set_xlabel('Lag (tokens)')
     axes[1].set_ylabel('Mutual information')
+    axes[1].legend(fontsize=8)
 
-    axes[2].plot(lags, normalized_mi, marker='o', color='teal', label='Normalized MI')
+    axes[2].plot(lags, compare_lengths, marker='o', color='steelblue', label='Compare length')
     axes[2].plot(lags, paired_concentration, marker='s', color='crimson', label='Weighted Top-1 Pairing')
-    axes[2].set_title(f'{split_name.upper()} Pairing Strength vs Lag')
+    axes[2].set_title(f'{split_name.upper()} Fixed-length Lag Stats')
     axes[2].set_xlabel('Lag (tokens)')
-    axes[2].set_ylabel('Strength')
+    axes[2].set_ylabel('Length / strength')
     axes[2].legend()
 
     plt.tight_layout()
@@ -806,16 +847,17 @@ def _save_cross_modal_coupling_plot(
 
 def _save_probe_style_lag_plot(path: Path, lag_metrics: List[Dict[str, object]], split_name: str):
     lags = [int(entry['lag']) for entry in lag_metrics]
-    mi_values = [float(entry['mutual_information']) for entry in lag_metrics]
+    mi_values = [float(entry['mi_improvement']) for entry in lag_metrics]
     best_index = int(np.argmax(mi_values)) if mi_values else 0
     best_lag = lags[best_index] if lags else 0
+    compare_length = int(lag_metrics[0].get('compare_length', 0)) if lag_metrics else 0
 
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(lags, mi_values, marker='o', color='slateblue')
-    ax.axvline(best_lag, color='red', linestyle='--', label=f'Best lag={best_lag}')
+    ax.axvline(best_lag, color='red', linestyle='--', label=f'Best corrected lag={best_lag}')
     ax.set_xlabel('Lag (tokens)')
-    ax.set_ylabel('Mutual Information (nats)')
-    ax.set_title(f'{split_name.upper()} Lag-aware EEG-fNIRS Token Coupling')
+    ax.set_ylabel('Corrected Mutual Information (nats)')
+    ax.set_title(f'{split_name.upper()} Fixed-length EEG-fNIRS Token Coupling (L={compare_length})')
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -895,9 +937,13 @@ def analyze_shared_alignment(
         eeg_summary = _codebook_summary(eeg_tokens.reshape(-1), codebook_size)
         fnirs_summary = _codebook_summary(fnirs_tokens.reshape(-1), codebook_size)
         overlap_summary = _active_overlap_summary(eeg_summary, fnirs_summary)
-        lag_metrics = [_pair_statistics(eeg_tokens, fnirs_tokens, codebook_size, lag) for lag in lag_set]
+        fixed_compare_length = min(max(eeg_tokens.shape[1] - lag, 0) for lag in lag_set) if lag_set else eeg_tokens.shape[1]
+        lag_metrics = [
+            _pair_statistics(eeg_tokens, fnirs_tokens, codebook_size, lag, target_length=fixed_compare_length)
+            for lag in lag_set
+        ]
         lag_zero = next(item for item in lag_metrics if item['lag'] == 0)
-        best_lag = max(lag_metrics, key=lambda item: item['mutual_information'])
+        best_lag = max(lag_metrics, key=lambda item: (item['mi_improvement'], -item['lag']))
         codebook_embeddings = model.quantizer.weight.detach().cpu().numpy()
 
         split_dir = output_dir / split_name
@@ -974,8 +1020,10 @@ def analyze_shared_alignment(
             'fnirs_codebook': {k: v for k, v in fnirs_summary.items() if k != 'counts'},
             'active_overlap': overlap_summary,
             'lag_metrics': lag_metrics,
+            'lag_compare_length': int(fixed_compare_length),
             'best_lag': int(best_lag['lag']),
             'best_lag_mutual_information': float(best_lag['mutual_information']),
+            'best_lag_mi_improvement': float(best_lag['mi_improvement']),
             'best_lag_match_rate': float(best_lag['match_rate']),
             'lag0_weighted_top1_concentration': float(lag_zero['weighted_top1_concentration']),
             'best_lag_weighted_top1_concentration': float(best_lag['weighted_top1_concentration']),
