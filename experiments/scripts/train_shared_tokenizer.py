@@ -21,6 +21,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data import create_configured_multimodal_dataloaders
+from src.metrics import compute_multi_stft_loss, compute_spectral_mse
 from src.tokenizers import create_tokenizer
 from src.utils.logger import ExperimentLogger
 from src.visualization import TensorBoardLogger
@@ -303,10 +304,73 @@ def log_tensorboard_visualizations(
         tb_logger.log_embedding_tsne(embeddings, usage, step, tag='shared_codebook_embeddings')
 
 
+def _flatten_signal_for_spectral(x: torch.Tensor) -> torch.Tensor:
+    if x.dim() == 3:
+        return x.reshape(-1, x.shape[-1])
+    return x
+
+
+def _compute_spectral_loss(x: torch.Tensor, x_rec: torch.Tensor, spectral_cfg: Dict[str, Any]) -> torch.Tensor:
+    x = _flatten_signal_for_spectral(x)
+    x_rec = _flatten_signal_for_spectral(x_rec)
+    spectral_type = spectral_cfg.get('type', 'multi_stft')
+    if spectral_type == 'multi_stft':
+        return compute_multi_stft_loss(
+            x,
+            x_rec,
+            fft_sizes=spectral_cfg.get('fft_sizes', [64, 128, 256]),
+            hop_sizes=spectral_cfg.get('hop_sizes'),
+            win_sizes=spectral_cfg.get('win_sizes'),
+        )
+    if spectral_type == 'fft_mse':
+        return compute_spectral_mse(
+            x,
+            x_rec,
+            n_fft=int(spectral_cfg.get('n_fft', 256)),
+        )
+    raise ValueError(f"Unsupported spectral loss type: {spectral_type}")
+
+
+def compute_multimodal_aux_losses(
+    config: Dict[str, Any],
+    eeg: torch.Tensor,
+    fnirs: torch.Tensor,
+    outputs: Dict[str, Any],
+) -> Tuple[torch.Tensor, Dict[str, float], Dict[str, torch.Tensor]]:
+    spectral_cfg = config.get('loss', {}).get('spectral', {})
+    spectral_weight = float(spectral_cfg.get('weight', 0.0))
+    zero = eeg.new_tensor(0.0)
+    aux_loss = zero
+    scalar_metrics: Dict[str, float] = {}
+    tensor_metrics: Dict[str, torch.Tensor] = {}
+
+    if not spectral_cfg.get('enabled', False) or spectral_weight <= 0.0:
+        return aux_loss, scalar_metrics, tensor_metrics
+
+    eeg_reconstructed = outputs.get('eeg_reconstructed')
+    fnirs_reconstructed = outputs.get('fnirs_reconstructed')
+    if not torch.is_tensor(eeg_reconstructed) or not torch.is_tensor(fnirs_reconstructed):
+        return aux_loss, scalar_metrics, tensor_metrics
+
+    eeg_spectral_loss = _compute_spectral_loss(eeg, eeg_reconstructed, spectral_cfg)
+    fnirs_spectral_loss = _compute_spectral_loss(fnirs, fnirs_reconstructed, spectral_cfg)
+    spectral_loss = 0.5 * (eeg_spectral_loss + fnirs_spectral_loss)
+    aux_loss = aux_loss + spectral_weight * spectral_loss
+
+    scalar_metrics['eeg_spectral_loss'] = float(eeg_spectral_loss.detach().item())
+    scalar_metrics['fnirs_spectral_loss'] = float(fnirs_spectral_loss.detach().item())
+    scalar_metrics['spectral_loss'] = float(spectral_loss.detach().item())
+    scalar_metrics['aux_loss'] = float(aux_loss.detach().item())
+    tensor_metrics['spectral_loss'] = spectral_loss
+    tensor_metrics['aux_loss'] = aux_loss
+    return aux_loss, scalar_metrics, tensor_metrics
+
+
 def train_epoch(
     model,
     dataloader,
     optimizer,
+    config: Dict[str, Any],
     device: torch.device,
     grad_clip: float,
     gradient_attribution_cfg: Optional[Dict[str, Any]] = None,
@@ -324,10 +388,13 @@ def train_epoch(
 
         optimizer.zero_grad()
         outputs = model(eeg, fnirs)
-        loss = outputs['loss']
+        aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
+        loss = outputs['loss'] + aux_loss
 
         if grad_cfg.get('enabled', False) and grad_batches < int(grad_cfg.get('max_batches', 1)):
-            grad_metrics = compute_gradient_attribution(model, outputs)
+            grad_outputs = dict(outputs)
+            grad_outputs.update(aux_tensors)
+            grad_metrics = compute_gradient_attribution(model, grad_outputs)
             if grad_metrics:
                 grad_batches += 1
                 for key, value in grad_metrics.items():
@@ -341,9 +408,14 @@ def train_epoch(
         optimizer.step()
         total_batches += 1
 
+        totals['loss'] = totals.get('loss', 0.0) + tensor_to_float(loss.detach())
         for key, value in outputs.items():
+            if key == 'loss':
+                continue
             if torch.is_tensor(value) and value.ndim == 0:
                 totals[key] = totals.get(key, 0.0) + tensor_to_float(value)
+        for key, value in aux_metrics.items():
+            totals[key] = totals.get(key, 0.0) + value
 
     averaged = {key: value / max(total_batches, 1) for key, value in totals.items()}
     if grad_batches > 0:
@@ -355,6 +427,7 @@ def train_epoch(
 def validate_epoch(
     model,
     dataloader,
+    config: Dict[str, Any],
     device: torch.device,
 ) -> Dict[str, float]:
     model.eval()
@@ -365,11 +438,17 @@ def validate_epoch(
         eeg = batch['eeg'].to(device, non_blocking=True)
         fnirs = batch['fnirs'].to(device, non_blocking=True)
         outputs = model(eeg, fnirs)
+        aux_loss, aux_metrics, _ = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         total_batches += 1
 
+        totals['val_loss'] = totals.get('val_loss', 0.0) + tensor_to_float((outputs['loss'] + aux_loss).detach())
         for key, value in outputs.items():
+            if key == 'loss':
+                continue
             if torch.is_tensor(value) and value.ndim == 0:
                 totals[f'val_{key}'] = totals.get(f'val_{key}', 0.0) + tensor_to_float(value)
+        for key, value in aux_metrics.items():
+            totals[f'val_{key}'] = totals.get(f'val_{key}', 0.0) + value
 
     return {key: value / max(total_batches, 1) for key, value in totals.items()}
 
@@ -508,7 +587,7 @@ def finalize_training_run(
     if hasattr(model, 'set_alignment_scale'):
         model.set_alignment_scale(1.0)
 
-    test_metrics = validate_epoch(model, test_loader, device)
+    test_metrics = validate_epoch(model, test_loader, config, device)
     final_metrics = {
         'best_epoch': best_epoch,
         'best_monitor': best_monitor,
@@ -567,10 +646,11 @@ def main():
     parser = argparse.ArgumentParser(description="Train shared EEG+fNIRS tokenizer")
     parser.add_argument('--config', required=True, help='Config path relative to experiments/configs')
     parser.add_argument('--resume', default=None, help='Optional checkpoint path')
+    parser.add_argument('--run-name', default=None, help='Optional run directory name to reuse inside experiments/runs')
     parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default shared alignment analysis at the end of training')
     args = parser.parse_args()
 
-    logger = ExperimentLogger(config_path=args.config)
+    logger = ExperimentLogger(config_path=args.config, run_name=args.run_name)
     config = logger.config
     tee_logger = setup_logging(logger.run_dir)
     tb_logger = TensorBoardLogger(run_dir=logger.run_dir)
@@ -686,11 +766,12 @@ def main():
                     model,
                     train_loader,
                     optimizer,
+                    config,
                     device,
                     grad_clip,
                     gradient_attribution_cfg=gradient_attribution_cfg,
                 )
-                val_metrics = validate_epoch(model, val_loader, device)
+                val_metrics = validate_epoch(model, val_loader, config, device)
 
                 if epoch > warmup_epochs:
                     scheduler.step()

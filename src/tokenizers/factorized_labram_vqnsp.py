@@ -58,6 +58,13 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         fnirs_time_weight: float = 1.25,
         latent_alignment_weight: float = 0.05,
         coupling_weight: float = 0.05,
+        assignment_alignment_weight: float = 0.0,
+        hard_assignment_alignment_weight: float = 0.0,
+        shared_entropy_weight: float = 0.0,
+        private_entropy_weight: float = 0.0,
+        shared_eeg_recon_weight: float = 0.0,
+        shared_fnirs_recon_weight: float = 0.0,
+        coupling_bidirectional: bool = True,
         orthogonality_weight: float = 0.01,
         assignment_temperature: float = 0.2,
         alignment_lag_candidates: List[int] | None = None,
@@ -109,6 +116,13 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         self.fnirs_time_weight = fnirs_time_weight
         self.latent_alignment_weight = latent_alignment_weight
         self.coupling_weight = coupling_weight
+        self.assignment_alignment_weight = assignment_alignment_weight
+        self.hard_assignment_alignment_weight = hard_assignment_alignment_weight
+        self.shared_entropy_weight = shared_entropy_weight
+        self.private_entropy_weight = private_entropy_weight
+        self.shared_eeg_recon_weight = shared_eeg_recon_weight
+        self.shared_fnirs_recon_weight = shared_fnirs_recon_weight
+        self.coupling_bidirectional = bool(coupling_bidirectional)
         self.orthogonality_weight = orthogonality_weight
         self.assignment_temperature = assignment_temperature
         self.alignment_lag_candidates = sorted({max(int(lag), 0) for lag in (alignment_lag_candidates or [0])})
@@ -408,6 +422,40 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         target_probs = target_probs / target_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
         return F.kl_div(pred_probs.log(), target_probs, reduction='batchmean')
 
+    def _batch_usage_entropy_loss(self, probs: torch.Tensor) -> torch.Tensor:
+        if probs.numel() == 0:
+            return probs.new_tensor(0.0)
+        marginal = probs.reshape(-1, probs.shape[-1]).mean(dim=0)
+        marginal = marginal.clamp_min(1e-8)
+        marginal = marginal / marginal.sum().clamp_min(1e-8)
+        entropy = -(marginal * marginal.log()).sum()
+        max_entropy = math.log(float(marginal.shape[0])) if marginal.shape[0] > 1 else 1.0
+        normalized_entropy = entropy / max(max_entropy, 1e-8)
+        return 1.0 - normalized_entropy
+
+    def _symmetric_prob_kl(self, probs_a: torch.Tensor, probs_b: torch.Tensor) -> torch.Tensor:
+        probs_a = probs_a.clamp_min(1e-8)
+        probs_a = probs_a / probs_a.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+        probs_b = probs_b.clamp_min(1e-8)
+        probs_b = probs_b / probs_b.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+        kl_ab = F.kl_div(probs_a.log(), probs_b, reduction='batchmean')
+        kl_ba = F.kl_div(probs_b.log(), probs_a, reduction='batchmean')
+        return 0.5 * (kl_ab + kl_ba)
+
+    def _symmetric_hard_assignment_ce(self, logits_a: torch.Tensor, logits_b: torch.Tensor) -> torch.Tensor:
+        targets_a = logits_a.detach().argmax(dim=-1)
+        targets_b = logits_b.detach().argmax(dim=-1)
+        scale = max(self.assignment_temperature, 1e-3)
+        ce_ab = F.cross_entropy(
+            (logits_a / scale).reshape(-1, logits_a.shape[-1]),
+            targets_b.reshape(-1),
+        )
+        ce_ba = F.cross_entropy(
+            (logits_b / scale).reshape(-1, logits_b.shape[-1]),
+            targets_a.reshape(-1),
+        )
+        return 0.5 * (ce_ab + ce_ba)
+
     def _compute_shared_alignment_losses(
         self,
         z_eeg_shared: torch.Tensor,
@@ -417,6 +465,8 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
     ) -> Dict[str, torch.Tensor]:
         latent_losses = []
         coupling_losses = []
+        assignment_losses = []
+        hard_assignment_losses = []
         combined_losses = []
         valid_lags = []
         usable_lengths = []
@@ -424,19 +474,44 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         temperature = max(self.assignment_temperature, 1e-3)
         eeg_probs = F.softmax(eeg_shared_logits / temperature, dim=-1)
         fnirs_probs = F.softmax(fnirs_shared_logits / temperature, dim=-1)
+        shared_entropy_loss = 0.5 * (
+            self._batch_usage_entropy_loss(eeg_probs) +
+            self._batch_usage_entropy_loss(fnirs_probs)
+        )
 
         for lag_index, lag in enumerate(self.alignment_lag_candidates):
             aligned_z_eeg, aligned_z_fnirs = self._align_pair(z_eeg_shared, z_fnirs_shared, lag, target_length=target_length)
             aligned_eeg_probs, aligned_fnirs_probs = self._align_pair(eeg_probs, fnirs_probs, lag, target_length=target_length)
+            aligned_eeg_logits, aligned_fnirs_logits = self._align_pair(
+                eeg_shared_logits,
+                fnirs_shared_logits,
+                lag,
+                target_length=target_length,
+            )
             if aligned_z_eeg.shape[1] == 0:
                 continue
             latent_loss = self.alignment_loss(aligned_z_eeg, aligned_z_fnirs)
             transition = F.softmax(self.coupling_logits[lag_index], dim=-1)
             pred_fnirs_probs = torch.einsum('bnk,kl->bnl', aligned_eeg_probs, transition)
             coupling_loss = self._coupling_kl(pred_fnirs_probs, aligned_fnirs_probs)
-            combined = self.latent_alignment_weight * latent_loss + self.coupling_weight * coupling_loss
+            if self.coupling_bidirectional:
+                reverse_transition = F.softmax(self.coupling_logits[lag_index].transpose(0, 1), dim=-1)
+                pred_eeg_probs = torch.einsum('bnk,kl->bnl', aligned_fnirs_probs, reverse_transition)
+                coupling_loss = 0.5 * (
+                    coupling_loss + self._coupling_kl(pred_eeg_probs, aligned_eeg_probs)
+                )
+            assignment_loss = self._symmetric_prob_kl(aligned_eeg_probs, aligned_fnirs_probs)
+            hard_assignment_loss = self._symmetric_hard_assignment_ce(aligned_eeg_logits, aligned_fnirs_logits)
+            combined = (
+                self.latent_alignment_weight * latent_loss +
+                self.coupling_weight * coupling_loss +
+                self.assignment_alignment_weight * assignment_loss +
+                self.hard_assignment_alignment_weight * hard_assignment_loss
+            )
             latent_losses.append(latent_loss)
             coupling_losses.append(coupling_loss)
+            assignment_losses.append(assignment_loss)
+            hard_assignment_losses.append(hard_assignment_loss)
             combined_losses.append(combined)
             valid_lags.append(lag)
             usable_lengths.append(aligned_z_eeg.shape[1])
@@ -446,6 +521,9 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             return {
                 'latent_align_loss': zero,
                 'coupling_loss': zero,
+                'assignment_align_loss': zero,
+                'hard_assignment_align_loss': zero,
+                'shared_entropy_loss': zero,
                 'selected_lag': torch.tensor(0.0, device=z_eeg_shared.device, dtype=z_eeg_shared.dtype),
                 'alignment_usable_tokens': torch.tensor(0.0, device=z_eeg_shared.device, dtype=z_eeg_shared.dtype),
             }
@@ -453,18 +531,25 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         if self.alignment_selection == 'mean':
             latent_align_loss = torch.stack(latent_losses).mean()
             coupling_loss = torch.stack(coupling_losses).mean()
+            assignment_align_loss = torch.stack(assignment_losses).mean()
+            hard_assignment_align_loss = torch.stack(hard_assignment_losses).mean()
             selected_lag = float(sum(valid_lags) / len(valid_lags))
             alignment_usable_tokens = float(sum(usable_lengths) / len(usable_lengths))
         else:
             best_index = int(torch.argmin(torch.stack(combined_losses)).item())
             latent_align_loss = latent_losses[best_index]
             coupling_loss = coupling_losses[best_index]
+            assignment_align_loss = assignment_losses[best_index]
+            hard_assignment_align_loss = hard_assignment_losses[best_index]
             selected_lag = float(valid_lags[best_index])
             alignment_usable_tokens = float(usable_lengths[best_index])
 
         return {
             'latent_align_loss': latent_align_loss,
             'coupling_loss': coupling_loss,
+            'assignment_align_loss': assignment_align_loss,
+            'hard_assignment_align_loss': hard_assignment_align_loss,
+            'shared_entropy_loss': shared_entropy_loss,
             'selected_lag': torch.tensor(selected_lag, device=z_eeg_shared.device, dtype=z_eeg_shared.dtype),
             'alignment_usable_tokens': torch.tensor(alignment_usable_tokens, device=z_eeg_shared.device, dtype=z_eeg_shared.dtype),
         }
@@ -528,6 +613,8 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
 
         eeg_shared_logits = self._assignment_logits(eeg_shared, self.shared_quantizer.weight)
         fnirs_shared_logits = self._assignment_logits(fnirs_shared, self.shared_quantizer.weight)
+        eeg_private_logits = self._assignment_logits(eeg_private, self.eeg_private_quantizer.weight)
+        fnirs_private_logits = self._assignment_logits(fnirs_private, self.fnirs_private_quantizer.weight)
         alignment_losses = self._compute_shared_alignment_losses(
             eeg_shared,
             fnirs_shared,
@@ -536,8 +623,17 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         )
         latent_align_loss = alignment_losses['latent_align_loss']
         coupling_loss = alignment_losses['coupling_loss']
+        assignment_align_loss = alignment_losses['assignment_align_loss']
+        hard_assignment_align_loss = alignment_losses['hard_assignment_align_loss']
+        shared_entropy_loss = alignment_losses['shared_entropy_loss']
         selected_lag = alignment_losses['selected_lag']
         alignment_usable_tokens = alignment_losses['alignment_usable_tokens']
+        eeg_private_probs = F.softmax(eeg_private_logits / max(self.assignment_temperature, 1e-3), dim=-1)
+        fnirs_private_probs = F.softmax(fnirs_private_logits / max(self.assignment_temperature, 1e-3), dim=-1)
+        private_entropy_loss = 0.5 * (
+            self._batch_usage_entropy_loss(eeg_private_probs) +
+            self._batch_usage_entropy_loss(fnirs_private_probs)
+        )
 
         reconstructions = self.decode_from_components(eeg_shared_q, eeg_private_q, fnirs_shared_q, fnirs_private_q)
         eeg_pred_amp = reconstructions['eeg_pred_amp']
@@ -565,6 +661,31 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             self.fnirs_time_weight * fnirs_time_loss
         )
 
+        zero_eeg_private_q = torch.zeros_like(eeg_private_q)
+        zero_fnirs_private_q = torch.zeros_like(fnirs_private_q)
+        shared_only_reconstructions = self.decode_from_components(
+            eeg_shared_q,
+            zero_eeg_private_q,
+            fnirs_shared_q,
+            zero_fnirs_private_q,
+        )
+        shared_eeg_pred_amp = shared_only_reconstructions['eeg_pred_amp']
+        shared_eeg_pred_phase = shared_only_reconstructions['eeg_pred_phase']
+        shared_fnirs_pred_amp = shared_only_reconstructions['fnirs_pred_amp']
+        shared_fnirs_pred_phase = shared_only_reconstructions['fnirs_pred_phase']
+        shared_eeg_rec = shared_only_reconstructions['eeg_reconstructed']
+        shared_fnirs_rec = shared_only_reconstructions['fnirs_reconstructed']
+        shared_eeg_rec_loss = (
+            self.eeg_amplitude_weight * self.loss_fn(shared_eeg_pred_amp, eeg_target_amp) +
+            self.eeg_phase_weight * self.loss_fn(shared_eeg_pred_phase, eeg_target_phase) +
+            self.eeg_time_weight * self.loss_fn(shared_eeg_rec, eeg)
+        )
+        shared_fnirs_rec_loss = (
+            self.fnirs_amplitude_weight * self.loss_fn(shared_fnirs_pred_amp, fnirs_target_amp) +
+            self.fnirs_phase_weight * self.loss_fn(shared_fnirs_pred_phase, fnirs_target_phase) +
+            self.fnirs_time_weight * self.loss_fn(shared_fnirs_rec, fnirs)
+        )
+
         orthogonality_loss = self._orthogonality_loss(eeg_shared, eeg_private) + self._orthogonality_loss(fnirs_shared, fnirs_private)
         vq_shared_loss = shared_info['vq_loss']
         vq_eeg_private_loss = eeg_private_info['vq_loss']
@@ -577,6 +698,12 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             vq_loss +
             (self.latent_alignment_weight * self.alignment_scale) * latent_align_loss +
             (self.coupling_weight * self.alignment_scale) * coupling_loss +
+            (self.assignment_alignment_weight * self.alignment_scale) * assignment_align_loss +
+            (self.hard_assignment_alignment_weight * self.alignment_scale) * hard_assignment_align_loss +
+            self.shared_entropy_weight * shared_entropy_loss +
+            self.private_entropy_weight * private_entropy_loss +
+            self.shared_eeg_recon_weight * shared_eeg_rec_loss +
+            self.shared_fnirs_recon_weight * shared_fnirs_rec_loss +
             self.orthogonality_weight * orthogonality_loss
         )
 
@@ -607,6 +734,12 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'vq_fnirs_private_loss': vq_fnirs_private_loss,
             'latent_align_loss': latent_align_loss,
             'coupling_loss': coupling_loss,
+            'assignment_align_loss': assignment_align_loss,
+            'hard_assignment_align_loss': hard_assignment_align_loss,
+            'shared_entropy_loss': shared_entropy_loss,
+            'private_entropy_loss': private_entropy_loss,
+            'shared_eeg_rec_loss': shared_eeg_rec_loss,
+            'shared_fnirs_rec_loss': shared_fnirs_rec_loss,
             'orthogonality_loss': orthogonality_loss,
             'selected_alignment_lag': selected_lag,
             'alignment_usable_tokens': alignment_usable_tokens,
@@ -624,6 +757,8 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'fnirs_private_utilization': fnirs_private_info['utilization'],
             'eeg_reconstructed': eeg_rec,
             'fnirs_reconstructed': fnirs_rec,
+            'eeg_shared_only_reconstructed': shared_eeg_rec,
+            'fnirs_shared_only_reconstructed': shared_fnirs_rec,
             'eeg_indices': eeg_shared_indices,
             'fnirs_indices': fnirs_shared_indices,
             'eeg_private_indices': eeg_private_indices,
@@ -658,5 +793,11 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'vq_loss': 1.0,
             'latent_align_loss': self.latent_alignment_weight * alignment_scale,
             'coupling_loss': self.coupling_weight * alignment_scale,
+            'assignment_align_loss': self.assignment_alignment_weight * alignment_scale,
+            'hard_assignment_align_loss': self.hard_assignment_alignment_weight * alignment_scale,
+            'shared_entropy_loss': self.shared_entropy_weight,
+            'private_entropy_loss': self.private_entropy_weight,
+            'shared_eeg_rec_loss': self.shared_eeg_recon_weight,
+            'shared_fnirs_rec_loss': self.shared_fnirs_recon_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }
