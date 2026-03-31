@@ -46,6 +46,9 @@ def create_tokenizer(config: Dict[str, Any]) -> nn.Module:
     tokenizer_type = model_cfg.get('type', 'patch_vqvae')
     
     cls = get_tokenizer_class(tokenizer_type)
+
+    if hasattr(cls, 'from_config') and callable(getattr(cls, 'from_config')):
+        return cls.from_config(config)
     
     # Build kwargs from config
     kwargs = _build_tokenizer_kwargs(tokenizer_type, config)
