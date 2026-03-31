@@ -3,6 +3,26 @@
 > This document is a follow-up design note built on top of [Shared_codebook_structure_report.md](Shared_codebook_structure_report.md).
 > The goal is to replace the current single shared-codebook assumption with a factorized architecture that preserves reconstruction while keeping cross-modal alignment interpretable and physiologically grounded.
 
+## Update after V4 long-run and V5
+
+The original version of this note overstated one point: it treated stronger reconstruction pressure as a main reason why shared-token overlap drops. The later factorized runs do not support that interpretation.
+
+What the updated evidence shows instead is:
+
+- better reconstruction and better codebook usage do not automatically reduce overlap,
+- exact shared-token identity is a poor proxy for physiological correspondence,
+- lag-conditioned mutual information can improve even when token match remains near zero,
+- the more important failure mode is asking the shared branch to explain the wrong target.
+
+The strongest counterexample is the comparison between V4 long-run and V5:
+
+- V5 improved full-signal reconstruction relative to V4 long-run,
+- V5 increased shared codebook perplexity substantially,
+- V5 improved best-lag mutual information,
+- but V5 still had nearly zero token identity match and only modest shared support overlap.
+
+This means the main design question is not "how do we force more overlap?" The main question is "what should the shared branch be responsible for reconstructing and predicting so that its states remain physiologically meaningful?"
+
 ## 1. Why the current shared-codebook design plateaus
 
 The current model in [src/tokenizers/shared_labram_vqnsp.py](src/tokenizers/shared_labram_vqnsp.py) uses:
@@ -24,13 +44,15 @@ EEG contains high-frequency, rapidly changing electrophysiological structure. fN
 2. Shared-token identity is stronger than physiological correspondence.
 Physiological coupling does not require that EEG and fNIRS emit the same token index. It only requires that certain EEG states predict certain fNIRS states under a lagged, structured mapping. The current model uses token identity overlap as an implicit proxy for correspondence. That proxy is too strict.
 
-3. Reconstruction and alignment compete inside the same discrete bottleneck.
-If the codebook prioritizes reconstruction, each modality tends to occupy its own region of the vocabulary and overlap collapses. If the codebook prioritizes overlap, reconstruction degrades because modality-private details are suppressed. This is the tradeoff observed in the final shared-codebook experiments.
+3. Reconstruction and alignment do not oppose each other in a simple monotonic way.
+Inside a finite discrete vocabulary, stronger per-modality reconstruction and broader code usage can actually increase support overlap, because each modality is forced to use more of the available inventory instead of collapsing onto a few codes. The later factorized runs show that reconstruction can improve together with shared-codebook perplexity while overlap does not collapse further.
+
+The deeper problem is different: exact token overlap is not the right target. A shared branch can carry physiologically aligned information through lagged, structured dependence while still assigning different discrete indices in EEG and fNIRS.
 
 4. Codebook-health metrics can be misleading under a shared bottleneck.
-EMA utilization can remain high while emitted-token overlap becomes nearly zero. In other words, the quantizer is numerically active, but the learned shared representation is semantically empty.
+EMA utilization, perplexity, overlap, and lag-conditioned mutual information are measuring different things. High utilization does not imply meaningful cross-modal physiology, but low token match does not imply that shared physiological structure is absent either. After V5, the more concerning symptom is not low token identity by itself; it is that the shared branch can nearly reconstruct the full signal alone, which means the factorization boundary is becoming semantically blurry.
 
-These observations indicate that the main problem is not simply a bad loss weight. The problem is that the representation geometry is over-constrained.
+These observations indicate that the main problem is not simply a bad loss weight. The problem is that the representation geometry and the shared-branch target are mismatched.
 
 ## 2. Core idea: shared/private factorization
 
@@ -281,6 +303,48 @@ To counter this, use a weak balance term, for example:
 
 This should be weak. The goal is to prevent trivial bypass, not to force false sharing.
 
+### 6.6 Shared reconstruction should target the common component, not the whole raw signal
+
+The V5 result revealed an important issue. Once the shared branch is explicitly trained to reconstruct the full EEG and full fNIRS signals by itself, it can become a second general-purpose reconstruction path rather than a carrier of cross-modal physiology. That improves raw reconstruction, but it weakens interpretability because the shared branch is no longer constrained to represent only common structure.
+
+The next design should therefore replace full raw shared-only reconstruction with common-component reconstruction.
+
+Conceptually, each modality should be decomposed into:
+
+$$
+x_{eeg} = x_{eeg}^{common} + x_{eeg}^{private}, \quad
+x_{fnirs} = x_{fnirs}^{common} + x_{fnirs}^{private}
+$$
+
+and the shared branch should only be asked to reconstruct $x^{common}$, while the private branch reconstructs the residual.
+
+In practice, the first implementation should use deterministic targets for the common component rather than trying to learn the decomposition from scratch. Reasonable first targets are:
+
+- EEG common target: low-frequency, energy-envelope, or band-power summaries that are plausible fNIRS precursors,
+- fNIRS common target: low-pass hemodynamic component after baseline removal,
+- private targets: residuals needed to recover the full waveform after subtracting the common component.
+
+This keeps the shared branch tied to physiologically interpretable structure instead of rewarding it for memorizing modality-private detail.
+
+### 6.7 Predictive alignment should dominate identity alignment
+
+The current coupling loss is closer to the right idea than token match or code-overlap metrics, because physiology is delayed and relational rather than index-identical. The next model should make that asymmetry explicit:
+
+- keep lag-conditioned predictive coupling on the shared branch,
+- demote assignment matching to a weak stabilizer or remove it entirely in some ablations,
+- evaluate shared states primarily through predictive and information-theoretic measures rather than exact token identity.
+
+The practical implication is that the main validation metrics should become:
+
+- full EEG reconstruction,
+- full fNIRS reconstruction,
+- shared-common-component reconstruction,
+- best-lag mutual information and MI improvement over lag 0,
+- cross-modal prediction quality from shared EEG to delayed fNIRS and vice versa,
+- branch-ablation gaps.
+
+Token match and code overlap should remain diagnostics, but not the main success criteria.
+
 ## 7. What should remain shared, and what should become private
 
 ### Shared
@@ -445,6 +509,8 @@ Goal:
 - align shared states without damaging reconstruction,
 - observe whether shared code overlap and coupling MI increase while private branches preserve fidelity.
 
+This stage should now be interpreted carefully. The primary success signal is improved lag-conditioned predictive structure, not larger exact token overlap.
+
 ### Stage 3. Decoder reliance probes
 
 Run ablations:
@@ -455,6 +521,12 @@ Run ablations:
 
 This directly tests whether the shared branch is meaningful rather than decorative.
 
+For the next revision, the probe should be extended from a raw-signal question to a decomposition question:
+
+- can the shared branch reconstruct the common physiological component,
+- can the private branch reconstruct the residual,
+- does combining them recover the full waveform with lower error than either branch alone?
+
 ## 10. Why this is better than another shared-codebook weight sweep
 
 Another weight sweep still leaves the model with one impossible requirement:
@@ -463,13 +535,15 @@ Another weight sweep still leaves the model with one impossible requirement:
 
 Factorization removes that contradiction.
 
+However, the V5 evidence adds a second lesson: even after factorization, shared-only full raw reconstruction is too permissive. It encourages the shared branch to act like a second full-modality decoder path rather than a cross-modal physiological bottleneck.
+
 The expected benefits are:
 
 1. Better reconstruction
 - because private branches no longer compete for shared capacity.
 
 2. More meaningful cross-modal interpretability
-- because shared codes correspond to common physiology, not full modality content.
+- because shared codes can be trained against common physiology rather than full modality content.
 
 3. Cleaner codebook diagnostics
 - because shared usage can be evaluated independently from private usage.
@@ -486,6 +560,17 @@ Mitigation:
 - small shared-usage regularizer,
 - branch dropout,
 - shared-only decoding probe during validation.
+
+Updated note: V5 exposed the opposite risk as well.
+
+### Risk 1b. Shared branch becomes too broad and absorbs full-signal detail
+
+Mitigation:
+
+- do not train shared-only reconstruction against the full raw waveform,
+- train shared reconstruction against common-component targets only,
+- measure shared-vs-private branch ablation gaps explicitly,
+- add residual composition checks so private branches remain necessary.
 
 ### Risk 2. Shared branch becomes too weak to capture coupling
 
@@ -515,7 +600,16 @@ Mitigation:
 
 ## 13. Bottom line
 
-The main lesson from the latest experiments is not that alignment should be weaker or stronger. The lesson is that one shared discrete bottleneck is too rigid for this problem.
+The main lesson from the latest experiments is not that alignment should be weaker or stronger. The lesson is that one shared discrete bottleneck is too rigid for this problem, and after factorization the next bottleneck is target definition for the shared branch.
+
+The revised interpretation is:
+
+- stronger reconstruction is not the core reason overlap stays low,
+- overlap and token identity should not be treated as the main physiological objective,
+- lag-conditioned predictive dependence is the more faithful alignment signal,
+- the shared branch should reconstruct common physiology, while the private branches reconstruct residual modality-specific detail.
+
+So the architecture direction remains factorized, but the next modification should be to change what the shared branch reconstructs, not to further harden token-identity constraints.
 
 Shared/private factorization is the minimal structural change that:
 

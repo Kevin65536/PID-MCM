@@ -64,6 +64,12 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         private_entropy_weight: float = 0.0,
         shared_eeg_recon_weight: float = 0.0,
         shared_fnirs_recon_weight: float = 0.0,
+        shared_eeg_common_weight: float = 0.0,
+        shared_fnirs_common_weight: float = 0.0,
+        eeg_private_residual_weight: float = 0.0,
+        fnirs_private_residual_weight: float = 0.0,
+        eeg_common_pool_kernel: int = 400,
+        fnirs_common_pool_kernel: int = 20,
         coupling_bidirectional: bool = True,
         orthogonality_weight: float = 0.01,
         assignment_temperature: float = 0.2,
@@ -122,6 +128,12 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         self.private_entropy_weight = private_entropy_weight
         self.shared_eeg_recon_weight = shared_eeg_recon_weight
         self.shared_fnirs_recon_weight = shared_fnirs_recon_weight
+        self.shared_eeg_common_weight = shared_eeg_common_weight
+        self.shared_fnirs_common_weight = shared_fnirs_common_weight
+        self.eeg_private_residual_weight = eeg_private_residual_weight
+        self.fnirs_private_residual_weight = fnirs_private_residual_weight
+        self.eeg_common_pool_kernel = max(int(eeg_common_pool_kernel), 1)
+        self.fnirs_common_pool_kernel = max(int(fnirs_common_pool_kernel), 1)
         self.coupling_bidirectional = bool(coupling_bidirectional)
         self.orthogonality_weight = orthogonality_weight
         self.assignment_temperature = assignment_temperature
@@ -433,6 +445,19 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
         normalized_entropy = entropy / max(max_entropy, 1e-8)
         return 1.0 - normalized_entropy
 
+    def _smooth_signal(self, signal: torch.Tensor, kernel_size: int) -> torch.Tensor:
+        if signal.dim() != 3:
+            raise ValueError('Expected signal tensor with shape [B, C, T]')
+        if signal.shape[-1] <= 1:
+            return signal
+        kernel = max(min(int(kernel_size), signal.shape[-1]), 1)
+        if kernel <= 1:
+            return signal
+        pad_left = (kernel - 1) // 2
+        pad_right = kernel - 1 - pad_left
+        padded = F.pad(signal, (pad_left, pad_right), mode='replicate')
+        return F.avg_pool1d(padded, kernel_size=kernel, stride=1)
+
     def _symmetric_prob_kl(self, probs_a: torch.Tensor, probs_b: torch.Tensor) -> torch.Tensor:
         probs_a = probs_a.clamp_min(1e-8)
         probs_a = probs_a / probs_a.sum(dim=-1, keepdim=True).clamp_min(1e-8)
@@ -686,6 +711,52 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             self.fnirs_time_weight * self.loss_fn(shared_fnirs_rec, fnirs)
         )
 
+        zero_eeg_shared_q = torch.zeros_like(eeg_shared_q)
+        zero_fnirs_shared_q = torch.zeros_like(fnirs_shared_q)
+        component_aux_enabled = any(
+            weight > 0.0
+            for weight in (
+                self.shared_eeg_common_weight,
+                self.shared_fnirs_common_weight,
+                self.eeg_private_residual_weight,
+                self.fnirs_private_residual_weight,
+            )
+        )
+        if component_aux_enabled:
+            eeg_common_target = self._smooth_signal(eeg, self.eeg_common_pool_kernel)
+            fnirs_common_target = self._smooth_signal(fnirs, self.fnirs_common_pool_kernel)
+            eeg_residual_target = eeg - eeg_common_target
+            fnirs_residual_target = fnirs - fnirs_common_target
+        else:
+            eeg_common_target = None
+            fnirs_common_target = None
+            eeg_residual_target = None
+            fnirs_residual_target = None
+
+        shared_eeg_common_loss = eeg.new_tensor(0.0)
+        shared_fnirs_common_loss = fnirs.new_tensor(0.0)
+        eeg_private_residual_loss = eeg.new_tensor(0.0)
+        fnirs_private_residual_loss = fnirs.new_tensor(0.0)
+        eeg_private_only_rec = None
+        fnirs_private_only_rec = None
+        if component_aux_enabled:
+            private_only_reconstructions = self.decode_from_components(
+                zero_eeg_shared_q,
+                eeg_private_q,
+                zero_fnirs_shared_q,
+                fnirs_private_q,
+            )
+            eeg_private_only_rec = private_only_reconstructions['eeg_reconstructed']
+            fnirs_private_only_rec = private_only_reconstructions['fnirs_reconstructed']
+            if self.shared_eeg_common_weight > 0.0:
+                shared_eeg_common_loss = self.loss_fn(shared_eeg_rec, eeg_common_target)
+            if self.shared_fnirs_common_weight > 0.0:
+                shared_fnirs_common_loss = self.loss_fn(shared_fnirs_rec, fnirs_common_target)
+            if self.eeg_private_residual_weight > 0.0:
+                eeg_private_residual_loss = self.loss_fn(eeg_private_only_rec, eeg_residual_target)
+            if self.fnirs_private_residual_weight > 0.0:
+                fnirs_private_residual_loss = self.loss_fn(fnirs_private_only_rec, fnirs_residual_target)
+
         orthogonality_loss = self._orthogonality_loss(eeg_shared, eeg_private) + self._orthogonality_loss(fnirs_shared, fnirs_private)
         vq_shared_loss = shared_info['vq_loss']
         vq_eeg_private_loss = eeg_private_info['vq_loss']
@@ -704,6 +775,10 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             self.private_entropy_weight * private_entropy_loss +
             self.shared_eeg_recon_weight * shared_eeg_rec_loss +
             self.shared_fnirs_recon_weight * shared_fnirs_rec_loss +
+            self.shared_eeg_common_weight * shared_eeg_common_loss +
+            self.shared_fnirs_common_weight * shared_fnirs_common_loss +
+            self.eeg_private_residual_weight * eeg_private_residual_loss +
+            self.fnirs_private_residual_weight * fnirs_private_residual_loss +
             self.orthogonality_weight * orthogonality_loss
         )
 
@@ -740,6 +815,10 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'private_entropy_loss': private_entropy_loss,
             'shared_eeg_rec_loss': shared_eeg_rec_loss,
             'shared_fnirs_rec_loss': shared_fnirs_rec_loss,
+            'shared_eeg_common_loss': shared_eeg_common_loss,
+            'shared_fnirs_common_loss': shared_fnirs_common_loss,
+            'eeg_private_residual_loss': eeg_private_residual_loss,
+            'fnirs_private_residual_loss': fnirs_private_residual_loss,
             'orthogonality_loss': orthogonality_loss,
             'selected_alignment_lag': selected_lag,
             'alignment_usable_tokens': alignment_usable_tokens,
@@ -759,6 +838,8 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'fnirs_reconstructed': fnirs_rec,
             'eeg_shared_only_reconstructed': shared_eeg_rec,
             'fnirs_shared_only_reconstructed': shared_fnirs_rec,
+            'eeg_private_only_reconstructed': eeg_private_only_rec if eeg_private_only_rec is not None else torch.zeros_like(eeg),
+            'fnirs_private_only_reconstructed': fnirs_private_only_rec if fnirs_private_only_rec is not None else torch.zeros_like(fnirs),
             'eeg_indices': eeg_shared_indices,
             'fnirs_indices': fnirs_shared_indices,
             'eeg_private_indices': eeg_private_indices,
@@ -799,5 +880,9 @@ class FactorizedLaBraMVQNSP(BaseTokenizer):
             'private_entropy_loss': self.private_entropy_weight,
             'shared_eeg_rec_loss': self.shared_eeg_recon_weight,
             'shared_fnirs_rec_loss': self.shared_fnirs_recon_weight,
+            'shared_eeg_common_loss': self.shared_eeg_common_weight,
+            'shared_fnirs_common_loss': self.shared_fnirs_common_weight,
+            'eeg_private_residual_loss': self.eeg_private_residual_weight,
+            'fnirs_private_residual_loss': self.fnirs_private_residual_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }

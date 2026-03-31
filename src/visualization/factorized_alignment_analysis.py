@@ -213,6 +213,39 @@ def _collect_snapshot_reconstructions(model, eeg: torch.Tensor, fnirs: torch.Ten
     }
 
 
+def _compute_branch_ablation_metrics(
+    eeg_signal: np.ndarray,
+    fnirs_signal: np.ndarray,
+    reconstructions: Dict[str, np.ndarray],
+) -> Dict[str, float]:
+    def mse(a: np.ndarray, b: np.ndarray) -> float:
+        return float(np.mean((a - b) ** 2))
+
+    eeg_full_mse = mse(reconstructions['full_eeg'], eeg_signal)
+    eeg_shared_only_mse = mse(reconstructions['shared_only_eeg'], eeg_signal)
+    eeg_private_only_mse = mse(reconstructions['private_only_eeg'], eeg_signal)
+    fnirs_full_mse = mse(reconstructions['full_fnirs'], fnirs_signal)
+    fnirs_shared_only_mse = mse(reconstructions['shared_only_fnirs'], fnirs_signal)
+    fnirs_private_only_mse = mse(reconstructions['private_only_fnirs'], fnirs_signal)
+
+    return {
+        'eeg_full_mse': eeg_full_mse,
+        'eeg_shared_only_mse': eeg_shared_only_mse,
+        'eeg_private_only_mse': eeg_private_only_mse,
+        'eeg_shared_gap': float(eeg_shared_only_mse - eeg_full_mse),
+        'eeg_private_gap': float(eeg_private_only_mse - eeg_full_mse),
+        'eeg_shared_to_full_ratio': float(eeg_shared_only_mse / max(eeg_full_mse, 1e-12)),
+        'eeg_private_to_full_ratio': float(eeg_private_only_mse / max(eeg_full_mse, 1e-12)),
+        'fnirs_full_mse': fnirs_full_mse,
+        'fnirs_shared_only_mse': fnirs_shared_only_mse,
+        'fnirs_private_only_mse': fnirs_private_only_mse,
+        'fnirs_shared_gap': float(fnirs_shared_only_mse - fnirs_full_mse),
+        'fnirs_private_gap': float(fnirs_private_only_mse - fnirs_full_mse),
+        'fnirs_shared_to_full_ratio': float(fnirs_shared_only_mse / max(fnirs_full_mse, 1e-12)),
+        'fnirs_private_to_full_ratio': float(fnirs_private_only_mse / max(fnirs_full_mse, 1e-12)),
+    }
+
+
 @torch.no_grad()
 def analyze_factorized_alignment(
     model,
@@ -386,6 +419,11 @@ def analyze_factorized_alignment(
         )
 
         if snapshot is not None:
+            branch_ablation_metrics = _compute_branch_ablation_metrics(
+                snapshot['eeg_signal'],
+                snapshot['fnirs_signal'],
+                snapshot['ablations'],
+            )
             eeg_fs = _estimate_sampling_rate(snapshot['eeg_signal'], window_duration_s)
             fnirs_fs = _estimate_sampling_rate(snapshot['fnirs_signal'], window_duration_s)
             _save_reconstruction_plot(
@@ -457,6 +495,8 @@ def analyze_factorized_alignment(
                     fs=fnirs_fs,
                     max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
                 )
+        else:
+            branch_ablation_metrics = {}
 
         split_result = {
             'mean_metrics': mean_metrics,
@@ -473,6 +513,7 @@ def analyze_factorized_alignment(
             'best_lag_match_rate': float(best_lag['match_rate']),
             'shared_cross_modal_coupling': shared_coupling,
             'top_pair_mapping': best_lag['top_mapping_rows'],
+            'branch_ablation_metrics': branch_ablation_metrics,
             'mean_shared_latent_energy': float(np.mean(shared_latent_energy)),
             'mean_private_latent_energy': float(np.mean(private_latent_energy)),
         }
