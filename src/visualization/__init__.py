@@ -1,6 +1,7 @@
 # src/visualization/__init__.py
 """Visualization utilities for tokenizer and classifier experiments."""
 
+from .alignment_analysis import analyze_alignment
 from .tokenizer_plots import TokenizerVisualizer, visualize_tokenizer_run
 from .classifier_plots import ClassifierVisualizer, visualize_classifier_run
 from .tensorboard_logger import TensorBoardLogger
@@ -12,6 +13,7 @@ __all__ = [
     'visualize_tokenizer_run',
     'ClassifierVisualizer',
     'visualize_classifier_run',
+    'analyze_alignment',
     'TensorBoardLogger',
     'analyze_shared_alignment',
     'analyze_factorized_alignment',

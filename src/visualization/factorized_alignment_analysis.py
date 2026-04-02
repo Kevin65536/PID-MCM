@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+
+from src.utils.io import write_json
 
 from .shared_alignment_analysis import (
     _active_overlap_summary,
@@ -519,9 +520,7 @@ def analyze_factorized_alignment(
         }
         results['splits'][split_name] = split_result
 
-        with open(split_dir / 'summary.json', 'w', encoding='utf-8') as handle:
-            json.dump(split_result, handle, indent=2)
+        write_json(split_dir / 'summary.json', split_result)
 
-    with open(output_dir / 'factorized_alignment_analysis.json', 'w', encoding='utf-8') as handle:
-        json.dump(results, handle, indent=2)
+    write_json(output_dir / 'factorized_alignment_analysis.json', results)
     return results

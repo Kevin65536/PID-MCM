@@ -13,7 +13,8 @@ import numpy as np
 import torch
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
-import json
+
+from src.utils.io import write_json
 
 # Matplotlib setup
 import matplotlib
@@ -581,10 +582,8 @@ class ClassifierVisualizer:
             'figures': [str(p.name) for p in self.generated_figures],
             'count': len(self.generated_figures)
         }
-        
-        path = self.figures_dir / filename
-        with open(path, 'w') as f:
-            json.dump(manifest, f, indent=2)
+
+        path = write_json(self.figures_dir / filename, manifest)
         
         print(f"[Viz] Manifest saved: {path.name}")
 

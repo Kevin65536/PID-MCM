@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 from collections import defaultdict
 from pathlib import Path
@@ -9,6 +8,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+
+from src.utils.io import write_json
 
 try:
     from sklearn.decomposition import PCA
@@ -1032,9 +1033,7 @@ def analyze_shared_alignment(
         }
         results['splits'][split_name] = split_result
 
-        with open(split_dir / 'summary.json', 'w', encoding='utf-8') as handle:
-            json.dump(split_result, handle, indent=2)
+        write_json(split_dir / 'summary.json', split_result)
 
-    with open(output_dir / 'shared_alignment_analysis.json', 'w', encoding='utf-8') as handle:
-        json.dump(results, handle, indent=2)
+    write_json(output_dir / 'shared_alignment_analysis.json', results)
     return results
