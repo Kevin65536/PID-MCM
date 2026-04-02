@@ -4,7 +4,6 @@ Handles config management, metrics logging, and visualization generation.
 """
 
 import json
-import yaml
 import hashlib
 import shutil
 from pathlib import Path
@@ -12,6 +11,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import numpy as np
 
+from .checkpoints import save_checkpoint_payload
+from .io import write_json, write_yaml
 from src.data.registry import load_experiment_config
 
 # Try to import visualization libraries
@@ -114,9 +115,7 @@ class ExperimentLogger:
     
     def _save_config(self):
         """Save frozen config to run directory."""
-        config_path = self.run_dir / "config.yaml"
-        with open(config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True)
+        write_yaml(self.run_dir / "config.yaml", self.config)
     
     def log_epoch(
         self,
@@ -172,9 +171,7 @@ class ExperimentLogger:
     
     def _save_metrics(self):
         """Save metrics to JSON file."""
-        metrics_path = self.run_dir / "metrics.json"
-        with open(metrics_path, 'w', encoding='utf-8') as f:
-            json.dump(self.metrics, f, indent=2)
+        write_json(self.run_dir / "metrics.json", self.metrics)
     
     def save_checkpoint(self, state_dict: Dict, epoch: int, is_best: bool = False):
         """Save model checkpoint."""
@@ -182,10 +179,7 @@ class ExperimentLogger:
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
         
         checkpoint_path = self.checkpoints_dir / f"checkpoint_epoch_{epoch}.pt"
-        
-        # Import torch only when needed
-        import torch
-        torch.save(state_dict, checkpoint_path)
+        save_checkpoint_payload(state_dict, checkpoint_path)
         
         if is_best:
             best_path = self.checkpoints_dir / "best_model.pt"
