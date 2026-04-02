@@ -25,7 +25,6 @@ TensorBoard:
 import sys
 import os
 import argparse
-import json
 import traceback
 import subprocess
 from pathlib import Path
@@ -41,52 +40,29 @@ import numpy as np
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.utils.logger import ExperimentLogger
-from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
-from src.data import create_configured_dataloader
-from src.metrics.reconstruction import (
+from src.losses import (
     compute_band_power_loss,
-    compute_mae,
     compute_multi_stft_loss,
-    compute_reconstruction_mse,
     compute_smoothness_loss,
+)
+from src.metrics import (
+    compute_mae,
+    compute_reconstruction_mse,
     compute_snr,
     compute_spectral_mse,
 )
+from src.tokenizers import create_tokenizer, StandardizedOutput, list_tokenizers
+from src.data import create_configured_dataloader
+from src.utils import (
+    ExperimentLogger,
+    load_training_checkpoint,
+    require_standard_training_launcher,
+    save_training_checkpoint,
+    setup_logging,
+    write_json,
+)
 from src.metrics.codebook_health import compute_codebook_health
 from src.visualization import TokenizerVisualizer, TensorBoardLogger
-
-
-# ============================================================================
-# Logging Utilities
-# ============================================================================
-
-class TeeLogger:
-    """同时输出到终端和文件的日志类"""
-    def __init__(self, log_file: Path):
-        self.terminal = sys.stdout
-        self.log_file = open(log_file, 'a', buffering=1)
-        
-    def write(self, message):
-        self.terminal.write(message)
-        self.log_file.write(message)
-        self.log_file.flush()
-        
-    def flush(self):
-        self.terminal.flush()
-        self.log_file.flush()
-        
-    def close(self):
-        self.log_file.close()
-
-
-def setup_logging(run_dir: Path) -> TeeLogger:
-    """设置日志，同时输出到终端和文件"""
-    log_file = run_dir / "training.log"
-    tee = TeeLogger(log_file)
-    sys.stdout = tee
-    sys.stderr = tee
-    return tee
 
 
 # ============================================================================
@@ -734,53 +710,7 @@ def save_detailed_analysis(
     if sample_spectral_metrics:
         report['sample_spectral_metrics'] = sample_spectral_metrics
 
-    report_path = analysis_dir / 'detailed_analysis.json'
-    report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
-    return report_path
-
-
-# ============================================================================
-# Checkpointing
-# ============================================================================
-
-def save_checkpoint(
-    tokenizer,
-    optimizer,
-    epoch: int,
-    val_loss: float,
-    config: dict,
-    save_path: Path,
-    is_best: bool = False,
-):
-    """Save model checkpoint."""
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': tokenizer.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'val_loss': val_loss,
-        'config': config,
-        'tokenizer_type': config['model'].get('type', 'unknown'),
-    }
-    torch.save(checkpoint, save_path)
-    
-    if is_best:
-        print(f"  ★ New best model saved (val_loss={val_loss:.4f})")
-
-
-def load_checkpoint(
-    checkpoint_path: Path,
-    tokenizer,
-    optimizer=None,
-    device='cpu',
-) -> Dict[str, Any]:
-    """Load model checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    tokenizer.load_state_dict(checkpoint['model_state_dict'])
-    
-    if optimizer is not None and 'optimizer_state_dict' in checkpoint:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    
-    return checkpoint
+    return write_json(analysis_dir / 'detailed_analysis.json', report)
 
 
 # ============================================================================
@@ -883,50 +813,9 @@ def main():
                         help='Config file path (relative to experiments/configs/)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to checkpoint to resume from')
-    parser.add_argument('--foreground', '-f', action='store_true',
-                        help='Run in foreground (default is background with nohup)')
     args = parser.parse_args()
-    
-    # If not foreground mode, re-launch as background process
-    if not args.foreground and not os.environ.get('TOKENIZER_TRAINING_BG'):
-        import subprocess
-        import sys
-        
-        # Create log directory
-        log_dir = Path('logs')
-        log_dir.mkdir(exist_ok=True)
-        
-        # Extract experiment name from config
-        config_name = Path(args.config).stem
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_file = log_dir / f'{config_name}_{timestamp}.log'
-        
-        # Build command with foreground flag and env var
-        cmd = [sys.executable, __file__, '--config', args.config, '--foreground']
-        if args.resume:
-            cmd.extend(['--resume', args.resume])
-        
-        # Set environment variable to mark this as background run
-        env = os.environ.copy()
-        env['TOKENIZER_TRAINING_BG'] = '1'
-        
-        # Launch background process with nohup-like behavior
-        with open(log_file, 'w') as log_f:
-            # Use DEVNULL for stdin to fully detach
-            process = subprocess.Popen(
-                cmd, 
-                stdin=subprocess.DEVNULL,
-                stdout=log_f, 
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
-        
-        print(f"Training started in background (PID: {process.pid})")
-        print(f"Log file: {log_file}")
-        print(f"Monitor: tail -f {log_file}")
-        print(f"TensorBoard: tensorboard --logdir experiments/runs")
-        sys.exit(0)  # Explicitly exit parent process
+
+    require_standard_training_launcher('tokenizer')
     
     # Print available tokenizers
     print(f"Available tokenizers: {list_tokenizers()}")
@@ -997,7 +886,7 @@ def main():
     start_epoch = 0
     if args.resume:
         print(f"\nResuming from checkpoint: {args.resume}")
-        ckpt = load_checkpoint(Path(args.resume), tokenizer, optimizer, device)
+        ckpt = load_training_checkpoint(Path(args.resume), tokenizer, optimizer, device)
         start_epoch = ckpt['epoch']
         print(f"Resumed from epoch {start_epoch}")
     
@@ -1259,7 +1148,18 @@ def main():
             
             # Save best model (in checkpoints directory)
             best_path = checkpoints_dir / 'best_model.pt'
-            save_checkpoint(tokenizer, optimizer, epoch + 1, val_loss, config, best_path, is_best=True)
+            save_training_checkpoint(
+                tokenizer,
+                optimizer,
+                epoch + 1,
+                best_path,
+                extra={
+                    'val_loss': val_loss,
+                    'config': config,
+                    'tokenizer_type': config['model'].get('type', 'unknown'),
+                },
+            )
+            print(f"  ★ New best model saved (val_loss={val_loss:.4f})")
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement >= patience:
@@ -1269,7 +1169,17 @@ def main():
         # Periodic checkpoint
         if save_every > 0 and (epoch + 1) % save_every == 0:
             ckpt_path = checkpoints_dir / f'checkpoint_epoch_{epoch+1}.pt'
-            save_checkpoint(tokenizer, optimizer, epoch + 1, val_loss, config, ckpt_path)
+            save_training_checkpoint(
+                tokenizer,
+                optimizer,
+                epoch + 1,
+                ckpt_path,
+                extra={
+                    'val_loss': val_loss,
+                    'config': config,
+                    'tokenizer_type': config['model'].get('type', 'unknown'),
+                },
+            )
     
     # Close TensorBoard writer
     tb_logger.close()
@@ -1288,7 +1198,7 @@ def main():
     # Load best model
     best_path = checkpoints_dir / 'best_model.pt'
     if best_path.exists():
-        checkpoint = load_checkpoint(best_path, tokenizer, device=device)
+        checkpoint = load_training_checkpoint(best_path, tokenizer, device=device)
         print(f"Loaded best model from epoch {checkpoint['epoch']}")
     
     tokenizer.eval()

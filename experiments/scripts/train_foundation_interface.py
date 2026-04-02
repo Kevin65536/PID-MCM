@@ -18,6 +18,7 @@ from src.foundation import (
     TokenBatchAdapter,
     UnifiedMultimodalFoundationModel,
 )
+from src.utils import require_standard_training_launcher
 
 
 def load_config(config_path: str) -> dict:
@@ -94,6 +95,8 @@ def main():
         help="Path to the foundation interface yaml config",
     )
     args = parser.parse_args()
+
+    require_standard_training_launcher('foundation-interface')
 
     config_path = Path(args.config)
     if not config_path.exists():

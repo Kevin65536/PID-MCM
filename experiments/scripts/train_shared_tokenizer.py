@@ -22,50 +22,19 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data import create_configured_multimodal_dataloaders
-from src.metrics import compute_multi_stft_loss, compute_spectral_mse
+from src.losses import compute_multi_stft_loss
+from src.metrics import compute_spectral_mse
 from src.tokenizers import create_tokenizer
-from src.utils.logger import ExperimentLogger
+from src.utils import (
+    ExperimentLogger,
+    load_checkpoint_file,
+    load_training_checkpoint,
+    require_standard_training_launcher,
+    setup_logging,
+    write_json,
+)
 from src.visualization import TensorBoardLogger
-from src.visualization import analyze_factorized_alignment, analyze_shared_alignment
-
-
-class TeeLogger:
-    """Write logs to both stdout and a file."""
-
-    def __init__(self, log_file: Path):
-        self.terminal = sys.stdout
-        self.error_terminal = sys.stderr
-        self.log_file = open(log_file, 'a', buffering=1)
-        self.closed = False
-
-    def write(self, message: str):
-        if self.closed:
-            self.terminal.write(message)
-            return
-        self.terminal.write(message)
-        self.log_file.write(message)
-        self.log_file.flush()
-
-    def flush(self):
-        self.terminal.flush()
-        if not self.closed:
-            self.log_file.flush()
-
-    def close(self):
-        if self.closed:
-            return
-        sys.stdout = self.terminal
-        sys.stderr = self.error_terminal
-        self.log_file.close()
-        self.closed = True
-
-
-def setup_logging(run_dir: Path) -> TeeLogger:
-    log_file = run_dir / "training.log"
-    tee = TeeLogger(log_file)
-    sys.stdout = tee
-    sys.stderr = tee
-    return tee
+from src.visualization import analyze_alignment
 
 
 def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
@@ -454,13 +423,6 @@ def validate_epoch(
     return {key: value / max(total_batches, 1) for key, value in totals.items()}
 
 
-def load_checkpoint(path: Path, model, optimizer, device: torch.device) -> Dict[str, Any]:
-    checkpoint = torch.load(path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    return checkpoint
-
-
 def maybe_seed_best_checkpoint(
     logger: ExperimentLogger,
     resume_path: Path,
@@ -514,7 +476,7 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
         return
 
     def load_branch(checkpoint_path: str, branch_prefix: str):
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = load_checkpoint_file(checkpoint_path, device=device)
         source_state = checkpoint['model_state_dict']
         target_state = model.state_dict()
 
@@ -601,8 +563,7 @@ def finalize_training_run(
 
     if best_path.exists():
         print(f"\nLoading best checkpoint from {best_path}")
-        best_checkpoint = torch.load(best_path, map_location=device)
-        model.load_state_dict(best_checkpoint['model_state_dict'])
+        best_checkpoint = load_training_checkpoint(best_path, model, device=device)
         best_epoch = int(best_checkpoint.get('best_epoch', best_checkpoint.get('epoch', best_epoch)))
         best_monitor = float(best_checkpoint.get('best_monitor', best_monitor))
         monitor_metric = best_checkpoint.get('monitor_metric', 'val_loss')
@@ -639,25 +600,22 @@ def finalize_training_run(
 
     analysis_type = getattr(model, 'get_analysis_type', lambda: 'shared_alignment')()
     summary_path = logger.run_dir / 'analysis' / f'{analysis_type}_summary.json'
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(summary_path, 'w', encoding='utf-8') as handle:
-        json.dump(final_metrics, handle, indent=2)
+    write_json(summary_path, final_metrics)
 
     if skip_post_analysis:
         return final_metrics
 
     analysis_dir = logger.run_dir / 'analysis' / analysis_type
     print(f"Running default {analysis_type} analysis -> {analysis_dir}")
-    analyzer = analyze_factorized_alignment if analysis_type == 'factorized_alignment' else analyze_shared_alignment
-    analysis_results = analyzer(
+    analysis_results = analyze_alignment(
         model=model,
         dataloaders={'val': val_loader, 'test': test_loader},
         config=config,
         output_dir=analysis_dir,
         device=analysis_device,
+        analysis_type=analysis_type,
     )
-    with open(analysis_dir / 'analysis_summary.json', 'w', encoding='utf-8') as handle:
-        json.dump(analysis_results, handle, indent=2)
+    write_json(analysis_dir / 'analysis_summary.json', analysis_results)
 
     lag_set = config.get('validation', {}).get('lag_set', [])
     max_validation_lag = max(lag_set) if lag_set else None
@@ -680,6 +638,8 @@ def main():
     parser.add_argument('--run-name', default=None, help='Optional run directory name to reuse inside experiments/runs')
     parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default shared alignment analysis at the end of training')
     args = parser.parse_args()
+
+    require_standard_training_launcher('shared-tokenizer')
 
     logger = ExperimentLogger(config_path=args.config, run_name=args.run_name)
     config = logger.config
@@ -762,7 +722,7 @@ def main():
 
         start_epoch = 0
         if args.resume:
-            checkpoint = load_checkpoint(Path(args.resume), model, optimizer, device)
+            checkpoint = load_training_checkpoint(Path(args.resume), model, optimizer, device)
             start_epoch = int(checkpoint.get('epoch', 0))
             resume_best_epoch = checkpoint.get('best_epoch')
             resume_best_monitor = checkpoint.get('best_monitor')

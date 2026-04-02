@@ -7,6 +7,7 @@ from .checkpoints import (
     save_training_checkpoint,
 )
 from .io import save_npz, write_json, write_yaml
+from .launcher import require_standard_training_launcher
 from .logger import ExperimentLogger, update_comparison_csv
 from .tee import TeeLogger, setup_logging
 
@@ -15,6 +16,7 @@ __all__ = [
     'TeeLogger',
     'load_checkpoint_file',
     'load_training_checkpoint',
+    'require_standard_training_launcher',
     'save_checkpoint_payload',
     'save_npz',
     'save_training_checkpoint',

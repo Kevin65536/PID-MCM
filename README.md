@@ -18,8 +18,9 @@ src/
   metrics/            # Codebook health and reconstruction metrics
   data/               # Dataset loading (placeholder + real data)
   models/             # (archived) ELP encoder
-  losses/             # (archived) PID losses
+  losses/             # Training losses
   utils/              # Logging and utilities
+  visualization/      # Standardized training/post-training visualization
 
 experiments/
   configs/
@@ -27,7 +28,10 @@ experiments/
     phase0/           # Phase 0 experiments (real data tokenization)
     archive/          # Old PID experiment configs
   scripts/
-    train_tokenizer.py  # Main training script
+    launch_training_nohup.sh  # Canonical training launcher
+    train_*.py             # Task-specific training entrypoints
+    analyze_alignment.py   # Standardized manual analysis rerun
+    probe/                 # Exploratory, non-standardized probe experiments only
     archive/            # Old experiment scripts
   runs/               # Experiment outputs
   results/            # Comparison results
@@ -56,29 +60,30 @@ python -m venv .venv
 pip install torch numpy scipy matplotlib pyyaml
 ```
 
-### Training a Tokenizer
+### Launch Training
 
 ```bash
-# Train FSQ tokenizer on EEG data
-python experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_fsq.yaml
+# Shared multimodal tokenizer
+bash experiments/scripts/launch_training_nohup.sh \
+  --task shared-tokenizer \
+  --config debug/simultaneous_nback_short_train.yaml
 
-# Train VQ-VAE tokenizer
-python experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml
-```
+# Single-modality tokenizer
+bash experiments/scripts/launch_training_nohup.sh \
+  --task tokenizer \
+  --config phase0plus/eeg_labram_vqnsp.yaml
 
-### Launch Long Training Jobs
-
-Use the detached launcher for long-running training so jobs do not depend on the VS Code integrated terminal session:
-
-```bash
-# Default target: experiments/scripts/train_shared_tokenizer.py
-bash experiments/scripts/launch_training_nohup.sh --config phase0plus/factorized_labram_eeg_fnirs_30s_2s.yaml
-
-# Custom training entrypoint
-bash experiments/scripts/launch_training_nohup.sh experiments/scripts/train_tokenizer.py --config phase0/P0_eeg_vqvae.yaml
+# Downstream classifier
+bash experiments/scripts/launch_training_nohup.sh \
+  --task downstream \
+  --config phase1a/P1A_eeg_classification.yaml
 ```
 
 The launcher prints the background PID and command. Training logs remain available inside each run directory, for example `experiments/runs/<run_name>/training.log`.
+
+For the full task list and task-specific parameters, see [docs/TRAIN_LAUNCH_STANDARD.md](docs/TRAIN_LAUNCH_STANDARD.md).
+
+Direct execution of `experiments/scripts/train_*.py` is intentionally disabled to avoid multiple competing launch paths.
 
 ## Current Status
 

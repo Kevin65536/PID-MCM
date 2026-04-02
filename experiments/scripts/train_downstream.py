@@ -70,44 +70,21 @@ from src.data.eeg_fnirs_dataset import (
 )
 from src.data.registry import load_experiment_config, normalize_data_config
 from src.data.factory import create_multimodal_window_dataset, create_unimodal_window_dataset
-from src.data.augmentation import SignalAugmentor, DualModalityAugmentor, LabelSmoothingCrossEntropy, create_augmentor_from_config
-from src.tokenizers import create_tokenizer, list_tokenizers
+from src.data.augmentation import SignalAugmentor, create_augmentor_from_config
+from src.losses import LabelSmoothingCrossEntropy
+from src.tokenizers import create_tokenizer
 from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
-from src.utils.logger import ExperimentLogger
-from src.visualization import TokenizerVisualizer, TensorBoardLogger
+from src.utils import (
+    load_checkpoint_file,
+    load_training_checkpoint,
+    require_standard_training_launcher,
+    save_npz,
+    save_training_checkpoint,
+    setup_logging,
+    write_json,
+    write_yaml,
+)
 from src.visualization.classifier_plots import visualize_classifier_run
-
-
-# ============================================================================
-# Logging Utilities
-# ============================================================================
-
-class TeeLogger:
-    """Write output to both terminal and file."""
-    def __init__(self, log_file: Path):
-        self.terminal = sys.stdout
-        self.log_file = open(log_file, 'a', buffering=1)
-        
-    def write(self, message):
-        self.terminal.write(message)
-        self.log_file.write(message)
-        self.log_file.flush()
-        
-    def flush(self):
-        self.terminal.flush()
-        self.log_file.flush()
-        
-    def close(self):
-        self.log_file.close()
-
-
-def setup_logging(run_dir: Path) -> TeeLogger:
-    """Setup logging to terminal and file."""
-    log_file = run_dir / "training.log"
-    tee = TeeLogger(log_file)
-    sys.stdout = tee
-    sys.stderr = tee
-    return tee
 
 
 # ============================================================================
@@ -544,7 +521,7 @@ def load_tokenizer_from_checkpoint(checkpoint_path: Path, device: torch.device) 
     
     print(f"Loading tokenizer from: {checkpoint_path}")
     
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint = load_checkpoint_file(checkpoint_path, device=device)
     config = checkpoint.get('config', {})
     
     # Create tokenizer using registry
@@ -907,7 +884,7 @@ def export_probe_data(
     for split in ['train', 'val', 'test']:
         payload = collect_embeddings(model, dataloaders[split], device, modality)
         out_path = probe_dir / f'{split}_embeddings.npz'
-        np.savez_compressed(out_path, **payload)
+        save_npz(out_path, **payload)
         exported[split] = str(out_path)
 
     return exported
@@ -1024,13 +1001,16 @@ def train(
             best_val_acc = val_metrics['accuracy']
             patience_counter = 0
             
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'best_val_acc': best_val_acc,
-                'config': config,
-            }, run_dir / 'checkpoints' / 'best_model.pt')
+            save_training_checkpoint(
+                model,
+                optimizer,
+                epoch,
+                run_dir / 'checkpoints' / 'best_model.pt',
+                extra={
+                    'best_val_acc': best_val_acc,
+                    'config': config,
+                },
+            )
             
             best_marker = " ★"
         else:
@@ -1056,8 +1036,11 @@ def train(
     print(f"\nTraining completed in {training_time/60:.1f} minutes")
     
     # Load best model and evaluate on test set
-    checkpoint = torch.load(run_dir / 'checkpoints' / 'best_model.pt', weights_only=False)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = load_training_checkpoint(
+        run_dir / 'checkpoints' / 'best_model.pt',
+        model,
+        device=device,
+    )
     
     test_metrics = evaluate(
         model, dataloaders['test'], criterion, device, modality, return_predictions=True
@@ -1116,9 +1099,8 @@ def train(
         'history': history,
         'probe_data_paths': probe_data_paths,
     }
-    
-    with open(run_dir / 'results.json', 'w') as f:
-        json.dump(results, f, indent=2)
+
+    write_json(run_dir / 'results.json', results)
     
     # Generate visualizations
     print("\nGenerating visualizations...")
@@ -1164,38 +1146,9 @@ def main():
     parser = argparse.ArgumentParser(description="Unified Downstream Task Training")
     parser.add_argument('--config', type=str, required=True,
                         help='Config file path (relative to experiments/configs/)')
-    parser.add_argument('--foreground', '-f', action='store_true',
-                        help='Run in foreground (default is background)')
     args = parser.parse_args()
-    
-    # Background mode handling
-    if not args.foreground and not os.environ.get('DOWNSTREAM_TRAINING_BG'):
-        log_dir = Path('logs')
-        log_dir.mkdir(exist_ok=True)
-        
-        config_name = Path(args.config).stem
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_file = log_dir / f'{config_name}_{timestamp}.log'
-        
-        cmd = [sys.executable, __file__, '--config', args.config, '--foreground']
-        
-        env = os.environ.copy()
-        env['DOWNSTREAM_TRAINING_BG'] = '1'
-        
-        with open(log_file, 'w') as log_f:
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
-        
-        print(f"Training started in background (PID: {process.pid})")
-        print(f"Log file: {log_file}")
-        print(f"Monitor: tail -f {log_file}")
-        sys.exit(0)
+
+    require_standard_training_launcher('downstream')
     
     # Load configuration
     config = load_config(args.config)
@@ -1212,8 +1165,7 @@ def main():
     tee_logger = setup_logging(run_dir)
     
     # Save config
-    with open(run_dir / 'config.yaml', 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
+    write_yaml(run_dir / 'config.yaml', config)
     
     try:
         # Setup device
