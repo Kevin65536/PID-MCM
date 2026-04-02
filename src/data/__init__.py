@@ -52,12 +52,16 @@ from .simultaneous_eeg_nirs_dataset import (
     is_deprecated_task,
     require_supported_task,
 )
-from .synthetic_timeseries import PIDTimeSeriesDataset
 from .validation import (
     build_all_validation_plans,
     build_dataset_validation_plan,
     render_validation_plan_markdown,
 )
+
+try:
+    from .synthetic_timeseries import PIDTimeSeriesDataset
+except ImportError:
+    PIDTimeSeriesDataset = None
 
 __all__ = [
     'BBCIDataLoader',
@@ -105,5 +109,7 @@ __all__ = [
     'build_dataset_validation_plan',
     'build_all_validation_plans',
     'render_validation_plan_markdown',
-    'PIDTimeSeriesDataset',
 ]
+
+if PIDTimeSeriesDataset is not None:
+    __all__.append('PIDTimeSeriesDataset')

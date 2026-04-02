@@ -10,6 +10,8 @@ import torch.nn as nn
 import numpy as np
 from typing import Dict, Optional, Tuple, Any
 
+from ..losses import LabelSmoothingCrossEntropy
+
 
 class SignalAugmentor(nn.Module):
     """
@@ -195,46 +197,6 @@ def create_augmentor_from_config(config: Dict[str, Any]) -> Optional[SignalAugme
         scaling_range=tuple(aug_cfg.get('scaling', {}).get('range', [1.0, 1.0])) if aug_cfg.get('scaling', {}).get('enabled', False) else (1.0, 1.0),
         mixup_alpha=aug_cfg.get('mixup', {}).get('alpha', 0.0) if aug_cfg.get('mixup', {}).get('enabled', False) else 0.0,
     )
-
-
-# Label smoothing loss
-class LabelSmoothingCrossEntropy(nn.Module):
-    """Cross-entropy loss with label smoothing."""
-    
-    def __init__(self, smoothing: float = 0.0, reduction: str = 'mean'):
-        super().__init__()
-        self.smoothing = smoothing
-        self.reduction = reduction
-    
-    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            pred: [B, C] logits
-            target: [B] hard labels or [B, C] soft labels
-        """
-        n_classes = pred.size(1)
-        
-        # Handle soft labels from mixup
-        if target.dim() == 2:
-            # Already soft labels
-            log_pred = torch.log_softmax(pred, dim=-1)
-            loss = -torch.sum(target * log_pred, dim=-1)
-        else:
-            # Hard labels - apply label smoothing
-            log_pred = torch.log_softmax(pred, dim=-1)
-            
-            # Smooth labels: (1 - smoothing) * one_hot + smoothing / n_classes
-            with torch.no_grad():
-                smooth_labels = torch.zeros_like(pred).fill_(self.smoothing / n_classes)
-                smooth_labels.scatter_(1, target.unsqueeze(1), 1.0 - self.smoothing + self.smoothing / n_classes)
-            
-            loss = -torch.sum(smooth_labels * log_pred, dim=-1)
-        
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        return loss
 
 
 if __name__ == '__main__':
