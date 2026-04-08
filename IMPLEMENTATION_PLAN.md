@@ -4,7 +4,7 @@
 > **Status**: Phase 0+ - Single-channel Tokenizer (Time-aligned) + Multi-lead Classifier  
 > **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)  
 > **Experiment Log**: [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md)
-> **Next Alignment Plan**: [`docs/NEXT_STAGE_ALIGNMENT_PLAN.md`](docs/NEXT_STAGE_ALIGNMENT_PLAN.md)
+> **Tokenizer Reset Plan**: [`docs/NEXT_STAGE_ALIGNMENT_PLAN.md`](docs/NEXT_STAGE_ALIGNMENT_PLAN.md)
 
 ---
 

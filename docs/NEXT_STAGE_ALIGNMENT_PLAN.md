@@ -1,420 +1,345 @@
-# EEG-fNIRS Alignment Next-Stage Plan
+# EEG-fNIRS Tokenizer Reset Plan
 
-> Last Updated: 2026-03-19
-> Status: Planning document for the first explicit alignment stage after single-modality tokenizer validation
+> Last Updated: 2026-04-08
+> Status: Active tokenizer mainline reset document
+> This document replaces the previous alignment-first interpretation of the next stage.
 
-## 1. Goal
+## 1. Reset Statement
 
-下一阶段的核心目标不再是证明 tokenization 可行，而是显式推动 EEG 与 fNIRS token 空间对齐，使得具有相同或稳定对应生理意义的信号片段被编码为：
+我们现在需要停止在旧的 EEG-fNIRS shared-codebook 设计上继续叠加约束，并把 tokenizer 主线重新定义为：
 
-1. 同一个 token
-2. 或一对稳定对应的 token
+1. 先做出健康、可解释、可复现的 codebook。
+2. 再用跨模态指标验证 shared branch 是否真的承载了生理共性。
+3. 只有当一个新增机制能够改善 codebook 表现或 shared/private 语义边界时，才保留它。
 
-只要第二种情况足够稳定，同样具备生理解释价值。因为我们最终关心的是：怎样的原始 EEG 片段会系统性地对应怎样的 fNIRS 片段，以及这种对应是否符合已知神经血流耦合规律。
+旧的推进方式有一个根本问题：它默认“alignment stronger = tokenizer better”。现有实验已经不支持这个判断。当前更可靠的结论是：
 
-## 2. Current Validated Facts
+- token identity overlap 不是 EEG-fNIRS 生理对应的正确主目标；
+- reconstruction 与 codebook usage 的改善，并不会自动破坏跨模态关系；
+- 真正需要被约束的是 shared branch 应该重建什么，而不是继续给它加更多 identity-style alignment loss。
 
-### 2.1 Single-modality tokenizers are ready enough to support alignment experiments
+因此，从现在开始，alignment 不再是 tokenizer 主线的出发点，而是 codebook-first 设计完成后的验证面。
 
-当前已经验证过并适合进入对齐阶段的单模态编码器包括：
+## 2. Evidence Base
 
-- P0plus_eeg_patch_vqvae_10s_30ch_recon_20260317_220959
-- P0plus_fnirs_patch_vqvae_10s_36ch_20260317_192610
-- eeg_labram_vqnsp_10s_1s_20260319_141551
-- fnirs_labram_vqnsp_10s_2s_20260318_192520
+当前重整不是凭印象做方向切换，而是基于仓库里已经形成的三类证据：
 
-其中，LaBraM 组合在当前阶段最适合作为 alignment 主线：
+1. 单模态与早期对齐计划
+   - [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)
+   - 此前的 alignment-first 叙事已经被本文件替换，不再适合作为当前主线依据
 
-- EEG 10s/1s 编码器的 codebook 健康度显著优于 EEG 6s/1s
-- fNIRS 10s/2s 编码器的重建、频谱保持和 codebook 使用都非常稳定
+2. shared-codebook 与 factorized 设计复盘
+   - [docs/experiement_reports/Shared_codebook_structure_report.md](experiement_reports/Shared_codebook_structure_report.md)
+   - [docs/experiement_reports/Shared_private_factorization_design.md](experiement_reports/Shared_private_factorization_design.md)
 
-### 2.2 Cross-modal mapping already exists, but it is mainly lag-aware rather than synchronous
+3. 当前代码实现状态
+   - [src/tokenizers/shared_labram_vqnsp.py](../src/tokenizers/shared_labram_vqnsp.py)
+   - [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
+   - [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
 
-基于独立训练好的 EEG 10s/1s 与 fNIRS 10s/2s tokenizer 的 probe 结果显示：
+## 3. What Has Actually Been Tried
 
-- 零时滞 mutual information 较弱
-- 但允许时滞后，最佳 lag 很稳定
-- 当前最强信号出现在 lag = 4 tokens 附近
+下面按“尝试族”而不是按零散 run 来重排现有工作。重点不是穷举所有配置，而是识别哪些设计假设已经被证实、被否定，或只能保留为对照。
 
-这说明接下来的 alignment 设计不能只押注“严格同步同位点完全一致”，必须把 delayed coupling 作为一等公民。
+| 阶段 | 代表实现 | 主要假设 | 结果 | 当前判断 |
+| --- | --- | --- | --- | --- |
+| 单模态验证 | P0 / P0plus 单模态 VQ-VAE 与 LaBraM tokenizer | 先验证 EEG 与 fNIRS 各自能否学出稳定 codebook | 单模态重建与 codebook 健康度已足够支撑进入多模态阶段 | 不再是主瓶颈 |
+| Shared-codebook baseline | [src/tokenizers/shared_labram_vqnsp.py](../src/tokenizers/shared_labram_vqnsp.py) | 两模态共享一个 codebook，并用 latent/assignment alignment 推动 token identity | 架构可运行，但把“共享 token index”当成主要目标，假设过强 | 保留为 control baseline |
+| Early factorized runs | [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py) | shared/private 分解，允许共性与模态特异信息分离 | 结构方向正确，开始摆脱一个 shared bottleneck 同时承担所有任务的问题 | 结构上应保留 |
+| V4 long-run to V5 | factorized 方案后期长跑与 shared-only full reconstruction 版本 | 共享分支可以通过更强重建压力学到更好的跨模态共性 | V5 的 full reconstruction、shared perplexity、best-lag MI 都改善，但 token identity 仍接近 0，且 shared branch 开始像第二条通用重建通路 | 证明 shared-only full raw reconstruction 方向错误 |
+| V6 / codebook-focused factorized | [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py) | 保留 factorization、lag-aware shared coupling、common/residual 目标，移除遗留 alignment auxiliaries | 与最新复盘结论一致，是当前最接近可收敛主线的实现 | 作为当前推荐参考实现 |
 
-### 2.3 The interrupted shared-codebook run is not negative evidence against the design itself
+## 4. Stable Conclusions From Existing Experiments
 
-此前效果不佳的 shared-codebook LaBraM 运行是意外暂停的训练过程，不能据此否定共享码本路线本身。它最多只能说明：
+### 4.1 单模态 tokenizer 已经不是当前关键矛盾
 
-- 当前这一版训练流程还不够稳健
-- 现有 loss 设计主要针对同步一一对应
-- 当前监控指标还不足以支撑长期 alignment 研发
+P0 与 P0plus 阶段已经说明，EEG 和 fNIRS 的单模态 tokenizer 至少满足两个条件：
 
-因此，结论不是放弃 shared codebook，而是把它重新定位为需要系统打磨的 baseline。
+1. 可以稳定重建；
+2. 可以提供足够健康的 codebook 使用统计，支持多模态阶段继续推进。
 
-## 3. Review of Existing Shared-Codebook Implementation
+所以现在继续纠结“tokenization 是否可行”没有意义。真正的问题是多模态 tokenizer 应该如何分配 shared 与 private 的表示职责。
 
-本节对应的当前实现主要包括：
+### 4.2 shared token identity 不是主要目标
 
-- experiments/scripts/train_shared_tokenizer.py
-- src/tokenizers/shared_labram_vqnsp.py
-- experiments/configs/phase0plus/shared_labram_vqnsp_eeg_fnirs_10s_2s.yaml
+shared-codebook baseline 把下面这件事当作默认成功形态：
 
-### 3.1 What the current implementation already does well
+1. EEG 与 fNIRS 尽量落到同一个 code index；
+2. 同位 token 最好直接对齐；
+3. token overlap 越高越好。
 
-当前 shared LaBraM 方案已经具备一个完整 baseline 所需的关键要素：
+但已有证据表明，这些指标至多是诊断量，不是主目标。EEG 与 fNIRS 的真实关系更接近“允许时滞的结构化预测”，而不是“同一时刻必须产出同一个离散 index”。
 
-1. 双模态各自 encoder 和 decoder，允许 EEG 与 fNIRS 保持各自的观测空间特性。
-2. 一个共享 VQ codebook，允许两模态落在同一离散索引空间。
-3. 显式 alignment loss：
-   - latent alignment: 对齐连续 latent
-   - assignment alignment: 对齐 code assignment 分布
-4. 配套训练入口、checkpoint、验证和日志记录已经齐备。
+### 4.3 reconstruction 与 codebook usage 的改善不会自动破坏跨模态关系
 
-这意味着下一阶段并不是从零开始，而是在一个已经能跑通的 shared-codebook baseline 上继续扩展。
+V4 long-run 与 V5 的比较给出了一个关键反例：
 
-### 3.2 What assumptions are hard-coded in the current implementation
+1. V5 的 full-signal reconstruction 更好；
+2. shared codebook perplexity 更高；
+3. best-lag mutual information 也更好；
+4. 但 token identity match 仍接近 0。
 
-当前 shared LaBraM 默认内含以下强假设：
+这说明“只要重建更强，就一定把 shared token overlap 压坏”这个叙事不成立。
 
-1. EEG 与 fNIRS 在每个 window 内必须产生相同数量的 token。
-2. 第 t 个 EEG token 应与第 t 个 fNIRS token 直接对齐。
-3. 对齐主要发生在同位 token 上，而不是一个 lag window 内。
-4. 目标更接近“共享 token identity”，而不是“稳定 paired-token correspondence”。
+### 4.4 真正的失败模式是 shared branch 的目标定义错了
 
-这些假设对于一个起始 baseline 是合理的，但对于真实 EEG-fNIRS 生理过程而言偏强。
+V5 暴露的核心问题不是 overlap 太低，而是 shared branch 被训练去单独重建完整原始信号后，会退化成第二条通用重建路径。这样做虽然能提高 raw reconstruction，但会带来两个直接后果：
 
-### 3.3 What is missing for the current research objective
+1. shared/private 语义边界变得模糊；
+2. shared branch 不再是“跨模态共性瓶颈”，而是“又一条高容量捷径”。
 
-如果研究目标升级为：
+因此，下一阶段不应该继续加大 alignment 力度，而应该限制 shared branch 只去建模 common component，并把 private branch 明确地绑定到 residual reconstruction。
 
-- 相同生理意义的片段尽量编码为同一个 token
-- 或编码为严格稳定对应的一对 token
+### 4.5 factorization 是结构性修正，不是又一个 patch
 
-那么当前实现还缺少三类关键能力：
+shared/private factorization 的价值不在于“再多加几个 loss”，而在于它终于允许模型表达：
 
-1. Lag-aware alignment
-   - 现实现仅比较同位 token，没有显式支持时滞窗口或可学习时滞。
+- shared branch 负责跨模态共性；
+- EEG private branch 负责快速电生理细节；
+- fNIRS private branch 负责缓慢血流细节。
 
-2. Paired-token alignment
-   - 现实现默认最好是同一个 token，但没有显式建模“EEG token 101 总是对应 fNIRS token 300”这一类稳定映射。
+这比单一 shared codebook 同时编码共性、模态特异、延迟耦合与重建细节更符合问题本身。
 
-3. Curriculum / warm-start support
-   - 现实现从头训练 shared model，没有直接利用已验证过的单模态 encoder/decoder 作为初始化锚点。
+### 4.6 downstream 诊断也支持这次重置
 
-## 4. Decision: Do We Need New Schemes?
+[docs/experiement_reports/factor_probe_experiment_based_on_early_stage_downstream_implementation.md](experiement_reports/factor_probe_experiment_based_on_early_stage_downstream_implementation.md) 表明，当前表示栈仍然存在两个明显问题：
 
-需要，但不是替换，而是并行增加。
+1. task signal 偏弱；
+2. multimodal representation 中 subject leakage 依然明显。
 
-### 4.1 Keep the current shared-codebook design as the baseline
+这进一步说明，继续在旧对齐叙事上加约束不会自然把 tokenizer 变成更好的 foundation 表示。必须先把 codebook 与 shared/private 结构本身做干净。
 
-原因：
+## 5. Current Implementation Status In Repo
 
-- 它最直接对应“同一个 token 表示跨模态共同生理意义”这一理想目标。
-- 结构简单，便于解释和比较。
-- 已经有训练脚本、配置和日志体系。
+当前仓库里的 tokenizer 实现已经形成了清晰的三层关系：
 
-因此，shared LaBraM baseline 应继续保留，并作为后续所有新增 alignment 方案的对照组。
+### 5.1 Control baseline
 
-### 4.2 Add at least two new alignment schemes
+- [src/tokenizers/shared_labram_vqnsp.py](../src/tokenizers/shared_labram_vqnsp.py)
 
-新增方案不是因为 shared codebook 思路错误，而是因为现有 baseline 只覆盖了最强版本的同步同位对齐假设，没有覆盖更符合当前数据证据的两种情况：
+作用：
 
-1. 延迟对应
-2. 配对但不相同的 token 对应
+1. 作为 shared-codebook 家族的可运行基线；
+2. 保留给对照实验使用；
+3. 不再作为默认开发主线。
 
-因此，至少应新增：
+### 5.2 Legacy factorized research surface
 
-- 方案 A: Lag-aware shared alignment
-- 方案 B: Paired-code alignment without forced identity
+- [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 
-### 4.3 Add one training-strategy upgrade even for the baseline
+作用：
 
-即使不改模型结构，也建议补一项训练流程增强：
+1. 表达 shared/private factorization 的完整研究空间；
+2. 保留各种辅助损失与研究接口；
+3. 不应继续作为“默认配置里什么都开一点”的主线。
 
-- 方案 C: Warm-start shared training from validated single-modality checkpoints
+### 5.3 Current recommended mainline
 
-这是低风险高收益项，应优先于大改模型。
+- [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
 
-## 5. Proposed Alignment Schemes
+这个实现已经把主线原则写得很明确：
 
-## 5.1 Scheme S0: Shared-Codebook LaBraM Baseline
+1. 保留 shared/private factorization；
+2. 保留 lag-aware shared coupling；
+3. 使用 shared common target 与 private residual target；
+4. 保留 orthogonality 与 codebook balance；
+5. 从默认优化路径里移除 legacy experimental auxiliaries。
 
-### Purpose
+这与实验复盘结论一致，因此它应该被正式提升为当前 tokenizer 研发的参考实现，而不是继续把 shared-codebook 计划文档当作默认路线。
 
-验证“共享 token identity”是否能够在现有 paired EEG-fNIRS 数据上自然出现。
+## 6. Mainline Decision Matrix
 
-### Core mechanism
+接下来所有 tokenizer 研发都按下面这个决策矩阵推进。
 
-- 一个 shared codebook
-- EEG/fNIRS 双 encoder 双 decoder
-- 同位 latent alignment
-- 同位 assignment alignment
+### 6.1 Keep in default mainline
 
-### Role in the roadmap
+这些组件属于当前默认保留项：
 
-- 作为所有新增方案的统一对照组
-- 验证 shared token space 的上限和训练稳定性
+1. shared/private factorization；
+2. lag-aware shared coupling；
+3. shared-common / private-residual target decomposition；
+4. shared/private orthogonality or decoupling constraint；
+5. codebook-balance regularization；
+6. shared/private branch ablation diagnostics；
+7. reconstruction-first then coupling-warm-start training schedule。
 
-### Immediate improvements needed
+### 6.2 Keep as baselines or stress tests only
 
-1. 支持从单模态 tokenizer 初始化 shared encoder / decoder。
-2. 支持 alignment loss warmup，而不是从 epoch 1 就全量施压。
-3. 增加 lag-aware offline validation 指标，避免只看同步 token match。
-4. 更稳妥地 resume scheduler / optimizer / early-stopping 状态。
+这些设计仍有价值，但只能作为对照，不应继续被包装成主线：
 
-## 5.2 Scheme S1: Warm-Started Shared Codebook
+1. single shared-codebook LaBraM；
+2. legacy generic factorized runs with many auxiliaries enabled；
+3. overfit/high-capacity factorized variants；
+4. exact token overlap 追求型实验。
 
-### Purpose
+### 6.3 Remove from default optimization path
 
-减少从头训练 shared model 的难度，把单模态已经学到的重建能力先保住，再逐步注入共享语义。
+这些项不应再出现在默认 mainline 配置里，除非作为明确 ablation：
 
-### Core idea
+1. latent alignment loss；
+2. assignment alignment loss；
+3. hard assignment alignment；
+4. shared entropy / private entropy regularization；
+5. shared-only full raw waveform reconstruction；
+6. 把 token identity match 当作主要 success criterion。
 
-1. 从已完成的单模态 checkpoint 中加载 EEG encoder/decoder 到 shared model 的 EEG 分支。
-2. 同样加载 fNIRS encoder/decoder 到 fNIRS 分支。
-3. shared quantizer 可以采用：
-   - 随机初始化 + 短 warmup
-   - 或从其中一个模态 codebook 初始化
-   - 或拼接后聚类再初始化
-4. 训练前期弱化 alignment loss，优先稳住 reconstruction。
+## 7. Codebook-First Success Criteria
 
-### Why this matters
+以后我们不再用“有没有更多 overlap”来给 tokenizer 下结论，而采用三层 success criteria。
 
-当前我们已经知道单模态编码器是有效的，因此没有必要每次 alignment 实验都重新学习全部底层表征。
+### 7.1 Layer A: codebook health gates
 
-## 5.3 Scheme S2: Lag-Aware Shared Alignment
+这是最优先的通过门槛。
 
-### Purpose
+1. reconstruction 不能明显退化；
+2. shared 与 private codebook 都不能出现系统性 collapse；
+3. perplexity、active-code count、usage coverage 必须稳定；
+4. branch ablation 必须显示 shared 与 private 都在承担不同职责，而不是某一支完全失效或单独包办全部重建。
 
-把神经活动和血流响应之间的时滞直接纳入 loss，而不是指望模型自己从同步约束里“猜”出来。
+### 7.2 Layer B: structured cross-modal value
 
-### Core idea
+只有通过 Layer A，才谈跨模态价值。
 
-对每个 EEG token 位置 t，不只和 fNIRS 的 t 做对齐，还和一个小范围 lag 集合内的位置比较，例如：
+1. best-lag mutual information 应稳定优于 lag 0；
+2. shared EEG 到 delayed fNIRS 的预测质量应提升；
+3. bidirectional coupling 如果保留，至少一侧要有稳定收益；
+4. overlap 与 token identity 仅作为补充诊断，而不是主要门槛。
 
-$$
-\tau \in \{0, 1, 2, 3, 4\}
-$$
+### 7.3 Layer C: downstream sanity
 
-然后对 latent loss 和 assignment loss 采用以下之一：
+tokenizer 不是直接为了分类器优化，但如果主线真的更健康，下游不应继续强化错误信号。
 
-1. hard best lag
-2. softmin over lags
-3. learnable lag attention
+1. task signal 不应持续停留在近 chance；
+2. subject leakage 不能继续随 multimodal 表示增强而变得更强；
+3. 如果 Layer A 与 B 都改善，但下游完全没有任何正向变化，需要重新检查 shared target 是否仍不对。
 
-一种可行的起始形式是：
+## 8. What Current Development Should Focus On
 
-$$
-L_{align}^{lag} = \text{softmin}_{\tau \in \mathcal{T}}\left[
-\lambda_z \lVert z^{eeg}_t - z^{fnirs}_{t+\tau} \rVert_2^2 +
-\lambda_q \operatorname{KL}(p^{eeg}_t \Vert p^{fnirs}_{t+\tau})
-\right]
-$$
+下面是从 codebook performance 出发的当前开发主线，不是“再想一个 alignment scheme”。
 
-### Why this matters
+### 8.1 Freeze one canonical mainline family
 
-现有 probe 已经显示 best lag 远强于 sync lag，因此这一方案是下一阶段最有必要新增的主方案。
+默认主线应固定为 codebook-focused factorized family，而不是继续在 shared_labram_vqnsp 与 generic factorized 之间来回摇摆。
 
-## 5.4 Scheme S3: Paired-Code Alignment
+建议的 canonical family：
 
-### Purpose
+1. one control baseline: shared_labram_vqnsp；
+2. one structural baseline: factorized_labram_vqnsp；
+3. one mainline reference: codebook_focus_factorized_labram_vqnsp；
+4. one stress test only: overfit_factorized_labram_vqnsp。
 
-直接建模“稳定一对多或一对一 token 对照关系”，而不是强迫 EEG 与 fNIRS 使用同一个 code index。
+### 8.2 Standardize a mandatory tokenizer scorecard
 
-### Core idea
+每一次 mainline run 都必须输出同一套 scorecard，而不能只汇报最显眼的几项曲线。
 
-保留两种模态各自的 codebook，但学习一个稳定映射：
+最低要求应包括：
 
-$$
-M \in \mathbb{R}^{K_{eeg} \times K_{fnirs}}
-$$
+1. EEG full reconstruction；
+2. fNIRS full reconstruction；
+3. shared-common reconstruction；
+4. EEG-private residual reconstruction；
+5. fNIRS-private residual reconstruction；
+6. shared/private perplexity 与 active-code counts；
+7. branch-only decoding gaps；
+8. best-lag MI、lag-0 MI 与它们的差值；
+9. shared usage by modality；
+10. private usage by modality。
 
-其中：
+### 8.3 Make ablation the default workflow
 
-- 第 i 行表示 EEG token i 对应到哪些 fNIRS token 的概率分布
-- 训练目标鼓励 paired windows 的 token co-occurrence 被 M 解释
-- 当 M 某些行高度尖锐时，就得到“EEG token 101 对应 fNIRS token 300”这类可解释对照
+以后不再接受“把多个新约束一起加上再看总结果”的实验方式。默认流程应该是：
 
-### Possible implementations
+1. reconstruction-first run；
+2. coupling warm-start run；
+3. branch ablation run；
+4. single-auxiliary ablation；
+5. only then compare against baselines。
 
-1. 简单映射矩阵 + 交叉熵 / KL
-2. Prototype pairing head
-3. Sinkhorn / optimal transport 约束的双向匹配矩阵
+任何新机制如果无法在这条 ladder 上解释清楚自己的贡献，就不应该进主线。
 
-### Why this matters
+### 8.4 Optimize for branch semantics, not more constraints
 
-这条路线最贴近你提出的“严格对照两个 token”的需求，而且不必强迫两模态共享同一个 codebook 尺寸和使用习惯。
+当前最该开发的不是新的 identity-style alignment，而是让 shared/private 分工更稳定、更可测：
 
-## 5.5 Scheme S4: Shared + Private Codebooks (Optional later)
+1. common target 的构造是否足够稳定；
+2. residual target 是否真的把模态特异细节留给 private；
+3. shared codebook size 与 private codebook size 的比例是否合理；
+4. branch dropout / masking 是否只是在防 bypass，而不是制造假共享；
+5. coupling head 是否真正利用了 shared states，而不是仅仅当作另一个附加 loss。
 
-### Purpose
+### 8.5 Clean the experiment surface instead of widening it
 
-如果发现完全共享的 token 空间总是牺牲重建质量，或者完全独立的 token 空间又缺乏跨模态语义，那么 shared + private 结构会是更自然的折中。
+实验面已经太大了。当前开发应该做减法：
 
-### Core idea
+1. 把默认 loss 集固定住；
+2. 把默认 config 家族固定住；
+3. 把日志与可视化指标固定住；
+4. 把 shared-codebook 家族正式降级成 baseline；
+5. 只有在 canonical scorecard 稳定后才开放新的结构探索。
 
-- shared codebook 负责跨模态共性
-- private codebook 负责模态特有成分
-- decoder 使用 shared + private token 共同重建
+## 9. Immediate Development Backlog
 
-### Priority
+这是现在最值得做、也最能减少后续噪声的工作序列。
 
-这条路线有价值，但不应该先于 S1 和 S2。因为它会显著提高结构复杂度。
+### Priority 1. Promote the codebook-focused factorized tokenizer to the documented mainline
 
-## 6. Recommended Development Order
+要明确写死：
 
-建议按以下顺序推进，而不是同时发散到过多大改方案：
+1. 当前推荐参考实现是 [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)；
+2. shared_labram_vqnsp 只保留为 control baseline；
+3. generic factorized 只保留为研究表面，不再作为默认配置承载所有实验变量。
 
-### Step 1. Solidify the existing shared-codebook baseline
+### Priority 2. Standardize canonical configs and reports
 
-目标：让 S0 成为可信 baseline。
+需要建立一个最小且稳定的 canonical run contract：
 
-工程任务：
+1. 固定主线配置；
+2. 固定 baseline 配置；
+3. 固定 ablation 配置；
+4. 固定可视化与日志字段；
+5. 固定复盘模板。
 
-1. 校正并保留现有 shared LaBraM 配置。
-2. 确认 interrupted run 的 resume 流程稳定。
-3. 为 shared training 增加更细的日志与验证输出。
-4. 增加 offline lag-aware evaluation，而不只记录 sync token_match。
+### Priority 3. Re-run a small, clean comparison matrix
 
-### Step 2. Add warm-start shared training
+下一轮不应继续大范围扫参数，而应只跑少量、可解释的对照：
 
-目标：提高 shared baseline 的收敛稳定性。
+1. shared-codebook baseline；
+2. generic factorized baseline；
+3. codebook-focused mainline；
+4. one ablation removing common/residual targets；
+5. one ablation restoring a legacy alignment auxiliary。
 
-工程任务：
+目标不是比谁短期分数最高，而是回答：哪些机制真的改善 codebook health，哪些只是制造更复杂的训练过程。
 
-1. 在 train_shared_tokenizer.py 中增加 optional checkpoint initialization。
-2. 支持单独加载 EEG / fNIRS 分支权重。
-3. 增加 alignment warmup 配置。
+### Priority 4. Push all future proposals through one promotion rule
 
-### Step 3. Add lag-aware alignment as the main new model variant
+任何新的 tokenizer 机制，只有满足以下条件才允许进入默认 mainline：
 
-目标：显式适配神经血流时滞。
+1. Layer A codebook health 不退化；
+2. Layer B shared-branch structured value 有明确提升；
+3. 可以通过 ablation 解释；
+4. 不把 shared branch 再次变回第二条全能重建捷径。
 
-工程任务：
+## 10. What We Should Explicitly Stop Doing
 
-1. 在 shared_labram_vqnsp.py 中增加 lag-aware alignment mode。
-2. 在 config 中增加 lag_set、aggregation mode、lag regularization。
-3. 记录 best lag、lag-wise MI、lag-wise token agreement。
+从现在开始，以下做法应视为偏离主线：
 
-### Step 4. Add paired-code mapping as the main alternative route
+1. 在 shared-codebook baseline 上继续叠加更多 alignment loss；
+2. 用 token identity match 或 overlap 当作主要成功指标；
+3. 在没有 branch ablation 的情况下解释 shared branch 的意义；
+4. 在没有 canonical scorecard 的情况下宣布某个 run “更好”；
+5. 继续把“更多约束”当作“更接近跨模态生理对应”的默认方向。
 
-目标：验证“paired token”是否比“same token”更自然、更稳定。
+## 11. Bottom Line
 
-工程任务：
+当前 EEG-fNIRS tokenizer 的主问题，已经不是“怎么让两个模态更像”，而是“怎样构造一个 shared/private 语义边界清晰、codebook 健康、并且能承载 lagged physiological structure 的离散表示系统”。
 
-1. 新增 pair-mapping module 或 prototype mapping head。
-2. 基于独立 tokenizer 或 shared encoder 输出训练 mapping。
-3. 统计映射矩阵的尖锐度、稳定性和任务依赖性。
+因此，当前最合理的开发方向是：
 
-## 7. File-Level Engineering Plan
+1. 正式把 tokenizer 主线切换到 codebook-focused factorized family；
+2. 把 shared-codebook 叙事降级为 baseline/control；
+3. 把 common/residual target、lag-aware shared coupling、orthogonality、codebook balance 作为默认保留结构；
+4. 把 latent alignment、assignment alignment、hard assignment、entropy regularization、shared-only raw reconstruction 移出默认 mainline；
+5. 所有后续研发都先回答 codebook performance 有没有变好，再谈 alignment 有没有更漂亮。
 
-## 7.1 train_shared_tokenizer.py
-
-建议新增：
-
-1. 分支 warm-start 参数
-   - --init-eeg-checkpoint
-   - --init-fnirs-checkpoint
-
-2. alignment schedule
-   - 前若干 epoch 只训重建或极弱 alignment
-   - 之后逐步拉高 latent / assignment 权重
-
-3. 更完整的 resume
-   - scheduler state
-   - best monitor
-   - epochs_without_improvement
-
-4. 额外验证指标
-   - lag-aware validation summary
-   - paired-token concentration metrics
-
-## 7.2 shared_labram_vqnsp.py
-
-建议新增：
-
-1. lag-aware alignment mode
-2. optional paired-code head
-3. optional shared/private hybrid extension hook
-4. alignment metrics that do not assume identity only
-
-## 7.3 experiments/configs/phase0plus/
-
-建议新增三组配置：
-
-1. shared_labram_warmstart_eeg_fnirs_10s_2s.yaml
-2. shared_labram_lag_align_eeg_fnirs_10s_2s.yaml
-3. paired_code_alignment_eeg_fnirs_10s.yaml
-
-## 8. Experiment Matrix
-
-| ID | Route | Main hypothesis | Priority |
-|----|-------|-----------------|----------|
-| A0 | S0 Shared baseline | 同位共享 token 可自然形成 | High |
-| A1 | S1 Warm-start shared | 单模态初始化可显著稳住 shared training | Highest |
-| A2 | S2 Lag-aware shared | 引入时滞后 shared alignment 明显增强 | Highest |
-| A3 | S3 Paired-code mapping | paired token 比 identical token 更自然 | High |
-| A4 | S4 Shared + private | 共性与模态特性能更好解耦 | Medium |
-
-## 9. Success Criteria
-
-下一阶段不应再只用 reconstruction 判断成败，而应同时满足以下三类标准：
-
-### 9.1 Single-modality quality is preserved
-
-- EEG 与 fNIRS 的 reconstruction 不应比当前最好单模态模型显著退化。
-- codebook utilization 与 perplexity 不能明显塌缩。
-
-### 9.2 Cross-modal alignment becomes stronger in the intended sense
-
-- 若目标是 same-token alignment：同步或 lag-aware token agreement 提升。
-- 若目标是 paired-token alignment：映射矩阵变得尖锐、稳定、跨被试可复现。
-
-### 9.3 The result becomes more interpretable rather than merely more coupled
-
-- paired token 应能回溯到相对稳定的 EEG/fNIRS 原始波形模式。
-- 这些模式应尽量符合已知生理规律，而不是纯统计偶合。
-
-## 10. Risks and Mitigations
-
-### Risk 1. Shared training collapses codebook usage
-
-Mitigation:
-
-- warm-start
-- alignment warmup
-- 分阶段增大 alignment 权重
-
-### Risk 2. The model overfits synchronous correspondence and misses physiological lag
-
-Mitigation:
-
-- 把 lag-aware alignment 设为主方案之一
-- offline evaluation 强制输出 lag curve
-
-### Risk 3. Same-token objective is too strict
-
-Mitigation:
-
-- 并行推进 paired-code mapping
-- 不把 token identity 作为唯一成功标准
-
-### Risk 4. Better alignment hurts reconstruction too much
-
-Mitigation:
-
-- 始终保留 reconstruction floor
-- 所有实验都与单模态 best model 对比
-
-## 11. Immediate Recommendation
-
-最推荐的下一阶段起步顺序是：
-
-1. 保留并继续 shared LaBraM baseline，不因意外暂停的 run 否定该路线。
-2. 优先补 warm-start shared training，这是最低风险、最高回报的增强项。
-3. 将 lag-aware shared alignment 作为下一阶段的主新增方案。
-4. 将 paired-code mapping 作为与 shared identity 平行的第二主方案。
-
-换言之，下一阶段不是在“shared codebook”与“new scheme”之间二选一，而是：
-
-- 继续 shared codebook baseline
-- 同时新增对时滞和 paired-token 友好的 alignment 方案
-
-这才与当前实验事实一致，也最符合后续生理解释分析的目标。
+如果这个重置不做，后面所有 tokenizer 开发都会继续停留在“给旧设计加 patch”的状态里。现在已有实验已经足够说明，这条路不应该再走下去了。
