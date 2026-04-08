@@ -9,7 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.losses.pid_losses import AlignmentLoss
+from src.losses import AlignmentLoss
+from src.losses.multimodal_tokenizer import align_pair, compute_shared_alignment_losses
 
 from .base import BaseTokenizer
 from .labram_vqnsp import NormEMAVectorQuantizer, TransformerDecoder, TransformerEncoder, l2norm
@@ -303,16 +304,6 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         normalized_z = l2norm(z)
         return torch.einsum("bnd,kd->bnk", normalized_z, self.quantizer.weight)
 
-    def _symmetric_kl(self, logits_a: torch.Tensor, logits_b: torch.Tensor) -> torch.Tensor:
-        temperature = max(self.assignment_temperature, 1e-3)
-        log_probs_a = F.log_softmax(logits_a / temperature, dim=-1)
-        log_probs_b = F.log_softmax(logits_b / temperature, dim=-1)
-        probs_a = log_probs_a.exp()
-        probs_b = log_probs_b.exp()
-        kl_ab = F.kl_div(log_probs_a, probs_b, reduction='batchmean')
-        kl_ba = F.kl_div(log_probs_b, probs_a, reduction='batchmean')
-        return 0.5 * (kl_ab + kl_ba)
-
     def _align_pair(
         self,
         tensor_a: torch.Tensor,
@@ -320,14 +311,7 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         lag: int,
         target_length: int | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if lag < 0:
-            raise ValueError('Only non-negative lag is supported')
-        usable = min(tensor_a.shape[1], tensor_b.shape[1] - lag)
-        if target_length is not None:
-            usable = min(usable, int(target_length))
-        if usable <= 0:
-            return tensor_a[:, :0], tensor_b[:, :0]
-        return tensor_a[:, :usable], tensor_b[:, lag:lag + usable]
+        return align_pair(tensor_a, tensor_b, lag, target_length=target_length)
 
     def _compute_alignment_losses(
         self,
@@ -336,65 +320,20 @@ class SharedLaBraMVQNSP(BaseTokenizer):
         eeg_logits: torch.Tensor,
         fnirs_logits: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
-        combined_losses = []
-        latent_losses = []
-        assignment_losses = []
-        valid_lags = []
-        usable_lengths = []
-        target_length = self.fixed_alignment_compare_length if self.alignment_compare_mode == 'fixed_min' else None
-
-        for lag in self.alignment_lag_candidates:
-            aligned_z_eeg, aligned_z_fnirs = self._align_pair(z_eeg, z_fnirs, lag, target_length=target_length)
-            aligned_eeg_logits, aligned_fnirs_logits = self._align_pair(
-                eeg_logits,
-                fnirs_logits,
-                lag,
-                target_length=target_length,
-            )
-            if aligned_z_eeg.shape[1] == 0:
-                continue
-
-            latent_loss = self.alignment_loss(aligned_z_eeg, aligned_z_fnirs)
-            assignment_loss = self._symmetric_kl(aligned_eeg_logits, aligned_fnirs_logits)
-            combined_loss = self.latent_alignment_weight * latent_loss + self.assignment_alignment_weight * assignment_loss
-
-            combined_losses.append(combined_loss)
-            latent_losses.append(latent_loss)
-            assignment_losses.append(assignment_loss)
-            valid_lags.append(lag)
-            usable_lengths.append(aligned_z_eeg.shape[1])
-
-        if not combined_losses:
-            zero = torch.tensor(0.0, device=z_eeg.device, dtype=z_eeg.dtype)
-            return {
-                'latent_align_loss': zero,
-                'assignment_align_loss': zero,
-                'selected_lag': torch.tensor(0.0, device=z_eeg.device, dtype=z_eeg.dtype),
-                'alignment_usable_tokens': torch.tensor(0.0, device=z_eeg.device, dtype=z_eeg.dtype),
-            }
-
-        if self.alignment_selection == 'mean':
-            latent_align_loss = torch.stack(latent_losses).mean()
-            assignment_align_loss = torch.stack(assignment_losses).mean()
-            selected_lag = float(sum(valid_lags) / len(valid_lags))
-            alignment_usable_tokens = float(sum(usable_lengths) / len(usable_lengths))
-        else:
-            best_index = int(torch.argmin(torch.stack(combined_losses)).item())
-            latent_align_loss = latent_losses[best_index]
-            assignment_align_loss = assignment_losses[best_index]
-            selected_lag = float(valid_lags[best_index])
-            alignment_usable_tokens = float(usable_lengths[best_index])
-
-        return {
-            'latent_align_loss': latent_align_loss,
-            'assignment_align_loss': assignment_align_loss,
-            'selected_lag': torch.tensor(selected_lag, device=z_eeg.device, dtype=z_eeg.dtype),
-            'alignment_usable_tokens': torch.tensor(
-                alignment_usable_tokens,
-                device=z_eeg.device,
-                dtype=z_eeg.dtype,
-            ),
-        }
+        return compute_shared_alignment_losses(
+            z_eeg,
+            z_fnirs,
+            eeg_logits,
+            fnirs_logits,
+            alignment_loss=self.alignment_loss,
+            alignment_lag_candidates=self.alignment_lag_candidates,
+            alignment_selection=self.alignment_selection,
+            alignment_compare_mode=self.alignment_compare_mode,
+            fixed_alignment_compare_length=self.fixed_alignment_compare_length,
+            latent_alignment_weight=self.latent_alignment_weight,
+            assignment_alignment_weight=self.assignment_alignment_weight,
+            assignment_temperature=self.assignment_temperature,
+        )
 
     def _match_rate_at_lag(self, eeg_indices: torch.Tensor, fnirs_indices: torch.Tensor, lag: int) -> torch.Tensor:
         aligned_eeg, aligned_fnirs = self._align_pair(eeg_indices, fnirs_indices, lag)
