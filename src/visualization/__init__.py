@@ -7,6 +7,7 @@ from .classifier_plots import ClassifierVisualizer, visualize_classifier_run
 from .tensorboard_logger import TensorBoardLogger
 from .shared_alignment_analysis import analyze_shared_alignment
 from .factorized_alignment_analysis import analyze_factorized_alignment
+from .gradient_diagnostics import plot_gradient_conflict_dashboard
 
 __all__ = [
     'TokenizerVisualizer',
@@ -17,4 +18,5 @@ __all__ = [
     'TensorBoardLogger',
     'analyze_shared_alignment',
     'analyze_factorized_alignment',
+    'plot_gradient_conflict_dashboard',
 ]

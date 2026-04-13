@@ -11,7 +11,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -79,14 +79,11 @@ def get_gradient_attribution_config(config: dict) -> Dict[str, Any]:
     return {
         'enabled': bool(grad_cfg.get('enabled', False)),
         'max_batches': max(int(grad_cfg.get('max_batches', 1)), 1),
+        'log_interval': max(int(grad_cfg.get('log_interval', 1)), 1),
     }
 
 
-def compute_gradient_attribution(model, outputs: Dict[str, Any]) -> Dict[str, float]:
-    params = [param for param in model.parameters() if param.requires_grad]
-    if not params:
-        return {}
-
+def _resolve_gradient_component_specs(model) -> Dict[str, float]:
     component_specs = {
         'eeg_rec_loss': 1.0,
         'fnirs_rec_loss': 1.0,
@@ -100,8 +97,23 @@ def compute_gradient_attribution(model, outputs: Dict[str, Any]) -> Dict[str, fl
             'latent_align_loss': float(getattr(model, 'latent_alignment_weight', 0.0)) * alignment_scale,
             'assignment_align_loss': float(getattr(model, 'assignment_alignment_weight', 0.0)) * alignment_scale,
         })
+    return component_specs
 
-    component_norms: Dict[str, float] = {}
+
+def _pairwise_metric_name(left: str, right: str) -> str:
+    return f'{left}__vs__{right}'
+
+
+def compute_gradient_attribution(
+    model,
+    outputs: Dict[str, Any],
+) -> Tuple[Dict[str, float], Optional[Dict[str, Any]]]:
+    params = [param for param in model.parameters() if param.requires_grad]
+    if not params:
+        return {}, None
+
+    component_specs = _resolve_gradient_component_specs(model)
+    component_entries: List[Dict[str, Any]] = []
     component_values: Dict[str, float] = {}
 
     for name, weight in component_specs.items():
@@ -109,28 +121,76 @@ def compute_gradient_attribution(model, outputs: Dict[str, Any]) -> Dict[str, fl
         if term is None or not torch.is_tensor(term) or term.ndim != 0 or abs(weight) <= 0.0:
             continue
         grads = torch.autograd.grad(weight * term, params, retain_graph=True, allow_unused=True)
+        grad_tensors: List[Optional[torch.Tensor]] = []
         squared_norm = None
         for grad in grads:
             if grad is None:
+                grad_tensors.append(None)
                 continue
             grad_value = grad.detach()
+            grad_tensors.append(grad_value)
             grad_sq = torch.sum(grad_value * grad_value)
             squared_norm = grad_sq if squared_norm is None else squared_norm + grad_sq
         if squared_norm is None:
             continue
-        component_norms[name] = float(torch.sqrt(squared_norm).item())
+        component_entries.append({
+            'name': name,
+            'norm': float(torch.sqrt(squared_norm).item()),
+            'grads': grad_tensors,
+        })
         component_values[f'weighted_term_{name}'] = float((weight * term.detach()).item())
 
-    if not component_norms:
-        return component_values
+    if not component_entries:
+        return component_values, None
 
-    total_component_norm = sum(component_norms.values()) + 1e-12
+    total_component_norm = sum(entry['norm'] for entry in component_entries) + 1e-12
     attribution_metrics: Dict[str, float] = {}
-    for name, norm in component_norms.items():
+    component_names = [entry['name'] for entry in component_entries]
+    component_norms = np.array([entry['norm'] for entry in component_entries], dtype=np.float32)
+    component_shares = component_norms / max(float(component_norms.sum()), 1e-12)
+
+    for entry, share in zip(component_entries, component_shares):
+        name = entry['name']
+        norm = entry['norm']
         attribution_metrics[f'grad_norm_{name}'] = norm
-        attribution_metrics[f'grad_share_{name}'] = norm / total_component_norm
+        attribution_metrics[f'grad_share_{name}'] = float(share)
+
+    cosine_matrix = np.eye(len(component_entries), dtype=np.float32)
+    pairwise_cosines: List[float] = []
+    conflict_pairs = 0
+    for i, left_entry in enumerate(component_entries):
+        for j in range(i + 1, len(component_entries)):
+            right_entry = component_entries[j]
+            dot_product = 0.0
+            for left_grad, right_grad in zip(left_entry['grads'], right_entry['grads']):
+                if left_grad is None or right_grad is None:
+                    continue
+                dot_product += float(torch.sum(left_grad * right_grad).item())
+            denominator = max(left_entry['norm'] * right_entry['norm'], 1e-12)
+            cosine = float(np.clip(dot_product / denominator, -1.0, 1.0))
+            cosine_matrix[i, j] = cosine
+            cosine_matrix[j, i] = cosine
+            pairwise_cosines.append(cosine)
+            if cosine < 0.0:
+                conflict_pairs += 1
+            pair_name = _pairwise_metric_name(left_entry['name'], right_entry['name'])
+            attribution_metrics[f'grad_cosine_{pair_name}'] = cosine
+
+    if pairwise_cosines:
+        attribution_metrics['grad_mean_pairwise_cosine'] = float(np.mean(pairwise_cosines))
+        attribution_metrics['grad_min_pairwise_cosine'] = float(np.min(pairwise_cosines))
+        attribution_metrics['grad_conflict_rate'] = conflict_pairs / len(pairwise_cosines)
+
+    attribution_metrics['grad_component_count'] = float(len(component_entries))
     attribution_metrics.update(component_values)
-    return attribution_metrics
+
+    return attribution_metrics, {
+        'component_names': component_names,
+        'component_norms': component_norms.tolist(),
+        'component_shares': component_shares.tolist(),
+        'cosine_matrix': cosine_matrix.tolist(),
+        'total_component_norm': float(total_component_norm),
+    }
 
 
 def strip_metric_prefix(metrics: Dict[str, float], prefix: str) -> Dict[str, float]:
@@ -344,13 +404,15 @@ def train_epoch(
     device: torch.device,
     grad_clip: float,
     gradient_attribution_cfg: Optional[Dict[str, Any]] = None,
-) -> Dict[str, float]:
+) -> Tuple[Dict[str, float], Optional[Dict[str, Any]]]:
     model.train()
     totals: Dict[str, float] = {}
     total_batches = 0
     grad_totals: Dict[str, float] = {}
     grad_batches = 0
     grad_cfg = gradient_attribution_cfg or {'enabled': False, 'max_batches': 1}
+    gradient_dashboard: Optional[Dict[str, Any]] = None
+    gradient_dashboard_batches = 0
 
     for batch in dataloader:
         eeg = batch['eeg'].to(device, non_blocking=True)
@@ -364,11 +426,29 @@ def train_epoch(
         if grad_cfg.get('enabled', False) and grad_batches < int(grad_cfg.get('max_batches', 1)):
             grad_outputs = dict(outputs)
             grad_outputs.update(aux_tensors)
-            grad_metrics = compute_gradient_attribution(model, grad_outputs)
+            grad_metrics, grad_artifacts = compute_gradient_attribution(model, grad_outputs)
             if grad_metrics:
                 grad_batches += 1
                 for key, value in grad_metrics.items():
                     grad_totals[key] = grad_totals.get(key, 0.0) + value
+            if grad_artifacts:
+                component_names = grad_artifacts['component_names']
+                cosine_matrix = np.asarray(grad_artifacts['cosine_matrix'], dtype=np.float32)
+                component_norms = np.asarray(grad_artifacts['component_norms'], dtype=np.float32)
+                component_shares = np.asarray(grad_artifacts['component_shares'], dtype=np.float32)
+                if gradient_dashboard is None:
+                    gradient_dashboard = {
+                        'component_names': component_names,
+                        'cosine_matrix': cosine_matrix,
+                        'component_norms': component_norms,
+                        'component_shares': component_shares,
+                    }
+                    gradient_dashboard_batches = 1
+                elif gradient_dashboard['component_names'] == component_names:
+                    gradient_dashboard['cosine_matrix'] += cosine_matrix
+                    gradient_dashboard['component_norms'] += component_norms
+                    gradient_dashboard['component_shares'] += component_shares
+                    gradient_dashboard_batches += 1
 
         loss.backward()
 
@@ -390,7 +470,14 @@ def train_epoch(
     averaged = {key: value / max(total_batches, 1) for key, value in totals.items()}
     if grad_batches > 0:
         averaged.update({key: value / grad_batches for key, value in grad_totals.items()})
-    return averaged
+    if gradient_dashboard is not None and gradient_dashboard_batches > 0:
+        gradient_dashboard = {
+            'component_names': gradient_dashboard['component_names'],
+            'cosine_matrix': (gradient_dashboard['cosine_matrix'] / gradient_dashboard_batches).tolist(),
+            'component_norms': (gradient_dashboard['component_norms'] / gradient_dashboard_batches).tolist(),
+            'component_shares': (gradient_dashboard['component_shares'] / gradient_dashboard_batches).tolist(),
+        }
+    return averaged, gradient_dashboard
 
 
 @torch.no_grad()
@@ -754,7 +841,7 @@ def main():
                 if hasattr(model, 'set_alignment_scale'):
                     model.set_alignment_scale(alignment_scale)
 
-                train_metrics = train_epoch(
+                train_metrics, gradient_dashboard = train_epoch(
                     model,
                     train_loader,
                     optimizer,
@@ -794,6 +881,20 @@ def main():
                 tb_logger.log_scalars('train', train_metrics, step)
                 tb_logger.log_scalars('val', strip_metric_prefix(val_metrics, 'val_'), step)
                 tb_logger.log_learning_rate(lr, step)
+
+                if (
+                    gradient_attribution_cfg.get('enabled', False)
+                    and gradient_dashboard
+                    and step % int(gradient_attribution_cfg.get('log_interval', 1)) == 0
+                ):
+                    tb_logger.log_gradient_conflict_dashboard(
+                        component_names=gradient_dashboard['component_names'],
+                        cosine_matrix=gradient_dashboard['cosine_matrix'],
+                        component_norms=gradient_dashboard['component_norms'],
+                        component_shares=gradient_dashboard['component_shares'],
+                        step=step,
+                        tag='gradient_conflicts',
+                    )
 
                 train_loss_breakdown = {k: v for k, v in train_metrics.items() if k.endswith('_loss')}
                 if train_loss_breakdown:

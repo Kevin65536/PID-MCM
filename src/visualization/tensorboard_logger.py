@@ -14,12 +14,15 @@ import torch
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 import io
+import re
 
 # Matplotlib setup
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+
+from .gradient_diagnostics import plot_gradient_conflict_dashboard
 
 # TensorBoard
 try:
@@ -87,13 +90,18 @@ class TensorBoardLogger:
             log_subdir: Subdirectory for TensorBoard logs
             comment: Optional comment for the run (not used to avoid subdirectories)
         """
+        self.run_dir = Path(run_dir)
+        self.log_dir = self.run_dir / log_subdir
+        self.figures_dir = self.run_dir / "figures"
+        self.tensorboard_figures_dir = self.figures_dir / "tensorboard"
+        self.figures_dir.mkdir(parents=True, exist_ok=True)
+        self.tensorboard_figures_dir.mkdir(parents=True, exist_ok=True)
+
         if not HAS_TENSORBOARD:
             print("[TensorBoard] Warning: TensorBoard not available. Install with: pip install tensorboard")
             self.writer = None
             return
-        
-        self.run_dir = Path(run_dir)
-        self.log_dir = self.run_dir / log_subdir
+
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # Use log_dir directly without comment to avoid creating subdirectories
@@ -120,6 +128,18 @@ class TensorBoardLogger:
         """Close the TensorBoard writer."""
         if self.writer:
             self.writer.close()
+
+    def _save_figure_copy(self, fig, tag: str, step: int):
+        safe_tag = re.sub(r'[^A-Za-z0-9_.-]+', '_', tag).strip('_') or 'figure'
+        output_path = self.tensorboard_figures_dir / f"{safe_tag}_step{step:04d}.png"
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+
+    def _record_figure(self, fig, tag: str, step: int):
+        if self.enabled:
+            img = fig_to_image(fig)
+            self.writer.add_image(f"images/{tag}", img, step, dataformats='HWC')
+        self._save_figure_copy(fig, tag, step)
+        plt.close(fig)
     
     # =========================================================================
     # Scalar Logging
@@ -150,6 +170,28 @@ class TensorBoardLogger:
         """Log learning rate."""
         if self.enabled:
             self.writer.add_scalar("train/learning_rate", lr, step)
+
+    def log_gradient_conflict_dashboard(
+        self,
+        component_names: List[str],
+        cosine_matrix: Union[np.ndarray, List[List[float]]],
+        component_norms: Union[np.ndarray, List[float]],
+        component_shares: Union[np.ndarray, List[float]],
+        step: int,
+        tag: str = "gradient_conflicts",
+    ):
+        """Log a compact dashboard for multi-loss gradient composition and conflict."""
+        if not component_names:
+            return
+        fig = plot_gradient_conflict_dashboard(
+            component_names=component_names,
+            cosine_matrix=cosine_matrix,
+            component_norms=component_norms,
+            component_shares=component_shares,
+            step=step,
+            colors=self.colors,
+        )
+        self._record_figure(fig, tag, step)
     
     # =========================================================================
     # Reconstruction Visualization
@@ -175,7 +217,7 @@ class TensorBoardLogger:
             fs: Sampling frequency
             tag: Tag for the image
         """
-        if not self.enabled:
+        if not self.enabled and not self.tensorboard_figures_dir.exists():
             return
         
         # Convert to numpy
@@ -233,9 +275,7 @@ class TensorBoardLogger:
         plt.tight_layout()
         
         # Convert to image and log
-        img = fig_to_image(fig)
-        self.writer.add_image(f"images/{tag}", img, step, dataformats='HWC')
-        plt.close(fig)
+        self._record_figure(fig, tag, step)
     
     def log_spectral_comparison(
         self,
@@ -257,7 +297,7 @@ class TensorBoardLogger:
             n_samples: Number of samples to average
             tag: Tag for the image
         """
-        if not self.enabled:
+        if not self.enabled and not self.tensorboard_figures_dir.exists():
             return
         
         # Convert to numpy
@@ -318,9 +358,7 @@ class TensorBoardLogger:
         fig.suptitle(f'Spectral Analysis (Step {step})', fontsize=12, fontweight='bold')
         plt.tight_layout()
         
-        img = fig_to_image(fig)
-        self.writer.add_image(f"images/{tag}", img, step, dataformats='HWC')
-        plt.close(fig)
+        self._record_figure(fig, tag, step)
     
     # =========================================================================
     # Codebook Analysis
@@ -342,7 +380,7 @@ class TensorBoardLogger:
             step: Global step
             tag: Tag for the image
         """
-        if not self.enabled:
+        if not self.enabled and not self.tensorboard_figures_dir.exists():
             return
         
         # Compute usage
@@ -367,9 +405,10 @@ class TensorBoardLogger:
         perplexity = np.exp(entropy)
         
         # Log scalar metrics
-        self.writer.add_scalar(f"{tag}/utilization", utilization, step)
-        self.writer.add_scalar(f"{tag}/dead_codes", dead_codes, step)
-        self.writer.add_scalar(f"{tag}/perplexity", perplexity, step)
+        if self.enabled:
+            self.writer.add_scalar(f"{tag}/utilization", utilization, step)
+            self.writer.add_scalar(f"{tag}/dead_codes", dead_codes, step)
+            self.writer.add_scalar(f"{tag}/perplexity", perplexity, step)
         
         # Create histogram figure
         sorted_usage = np.sort(usage)[::-1]
@@ -408,12 +447,11 @@ class TensorBoardLogger:
         fig.suptitle(f'Codebook Health (Step {step})', fontsize=12, fontweight='bold')
         plt.tight_layout()
         
-        img = fig_to_image(fig)
-        self.writer.add_image(f"images/{tag}_histogram", img, step, dataformats='HWC')
-        plt.close(fig)
+        self._record_figure(fig, f"{tag}_histogram", step)
         
         # Also log the usage as a histogram directly
-        self.writer.add_histogram(f"{tag}/usage_distribution", usage, step)
+        if self.enabled:
+            self.writer.add_histogram(f"{tag}/usage_distribution", usage, step)
     
     # =========================================================================
     # Embedding Visualization (t-SNE / PCA)
@@ -439,7 +477,7 @@ class TensorBoardLogger:
             perplexity: t-SNE perplexity
             tag: Tag for the image
         """
-        if not self.enabled or not HAS_SKLEARN:
+        if (not self.enabled and not self.tensorboard_figures_dir.exists()) or not HAS_SKLEARN:
             if not HAS_SKLEARN:
                 print("[TensorBoard] Warning: sklearn not available for t-SNE/PCA")
             return
@@ -515,9 +553,7 @@ class TensorBoardLogger:
                     fontsize=12, fontweight='bold')
         plt.tight_layout()
         
-        img = fig_to_image(fig)
-        self.writer.add_image(f"images/{tag}_tsne", img, step, dataformats='HWC')
-        plt.close(fig)
+        self._record_figure(fig, f"{tag}_tsne", step)
     
     def log_latent_distribution(
         self,
@@ -589,7 +625,7 @@ class TensorBoardLogger:
             step: Global step
             tag: Tag for the image
         """
-        if not self.enabled or not loss_dict:
+        if (not self.enabled and not self.tensorboard_figures_dir.exists()) or not loss_dict:
             return
         
         # Filter positive losses
@@ -613,9 +649,7 @@ class TensorBoardLogger:
         
         plt.tight_layout()
         
-        img = fig_to_image(fig)
-        self.writer.add_image(f"images/{tag}", img, step, dataformats='HWC')
-        plt.close(fig)
+        self._record_figure(fig, tag, step)
     
     # =========================================================================
     # Training Progress Summary
