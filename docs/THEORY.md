@@ -8,10 +8,10 @@
 
 ## Update Notice (2026-03-15)
 
-For the next-stage foundation-model direction (subject/task factor separation, multi-scale temporal-spatial fusion, and cross-task transfer), see:
+For the current foundation-model reflection and tokenizer-reset direction, see:
 
-- [docs/THEORY_V2_FOUNDATION_MODEL.md](THEORY_V2_FOUNDATION_MODEL.md)
-- [docs/EXPERIMENT_PLAN_V2_FOUNDATION.md](EXPERIMENT_PLAN_V2_FOUNDATION.md)
+- [docs/NEXT_STAGE_ALIGNMENT_PLAN.md](NEXT_STAGE_ALIGNMENT_PLAN.md)
+- [docs/notes/2026.3.4_current_problem_of_physiological_foundation_model.md](notes/2026.3.4_current_problem_of_physiological_foundation_model.md)
 
 ---
 
@@ -107,31 +107,67 @@ $$s_m = P(e_{q_m}) \in S$$
 
 这允许在 $S$ 空间中进行跨模态对齐与分析。
 
+### 3.3 What a physiological token should mean
+
+word2vec 的真正启发，不是后续模型依赖某个固定的线性类比技巧，而是说明一个好的表示空间可以把语义变成可计算的几何结构。对 EEG 与 fNIRS 来说，我们不应该把 token 理解成“波形片段的名字”，而应该把它理解成“可复用的局部生理状态标识”。
+
+因此，一个好的生理 token 应该满足：
+
+1. 它对应的窗口在生理机制上近似等价，而不是仅仅在原始形状上相似；
+2. 它对未来状态和另一模态的滞后状态具有更强预测力；
+3. 它对 subject、device、artifact 等 nuisance factor 尽量不敏感；
+4. shared token 承载跨模态共性状态，private token 承载模态特异残差状态。
+
+换句话说，tokenization 的目标不是制造更多同步 token overlap，而是构建一个可用于状态转移建模、滞后耦合建模和下游泛化的离散生理语义空间。
+
 ---
 
 ## 4. Evaluation Criteria
 
-### 4.1 Codebook Health Metrics
+tokenizer 不应只被当作 reconstruction codec 来评估，而应被当作一个离散生理语义系统来评估。当前推荐的详细指标设计见 [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md)。高层上，评估应分为四层。
 
-| 指标 | 计算方式 | 期望值 |
-|------|----------|--------|
-| Perplexity | $\exp(-\sum_k p_k \log p_k)$ | > 30% of codebook size |
-| Utilization | $\frac{\text{active codes}}{\text{total codes}}$ | > 20% |
-| Dead Codes | $\sum_k \mathbb{1}[p_k = 0]$ | < 30% |
+### 4.1 Representation Health
 
-### 4.2 Reconstruction Quality
+这是进入语义讨论前的保底门槛。
 
-| 指标 | 适用模态 |
-|------|----------|
-| Time-domain MSE | 所有模态 |
-| Spectral MSE (STFT) | EEG（频谱保真） |
-| Smoothness Loss | fNIRS（平滑性） |
+| 指标 | 计算方式 | 作用 |
+|------|----------|------|
+| Perplexity | $\exp(-\sum_k p_k \log p_k)$ | 检查 codebook 是否系统性 collapse |
+| Utilization | $\frac{\text{active codes}}{\text{total codes}}$ | 检查有效使用范围 |
+| Gini / Top-k Coverage | usage distribution statistics | 检查是否被少数 code 垄断 |
+| Reconstruction Guardrails | MSE / STFT / smoothness / common-residual reconstruction | 保证 token 仍然保留基础信号内容 |
+| Branch Ablation Gap | shared/private ablation 后的目标退化差异 | 检查 branch 是否真的分工 |
 
-### 4.3 Generalization
+### 4.2 Physiological Semantic Quality
 
-- **跨被试泛化**：Train on subjects 1-N, test on N+1
-- **跨 Session 泛化**：同一被试不同 session
-- **期望**：泛化误差 < 2x 训练误差
+这一层才真正回答“token 是否在表达状态语义”。
+
+| 指标 | 形式 | 含义 |
+|------|------|------|
+| Intra-token State Consistency | $\sum_k p_k \mathbb{E}[\|\phi(x)-\mu_k\|^2 \mid z=k]$ | 同一 token 内部的状态是否稳定 |
+| Prototype Separation Ratio | between-token distance / within-token variance | 不同 token 是否代表不同状态原型 |
+| Transition Predictability Gain | $H(Z_{t+\Delta}) - H(Z_{t+\Delta} \mid Z_t)$ | token 是否保留状态转移结构 |
+| Augmentation Consistency | nuisance-preserving augmentation 下的一致率 | token 是否对无关扰动稳定 |
+
+### 4.3 Structured Cross-Modal Value
+
+跨模态价值不应被简化成同步 overlap，而应体现为有时滞的结构化预测能力。
+
+| 指标 | 形式 | 含义 |
+|------|------|------|
+| Lagged MI Gain | $I(Z^{eeg}_{t-\tau}; Z^{fnirs}_t) - I(Z^{eeg}_t; Z^{fnirs}_t)$ | 检查是否存在更合理的生理时滞耦合 |
+| Conditional KL Gain | $D_{KL}(P(Z^{fnirs}\mid Z^{eeg}) \| P(Z^{fnirs}))$ | EEG token 是否改变了 fNIRS token 的条件分布 |
+| Cross-modal MTP Gain | masked token prediction gain over shuffled baselines | shared states 是否具有跨模态预测价值 |
+| Shared Usage Balance | shared token usage by modality | 检查 shared branch 是否只被单一模态垄断 |
+
+### 4.4 Invariance And Downstream Sanity
+
+foundation representation 必须尽量保留真正的生理信号，同时压低 nuisance factor。
+
+- **跨被试 / 跨 session / 跨设备稳定性**：shared token 的统计结构不应对采集条件过度敏感；
+- **subject leakage**：shared states 不应越来越容易恢复 subject identity；
+- **task / condition signal**：如果 token 真有语义，轻量 probe 至少应看到弱但稳定的 task-relevant 信号；
+- **semantic selectivity**：task-relevant signal 应优于 nuisance-relevant signal，而不是相反。
 
 ---
 
@@ -146,9 +182,16 @@ Tokenization 完成后，离散 token 可用于多种下游任务：
 - 状态检测（疲劳、注意力等）
 - 事件检测
 
-### 5.2 跨模态对齐
+### 5.2 Lag-aware Cross-modal Modeling
 
-使用对比学习（InfoNCE）或其他对齐目标，让同一时间窗口的 EEG 与 fNIRS token 在语义空间中接近。
+对 EEG 与 fNIRS，不应默认要求同一时间窗口的 token 在语义空间中直接接近。更合理的目标是让 shared states 在允许生理时滞的前提下，对另一模态 token 或 future state 具有预测力。
+
+可行方式包括：
+
+- lag-aware mutual information analysis；
+- cross-modal masked token prediction；
+- shared state 到 delayed opposite-modality target 的预测；
+- 仅把 same-time overlap 作为补充诊断，而不是主目标。
 
 ### 5.3 可解释性分析
 
@@ -168,7 +211,7 @@ Tokenization 完成后，离散 token 可用于多种下游任务：
 - 定义源变量：$C_{eeg}$（EEG token 序列）、$C_{fnirs}$（fNIRS token 序列）
 - 分析冗余 (Redundancy)、唯一性 (Unique)、协同 (Synergy)
 
-详见旧版理论文档：[docs/THEORY_v1_ELP.md](THEORY_v1_ELP.md)
+详见旧版理论文档：[docs/previous_plan/THEORY_v1_ELP.md](previous_plan/THEORY_v1_ELP.md)
 
 ### 6.2 Brain State Modeling
 
