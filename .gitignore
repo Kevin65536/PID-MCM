@@ -33,3 +33,6 @@ __pycache__
 
 # power point for report on group meeting
 /docs/power_point
+
+# latex paper
+/docs/paper
