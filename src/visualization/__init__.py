@@ -8,6 +8,7 @@ from .tensorboard_logger import TensorBoardLogger
 from .shared_alignment_analysis import analyze_shared_alignment
 from .factorized_alignment_analysis import analyze_factorized_alignment
 from .gradient_diagnostics import plot_gradient_conflict_dashboard
+from .semantic_space_analysis import analyze_semantic_space
 
 __all__ = [
     'TokenizerVisualizer',
@@ -19,4 +20,5 @@ __all__ = [
     'analyze_shared_alignment',
     'analyze_factorized_alignment',
     'plot_gradient_conflict_dashboard',
+    'analyze_semantic_space',
 ]

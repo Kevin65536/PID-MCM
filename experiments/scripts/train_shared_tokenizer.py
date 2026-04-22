@@ -35,6 +35,7 @@ from src.utils import (
 )
 from src.visualization import TensorBoardLogger
 from src.visualization import analyze_alignment
+from src.visualization import analyze_semantic_space
 
 
 def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
@@ -703,6 +704,18 @@ def finalize_training_run(
         analysis_type=analysis_type,
     )
     write_json(analysis_dir / 'analysis_summary.json', analysis_results)
+
+    semantic_analysis_dir = logger.run_dir / 'analysis' / 'semantic_space'
+    print(f"Running semantic_space analysis -> {semantic_analysis_dir}")
+    semantic_results = analyze_semantic_space(
+        model=model,
+        dataloaders={'val': val_loader, 'test': test_loader},
+        config=config,
+        output_dir=semantic_analysis_dir,
+        device=analysis_device,
+        run_dir=logger.run_dir,
+    )
+    write_json(semantic_analysis_dir / 'analysis_summary.json', semantic_results)
 
     lag_set = config.get('validation', {}).get('lag_set', [])
     max_validation_lag = max(lag_set) if lag_set else None
