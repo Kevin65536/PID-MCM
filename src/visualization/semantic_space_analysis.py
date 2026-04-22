@@ -4,7 +4,7 @@ import json
 import math
 from itertools import combinations
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,13 +33,7 @@ RECONSTRUCTION_GRAD_KEYS = [
     'grad_share_fnirs_rec_loss',
 ]
 
-PENDING_METRICS = [
-    'augmentation_consistency',
-    'cross_modal_masked_token_prediction_gain',
-    'subject_leakage_probe',
-    'task_signal_probe',
-    'session_device_stability_probe',
-]
+PENDING_METRICS: List[str] = []
 
 
 def _compact_codebook_summary(summary: Dict[str, object]) -> Dict[str, object]:
@@ -247,6 +241,281 @@ def _update_group_counts(
         accumulator[int(group_id)] += shared_counts.astype(np.float64)
 
 
+def _shared_hist_features(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    codebook_size: int,
+) -> np.ndarray:
+    batch_size = int(eeg_tokens.shape[0])
+    features = np.zeros((batch_size, codebook_size * 2), dtype=np.float64)
+    for row_index in range(batch_size):
+        eeg_counts = np.bincount(eeg_tokens[row_index], minlength=codebook_size).astype(np.float64)
+        fnirs_counts = np.bincount(fnirs_tokens[row_index], minlength=codebook_size).astype(np.float64)
+        features[row_index, :codebook_size] = eeg_counts / max(eeg_counts.sum(), 1.0)
+        features[row_index, codebook_size:] = fnirs_counts / max(fnirs_counts.sum(), 1.0)
+    return features
+
+
+def _probe_id_array(values: Optional[np.ndarray], take: int) -> np.ndarray:
+    if values is None:
+        return np.full((take,), -1, dtype=np.int64)
+    return values[:take].astype(np.int64, copy=False)
+
+
+def _extract_token_tensors(outputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    token_map = {
+        'shared_eeg': outputs['eeg_indices'],
+        'shared_fnirs': outputs['fnirs_indices'],
+    }
+    if 'eeg_private_indices' in outputs:
+        token_map['eeg_private'] = outputs['eeg_private_indices']
+    if 'fnirs_private_indices' in outputs:
+        token_map['fnirs_private'] = outputs['fnirs_private_indices']
+    return token_map
+
+
+def _edge_shift(x: torch.Tensor, shift: int) -> torch.Tensor:
+    if shift == 0:
+        return x.clone()
+    if shift > 0:
+        return torch.cat([x[:, :, :1].expand(-1, -1, shift), x[:, :, :-shift]], dim=-1)
+    shift = abs(int(shift))
+    return torch.cat([x[:, :, shift:], x[:, :, -1:].expand(-1, -1, shift)], dim=-1)
+
+
+def _build_augmented_views(
+    eeg: torch.Tensor,
+    fnirs: torch.Tensor,
+    seed: int,
+) -> Dict[str, Tuple[torch.Tensor, torch.Tensor]]:
+    generator = torch.Generator(device='cpu')
+    generator.manual_seed(int(seed))
+
+    eeg_std = eeg.detach().cpu().std(dim=-1, keepdim=True).clamp_min(1e-6)
+    fnirs_std = fnirs.detach().cpu().std(dim=-1, keepdim=True).clamp_min(1e-6)
+    eeg_noise = torch.randn(eeg.shape, generator=generator, dtype=eeg.dtype) * eeg_std * 0.02
+    fnirs_noise = torch.randn(fnirs.shape, generator=generator, dtype=fnirs.dtype) * fnirs_std * 0.02
+
+    eeg_shift = max(1, eeg.shape[-1] // 50)
+    fnirs_shift = max(1, fnirs.shape[-1] // 50)
+
+    return {
+        'scaled': (eeg * 1.05, fnirs * 1.05),
+        'gaussian_noise': (eeg + eeg_noise.to(eeg.device), fnirs + fnirs_noise.to(fnirs.device)),
+        'time_shift': (_edge_shift(eeg, eeg_shift), _edge_shift(fnirs, fnirs_shift)),
+    }
+
+
+def _finalize_match_stats(raw_stats: Dict[str, Dict[str, List[float]]]) -> Dict[str, object]:
+    if not raw_stats:
+        return {'available': False}
+    per_augmentation = {}
+    branch_means: Dict[str, List[float]] = {}
+    for augmentation_name, branch_map in raw_stats.items():
+        per_augmentation[augmentation_name] = {}
+        for branch_name, values in branch_map.items():
+            mean_value = float(np.mean(values)) if values else 0.0
+            per_augmentation[augmentation_name][branch_name] = mean_value
+            branch_means.setdefault(branch_name, []).append(mean_value)
+    averaged = {branch: float(np.mean(values)) for branch, values in branch_means.items()}
+    overall = float(np.mean(list(averaged.values()))) if averaged else 0.0
+    return {
+        'available': True,
+        'augmentations': per_augmentation,
+        'branch_mean_match_rate': averaged,
+        'overall_mean_match_rate': overall,
+    }
+
+
+def _stratified_split_indices(labels: np.ndarray, seed: int, train_ratio: float = 0.7) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    valid_mask = labels >= 0
+    candidate_indices = np.where(valid_mask)[0]
+    if candidate_indices.size == 0:
+        return np.empty((0,), dtype=np.int64), np.empty((0,), dtype=np.int64), np.empty((0,), dtype=np.int64)
+
+    filtered_labels = labels[candidate_indices]
+    classes, counts = np.unique(filtered_labels, return_counts=True)
+    valid_classes = classes[counts >= 2]
+    if valid_classes.size < 2:
+        return np.empty((0,), dtype=np.int64), np.empty((0,), dtype=np.int64), np.empty((0,), dtype=np.int64)
+
+    rng = np.random.default_rng(int(seed))
+    train_indices: List[np.ndarray] = []
+    test_indices: List[np.ndarray] = []
+    retained_classes = []
+    for cls in valid_classes.tolist():
+        cls_indices = candidate_indices[filtered_labels == cls]
+        permuted = rng.permutation(cls_indices)
+        split = min(max(int(round(permuted.size * train_ratio)), 1), permuted.size - 1)
+        train_indices.append(permuted[:split])
+        test_indices.append(permuted[split:])
+        retained_classes.append(int(cls))
+
+    return (
+        np.concatenate(train_indices, axis=0) if train_indices else np.empty((0,), dtype=np.int64),
+        np.concatenate(test_indices, axis=0) if test_indices else np.empty((0,), dtype=np.int64),
+        np.array(retained_classes, dtype=np.int64),
+    )
+
+
+def _nearest_centroid_probe(features: np.ndarray, labels: np.ndarray, seed: int) -> Dict[str, object]:
+    if features.size == 0 or labels.size == 0:
+        return {'available': False}
+    train_idx, test_idx, classes = _stratified_split_indices(labels, seed=seed)
+    if train_idx.size == 0 or test_idx.size == 0 or classes.size < 2:
+        return {'available': False}
+
+    train_features = features[train_idx]
+    train_labels = labels[train_idx]
+    test_features = features[test_idx]
+    test_labels = labels[test_idx]
+    centroids = np.stack([train_features[train_labels == cls].mean(axis=0) for cls in classes], axis=0)
+    distances = ((test_features[:, None, :] - centroids[None, :, :]) ** 2).sum(axis=-1)
+    predictions = classes[np.argmin(distances, axis=1)]
+
+    accuracy = float(np.mean(predictions == test_labels))
+    per_class_accuracy = []
+    for cls in classes.tolist():
+        mask = test_labels == cls
+        if mask.any():
+            per_class_accuracy.append(float(np.mean(predictions[mask] == test_labels[mask])))
+    balanced_accuracy = float(np.mean(per_class_accuracy)) if per_class_accuracy else accuracy
+    chance = float(1.0 / max(classes.size, 1))
+    normalized_lift = float(max(accuracy - chance, 0.0) / max(1.0 - chance, 1e-12))
+
+    return {
+        'available': True,
+        'num_classes': int(classes.size),
+        'train_samples': int(train_idx.size),
+        'test_samples': int(test_idx.size),
+        'chance_accuracy': chance,
+        'accuracy': accuracy,
+        'balanced_accuracy': balanced_accuracy,
+        'normalized_lift': normalized_lift,
+    }
+
+
+def _count_table_probe(
+    source_tokens: np.ndarray,
+    target_tokens: np.ndarray,
+    lag: int,
+    codebook_size: int,
+    seed: int,
+) -> Dict[str, object]:
+    usable = min(max(source_tokens.shape[1] - lag, 0), target_tokens.shape[1] - lag)
+    if source_tokens.ndim != 2 or target_tokens.ndim != 2 or usable <= 1 or source_tokens.shape[0] < 4:
+        return {'available': False}
+
+    source = source_tokens[:, :usable].astype(np.int64, copy=False)
+    target = target_tokens[:, lag:lag + usable].astype(np.int64, copy=False)
+
+    rng = np.random.default_rng(int(seed))
+    row_indices = rng.permutation(source.shape[0])
+    train_size = min(max(int(round(source.shape[0] * 0.7)), 2), source.shape[0] - 1)
+    train_rows = row_indices[:train_size]
+    test_rows = row_indices[train_size:]
+    if test_rows.size == 0:
+        return {'available': False}
+
+    train_source = source[train_rows]
+    train_target = target[train_rows]
+    test_source = source[test_rows]
+    test_target = target[test_rows]
+
+    marginal_counts = np.bincount(train_target[:, 1:].reshape(-1), minlength=codebook_size)
+    global_mode = int(np.argmax(marginal_counts)) if marginal_counts.sum() > 0 else 0
+    fnirs_only_table: Dict[int, np.ndarray] = {}
+    joint_table: Dict[Tuple[int, int], np.ndarray] = {}
+    shuffled_joint_table: Dict[Tuple[int, int], np.ndarray] = {}
+
+    def _accumulate(prev_values: np.ndarray, source_values: np.ndarray, target_values: np.ndarray, joint_store: Dict[Tuple[int, int], np.ndarray]) -> None:
+        for prev_token, source_token, target_token in zip(prev_values.tolist(), source_values.tolist(), target_values.tolist()):
+            prev_token = int(prev_token)
+            source_token = int(source_token)
+            target_token = int(target_token)
+            if prev_token not in fnirs_only_table:
+                fnirs_only_table[prev_token] = np.zeros(codebook_size, dtype=np.int64)
+            fnirs_only_table[prev_token][target_token] += 1
+            key = (prev_token, source_token)
+            if key not in joint_store:
+                joint_store[key] = np.zeros(codebook_size, dtype=np.int64)
+            joint_store[key][target_token] += 1
+
+    prev_train = train_target[:, :-1].reshape(-1)
+    source_train = train_source[:, 1:].reshape(-1)
+    target_train = train_target[:, 1:].reshape(-1)
+    _accumulate(prev_train, source_train, target_train, joint_table)
+
+    shuffled_rows = train_source[rng.permutation(train_source.shape[0])]
+    shuffled_source_train = shuffled_rows[:, 1:].reshape(-1)
+    _accumulate(prev_train, shuffled_source_train, target_train, shuffled_joint_table)
+
+    def _predict(prev_token: int, source_token: int, joint_store: Dict[Tuple[int, int], np.ndarray]) -> Tuple[int, int]:
+        joint_counts = joint_store.get((int(prev_token), int(source_token)))
+        if joint_counts is not None and joint_counts.sum() > 0:
+            return int(np.argmax(joint_counts)), int(np.argmax(joint_counts))
+        prev_counts = fnirs_only_table.get(int(prev_token))
+        if prev_counts is not None and prev_counts.sum() > 0:
+            pred = int(np.argmax(prev_counts))
+            return pred, pred
+        return global_mode, global_mode
+
+    joint_hits = 0
+    fnirs_only_hits = 0
+    shuffled_hits = 0
+    total = 0
+    for row_index in range(test_target.shape[0]):
+        prev_values = test_target[row_index, :-1]
+        target_values = test_target[row_index, 1:]
+        source_values = test_source[row_index, 1:]
+        for prev_token, source_token, target_token in zip(prev_values.tolist(), source_values.tolist(), target_values.tolist()):
+            target_token = int(target_token)
+            prev_counts = fnirs_only_table.get(int(prev_token))
+            fnirs_pred = int(np.argmax(prev_counts)) if prev_counts is not None and prev_counts.sum() > 0 else global_mode
+            joint_pred, _ = _predict(int(prev_token), int(source_token), joint_table)
+            shuffled_pred, _ = _predict(int(prev_token), int(source_token), shuffled_joint_table)
+            joint_hits += int(joint_pred == target_token)
+            fnirs_only_hits += int(fnirs_pred == target_token)
+            shuffled_hits += int(shuffled_pred == target_token)
+            total += 1
+
+    if total <= 0:
+        return {'available': False}
+    acc_joint = float(joint_hits / total)
+    acc_fnirs_only = float(fnirs_only_hits / total)
+    acc_shuffled = float(shuffled_hits / total)
+    return {
+        'available': True,
+        'lag': int(lag),
+        'train_rows': int(train_rows.size),
+        'test_rows': int(test_rows.size),
+        'token_positions': int(total),
+        'joint_accuracy': acc_joint,
+        'fnirs_only_accuracy': acc_fnirs_only,
+        'shuffled_source_accuracy': acc_shuffled,
+        'gain_over_fnirs_only': float(acc_joint - acc_fnirs_only),
+        'gain_over_shuffled_source': float(acc_joint - acc_shuffled),
+    }
+
+
+def _resolve_semantic_analysis_options(
+    config: Dict[str, object],
+    max_batches: Optional[int],
+    max_feature_samples: Optional[int],
+    max_probe_samples: Optional[int],
+    augmentation_probe_batches: Optional[int],
+    probe_seed: Optional[int],
+) -> Dict[str, int | None]:
+    semantic_cfg = config.get('validation', {}).get('semantic_space', {})
+    return {
+        'max_batches': int(semantic_cfg.get('max_batches')) if max_batches is None and semantic_cfg.get('max_batches') is not None else max_batches,
+        'max_feature_samples': int(semantic_cfg.get('max_feature_samples', 20000 if max_feature_samples is None else max_feature_samples)),
+        'max_probe_samples': int(semantic_cfg.get('max_probe_samples', 2048 if max_probe_samples is None else max_probe_samples)),
+        'augmentation_probe_batches': int(semantic_cfg.get('augmentation_probe_batches', 4 if augmentation_probe_batches is None else augmentation_probe_batches)),
+        'probe_seed': int(semantic_cfg.get('probe_seed', config.get('experiment', {}).get('seed', 42) if probe_seed is None else probe_seed)),
+    }
+
+
 def _js_divergence(p: np.ndarray, q: np.ndarray) -> float:
     p = p / max(p.sum(), 1.0)
     q = q / max(q.sum(), 1.0)
@@ -325,6 +594,9 @@ def _collect_split_data(
     shared_codebook_size: int,
     max_batches: Optional[int],
     max_feature_samples: int,
+    max_probe_samples: int,
+    augmentation_probe_batches: int,
+    probe_seed: int,
 ) -> Dict[str, object]:
     scalar_totals: Dict[str, float] = {}
     total_batches = 0
@@ -356,6 +628,13 @@ def _collect_split_data(
 
     subject_group_counts: Dict[int, np.ndarray] = {}
     label_group_counts: Dict[int, np.ndarray] = {}
+    session_group_counts: Dict[int, np.ndarray] = {}
+    probe_feature_chunks: List[np.ndarray] = []
+    probe_subject_chunks: List[np.ndarray] = []
+    probe_label_chunks: List[np.ndarray] = []
+    probe_session_chunks: List[np.ndarray] = []
+    remaining_probe_samples = max_probe_samples
+    augmentation_raw_stats: Dict[str, Dict[str, List[float]]] = {}
 
     recon_totals: Dict[str, float] = {
         'eeg_full_mse': 0.0,
@@ -432,8 +711,29 @@ def _collect_split_data(
 
         subject_ids = _maybe_batch_vector(batch, ('subject', 'subject_id'))
         label_ids = _maybe_batch_vector(batch, ('label', 'labels', 'task', 'condition'))
+        session_ids = _maybe_batch_vector(batch, ('session', 'session_idx'))
         _update_group_counts(subject_group_counts, subject_ids, eeg_shared_tokens, fnirs_shared_tokens, shared_codebook_size)
         _update_group_counts(label_group_counts, label_ids, eeg_shared_tokens, fnirs_shared_tokens, shared_codebook_size)
+        _update_group_counts(session_group_counts, session_ids, eeg_shared_tokens, fnirs_shared_tokens, shared_codebook_size)
+
+        if remaining_probe_samples > 0:
+            take = min(int(remaining_probe_samples), int(eeg_shared_tokens.shape[0]))
+            probe_feature_chunks.append(_shared_hist_features(eeg_shared_tokens[:take], fnirs_shared_tokens[:take], shared_codebook_size))
+            probe_subject_chunks.append(_probe_id_array(subject_ids, take))
+            probe_label_chunks.append(_probe_id_array(label_ids, take))
+            probe_session_chunks.append(_probe_id_array(session_ids, take))
+            remaining_probe_samples -= take
+
+        if batch_index < int(max(augmentation_probe_batches, 0)):
+            original_tokens = _extract_token_tensors(outputs)
+            for augmentation_name, (eeg_aug, fnirs_aug) in _build_augmented_views(eeg, fnirs, seed=probe_seed + batch_index).items():
+                augmented_outputs = model(eeg_aug.to(device), fnirs_aug.to(device))
+                augmented_tokens = _extract_token_tensors(augmented_outputs)
+                for branch_name, original_tensor in original_tokens.items():
+                    if branch_name not in augmented_tokens:
+                        continue
+                    match_rate = float((original_tensor == augmented_tokens[branch_name]).float().mean().item())
+                    augmentation_raw_stats.setdefault(augmentation_name, {}).setdefault(branch_name, []).append(match_rate)
 
         if 'eeg_private_indices' in outputs:
             eeg_private_tokens = outputs['eeg_private_indices'].detach().cpu().numpy().astype(np.int64, copy=False)
@@ -496,6 +796,12 @@ def _collect_split_data(
         },
         'subject_group_counts': subject_group_counts,
         'label_group_counts': label_group_counts,
+        'session_group_counts': session_group_counts,
+        'probe_features': _safe_concat(probe_feature_chunks, ndim=2),
+        'probe_subject_ids': _safe_concat(probe_subject_chunks, ndim=1),
+        'probe_label_ids': _safe_concat(probe_label_chunks, ndim=1),
+        'probe_session_ids': _safe_concat(probe_session_chunks, ndim=1),
+        'augmentation_consistency': _finalize_match_stats(augmentation_raw_stats),
     }
 
 
@@ -526,19 +832,101 @@ def _build_branch_responsibility(mean_branch: Dict[str, float], has_private: boo
 def _build_layer_d(split_data: Dict[str, object]) -> Dict[str, object]:
     subject_proxy = _group_separation_proxy(split_data['subject_group_counts'])
     label_proxy = _group_separation_proxy(split_data['label_group_counts'])
+    session_proxy = _group_separation_proxy(split_data['session_group_counts'])
+    subject_probe = _nearest_centroid_probe(split_data['probe_features'], split_data['probe_subject_ids'], seed=17)
+    label_probe = _nearest_centroid_probe(split_data['probe_features'], split_data['probe_label_ids'], seed=23)
     selectivity = None
-    if subject_proxy.get('available') and label_proxy.get('available'):
+    if subject_probe.get('available') and label_probe.get('available'):
         selectivity = float(
-            label_proxy['normalized_mean_js_divergence'] /
-            max(subject_proxy['normalized_mean_js_divergence'], 1e-12)
+            label_probe['normalized_lift'] /
+            max(subject_probe['normalized_lift'], 1e-12)
         )
+    session_stability = None
+    if session_proxy.get('available'):
+        session_stability = float(1.0 - session_proxy['normalized_mean_js_divergence'])
     return {
-        'available': bool(subject_proxy.get('available') or label_proxy.get('available')),
+        'available': bool(
+            subject_proxy.get('available') or
+            label_proxy.get('available') or
+            session_proxy.get('available') or
+            subject_probe.get('available') or
+            label_probe.get('available') or
+            split_data['augmentation_consistency'].get('available')
+        ),
         'subject_distribution_separation_proxy': subject_proxy,
         'label_distribution_separation_proxy': label_proxy,
+        'session_distribution_stability_proxy': session_proxy,
+        'augmentation_consistency': split_data['augmentation_consistency'],
+        'subject_leakage_probe': subject_probe,
+        'task_signal_probe': label_probe,
+        'session_device_stability_probe': {
+            'available': bool(session_proxy.get('available')),
+            'method': 'session_idx_distribution_js',
+            'stability_score': session_stability,
+            'raw_proxy': session_proxy,
+        },
         'semantic_selectivity_proxy': selectivity,
         'pending_probe_metrics': PENDING_METRICS,
     }
+
+
+def _save_probe_dashboard(path: Path, split_name: str, split_result: Dict[str, object]) -> None:
+    layer_c = split_result['layer_c']
+    layer_d = split_result['layer_d']
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
+
+    count_probe = layer_c.get('cross_modal_masked_token_prediction_gain', {})
+    if count_probe.get('available'):
+        axes[0].bar(
+            ['joint', 'fnirs_only', 'shuffled'],
+            [
+                float(count_probe['joint_accuracy']),
+                float(count_probe['fnirs_only_accuracy']),
+                float(count_probe['shuffled_source_accuracy']),
+            ],
+            color=['teal', 'steelblue', 'gray'],
+            alpha=0.85,
+        )
+        axes[0].set_ylabel('Accuracy')
+    else:
+        axes[0].text(0.5, 0.5, 'No CMG probe', ha='center', va='center')
+    axes[0].set_title(f'{split_name.upper()} Cross-modal Probe')
+
+    task_probe = layer_d.get('task_signal_probe', {})
+    subject_probe = layer_d.get('subject_leakage_probe', {})
+    if task_probe.get('available') or subject_probe.get('available'):
+        axes[1].bar(
+            ['task', 'subject'],
+            [
+                float(task_probe.get('accuracy', 0.0)),
+                float(subject_probe.get('accuracy', 0.0)),
+            ],
+            color=['forestgreen', 'crimson'],
+            alpha=0.85,
+        )
+        axes[1].set_ylabel('Probe accuracy')
+    else:
+        axes[1].text(0.5, 0.5, 'No label/subject probes', ha='center', va='center')
+    axes[1].set_title(f'{split_name.upper()} Probe Selectivity')
+
+    augmentation = layer_d.get('augmentation_consistency', {})
+    if augmentation.get('available'):
+        branch_names = list(augmentation['branch_mean_match_rate'].keys())
+        branch_values = [float(augmentation['branch_mean_match_rate'][key]) for key in branch_names]
+        axes[2].bar(branch_names, branch_values, color='slateblue', alpha=0.85)
+        axes[2].tick_params(axis='x', rotation=20)
+        axes[2].set_ylabel('Match rate')
+    else:
+        axes[2].text(0.5, 0.5, 'No augmentation probe', ha='center', va='center')
+    axes[2].set_title(f'{split_name.upper()} Augmentation Consistency')
+
+    for axis in axes:
+        axis.grid(True, axis='y', alpha=0.25)
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
 
 
 def _build_reasonableness_heuristic(
@@ -722,9 +1110,21 @@ def analyze_semantic_space(
     splits: Iterable[str] = ('val', 'test'),
     run_dir: Optional[Path] = None,
     max_batches: Optional[int] = None,
-    max_feature_samples: int = 20000,
+    max_feature_samples: Optional[int] = 20000,
+    max_probe_samples: Optional[int] = None,
+    augmentation_probe_batches: Optional[int] = None,
+    probe_seed: Optional[int] = None,
 ) -> Dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    options = _resolve_semantic_analysis_options(
+        config=config,
+        max_batches=max_batches,
+        max_feature_samples=max_feature_samples,
+        max_probe_samples=max_probe_samples,
+        augmentation_probe_batches=augmentation_probe_batches,
+        probe_seed=probe_seed,
+    )
 
     lag_set = [int(x) for x in config.get('validation', {}).get('lag_set', [0, 1, 2, 3, 4, 5])]
     shared_codebook_size = int(getattr(model, 'shared_codebook_size', getattr(model, 'codebook_size', model.get_codebook_size())))
@@ -745,14 +1145,20 @@ def analyze_semantic_space(
             'branch_responsibility_gap',
             'lagged_mutual_information_gain',
             'conditional_kl_gain',
+            'cross_modal_masked_token_prediction_gain',
             'shared_usage_distribution_balance',
             'intra_token_state_consistency',
             'prototype_separation_ratio',
             'transition_predictability_gain',
+            'augmentation_consistency',
+            'subject_leakage_probe',
+            'task_signal_probe',
+            'session_device_stability_probe',
             'metadata_distribution_separation_proxies',
             'gradient_semantic_support_summary',
         ],
         'pending_metrics': PENDING_METRICS,
+        'analysis_options': options,
         'splits': {},
     }
 
@@ -772,8 +1178,11 @@ def analyze_semantic_space(
             dataloader=dataloader,
             device=device,
             shared_codebook_size=shared_codebook_size,
-            max_batches=max_batches,
-            max_feature_samples=max_feature_samples,
+            max_batches=options['max_batches'],
+            max_feature_samples=int(options['max_feature_samples']),
+            max_probe_samples=int(options['max_probe_samples']),
+            augmentation_probe_batches=int(options['augmentation_probe_batches']),
+            probe_seed=int(options['probe_seed']),
         )
         if split_data['total_batches'] == 0:
             continue
@@ -891,6 +1300,13 @@ def analyze_semantic_space(
             'corrected_lmig': float(best_lag['mi_improvement'] - lag_zero['mi_improvement']),
             'conditional_kl': float(conditional_kl),
             'conditional_kl_gain_vs_shuffle': float(best_lag['mi_improvement']),
+            'cross_modal_masked_token_prediction_gain': _count_table_probe(
+                split_data['eeg_shared_tokens'],
+                split_data['fnirs_shared_tokens'],
+                lag=int(best_lag['lag']),
+                codebook_size=shared_codebook_size,
+                seed=int(options['probe_seed']) + 101,
+            ),
             'shared_usage_distribution_balance': float(balance_summary['distribution_balance']),
             'shared_usage_total_variation_distance': float(balance_summary['total_variation_distance']),
             'supplementary_overlap': shared_overlap,
@@ -909,6 +1325,7 @@ def analyze_semantic_space(
 
         write_json(split_dir / 'semantic_scorecard_summary.json', split_result)
         _save_split_dashboard(split_dir / 'semantic_scorecard_dashboard.png', split_name, split_result)
+        _save_probe_dashboard(split_dir / 'semantic_probe_dashboard.png', split_name, split_result)
         results['splits'][split_name] = split_result
 
     write_json(output_dir / 'summary.json', results)

@@ -25,6 +25,9 @@ def main():
     parser.add_argument('--device', default=None, help='Optional device override, e.g. cpu or cuda')
     parser.add_argument('--max-batches', type=int, default=None, help='Optional limit for quick smoke analysis')
     parser.add_argument('--max-feature-samples', type=int, default=20000, help='Maximum latent-token pairs per branch for state-quality metrics')
+    parser.add_argument('--max-probe-samples', type=int, default=None, help='Optional cap for per-sample probe features used by P2 metrics')
+    parser.add_argument('--augmentation-probe-batches', type=int, default=None, help='Optional cap for augmentation-consistency probe batches')
+    parser.add_argument('--probe-seed', type=int, default=None, help='Optional random seed override for lightweight probes')
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
@@ -57,6 +60,9 @@ def main():
         run_dir=run_dir,
         max_batches=args.max_batches,
         max_feature_samples=args.max_feature_samples,
+        max_probe_samples=args.max_probe_samples,
+        augmentation_probe_batches=args.augmentation_probe_batches,
+        probe_seed=args.probe_seed,
     )
     print(
         json.dumps(
