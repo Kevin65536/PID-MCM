@@ -12,6 +12,8 @@ import torch
 
 from src.utils.io import write_json
 
+from .analysis_artifacts import prepare_analysis_layout
+
 from .shared_alignment_analysis import (
     _active_overlap_summary,
     _codebook_summary,
@@ -1115,7 +1117,21 @@ def analyze_semantic_space(
     augmentation_probe_batches: Optional[int] = None,
     probe_seed: Optional[int] = None,
 ) -> Dict[str, object]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = prepare_analysis_layout(
+        suite_root=output_dir,
+        analysis_name='semantic_space',
+        splits=splits,
+        metadata={
+            'focus': 'semantic_scorecard',
+            'retained_metrics': [
+                'layer_a_codebook_health',
+                'layer_b_state_quality',
+                'layer_c_lag_coupling',
+                'layer_d_invariance',
+                'training_dynamics',
+            ],
+        },
+    )
 
     options = _resolve_semantic_analysis_options(
         config=config,
@@ -1134,6 +1150,7 @@ def analyze_semantic_space(
 
     results: Dict[str, object] = {
         'analysis_type': 'semantic_space',
+        'artifact_root': str(layout['analysis_root']),
         'lag_set': lag_set,
         'shared_codebook_size': shared_codebook_size,
         'eeg_private_codebook_size': eeg_private_codebook_size,
@@ -1163,15 +1180,16 @@ def analyze_semantic_space(
     }
 
     if training_dynamics.get('available'):
-        _save_training_dynamics_dashboard(output_dir / 'training_dynamics_dashboard.png', training_dynamics)
+        _save_training_dynamics_dashboard(Path(layout['figures_root']) / 'training_dynamics_dashboard.png', training_dynamics)
 
     model.eval()
     for split_name in splits:
         dataloader = dataloaders.get(split_name)
         if dataloader is None:
             continue
-        split_dir = output_dir / split_name
-        split_dir.mkdir(parents=True, exist_ok=True)
+        split_layout = layout['splits'][split_name]
+        split_metrics_dir = split_layout['metrics']
+        split_figures_dir = split_layout['figures']
 
         split_data = _collect_split_data(
             model=model,
@@ -1323,12 +1341,12 @@ def analyze_semantic_space(
             'heuristic_reasonableness': heuristic,
         }
 
-        write_json(split_dir / 'semantic_scorecard_summary.json', split_result)
-        _save_split_dashboard(split_dir / 'semantic_scorecard_dashboard.png', split_name, split_result)
-        _save_probe_dashboard(split_dir / 'semantic_probe_dashboard.png', split_name, split_result)
+        write_json(split_metrics_dir / 'summary.json', split_result)
+        _save_split_dashboard(split_figures_dir / 'scorecard_dashboard.png', split_name, split_result)
+        _save_probe_dashboard(split_figures_dir / 'probe_dashboard.png', split_name, split_result)
         results['splits'][split_name] = split_result
 
-    write_json(output_dir / 'summary.json', results)
+    write_json(Path(layout['metrics_root']) / 'summary.json', results)
     return results
 
 

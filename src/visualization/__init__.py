@@ -9,6 +9,7 @@ from .shared_alignment_analysis import analyze_shared_alignment
 from .factorized_alignment_analysis import analyze_factorized_alignment
 from .gradient_diagnostics import plot_gradient_conflict_dashboard
 from .semantic_space_analysis import analyze_semantic_space
+from .tokenizer_analysis_suite import generate_tokenizer_analysis_suite
 
 __all__ = [
     'TokenizerVisualizer',
@@ -21,4 +22,5 @@ __all__ = [
     'analyze_factorized_alignment',
     'plot_gradient_conflict_dashboard',
     'analyze_semantic_space',
+    'generate_tokenizer_analysis_suite',
 ]

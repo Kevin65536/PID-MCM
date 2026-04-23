@@ -34,8 +34,7 @@ from src.utils import (
     write_json,
 )
 from src.visualization import TensorBoardLogger
-from src.visualization import analyze_alignment
-from src.visualization import analyze_semantic_space
+from src.visualization import generate_tokenizer_analysis_suite
 
 
 def resolve_normalization_config(data_cfg: dict) -> Tuple[bool, str]:
@@ -687,41 +686,33 @@ def finalize_training_run(
     logger.generate_figures()
 
     analysis_type = getattr(model, 'get_analysis_type', lambda: 'shared_alignment')()
-    summary_path = logger.run_dir / 'analysis' / f'{analysis_type}_summary.json'
+    summary_root = logger.run_dir / 'analysis' / 'tokenizer_report'
+    summary_root.mkdir(parents=True, exist_ok=True)
+    summary_path = summary_root / 'training_summary.json'
     write_json(summary_path, final_metrics)
 
     if skip_post_analysis:
         return final_metrics
 
-    analysis_dir = logger.run_dir / 'analysis' / analysis_type
-    print(f"Running default {analysis_type} analysis -> {analysis_dir}")
-    analysis_results = analyze_alignment(
+    print(f"Running tokenizer analysis suite -> {summary_root}")
+    suite_results = generate_tokenizer_analysis_suite(
         model=model,
         dataloaders={'val': val_loader, 'test': test_loader},
         config=config,
-        output_dir=analysis_dir,
+        run_dir=logger.run_dir,
+        output_dir=summary_root,
         device=analysis_device,
         analysis_type=analysis_type,
     )
-    write_json(analysis_dir / 'analysis_summary.json', analysis_results)
-
-    semantic_analysis_dir = logger.run_dir / 'analysis' / 'semantic_space'
-    print(f"Running semantic_space analysis -> {semantic_analysis_dir}")
-    semantic_results = analyze_semantic_space(
-        model=model,
-        dataloaders={'val': val_loader, 'test': test_loader},
-        config=config,
-        output_dir=semantic_analysis_dir,
-        device=analysis_device,
-        run_dir=logger.run_dir,
-    )
-    write_json(semantic_analysis_dir / 'analysis_summary.json', semantic_results)
+    analysis_results = suite_results['alignment']
 
     lag_set = config.get('validation', {}).get('lag_set', [])
     max_validation_lag = max(lag_set) if lag_set else None
     if max_validation_lag is not None:
         for split_name, split_result in analysis_results.get('splits', {}).items():
             best_lag = split_result.get('best_lag')
+            if best_lag is None:
+                best_lag = split_result.get('lag_coupling', {}).get('best_lag')
             if best_lag is not None and int(best_lag) >= int(max_validation_lag):
                 print(
                     f"[Warning] {split_name} best_lag={best_lag} hit validation lag boundary "
@@ -736,7 +727,7 @@ def main():
     parser.add_argument('--config', required=True, help='Config path relative to experiments/configs')
     parser.add_argument('--resume', default=None, help='Optional checkpoint path')
     parser.add_argument('--run-name', default=None, help='Optional run directory name to reuse inside experiments/runs')
-    parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default shared alignment analysis at the end of training')
+    parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default tokenizer analysis suite at the end of training')
     args = parser.parse_args()
 
     require_standard_training_launcher('shared-tokenizer')

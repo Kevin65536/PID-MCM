@@ -9,6 +9,8 @@ import torch
 
 from src.utils.io import write_json
 
+from .analysis_artifacts import prepare_analysis_layout
+
 from .shared_alignment_analysis import (
     _active_overlap_summary,
     _codebook_summary,
@@ -247,6 +249,65 @@ def _compute_branch_ablation_metrics(
     }
 
 
+def _compact_codebook_summary(summary: Dict[str, object], codebook_size: int) -> Dict[str, float | int]:
+    return {
+        'active_codes': int(summary['active_codes']),
+        'usage_rate': float(summary['usage_rate']),
+        'dead_codes': int(summary['dead_codes']),
+        'dead_ratio': float(summary['dead_codes']) / max(codebook_size, 1),
+        'perplexity': float(summary['perplexity']),
+        'perplexity_ratio': float(summary['perplexity']) / max(codebook_size, 1),
+        'gini_coefficient': float(summary['gini_coefficient']),
+        'top_20_coverage': float(summary['top_20_coverage']),
+    }
+
+
+def _save_codebook_health_dashboard(
+    path: Path,
+    split_name: str,
+    shared_eeg_summary: Dict[str, object],
+    shared_fnirs_summary: Dict[str, object],
+    eeg_private_summary: Dict[str, object],
+    fnirs_private_summary: Dict[str, object],
+    shared_codebook_size: int,
+    eeg_private_codebook_size: int,
+    fnirs_private_codebook_size: int,
+):
+    shared_eeg = _compact_codebook_summary(shared_eeg_summary, shared_codebook_size)
+    shared_fnirs = _compact_codebook_summary(shared_fnirs_summary, shared_codebook_size)
+    eeg_private = _compact_codebook_summary(eeg_private_summary, eeg_private_codebook_size)
+    fnirs_private = _compact_codebook_summary(fnirs_private_summary, fnirs_private_codebook_size)
+    summaries = [shared_eeg, shared_fnirs, eeg_private, fnirs_private]
+    labels = ['shared_eeg', 'shared_fnirs', 'eeg_private', 'fnirs_private']
+    colors = ['steelblue', 'forestgreen', 'darkorange', 'purple']
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+
+    axes[0, 0].bar(labels, [item['perplexity_ratio'] for item in summaries], color=colors, alpha=0.85)
+    axes[0, 0].set_title(f'{split_name.upper()} Perplexity Ratio')
+    axes[0, 0].set_ylabel('perplexity / codebook_size')
+
+    axes[0, 1].bar(labels, [item['usage_rate'] for item in summaries], color=colors, alpha=0.85)
+    axes[0, 1].set_title(f'{split_name.upper()} Usage Rate')
+    axes[0, 1].set_ylabel('active_codes / codebook_size')
+
+    axes[1, 0].bar(labels, [item['dead_ratio'] for item in summaries], color=colors, alpha=0.85)
+    axes[1, 0].set_title(f'{split_name.upper()} Dead Code Ratio')
+    axes[1, 0].set_ylabel('dead_codes / codebook_size')
+
+    axes[1, 1].bar(labels, [item['top_20_coverage'] for item in summaries], color=colors, alpha=0.85)
+    axes[1, 1].set_title(f'{split_name.upper()} Top-20 Coverage')
+    axes[1, 1].set_ylabel('coverage')
+
+    for axis in axes.flatten():
+        axis.grid(True, axis='y', alpha=0.25)
+        axis.tick_params(axis='x', rotation=20)
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 @torch.no_grad()
 def analyze_factorized_alignment(
     model,
@@ -256,7 +317,21 @@ def analyze_factorized_alignment(
     device: torch.device,
     splits: Iterable[str] = ('val', 'test'),
 ) -> Dict[str, object]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = prepare_analysis_layout(
+        suite_root=output_dir,
+        analysis_name='factorized_alignment',
+        splits=splits,
+        metadata={
+            'focus': 'architecture_guidance',
+            'retained_metrics': [
+                'reconstruction_guardrails',
+                'codebook_health',
+                'branch_responsibility',
+                'lag_coupling',
+                'supplementary_overlap',
+            ],
+        },
+    )
     lag_set = [int(x) for x in config.get('validation', {}).get('lag_set', [0, 1, 2, 3, 4, 5])]
     shared_codebook_size = int(getattr(model, 'shared_codebook_size', model.get_codebook_size()))
     eeg_private_codebook_size = int(getattr(model, 'eeg_private_codebook_size', shared_codebook_size))
@@ -267,6 +342,7 @@ def analyze_factorized_alignment(
 
     results: Dict[str, object] = {
         'analysis_type': 'factorized_alignment',
+        'artifact_root': str(layout['analysis_root']),
         'shared_codebook_size': shared_codebook_size,
         'eeg_private_codebook_size': eeg_private_codebook_size,
         'fnirs_private_codebook_size': fnirs_private_codebook_size,
@@ -353,70 +429,28 @@ def analyze_factorized_alignment(
         lag_zero = next(item for item in lag_metrics if item['lag'] == 0)
         best_lag = max(lag_metrics, key=lambda item: (item['mi_improvement'], -item['lag']))
 
-        split_dir = output_dir / split_name
-        split_dir.mkdir(parents=True, exist_ok=True)
+        split_layout = layout['splits'][split_name]
+        split_metrics_dir = split_layout['metrics']
+        split_figures_dir = split_layout['figures']
 
-        _save_usage_plot(split_dir / 'shared_codebook_usage.png', shared_eeg_summary, shared_fnirs_summary, split_name)
-        _save_codebook_diagnostics(
-            split_dir / 'shared_codebook_diagnostics.png',
+        _save_codebook_health_dashboard(
+            split_figures_dir / 'codebook_health.png',
+            split_name,
             shared_eeg_summary,
             shared_fnirs_summary,
-            split_name,
+            eeg_private_summary,
+            fnirs_private_summary,
             shared_codebook_size,
+            eeg_private_codebook_size,
+            fnirs_private_codebook_size,
         )
-        _save_lag_plot(split_dir / 'shared_lag_metrics.png', lag_metrics, split_name)
-        _save_heatmap(split_dir / 'shared_top_pair_heatmap.png', best_lag, split_name)
-        _save_pairing_dashboard(split_dir / 'shared_pairing_diagnostics.png', split_name, lag_zero, best_lag, shared_overlap)
+        _save_lag_plot(split_figures_dir / 'lag_metrics.png', lag_metrics, split_name)
         shared_coupling = _save_cross_modal_coupling_plot(
-            split_dir / 'shared_cross_modal_coupling.png',
+            split_figures_dir / 'cross_modal_coupling.png',
             eeg_shared_tokens,
             fnirs_shared_tokens,
             shared_codebook_size,
             split_name,
-        )
-        _save_probe_style_lag_plot(split_dir / 'shared_probe_lagged_coupling.png', lag_metrics, split_name)
-
-        private_display_size = max(eeg_private_codebook_size, fnirs_private_codebook_size)
-        eeg_private_usage = _summary_with_padded_counts(eeg_private_summary, private_display_size)
-        fnirs_private_usage = _summary_with_padded_counts(fnirs_private_summary, private_display_size)
-        _save_codebook_diagnostics(
-            split_dir / 'private_codebook_diagnostics.png',
-            eeg_private_usage,
-            fnirs_private_usage,
-            split_name,
-            private_display_size,
-        )
-        _save_branch_usage_dashboard(
-            split_dir / 'branch_usage_dashboard.png',
-            shared_overlap,
-            eeg_private_summary,
-            fnirs_private_summary,
-            split_name,
-        )
-
-        coupling_logits = model.coupling_logits.detach().cpu().numpy()
-        _save_coupling_matrix_plot(split_dir / 'learned_coupling_matrices.png', coupling_logits, lag_set, split_name)
-
-        _save_component_embedding_plot(
-            split_dir / 'shared_token_embeddings.png',
-            model.shared_quantizer.weight.detach().cpu().numpy(),
-            np.array(shared_eeg_summary['counts']) + np.array(shared_fnirs_summary['counts']),
-            split_name,
-            'Shared Code Embeddings',
-        )
-        _save_component_embedding_plot(
-            split_dir / 'eeg_private_token_embeddings.png',
-            model.eeg_private_quantizer.weight.detach().cpu().numpy(),
-            np.array(eeg_private_summary['counts']),
-            split_name,
-            'EEG Private Code Embeddings',
-        )
-        _save_component_embedding_plot(
-            split_dir / 'fnirs_private_token_embeddings.png',
-            model.fnirs_private_quantizer.weight.detach().cpu().numpy(),
-            np.array(fnirs_private_summary['counts']),
-            split_name,
-            'fNIRS Private Code Embeddings',
         )
 
         if snapshot is not None:
@@ -427,100 +461,53 @@ def analyze_factorized_alignment(
             )
             eeg_fs = _estimate_sampling_rate(snapshot['eeg_signal'], window_duration_s)
             fnirs_fs = _estimate_sampling_rate(snapshot['fnirs_signal'], window_duration_s)
-            _save_reconstruction_plot(
-                split_dir / 'reconstruction_examples.png',
-                snapshot['eeg_signal'],
-                snapshot['full_eeg_reconstruction'],
-                snapshot['fnirs_signal'],
-                snapshot['full_fnirs_reconstruction'],
-                split_name,
-            )
-            _save_spectral_comparison_plot(
-                split_dir / 'spectral_comparison.png',
-                snapshot['eeg_signal'],
-                snapshot['full_eeg_reconstruction'],
-                snapshot['fnirs_signal'],
-                snapshot['full_fnirs_reconstruction'],
-                split_name,
-                eeg_fs=eeg_fs,
-                fnirs_fs=fnirs_fs,
-                eeg_max_freq=float(eeg_lowpass) if eeg_lowpass is not None else None,
-                fnirs_max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
-            )
             _save_branch_ablation_plot(
-                split_dir / 'branch_ablation_reconstruction.png',
+                split_figures_dir / 'branch_ablation.png',
                 snapshot['eeg_signal'],
                 snapshot['fnirs_signal'],
                 snapshot['ablations'],
                 split_name,
             )
-            if eeg_signals.size > 0:
-                _save_token_pattern_plot(
-                    split_dir / 'shared_token_patterns_EEG.png',
-                    eeg_shared_tokens[:eeg_signals.shape[0]],
-                    eeg_signals,
-                    shared_codebook_size,
-                    patch_size=int(model.eeg_patch_size),
-                    modality_name='EEG Shared',
-                    fs=eeg_fs,
-                    max_freq=float(eeg_lowpass) if eeg_lowpass is not None else 50.0,
-                )
-                _save_token_pattern_plot(
-                    split_dir / 'private_token_patterns_EEG.png',
-                    eeg_private_tokens[:eeg_signals.shape[0]],
-                    eeg_signals,
-                    eeg_private_codebook_size,
-                    patch_size=int(model.eeg_patch_size),
-                    modality_name='EEG Private',
-                    fs=eeg_fs,
-                    max_freq=float(eeg_lowpass) if eeg_lowpass is not None else 50.0,
-                )
-            if fnirs_signals.size > 0:
-                _save_token_pattern_plot(
-                    split_dir / 'shared_token_patterns_fNIRS.png',
-                    fnirs_shared_tokens[:fnirs_signals.shape[0]],
-                    fnirs_signals,
-                    shared_codebook_size,
-                    patch_size=int(model.fnirs_patch_size),
-                    modality_name='fNIRS Shared',
-                    fs=fnirs_fs,
-                    max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
-                )
-                _save_token_pattern_plot(
-                    split_dir / 'private_token_patterns_fNIRS.png',
-                    fnirs_private_tokens[:fnirs_signals.shape[0]],
-                    fnirs_signals,
-                    fnirs_private_codebook_size,
-                    patch_size=int(model.fnirs_patch_size),
-                    modality_name='fNIRS Private',
-                    fs=fnirs_fs,
-                    max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
-                )
         else:
             branch_ablation_metrics = {}
 
         split_result = {
-            'mean_metrics': mean_metrics,
-            'shared_eeg_codebook': {k: v for k, v in shared_eeg_summary.items() if k != 'counts'},
-            'shared_fnirs_codebook': {k: v for k, v in shared_fnirs_summary.items() if k != 'counts'},
-            'eeg_private_codebook': {k: v for k, v in eeg_private_summary.items() if k != 'counts'},
-            'fnirs_private_codebook': {k: v for k, v in fnirs_private_summary.items() if k != 'counts'},
-            'shared_active_overlap': shared_overlap,
-            'shared_lag_metrics': lag_metrics,
-            'lag_compare_length': int(fixed_compare_length),
-            'best_lag': int(best_lag['lag']),
-            'best_lag_mutual_information': float(best_lag['mutual_information']),
-            'best_lag_mi_improvement': float(best_lag['mi_improvement']),
-            'best_lag_match_rate': float(best_lag['match_rate']),
-            'shared_cross_modal_coupling': shared_coupling,
-            'top_pair_mapping': best_lag['top_mapping_rows'],
-            'branch_ablation_metrics': branch_ablation_metrics,
-            'mean_shared_latent_energy': float(np.mean(shared_latent_energy)),
-            'mean_private_latent_energy': float(np.mean(private_latent_energy)),
+            'reconstruction_guardrails': {
+                'eeg_rec_loss': float(mean_metrics.get('eeg_rec_loss', 0.0)),
+                'fnirs_rec_loss': float(mean_metrics.get('fnirs_rec_loss', 0.0)),
+                'shared_eeg_common_loss': float(mean_metrics.get('shared_eeg_common_loss', 0.0)),
+                'shared_fnirs_common_loss': float(mean_metrics.get('shared_fnirs_common_loss', 0.0)),
+                'eeg_private_residual_loss': float(mean_metrics.get('eeg_private_residual_loss', 0.0)),
+                'fnirs_private_residual_loss': float(mean_metrics.get('fnirs_private_residual_loss', 0.0)),
+            },
+            'codebook_health': {
+                'shared_eeg': _compact_codebook_summary(shared_eeg_summary, shared_codebook_size),
+                'shared_fnirs': _compact_codebook_summary(shared_fnirs_summary, shared_codebook_size),
+                'eeg_private': _compact_codebook_summary(eeg_private_summary, eeg_private_codebook_size),
+                'fnirs_private': _compact_codebook_summary(fnirs_private_summary, fnirs_private_codebook_size),
+            },
+            'branch_responsibility': branch_ablation_metrics,
+            'lag_coupling': {
+                'lag_compare_length': int(fixed_compare_length),
+                'lag_zero_mutual_information': float(lag_zero['mutual_information']),
+                'lag_zero_mi_improvement': float(lag_zero['mi_improvement']),
+                'best_lag': int(best_lag['lag']),
+                'best_lag_mutual_information': float(best_lag['mutual_information']),
+                'best_lag_mi_improvement': float(best_lag['mi_improvement']),
+                'best_lag_match_rate': float(best_lag['match_rate']),
+                'lag_metrics': lag_metrics,
+                'shared_cross_modal_coupling': shared_coupling,
+            },
+            'supplementary_overlap': shared_overlap,
+            'optimization_signature': {
+                'mean_shared_latent_energy': float(np.mean(shared_latent_energy)),
+                'mean_private_latent_energy': float(np.mean(private_latent_energy)),
+                'selected_alignment_lag_objective': float(mean_metrics.get('selected_alignment_lag', 0.0)),
+            },
         }
         results['splits'][split_name] = split_result
 
-        write_json(split_dir / 'summary.json', split_result)
+        write_json(split_metrics_dir / 'summary.json', split_result)
 
-    write_json(output_dir / 'factorized_alignment_analysis.json', results)
+    write_json(Path(layout['metrics_root']) / 'summary.json', results)
     return results

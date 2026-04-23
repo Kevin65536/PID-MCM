@@ -7,27 +7,32 @@ from pathlib import Path
 
 import yaml
 
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(project_root))
 
 from experiments.scripts.train_shared_tokenizer import create_multimodal_dataloaders, setup_device
 from src.tokenizers import create_tokenizer
 from src.utils import load_checkpoint_file
-from src.visualization import analyze_alignment
+from src.visualization import generate_tokenizer_analysis_suite
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Re-run standardized alignment analysis for a completed multimodal tokenizer run')
+    parser = argparse.ArgumentParser(description='Generate the standardized tokenizer analysis suite for a completed run')
     parser.add_argument('--run-dir', required=True, help='Run directory containing config.yaml and checkpoints')
     parser.add_argument('--checkpoint', default='best_model.pt', help='Checkpoint filename inside run_dir/checkpoints')
-    parser.add_argument('--output-dir', default=None, help='Optional output directory for analysis results')
+    parser.add_argument('--output-dir', default=None, help='Optional suite root directory for all analysis artifacts')
     parser.add_argument('--splits', nargs='+', default=['val', 'test'], help='Splits to analyze')
     parser.add_argument('--device', default=None, help='Optional device override, e.g. cpu or cuda')
+    parser.add_argument('--max-batches', type=int, default=None, help='Optional limit for quick smoke analysis')
+    parser.add_argument('--max-feature-samples', type=int, default=20000, help='Maximum latent-token pairs per branch for state-quality metrics')
+    parser.add_argument('--max-probe-samples', type=int, default=None, help='Optional cap for per-sample probe features used by semantic metrics')
+    parser.add_argument('--augmentation-probe-batches', type=int, default=None, help='Optional cap for augmentation-consistency probe batches')
+    parser.add_argument('--probe-seed', type=int, default=None, help='Optional random seed override for lightweight probes')
     parser.add_argument(
         '--analysis-type',
         choices=['shared_alignment', 'factorized_alignment'],
         default=None,
-        help='Optional explicit analyzer override; defaults to model.get_analysis_type()',
+        help='Optional explicit alignment analyzer override; defaults to model.get_analysis_type()',
     )
     args = parser.parse_args()
 
@@ -50,23 +55,33 @@ def main():
     model.eval()
 
     dataloaders = create_multimodal_dataloaders(config)
-    analysis_type = args.analysis_type or getattr(model, 'get_analysis_type', lambda: 'shared_alignment')()
     output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'tokenizer_report'
-    results = analyze_alignment(
+
+    suite_results = generate_tokenizer_analysis_suite(
         model=model,
         dataloaders=dataloaders,
         config=config,
+        run_dir=run_dir,
         output_dir=output_dir,
         device=device,
         splits=args.splits,
-        analysis_type=analysis_type,
+        analysis_type=args.analysis_type,
+        max_batches=args.max_batches,
+        max_feature_samples=args.max_feature_samples,
+        max_probe_samples=args.max_probe_samples,
+        augmentation_probe_batches=args.augmentation_probe_batches,
+        probe_seed=args.probe_seed,
     )
+    alignment_results = suite_results['alignment']
+    semantic_results = suite_results['semantic']
+
     print(
         json.dumps(
             {
-                'output_dir': str(results.get('artifact_root', output_dir)),
-                'analysis_type': analysis_type,
-                'splits': list(results.get('splits', {}).keys()),
+                'output_dir': str(suite_results['output_dir']),
+                'alignment_root': str(alignment_results.get('artifact_root', output_dir)),
+                'semantic_root': str(semantic_results.get('artifact_root', output_dir)),
+                'splits': list(semantic_results.get('splits', {}).keys()),
             },
             indent=2,
         )

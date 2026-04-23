@@ -11,6 +11,8 @@ import torch
 
 from src.utils.io import write_json
 
+from .analysis_artifacts import prepare_analysis_layout
+
 try:
     from sklearn.decomposition import PCA
     from sklearn.manifold import TSNE
@@ -875,7 +877,15 @@ def analyze_shared_alignment(
     device: torch.device,
     splits: Iterable[str] = ('val', 'test'),
 ) -> Dict[str, object]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    layout = prepare_analysis_layout(
+        suite_root=output_dir,
+        analysis_name='shared_alignment',
+        splits=splits,
+        metadata={
+            'focus': 'baseline_alignment',
+            'retained_metrics': ['codebook_health', 'lag_coupling', 'reconstruction_diagnostics'],
+        },
+    )
     lag_set = [int(x) for x in config.get('validation', {}).get('lag_set', [0, 1, 2, 3, 4, 5])]
     codebook_size = int(getattr(model, 'codebook_size', model.get_codebook_size()))
     window_duration_s = float(config.get('data', {}).get('window', {}).get('duration_s', 1.0))
@@ -884,6 +894,7 @@ def analyze_shared_alignment(
 
     results: Dict[str, object] = {
         'analysis_type': 'shared_alignment',
+        'artifact_root': str(layout['analysis_root']),
         'codebook_size': codebook_size,
         'lag_set': lag_set,
         'splits': {},
@@ -947,26 +958,27 @@ def analyze_shared_alignment(
         best_lag = max(lag_metrics, key=lambda item: (item['mi_improvement'], -item['lag']))
         codebook_embeddings = model.quantizer.weight.detach().cpu().numpy()
 
-        split_dir = output_dir / split_name
-        split_dir.mkdir(parents=True, exist_ok=True)
-        _save_usage_plot(split_dir / 'codebook_usage.png', eeg_summary, fnirs_summary, split_name)
-        _save_codebook_diagnostics(split_dir / 'codebook_diagnostics.png', eeg_summary, fnirs_summary, split_name, codebook_size)
-        _save_lag_plot(split_dir / 'lag_metrics.png', lag_metrics, split_name)
-        _save_heatmap(split_dir / 'top_pair_heatmap.png', best_lag, split_name)
-        _save_pairing_dashboard(split_dir / 'pairing_diagnostics.png', split_name, lag_zero, best_lag, overlap_summary)
+        split_layout = layout['splits'][split_name]
+        split_metrics_dir = split_layout['metrics']
+        split_figures_dir = split_layout['figures']
+        _save_usage_plot(split_figures_dir / 'codebook_usage.png', eeg_summary, fnirs_summary, split_name)
+        _save_codebook_diagnostics(split_figures_dir / 'codebook_diagnostics.png', eeg_summary, fnirs_summary, split_name, codebook_size)
+        _save_lag_plot(split_figures_dir / 'lag_metrics.png', lag_metrics, split_name)
+        _save_heatmap(split_figures_dir / 'top_pair_heatmap.png', best_lag, split_name)
+        _save_pairing_dashboard(split_figures_dir / 'pairing_diagnostics.png', split_name, lag_zero, best_lag, overlap_summary)
         coupling_summary = _save_cross_modal_coupling_plot(
-            split_dir / 'exp3_cross_modal_coupling.png',
+            split_figures_dir / 'exp3_cross_modal_coupling.png',
             eeg_tokens,
             fnirs_tokens,
             codebook_size,
             split_name,
         )
-        _save_probe_style_lag_plot(split_dir / 'exp3_lagged_coupling.png', lag_metrics, split_name)
+        _save_probe_style_lag_plot(split_figures_dir / 'exp3_lagged_coupling.png', lag_metrics, split_name)
         if reconstruction_snapshot is not None:
             eeg_fs = _estimate_sampling_rate(reconstruction_snapshot['eeg_signal'], window_duration_s)
             fnirs_fs = _estimate_sampling_rate(reconstruction_snapshot['fnirs_signal'], window_duration_s)
             _save_reconstruction_plot(
-                split_dir / 'reconstruction_examples.png',
+                split_figures_dir / 'reconstruction_examples.png',
                 reconstruction_snapshot['eeg_signal'],
                 reconstruction_snapshot['eeg_reconstruction'],
                 reconstruction_snapshot['fnirs_signal'],
@@ -974,7 +986,7 @@ def analyze_shared_alignment(
                 split_name,
             )
             _save_spectral_comparison_plot(
-                split_dir / 'spectral_comparison.png',
+                split_figures_dir / 'spectral_comparison.png',
                 reconstruction_snapshot['eeg_signal'],
                 reconstruction_snapshot['eeg_reconstruction'],
                 reconstruction_snapshot['fnirs_signal'],
@@ -987,7 +999,7 @@ def analyze_shared_alignment(
             )
             if eeg_signals.size > 0:
                 _save_token_pattern_plot(
-                    split_dir / 'exp2_token_patterns_EEG.png',
+                    split_figures_dir / 'exp2_token_patterns_EEG.png',
                     eeg_tokens[:eeg_signals.shape[0]],
                     eeg_signals,
                     codebook_size,
@@ -998,7 +1010,7 @@ def analyze_shared_alignment(
                 )
             if fnirs_signals.size > 0:
                 _save_token_pattern_plot(
-                    split_dir / 'exp2_token_patterns_fNIRS.png',
+                    split_figures_dir / 'exp2_token_patterns_fNIRS.png',
                     fnirs_tokens[:fnirs_signals.shape[0]],
                     fnirs_signals,
                     codebook_size,
@@ -1008,7 +1020,7 @@ def analyze_shared_alignment(
                     max_freq=float(fnirs_lowpass) if fnirs_lowpass is not None else None,
                 )
         _save_token_embeddings_plot(
-            split_dir / 'token_embeddings.png',
+            split_figures_dir / 'token_embeddings.png',
             codebook_embeddings,
             np.array(eeg_summary['counts']),
             np.array(fnirs_summary['counts']),
@@ -1033,7 +1045,7 @@ def analyze_shared_alignment(
         }
         results['splits'][split_name] = split_result
 
-        write_json(split_dir / 'summary.json', split_result)
+        write_json(split_metrics_dir / 'summary.json', split_result)
 
-    write_json(output_dir / 'shared_alignment_analysis.json', results)
+    write_json(Path(layout['metrics_root']) / 'summary.json', results)
     return results

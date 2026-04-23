@@ -49,7 +49,7 @@ def main():
     model.eval()
 
     dataloaders = create_multimodal_dataloaders(config)
-    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'semantic_space'
+    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'tokenizer_report'
     results = analyze_semantic_space(
         model=model,
         dataloaders=dataloaders,
@@ -67,7 +67,7 @@ def main():
     print(
         json.dumps(
             {
-                'output_dir': str(output_dir),
+                'output_dir': str(results.get('artifact_root', output_dir)),
                 'splits': list(results.get('splits', {}).keys()),
                 'training_dynamics_available': bool(results.get('training_dynamics', {}).get('available')),
             },
