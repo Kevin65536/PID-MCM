@@ -36,3 +36,6 @@ __pycache__
 
 # latex paper
 /docs/paper
+
+# reference paper
+/docs/paper_pdf
