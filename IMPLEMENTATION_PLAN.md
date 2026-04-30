@@ -1,8 +1,8 @@
 # Neuro-Tokenization Implementation Plan
 
-> Rewritten: 2026-04-30
-> Status: Active mainline execution guide
-> Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md)
+> Rewritten: 2026-04-30 | Last revised: 2026-04-30
+> Status: Active mainline execution guide — branch semantics gate PASSED, entering Phase 1 implementation
+> Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md) — Section 2 contains the complete Source/Observation redesign
 > Archived reset foundation: [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
 > Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md)
 > Experiment log: [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md)
@@ -36,9 +36,11 @@
 
 1. EEG / fNIRS shared-private factorization
 2. lag-aware coupling for shared branch
-3. temporal-smoothed common target for shared branch as the current working proxy
-4. temporal residual target for private branches as the current working proxy
+3. temporal-smoothed common target for shared branch as the current working proxy **(待替换为 HRF model target)**
+4. temporal residual target for private branches as the current working proxy **(待替换为 observation branch 隐式定义)**
 5. codebook health regularization and branch responsibility separation
+
+**⚠️ 分支语义 redesign 已完成**：shared/private 将被重命名为 source/observation，单一 shared quantizer 将被替换为双 source codebook + constrained coupling，HRF 卷积模型将替代 smooth_signal proxy。详见 [PHYSIOLOGICAL_COUPLING_PLAN.md Section 2](docs/PHYSIOLOGICAL_COUPLING_PLAN.md)。V6 仍然是当前运行的基线，但已被指定为 S1 对照，不再是最终目标架构。
 
 ### 2.2 What has changed in the innovation story
 
@@ -114,53 +116,50 @@
 
 ## 5. Current Development Goal
 
-当前阶段的核心目标分为两个顺序化步骤：
+当前阶段的核心目标：
 
-1. **先重新审阅 shared/private branch 是否必要，以及每个分支的语义是否足够明确**；
-2. **只有在 branch semantics 明确后，才把 EEG-fNIRS coupling 从一个事后可分析的统计量，升级为一个带有明确生理结构先验的离散表示机制。**
+1. ~~**先重新审阅 shared/private branch 是否必要，以及每个分支的语义是否足够明确**~~ ✅ **已完成** — S2 design selected
+2. **实现 source/observation branch semantics redesign**（Phase 1-3），然后在明确的 branch semantics 上做 A/C 机制实验
 
-基于 [docs/references/TokenFlow_analysis.md](docs/references/TokenFlow_analysis.md) 和当前实现状态，当前的暂定判断是：
+### 5.1 Branch semantics review: conclusion ✅ DECIDED
 
-1. **不应直接清除 shared/private factorization**；
-2. **也不应把当前 shared-common / private-residual 代理目标当作已经定型的最终语义定义**；
-3. **在 Mechanism A / C 之前，必须先完成一个 branch semantics decision gate**。
+经过对 V6 baseline、TokenFlow 论文、以及神经血管耦合生理模型的分析，结论如下：
 
-### 5.1 Branch semantics review: provisional conclusion
+1. ✅ 保留 factorization 这个大方向；
+2. ✅ 重新定义 shared/private 的职责边界 —— 现在命名为 **source/observation**：
+   - **source branch** = HRF-modeled neurovascular coupling state
+   - **observation branch** = modality-specific reconstruction debt
+3. ✅ 当前 `shared = smoothed common`、`private = temporal residual` 已被正式弃用；
+4. ✅ 单一 shared quantizer 被替换为双 source codebook + constrained coupling matrix；
+5. ⚠️ equal token count per window 当前保留为工作假设，延后至 Phase 5 审计。
 
-当前更合理的结论不是“回到单瓶颈”，而是：
+### 5.2 Decision: S2 selected as new architecture target
 
-1. 保留 factorization 这个大方向；
-2. 重新定义 shared/private 的职责边界；
-3. 把当前 `shared = smoothed common`、`private = temporal residual` 看作工作代理，而不是最终理论语义；
-4. 把“single shared quantizer + equal token count per window”看作当前实现假设，而不是不可动摇的结构真理。
+在 S0 / S1 / S2 的比较中，**S2 (explicit-semantics factorized variant)** 被选定为新的架构目标：
 
-### 5.2 Decision options that must be compared before A/C
+| 结构 | 决策 | 理由 |
+|------|------|------|
+| S0: remove factorization | ❌ 不采用 | 不做 control experiment；factorization 必要性由 TokenFlow 分析和生理直觉支持 |
+| S1: V6 factorized baseline | ⚠️ 保留为对照 | 作为 Phase 1-3 实验的 comparison baseline |
+| **S2: explicit-semantics factorized** | ✅ **选定** | 完整设计规范见 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2 |
 
-在接入新的生理 coupling 先验之前，当前主线先比较以下三类结构：
+S2 的核心变更：
+1. shared/private → **source/observation**（命名 + 语义）
+2. 单一 shared quantizer → **双独立 source codebook**（eeg_source + fnirs_source）
+3. smooth_signal proxy → **HRF convolution model** 作为 source target
+4. 自由 coupling → **concentration-constrained coupling**
 
-1. **S0: remove factorization control**
-   - 单瓶颈或 shared-only 结构
-   - 目的不是回归主线，而是验证 factorization 是否确实必要
+### 5.3 Branch semantics exit gate ✅ PASSED
 
-2. **S1: current V6 factorized baseline**
-   - 保留单 shared quantizer
-   - 保留当前 common/residual 代理目标
-   - 作为当前主线对照
+以下条件已满足，允许进入 A/C 机制实验（在 Phase 3 concentration baseline 完成后）：
 
-3. **S2: explicit-semantics factorized variant**
-   - 保留 shared/private 结构
-   - 弱化“强共享 quantizer”假设，优先考虑 lightly tied shared codebooks 或显式 state mapping
-   - 把 shared branch 更明确地定义为 cross-modal state branch，而不是简单的低频通道
-   - 把 private branch 更明确地定义为 modality-specific reconstruction debt，而不是简单的平滑残差桶
+1. ✅ S2 的设计规范明确（PHYSIOLOGICAL_COUPLING_PLAN.md Section 2）
+2. ✅ source branch 语义 = HRF-modeled neurovascular coupling state（生理可解释，非低频重建捷径）
+3. ✅ observation branch 语义 = modality-specific reconstruction debt（由 ablation gap 定义，非平滑残差桶）
+4. ✅ 耦合结构从”事后统计量”升级为”concentration-constrained physiological mapping”
+5. ✅ 损失函数精简（V6: 12 terms → S2: 9 terms）
 
-### 5.3 Branch semantics exit gate
-
-只有满足下面条件之一，才允许继续进入 A/C 机制实验：
-
-1. S1 已证明 shared/private 职责边界清晰，且 shared branch 不是低频重建捷径；
-2. S2 相比 S1 在 Layer B 或 branch responsibility gap 上更清晰，因此成为新的默认主线。
-
-如果 S0 的结果与 S1/S2 相近，说明 factorization 的必要性仍未建立，此时不应直接继续做 coupling priors。
+**不再需要比较 S0 作为 gate condition**——S2 的设计已经充分论证了 factorization 的必要性和每个分支的独立生理语义。
 
 ---
 
@@ -193,20 +192,25 @@
 
 如果 baseline 工件不完整，不进入 A/C 机制比较。
 
-### 6.3 Audit questions that must be answered first
+### 6.3 Audit questions — all answered ✅
 
-在进入 A/C 之前，先回答下面四个问题：
+在进入 A/C 之前需要回答的四个问题：
 
-1. 当前 shared branch 学到的是跨模态共性状态，还是仅仅是更容易重建的低频成分？
-2. 当前 private branch 学到的是 modality-specific 信息，还是只是 shared 之外的剩余误差桶？
-3. `single shared quantizer` 是否是必要结构，还是当前 shared semantics 模糊的来源之一？
-4. `equal token count per window` 是否是科学假设，还是暂时的工程便利？
+1. ~~当前 shared branch 学到的是跨模态共性状态，还是仅仅是更容易重建的低频成分？~~ → **V6 shared branch 确实退化为低频重建捷径（smooth_signal proxy）。S2 redesign 用 HRF 物理模型替代。**
+2. ~~当前 private branch 学到的是 modality-specific 信息，还是只是 shared 之外的剩余误差桶？~~ → **V6 private branch 是残差桶（raw - smoothed）。S2 redesign 用 reconstruction necessity 定义 observation branch。**
+3. ~~`single shared quantizer` 是否是必要结构，还是当前 shared semantics 模糊的来源之一？~~ → **单一 shared quantizer 是 shared semantics 模糊的来源之一。S2 采用双 source codebook + constrained coupling。**
+4. ~~`equal token count per window` 是否是科学假设，还是暂时的工程便利？~~ → **是工程便利。当前保留为工作假设，延后至 Phase 5 审计。**
+
+所有四个 audit 问题已在 S2 redesign 中得到回答。
 
 ---
 
 ## 7. Workstream A: Coupling Smoothness
 
-本 workstream 只有在 Section 5 的 branch semantics exit gate 通过后才进入实现。
+本 workstream 现在有两个前置条件：
+1. ~~Section 5 的 branch semantics exit gate 通过~~ ✅
+2. **Phase 3 (concentration baseline) 完成并通过 gate** ← 当前阻塞
+3. 机制 A 不与机制 C 同时启用（文档要求）
 
 ### 7.1 Objective
 
@@ -267,7 +271,10 @@ loss:
 
 ## 8. Workstream C: Causal Direction Asymmetry
 
-本 workstream 只有在 Section 5 的 branch semantics exit gate 通过后才进入实现。
+本 workstream 现在有两个前置条件：
+1. ~~Section 5 的 branch semantics exit gate 通过~~ ✅
+2. **Phase 3 (concentration baseline) 完成并通过 gate** ← 当前阻塞
+3. 机制 C 不与机制 A 同时启用（文档要求）
 
 ### 8.1 Objective
 
@@ -347,16 +354,21 @@ loss:
 
 当前严格执行以下顺序：
 
-1. 维护 V6 baseline 作为固定对照
-2. 完成 shared/private branch semantics audit
-3. 比较 S0 / S1 / S2 三类结构，决定是否保留当前 factorization 以及如何定义 shared branch
-4. 选定通过 gate 的 branch semantics baseline
-5. 在该 baseline 上实现并验证 Mechanism A
-6. 记录 A 的 scorecard 与实验结论
-7. 回到同一 baseline，独立实现并验证 Mechanism C
-8. 记录 C 的 scorecard 与实验结论
-9. 只有当 A 或 C 中至少一个独立通过后，才讨论 A + C 组合
-10. tokenizer 证据充分后，才考虑 foundation model 层面的目标替换
+1. ~~维护 V6 baseline 作为固定对照~~ ✅ V6 baseline 维护中
+2. ~~完成 shared/private branch semantics audit~~ ✅ **已完成** — 结论见 Section 5
+3. ~~比较 S0 / S1 / S2 三类结构，决定是否保留当前 factorization 以及如何定义 shared branch~~ ✅ **已完成** — S2 selected
+4. ~~选定通过 gate 的 branch semantics baseline~~ ✅ **已完成** — S2 design spec in PHYSIOLOGICAL_COUPLING_PLAN.md Section 2
+5. **← 当前步骤**：实现 Phase 1: Structural Migration（拆分 quantizer、重命名、删除废弃 loss）
+6. 实现 Phase 2: Source Target Introduction（HRF convolution model）
+7. 实现 Phase 3: Concentration Prior（coupling row entropy）
+8. 在 Phase 3 baseline 上实现并验证 Mechanism A (coupling smoothness)
+9. 记录 A 的 scorecard 与实验结论
+10. 回到 Phase 3 baseline，独立实现并验证 Mechanism C (causal asymmetry)
+11. 记录 C 的 scorecard 与实验结论
+12. 只有当 A 或 C 中至少一个独立通过后，才讨论 A + C 组合
+13. tokenizer 证据充分后，才考虑 foundation model 层面的目标替换
+
+**Phase 1-3 的具体实现步骤见 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2.9。**
 
 任何跳步都意味着解释链断裂，不能作为主线证据。
 
@@ -394,15 +406,17 @@ loss:
 
 ## 13. Bottom Line
 
-当前项目的 tokenizer 主线已经从“证明 token 条件概率可分析”切换到“设计一个带有生理结构先验的离散表示机制”。
+当前项目的 tokenizer 主线已经从”证明 token 条件概率可分析”切换到”设计一个带有生理结构先验的离散表示机制”。
 
-但在继续给 coupling 施加新的生理先验之前，当前更紧迫的问题是：shared/private 是否真的有清晰、可辩护的语义分工。
+**Branch semantics gate 已通过**：shared/private 已被重新定义为 **source/observation**。Source branch 编码 HRF-modeled neurovascular coupling state；observation branch 编码 modality-specific reconstruction debt。单一 shared quantizer 被双 source codebook + constrained coupling 替代。
 
-因此，接下来的工作重点不是直接进入 A/C，而是：
+**接下来的工作重点是**：
 
-1. 以 V6 codebook-focused factorized tokenizer 为固定基线；
-2. 先完成 shared/private branch semantics decision；
-3. 只在通过该 gate 后，按顺序实现 coupling smoothness 与 causal asymmetry；
+1. 将 V6 baseline 作为 S1 固定对照，保留不动；
+2. 按 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2.9 的 Phase 1-3 顺序实现 S2 architecture；
+3. 在 Phase 3 concentration baseline 通过 gate 后，按顺序独立验证 Mechanism A 和 Mechanism C；
 4. 只在 Layer A-D 评价闭环成立时推进默认主线。
+
+**当前步骤**：Phase 1 — Structural Migration（拆分 dual source quantizer、重命名 shared→source/private→observation、删除废弃 loss terms）。
 
 本文件即为当前实现顺序与准入标准的唯一主文档。

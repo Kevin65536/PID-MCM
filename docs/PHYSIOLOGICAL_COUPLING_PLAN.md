@@ -1,9 +1,10 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
-> Created: 2026-04-30
-> Status: Active development plan — next-stage tokenizer innovation
+> Created: 2026-04-30 | Last revised: 2026-04-30
+> Status: Active development plan — branch semantics redesign complete, ready for Phase 1 implementation
 > Supersedes: [archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
 > Reference implementation: [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
+> New design specification: Section 2 (Source/Observation Branch Semantics)
 
 ---
 
@@ -30,20 +31,520 @@
 | 旧声明 | 新声明 |
 |--------|--------|
 | "离散化揭示了 EEG-fNIRS 之间的条件概率" | "我们在离散化过程中引入了神经血管耦合的结构先验" |
+| shared = temporal smoothing, private = residual | **source branch** = HRF-modeled neurovascular coupling state, **observation branch** = modality-specific encoding debt |
+| 单一 shared quantizer 强制跨模态共享离散空间 | 双 source codebook 通过 constrained coupling matrix 建立 state correspondence |
+| 自由参数的 coupling matrix | 施加 concentration prior（确定性耦合）+ 可独立验证的 smoothness / asymmetry 先验 |
 | 被动观察 | 主动机制设计 |
 | 一个统计分析工具 | 一个体现生理原理的表示学习框架 |
 
 ---
 
-## 2. Mechanism A: Token-Space Coupling Smoothness
+## 2. Branch Semantics Redesign: From Shared/Private to Source/Observation
 
-### 2.1 Physiological basis
+> Status: Design specification — serving as implementation blueprint for the branch semantics gate
+> Motivation: IMPLEMENTATION_PLAN.md Section 5.3 — branch semantics must be clearly defined before A/C mechanisms
+> Reference design: TokenFlow (dual codebook + explicit index mapping), PHYSIOLOGICAL_COUPLING_PLAN (structure prior on coupling)
+
+### 2.1 Diagnosis: Why Current Shared/Private Semantics Are Insufficient
+
+当前 V6 baseline 中 shared/private 分支的语义定义存在四个根本性问题：
+
+**问题 1: shared branch 语义是工程代理，不是生理定义**
+
+当前 shared branch 的训练目标之一是 `shared_eeg_common_loss` 和 `shared_fnirs_common_loss`，其定义是：
+
+```
+shared_target = smooth_signal(raw_signal, kernel_size)
+```
+
+这是一个纯粹的时间平滑操作——它提取信号的低频成分，然后声称"低频 = 跨模态共性"。这种定义没有任何生理学依据。两个模态共享低频成分可能仅仅是因为两者都包含缓慢的基线漂移，而不是因为存在神经血管耦合。
+
+**问题 2: private branch 语义是残差桶**
+
+当前 private branch 的训练目标之一是 `eeg_private_residual_loss` 和 `fnirs_private_residual_loss`，其定义是：
+
+```
+private_target = raw_signal - smooth_signal(raw_signal, kernel_size)
+```
+
+这意味着 private branch 被定义为"shared branch 的补集"——任何不被 shared 捕获的信息都被倒入 private。这种定义方式导致：
+- private 可能包含大量本应属于跨模态耦合的信息（如果平滑核大小不合适）
+- private 必然包含高频噪声——但它是否也包含有意义的模态特异生理信息？无从判断
+- private 的语义完全依赖于 shared 的定义——如果 shared 语义错误，private 也必然错误
+
+**问题 3: single shared quantizer 是一个未经检验的强假设**
+
+当前实现中，EEG 和 fNIRS 的 shared latent 共同通过一个 `NormEMAVectorQuantizer`（代码位置 [factorized_labram_vqnsp.py:519-522](src/tokenizers/factorized_labram_vqnsp.py#L519-L522)）：
+
+```python
+shared_joint = torch.cat([eeg_shared, fnirs_shared], dim=0)
+shared_q_joint, shared_idx_joint, shared_info = self.shared_quantizer(shared_joint)
+```
+
+这强制 EEG 和 fNIRS shared latent 在同一离散空间中竞争相同的 codebook vectors。但 EEG（电生理，ms 级动态）和 fNIRS（血流动力学，s 级动态）的潜在状态空间在生理上是不同质的——它们可能有不同的最优离散化粒度和不同的流形结构。将两者压入同一个 codebook 可能迫使模型学习一个"折中"的离散空间，既不是 EEG-friendly 也不是 fNIRS-friendly。
+
+**问题 4: equal token count per window 是工程便利**
+
+当前实现要求 `eeg_n_patches == fnirs_n_patches`（[factorized_labram_vqnsp.py:112-116](src/tokenizers/factorized_labram_vqnsp.py#L112-L116)），即 EEG 2000 samples 和 fNIRS 100 samples 必须产生相同数量的 token。这没有生理学理由——只是为了让 alignment 机制可以在 token 级别一一对应。（此问题的解决延后至 Phase 4，当前仍保留 equal token count 作为工作假设。）
+
+### 2.2 Redesigned Branch Semantics
+
+#### 2.2.1 Naming
+
+| 旧名称 | 新名称 | 命名理由 |
+|--------|--------|----------|
+| shared branch | **source branch** | 编码跨模态的神经生理**源**——驱动 EEG 电位和 fNIRS 血流响应的共同神经活动状态 |
+| private branch | **observation branch** | 编码模态特异的**观测**特性——每个测量通道独特的信号特征、噪声结构、被试特异变异 |
+
+source/observation 命名的生成式直觉：
+
+$$\text{Neural Source State } S \rightarrow \begin{cases} \text{EEG Observation } O_{EEG} = f_{EEG}(S) + \epsilon_{EEG} \\ \text{fNIRS Observation } O_{fNIRS} = f_{fNIRS}(S) + \epsilon_{fNIRS} \end{cases}$$
+
+- **source branch** 编码 $S$：底层神经活动状态（neurogenic driver）
+- **observation branch** 编码 $\epsilon_{EEG}$ 和 $\epsilon_{fNIRS}$：每种观测模态特有的、不能从 $S$ 预测的信号成分
+
+#### 2.2.2 Source Branch 语义定义
+
+**Source branch 编码的是"神经血管耦合状态"——即可以通过生理模型从一个模态预测另一个模态的信号成分。**
+
+定量操作化定义：
+
+> 一个 token 是 source token，当且仅当它所编码的信息满足：
+> 1. 它在 EEG 侧和 fNIRS 侧存在**有结构的跨模态对应**（通过 coupling matrix 可预测）
+> 2. 它可以通过**HRF 卷积模型**重建：source branch decoder 输出的信号应当逼近 HRF 模型从另一模态预测的目标信号
+
+这意味着 source branch 的训练信号来自两个方向：
+- **前向（EEG→fNIRS）**：EEG 频带功率与 HRF 卷积 → fNIRS 预测 → 作为 fNIRS source decoder 的目标
+- **反向（fNIRS→EEG）**：此方向生理约束弱于前向，初始使用 coarse raw EEG 作为弱辅助目标
+
+**Source branch 不做什么**：
+- 不要求 EEG 和 fNIRS 在 source codebook 中取相同的 index
+- 不要求 source latent 在欧氏空间中接近
+- 不承担 raw signal 的全频带 reconstruction（那是 source + observation 联合的任务）
+
+#### 2.2.3 Observation Branch 语义定义
+
+**Observation branch 编码的是"模态特异重建债务"——即 decoder 重建 raw signal 所需的、但无法从 source representation 和跨模态 coupling 中预测的信号成分。**
+
+定量操作化定义：
+
+> 一个 token 是 observation token，当且仅当：
+> 1. 它对 reconstruction 有显著贡献：`recon(source+obs)` 显著优于 `recon(source_only)`
+> 2. 它不能被另一模态的信息预测：给定 fNIRS source token，预测 EEG observation token 的准确率应接近随机水平
+> 3. 它携带更多的被试特异信息（subject leakage 集中在 observation branch）
+
+**Observation branch 不做什么**：
+- 不是 source 的简单补集（不是 `raw - smoothed`）
+- 不承担跨模态的共有信息
+- 不对应任何特定的预处理操作
+
+### 2.3 Architecture: From Single Shared Quantizer to Dual Coupled Source Codebooks
+
+#### 2.3.1 Core Structural Change
+
+```
+旧架构 (V6):
+  EEG enc → eeg_shared_proj ─┐
+                              ├→ shared_quantizer (single, K=128) → eeg_shared_q / fnirs_shared_q
+  fNIRS enc → fnirs_shared_proj┘
+  
+  EEG enc → eeg_private_proj → eeg_private_quantizer (K=256) → eeg_private_q
+  fNIRS enc → fnirs_private_proj → fnirs_private_quantizer (K=128) → fnirs_private_q
+
+新架构:
+  EEG enc → eeg_source_proj → eeg_source_quantizer (K_src, D_eeg_src) → eeg_source_q
+  fNIRS enc → fnirs_source_proj → fnirs_source_quantizer (K_src, D_fnirs_src) → fnirs_source_q
+  
+  EEG enc → eeg_obs_proj → eeg_obs_quantizer (K_eeg_obs, D_eeg_obs) → eeg_obs_q
+  fNIRS enc → fnirs_obs_proj → fnirs_obs_quantizer (K_fnirs_obs, D_fnirs_obs) → fnirs_obs_q
+  
+  Coupling: M_lag ∈ R^{K_src × K_src} — bridges two source codebooks
+```
+
+核心变更：
+1. **单一 shared quantizer 替换为两个独立但有桥接的 source codebook**
+2. **耦合发生在 codebook 之间的映射矩阵上**，而不是通过强制共享离散空间
+3. **Observation codebook 保持模态独立**（与旧 private 一致，但语义定义更新）
+
+#### 2.3.2 Design Rationale (来自 TokenFlow 的启示)
+
+TokenFlow 的成功模式：
+- **semantic codebook** 和 **pixel codebook** 是两个独立的 embedding 空间
+- 统一不是通过"同一个 codebook"，而是通过 **shared index mapping**：一个 index 同时从两个 codebook 取出对应的 embedding
+- $i^* = \arg\min_i(d_{sem,i} + w_{dis} \cdot d_{pix,i})$ — 联合量化目标
+
+对 EEG-fNIRS 的类比：
+- **eeg_source_codebook** 和 **fnirs_source_codebook** 是两个独立的 embedding 空间
+- 统一通过 **constrained coupling matrix** $M_{lag} \in \mathbb{R}^{K_{src} \times K_{src}}$ 建立
+- 不要求同一个 index，而是学习 index 之间的对应概率
+
+#### 2.3.3 Parameter Specification
+
+| 参数 | 旧值 (V6) | 新值 | 说明 |
+|------|----------|------|------|
+| `shared_codebook_size` | 128 | — | 替换为 `source_codebook_size` |
+| `source_codebook_size` | — | 128 | 两个 source codebook 的共享大小（各自独立参数） |
+| `source_codebook_dim` | 48 | 48 (eeg), 48 (fnirs) | 可以不同维度 |
+| `eeg_private_codebook_size` | 256 | — | 替换为 `eeg_obs_codebook_size` |
+| `eeg_obs_codebook_size` | — | 256 | EEG observation codebook |
+| `fnirs_private_codebook_size` | 128 | — | 替换为 `fnirs_obs_codebook_size` |
+| `fnirs_obs_codebook_size` | — | 128 | fNIRS observation codebook |
+| `coupling_logits` | `[n_lags, K, K]` | `[n_lags, K_src, K_src]` | 不变形状，但连接两个独立 codebook |
+| `coupling_asymmetric` | 不存在 | `bool=False` | 机制 C 开关 |
+| `coupling_logits_fwd/rev` | 不存在 | 各 `[n_lags, K_src, K_src]` | 机制 C 参数 |
+
+#### 2.3.4 Implementation Notes
+
+**codebook 初始化**：
+- 两个 source codebook 独立初始化（各自 kmeans_init）
+- 不使用 shared codebook 来初始化任何一个
+
+**前向传播关键差异**：
+```python
+# 旧: joint quantization through single codebook
+shared_joint = torch.cat([eeg_source, fnirs_source], dim=0)
+shared_q_joint, _, _ = self.shared_quantizer(shared_joint)
+eeg_source_q, fnirs_source_q = torch.split(shared_q_joint, [B, B], dim=0)
+
+# 新: independent quantization through separate codebooks
+eeg_source_q, eeg_source_idx, _ = self.eeg_source_quantizer(eeg_source)
+fnirs_source_q, fnirs_source_idx, _ = self.fnirs_source_quantizer(fnirs_source)
+```
+
+### 2.4 Source Branch Target: HRF Convolution Model
+
+这是本次 redesign 最重要的创新点之一。用神经血管耦合的物理模型替代 `smooth_signal` 代理。
+
+#### 2.4.1 Physiological Basis
+
+神经血管耦合的标准模型：神经活动引起局部代谢需求增加 → 血管舒张 → 脑血流增加 → HbO/HbR 浓度变化。这个过程的时序关系可以用**血流动力学响应函数 (HRF)** 描述：
+
+$$\text{fNIRS}(t) = (\text{Neural Activity} * \text{HRF})(t) + \epsilon(t)$$
+
+其中 $*$ 表示时序卷积，HRF 在 fNIRS/fMRI 文献中有标准参数化形式。
+
+#### 2.4.2 HRF Model Specification
+
+使用标准双 Gamma HRF（SPM canonical HRF 的 fNIRS 适配版本）：
+
+$$\text{HRF}(t; \theta) = A \cdot \left(\frac{t}{\tau_1}\right)^{\alpha_1} \cdot e^{-(t - \tau_1) / \beta_1} - B \cdot \left(\frac{t}{\tau_2}\right)^{\alpha_2} \cdot e^{-(t - \tau_2) / \beta_2}$$
+
+其中 $\theta = \{A, B, \tau_1, \tau_2, \alpha_1, \alpha_2, \beta_1, \beta_2\}$。
+
+默认参数（基于 fNIRS 文献中的典型 HRF 形状）：
+- Peak time $\tau_1 \approx 6s$（fNIRS 的 HRF peak 通常比 fMRI BOLD 略晚）
+- Undershoot time $\tau_2 \approx 16s$
+- 正峰幅值 $A$ 和负峰比 $B$ 由数据尺度决定
+
+考虑到：
+1. **个体 HRF 变异大**：被试间、脑区间 HRF 形状显著不同
+2. **fNIRS 测量的是 HbO 和 HbR 两个信号**：两者的 HRF 形状不同（HbR 的 peak 通常更晚、更小）
+3. **深层/浅层信号混合**：fNIRS 包含 systemic 和 cerebral 两种成分
+
+当前阶段采用**简化方案**：
+
+**方案 A (可学习参数的 HRF Convolution Target)**：
+1. 从 EEG 提取宽带功率包络（或直接使用 EEG encoder 的中间表示）
+2. 用可学习参数的双 Gamma HRF 核进行时序卷积
+3. 卷积结果作为 source branch decoder 的 fNIRS 侧重建目标
+4. HRF 核参数受软约束（初始化为典型形状，允许有限偏离）
+
+数学形式：
+
+给定 EEG 信号 $x_{eeg}(t)$ 和当前 batch 的 HRF 核 $h(t; \theta)$，source branch 的 fNIRS 目标为：
+
+$$y_{source\_target}(t) = (x_{eeg}^{power} * h)(t)$$
+
+其中 $x_{eeg}^{power}(t)$ 是 EEG 的瞬时功率包络（通过对 EEG 信号取绝对值 + 低通滤波得到，或直接使用 encoder 中间特征）。
+
+训练时，fNIRS source decoder 的损失为：
+
+$$\mathcal{L}_{source\_target} = \text{MSE}(\text{fNIRS}_{source\_recon}, y_{source\_target})$$
+
+**方案 B (Learned HRF Kernel)** 作为 fallback：如果 HRF 参数化模型因个体差异过大而无法稳定训练，回退到纯学习的时序卷积核（初始化为 HRF 形状但允许更多自由度）。
+
+#### 2.4.3 Alternative: EEG Feature → fNIRS Prediction via Band Power
+
+作为方案 A 的一个具体实现变体，使用 EEG 频带功率作为中间特征：
+
+1. 对 EEG 每个 patch 计算频带功率（delta/theta/alpha/beta/gamma）
+2. 对每个频带的功率时间序列分别与 HRF 卷积
+3. 加权求和得到 fNIRS 预测
+4. 该预测作为 source branch fNIRS decoder 的目标
+
+这种方法的优势在于：
+- EEG 频带具有明确的生理意义
+- 不同频带的 HRF 形状可能不同（alpha 和 gamma 的血管耦合可能有时序差异）
+- 可解释性强：可以分析哪些频带对 fNIRS 预测贡献最大
+
+但当前阶段**不采用**此变体，原因是：
+- 频带定义引入了额外的超参数（频带边界、功率计算方法）
+- 丢失了 EEG encoder 可能学到的非频带信息
+- 增加了计算复杂度
+
+它应作为未来的可解释性分析工具，而非训练目标的一部分。
+
+#### 2.4.4 Where the HRF Target Applies
+
+HRF 模型提供的是**单向**目标（EEG→fNIRS），因为只有这个方向在生理上有明确的卷积模型。因此：
+
+| 目标 | 损失 | 权重 |
+|------|------|------|
+| fNIRS source decoder → HRF(EEG_power) | MSE | `source_target_weight` |
+| EEG source decoder → raw EEG (coarse) | MSE | `source_target_weight * 0.5` |
+| Full decoder → raw signal | MSE | 1.0 (main reconstruction) |
+
+EEG source 使用弱辅助目标（raw EEG coarse reconstruction）是为了 prevent source codebook collapse——给它一个独立于 coupling 的训练信号，防止它退化。
+
+### 2.5 Observation Branch Target
+
+Observation branch 的目标从"显式残差回归"转变为"隐式重建债务"。
+
+**旧定义**：
+```python
+residual_target = raw_signal - smooth_signal(raw_signal, kernel_size)
+observation_loss = MSE(obs_recon, residual_target)
+```
+
+**新定义**：
+Observation branch 不接受独立的显式 target。它的语义通过以下机制隐式定义：
+
+1. **Source-only vs full reconstruction gap**：observation branch 的质量通过 ablation gap 衡量
+   ```python
+   gap = MSE(recon(source_only), raw) - MSE(recon(source+obs), raw)
+   ```
+   gap 应该显著 > 0，证明 observation branch 提供了 source 无法提供的信息。
+
+2. **Orthogonality to source**（保留）：
+   $$\mathcal{L}_{orth} = \|\text{corr}(z_{source}, z_{obs})\|^2$$
+   确保 observation 不复制 source 已编码的信息。
+
+3. **No cross-modal predictability**：从 fNIRS source token 不应能预测 EEG observation token。这是未来的诊断指标，不作为训练损失。
+
+**Observation branch 的 codebook 使用独立的 quantizer**（与 V6 一致，保留不变）。
+
+### 2.6 Coupling Matrix Redesign
+
+#### 2.6.1 From Free Parameter to Constrained Mapping
+
+旧 coupling 是一个完全自由的 `nn.Parameter`：
+```python
+self.coupling_logits = nn.Parameter(torch.zeros(n_lags, K, K))
+```
+
+新 coupling 保持参数化形式，但增加一个**核心生理约束**。
+
+#### 2.6.2 The One Constraint: Concentration Prior
+
+**生理依据**：神经血管耦合在宏观尺度上是**确定性**的——给定某种神经活动状态，血流动力学响应应当是特异的、集中的，而不是均匀分布的。如果一个 EEG source token 等概率地映射到所有 fNIRS source token，说明学到的 coupling 没有任何信息量。
+
+**数学形式**：
+
+设 coupling 矩阵（经 softmax 归一化后）为 $T_{lag} \in \mathbb{R}^{K \times K}$，其中 $T_{ij} = P(\text{fNIRS token}=j \mid \text{EEG token}=i, \text{lag})$。
+
+Concentration loss 定义为行熵的负值（即鼓励每行低熵）：
+
+$$\mathcal{L}_{conc}(T) = \frac{1}{K} \sum_{i=1}^{K} H(T_{i,:}) = -\frac{1}{K} \sum_{i=1}^{K} \sum_{j=1}^{K} T_{ij} \log T_{ij}$$
+
+对所有 lag 取平均：
+
+$$\mathcal{L}_{conc} = \frac{1}{n_{lags}} \sum_{l=1}^{n_{lags}} \mathcal{L}_{conc}(T_l)$$
+
+**为什么选择行熵而不是列熵？**
+- 行（EEG→fNIRS）：沿生理因果方向，每行应集中
+- 列（fNIRS→EEG）：反向映射可以更分散（生理上合理，因为不同的 EEG 状态可能产生相似的 fNIRS 响应）
+
+**为什么选择 concentration 而不是 smoothness 或 asymmetry？**
+
+| 约束 | 优先级 | 理由 |
+|------|--------|------|
+| **Concentration** | P0 — 本次实现 | 最基础的生理先验——耦合的确定性。没有 concentration，coupling 可能退化为均匀分布（非信息性），后续所有分析都无意义。数学简单（单标量），实现干净。 |
+| Smoothness (A) | P1 — 独立实验 | 连续性假设合理但需要在 concentration baseline 稳定后验证。依赖 codebook 邻居关系有生理意义。文档要求不与 C 同时启用。 |
+| Asymmetry (C) | P1 — 独立实验 | 因果不对称性有生理依据，但需要 concentration baseline 先通过。文档要求不与 A 同时启用。 |
+
+**浓度先验的可调参数**：
+
+```yaml
+loss:
+  coupling:
+    concentration_weight: 0.005    # 从小系数开始 sweep: [0.001, 0.005, 0.01]
+```
+
+#### 2.6.3 What Is Deliberately Omitted
+
+以下约束被明确排除在当前设计之外：
+
+1. **Coupling smoothness** — 保留为机制 A，作为独立实验
+2. **Causal asymmetry parameterization** — 保留为机制 C，作为独立实验
+3. **Codebook correspondence loss** — 耦合矩阵可以隐式学习对应关系，额外的 codebook-level 对齐是冗余的
+4. **Latent alignment loss** — 在 dual codebook 架构下，EEG 和 fNIRS source latent 处于不同空间，MSE 对齐没有意义
+5. **Assignment alignment loss** — TokenFlow analysis 已确认"同 token identity"不应是目标
+
+### 2.7 Complete Loss Function
+
+#### 2.7.1 Loss Terms Specification
+
+```python
+total_loss = (
+    # === Layer A: Reconstruction (unchanged from V6) ===
+    eeg_rec_loss +                         # full EEG reconstruction (amp + phase + time)
+    fnirs_rec_loss +                       # full fNIRS reconstruction (amp + phase + time)
+    vq_loss +                              # VQ commitment loss for all quantizers
+    
+    # === Layer B: Branch Semantics ===
+    alpha_source_target * source_target_loss +    # HRF model target for fNIRS source decoder (NEW)
+    alpha_source_target * 0.5 * eeg_source_aux_loss +  # coarse EEG target for EEG source decoder (NEW)
+    alpha_orth * orthogonality_loss +              # source ⊥ observation (retained from V6)
+    
+    # === Layer C: Coupling with Physiological Prior ===
+    alpha_coupling * coupling_kl_loss +            # basic coupling training (retained)
+    alpha_conc * concentration_loss +              # sparsity prior on coupling rows (NEW, core)
+    
+    # === Codebook Health ===
+    alpha_balance * codebook_balance_loss          # utilization / perplexity (retained)
+)
+```
+
+**Loss term reference table**:
+
+| 符号 | 损失项 | 来源 | 说明 |
+|------|--------|------|------|
+| `eeg_rec_loss` | EEG reconstruction | V6 保留 | amplitude + phase + time weights |
+| `fnirs_rec_loss` | fNIRS reconstruction | V6 保留 | amplitude + phase + time weights |
+| `vq_loss` | VQ commitment | V6 保留 | across all 4 quantizers |
+| `source_target_loss` | Source branch HRF target | **新增** | fNIRS source decoder → HRF(EEG) |
+| `eeg_source_aux_loss` | EEG source coarse target | **新增** | EEG source decoder → raw EEG (weak auxiliary) |
+| `orthogonality_loss` | Source ⊥ Observation | V6 保留 | cross-correlation penalty |
+| `coupling_kl_loss` | Coupling KL | V6 保留 | P(fNIRS token \| EEG token) vs actual |
+| `concentration_loss` | Coupling row entropy | **新增** | encourages sparse/concentrated coupling |
+| `codebook_balance_loss` | Codebook utilization | V6 保留 | entropy-based balance |
+
+**Removed from V6**:
+
+| 已删除项 | 删除理由 |
+|----------|----------|
+| `latent_align_loss` | Dual codebook 架构下，source latent 在不同空间，MSE 无意义；coupling 已提供跨模态桥接 |
+| `assignment_align_loss` | TokenFlow analysis 确认不应追求同 token identity |
+| `hard_assignment_align_loss` | 同上 |
+| `shared_entropy_loss` | 功能被 `codebook_balance_loss` 覆盖 |
+| `private_entropy_loss` | 功能被 `codebook_balance_loss` 覆盖 |
+| `shared_eeg_common_loss` | 被 `source_target_loss` (HRF model) 替代 |
+| `shared_fnirs_common_loss` | 被 `source_target_loss` (HRF model) 替代 |
+| `eeg_private_residual_loss` | Observation branch 不再使用显式残差 target |
+| `fnirs_private_residual_loss` | Observation branch 不再使用显式残差 target |
+| `shared_eeg_recon_loss` | Source decoder 已有 aux target，不需要重复的 shared-only recon loss |
+| `shared_fnirs_recon_loss` | 同上 |
+
+**Loss count**: V6 = 12 loss terms → New design = 9 loss terms (减少 3 项，同时语义更清晰)
+
+#### 2.7.2 Default Weights
+
+```yaml
+loss:
+  reconstruction:
+    eeg_amplitude_weight: 1.0
+    eeg_phase_weight: 1.0
+    eeg_time_weight: 0.75
+    fnirs_amplitude_weight: 1.0
+    fnirs_phase_weight: 0.25
+    fnirs_time_weight: 1.25
+  
+  source_target:
+    source_target_weight: 0.15        # HRF model target weight
+    source_target_warmup_epochs: 30   # warm-start: wait for reconstruction to stabilize
+  
+  coupling:
+    coupling_weight: 0.07             # (retained from V6)
+    concentration_weight: 0.005       # new: start small, sweep [0.001, 0.005, 0.01]
+    coupling_bidirectional: true      # (retained from V6)
+  
+  branch:
+    orthogonality_weight: 0.01        # (retained from V6)
+  
+  codebook:
+    codebook_balance_weight: 0.02     # (retained from V6)
+```
+
+### 2.8 Diagnostic Metrics for Branch Semantics Validation
+
+以下诊断指标用于验证 source/observation 分支的重定义是否成功。这些指标不作为训练损失，仅用于监控和 gate decision。
+
+#### 2.8.1 Source Branch Diagnostics
+
+| 指标 | 计算 | 健康范围 |
+|------|------|----------|
+| **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | 显著 < $\log K$（非均匀） |
+| **Coupling concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$ averaged over rows | > 1.5（行有峰值） |
+| **Source target reconstruction** | MSE(fNIRS_source_recon, HRF_target) | 随训练下降 |
+| **Cross-modal token predictability** | P(fNIRS_token \| EEG_token) top-1 accuracy | > 1/K (random baseline) |
+
+#### 2.8.2 Observation Branch Diagnostics
+
+| 指标 | 计算 | 健康范围 |
+|------|------|----------|
+| **Observation contribution gap** | MSE(source_only) - MSE(source+obs) | > 0（observation 有正贡献） |
+| **Observation cross-modal unpredictability** | MI(EEG_obs_token, fNIRS_source_token) | 接近 0（观测是模态特异的） |
+| **Subject leakage ratio** | MI(EEG_obs, subject_id) / MI(EEG_source, subject_id) | > 1.0（subject 信息集中在 observation） |
+
+#### 2.8.3 Architecture Comparison Metrics
+
+| 指标 | 用于比较 |
+|------|----------|
+| Source codebook perplexity (EEG vs fNIRS) | 两个 source codebook 各自健康度 |
+| Coupling structure visualization | 热力图：按行熵排序后的 coupling matrix |
+| Ablation: source-only vs full reconstruction | 比较 S0/S1/S2 的 gap 大小 |
+
+### 2.9 Implementation Phases
+
+```
+Phase 1: Structural Migration (no new loss terms)
+  ├── 拆分 shared_quantizer → eeg_source_quantizer + fnirs_source_quantizer
+  ├── 重命名参数和方法: shared→source, private→observation
+  ├── 删除已废弃的 loss terms (latent_align, assignment_align, shared/private entropy,
+  │   shared_eeg_common, shared_fnirs_common, eeg_private_residual, fnirs_private_residual,
+  │   shared_eeg_recon, shared_fnirs_recon, hard_assignment_align)
+  ├── 保留 coupling_logits 不变
+  └── Gate: Layer A (reconstruction + codebook health) 不退化
+            + 两个 source codebook 各自利用率 > 50%
+
+Phase 2: Source Target Introduction
+  ├── 实现 HRF 卷积模型 (方案 A: 可学习参数的 double-gamma HRF)
+  ├── 新增 source_target_loss (fNIRS source decoder → HRF target)
+  ├── 新增 eeg_source_aux_loss (EEG source decoder → coarse raw EEG)
+  ├── 新增 source branch diagnostics
+  └── Gate: source target reconstruction 显著优于随机 baseline
+            + fNIRS source codebook 不 collapse
+
+Phase 3: Concentration Prior
+  ├── 实现 concentration_loss (coupling row entropy)
+  ├── 小系数 sweep [0.001, 0.005, 0.01]
+  ├── 监控 coupling row entropy vs log(K) baseline
+  └── Gate: coupling row entropy < log(K)/2
+            + Layer A 不退化
+            + concentration_ratio > 1.5
+
+Phase 4: Independent Mechanism Validation
+  ├── 在 Phase 3 baseline 上单独验证 Mechanism A (smoothness)
+  ├── 在 Phase 3 baseline 上单独验证 Mechanism C (asymmetry)
+  └── Gate: 按 promotion rule 各自评估 (Section 6)
+
+Phase 5 (延后): Structural Assumption Audit
+  ├── 评估 equal token count per window 是否应松动
+  ├── 评估 patch boundary alignment 是否必要
+  └── 评估 source codebook size ratio (EEG vs fNIRS) 的最优配置
+```
+
+---
+
+## 3. Mechanism A: Token-Space Coupling Smoothness
+
+### 3.1 Physiological basis
 
 神经血管耦合的基本性质：**相近的神经活动状态引起相近的血流动力学响应**。
 
-如果两个 EEG token 在 shared codebook 空间中代表相似的神经状态，它们经由 coupling 矩阵映射到的 fNIRS token 分布也应该是相似的。当前自由参数化的 coupling 矩阵不保证这一性质——两个 codebook 向量几乎相同的 token 可能学到完全不同的耦合分布。
+如果两个 EEG token 在 source codebook 空间中代表相似的神经状态，它们经由 coupling 矩阵映射到的 fNIRS token 分布也应该是相似的。当前自由参数化的 coupling 矩阵不保证这一性质——两个 codebook 向量几乎相同的 token 可能学到完全不同的耦合分布。
 
-### 2.2 Mathematical formulation
+### 3.2 Mathematical formulation
 
 设 shared codebook 的归一化权重为 $C \in \mathbb{R}^{K \times D}$。对每个 token $i$，找到其在 codebook 空间中的 $M$ 个最近邻 $\mathcal{N}(i)$（基于余弦相似度）。
 
@@ -62,7 +563,7 @@ $$\mathcal{L}_{smooth}(T) = \frac{1}{K \cdot M} \sum_{i=1}^{K} \sum_{j \in \math
 - 局部约束更稳健：只要求最相似的 token 有相似耦合行为
 - 计算量可控（M=5 时每个 token 只计算 5 个 pair）
 
-### 2.3 Implementation
+### 3.3 Implementation
 
 新文件或修改位置：
 
@@ -112,7 +613,7 @@ coupling_smoothness_neighbors: int = 5,
 'smoothness_loss': coupling_smoothness_loss(...) if enabled else zero_tensor
 ```
 
-### 2.4 Expected behavioral signatures
+### 3.4 Expected behavioral signatures
 
 | 指标 | 预期变化 | 验证方式 |
 |------|----------|----------|
@@ -122,7 +623,7 @@ coupling_smoothness_neighbors: int = 5,
 | Reconstruction | 无显著变化 | MSE / STFT |
 | Codebook health | 无显著退化（可能轻微改善，因为耦合结构更清晰） | Perplexity / utilization |
 
-### 2.5 Failure modes
+### 3.5 Failure modes
 
 1. **Codebook 未收敛时无意义**：如果 codebook 本身还在剧烈变化，邻居关系不稳定，平滑性约束会引入噪声。缓解：在 reconstruction 稳定后再 warm-start 此约束。
 2. **系数过大导致所有 token 耦合相同**：如果 $\lambda_{smooth}$ 过大，所有行收敛到相同分布。缓解：从小系数（0.005）开始，监控行间方差。
@@ -130,9 +631,9 @@ coupling_smoothness_neighbors: int = 5,
 
 ---
 
-## 3. Mechanism C: Causal Direction Asymmetry
+## 4. Mechanism C: Causal Direction Asymmetry
 
-### 3.1 Physiological basis
+### 4.1 Physiological basis
 
 神经血管耦合的因果方向在试次时间尺度（~10s）上是明确的：
 
@@ -147,7 +648,7 @@ reverse_transition = F.softmax(coupling_logits[lag_index].transpose(0, 1), dim=-
 
 这意味着 $P(\text{fNIRS}_j \mid \text{EEG}_i) \propto P(\text{EEG}_i \mid \text{fNIRS}_j)$——两个方向的耦合共享同一组参数。这在生理上是不合理的：EEG→fNIRS 的预测结构应该比 fNIRS→EEG 更集中、更有组织性。
 
-### 3.2 Design principle: asymmetric prior, not asymmetric loss
+### 4.2 Design principle: asymmetric prior, not asymmetric loss
 
 不引入显式的"前向必须比反向更集中"的损失项。而是：
 
@@ -158,7 +659,7 @@ reverse_transition = F.softmax(coupling_logits[lag_index].transpose(0, 1), dim=-
 
 这种"不对等先验"方案比显式不对称损失更干净：它不给优化器增加对抗性约束，而是通过**不对等的参数化自由度和正则化水平**让生理结构自然浮现。
 
-### 3.3 Mathematical formulation
+### 4.3 Mathematical formulation
 
 **参数独立化**：
 
@@ -187,7 +688,7 @@ $$\text{asymmetry\_ratio} = \frac{\mathbb{E}_k[H(T^{rev}_{k,:})]}{\mathbb{E}_k[H
 
 其中 $H(\cdot)$ 是行分布的熵。期望 asymmetry_ratio > 1.0（反向比前向更分散）。
 
-### 3.4 Implementation
+### 4.4 Implementation
 
 **`src/tokenizers/factorized_labram_vqnsp.py`** — 参数变更：
 
@@ -251,7 +752,7 @@ if self.coupling_asymmetric:
         asymmetry_ratio = h_rev / (h_fwd + 1e-8)
 ```
 
-### 3.5 Expected behavioral signatures
+### 4.5 Expected behavioral signatures
 
 | 指标 | 预期变化 | 验证方式 |
 |------|----------|----------|
@@ -261,20 +762,20 @@ if self.coupling_asymmetric:
 | Reconstruction | 无显著变化 | MSE / STFT |
 | Codebook health | 无显著退化 | Perplexity / utilization |
 
-### 3.6 Failure modes
+### 4.6 Failure modes
 
 1. **asymmetry_ratio ≈ 1.0**：数据中两个方向的信息流确实对称，或反向参数学到的结构与前向类似。这不是严格意义上的"失败"——它说明数据不支持神经血管耦合的不对称假设。这仍然是有价值的发现。
 2. **反向耦合退化**：如果 fNIRS→EEG 的耦合损失变得很大（远大于前向），可能是因为反向参数未被充分优化。缓解：确保两个方向的 coupling loss权重相同，不对反向施加额外的压制。
 
 ---
 
-## 4. Experimental Design
+## 5. Experimental Design
 
-### 4.1 Independent experiments (not combined)
+### 5.1 Independent experiments (not combined)
 
 在当前研究阶段，机制 A 和机制 C **分别进行实验**，不组合使用。每个机制的实验独立于 V6 baseline 进行比较。
 
-### 4.2 Experiment ladder
+### 5.2 Experiment ladder
 
 ```
                         ┌── V6 Baseline (current mainline)
@@ -291,7 +792,7 @@ if self.coupling_asymmetric:
    start schedule   smoothness
 ```
 
-### 4.3 Exp A: Coupling smoothness
+### 5.3 Exp A: Coupling smoothness
 
 **Config changes** (relative to V6 baseline):
 
@@ -324,7 +825,7 @@ loss:
 - ✅ Pass: Layer A 不退化 + coupling 矩阵呈现可辨识的平滑结构 + ≥1 项 Layer C 指标改善
 - ❌ Fail: Layer A 退化，或 coupling 矩阵无明显结构改善，或无任何 Layer B/C 指标改善
 
-### 4.4 Exp C: Causal asymmetry
+### 5.4 Exp C: Causal asymmetry
 
 **Config changes** (relative to V6 baseline):
 
@@ -347,7 +848,7 @@ loss:
 - ⚠️ Inconclusive: asymmetry_ratio ≈ 1.0 但 Layer A/C 不退化（说明数据不支持不对称先验）
 - ❌ Fail: Layer A 退化
 
-### 4.5 What NOT to do
+### 5.5 What NOT to do
 
 - ❌ 同时启用机制 A 和机制 C（当前阶段）
 - ❌ 在 shared codebook baseline 上测试这些机制（它们依赖 factorization）
@@ -356,9 +857,9 @@ loss:
 
 ---
 
-## 5. Integration Plan
+## 6. Integration Plan
 
-### 5.1 Code changes summary
+### 6.1 Code changes summary
 
 | 文件 | 变更 | 机制 |
 |------|------|------|
@@ -370,7 +871,7 @@ loss:
 | `src/tokenizers/codebook_focus_factorized_labram_vqnsp.py` | 透传新参数（默认 smoothness=0, asymmetric=False） | A+C |
 | Config YAML | 新增 `coupling_smoothness_*` 和 `coupling_asymmetric` 字段 | A+C |
 
-### 5.2 Backward compatibility
+### 6.2 Backward compatibility
 
 - `coupling_smoothness_weight=0.0` → 行为与 V6 完全相同（机制 A 默认关闭）
 - `coupling_asymmetric=False` → 行为与 V6 完全相同（机制 C 默认关闭）
@@ -378,7 +879,7 @@ loss:
 
 ---
 
-## 6. Success Criteria & Promotion Rule
+## 7. Success Criteria & Promotion Rule
 
 任何机制要进入默认 mainline，必须满足（继承自 V6 reset 的 promotion rule）：
 
@@ -390,7 +891,7 @@ loss:
 
 ---
 
-## 7. Relationship to Foundation Model
+## 8. Relationship to Foundation Model
 
 本计划聚焦于 tokenizer 层面的 coupling 约束。与 foundation model pretraining 的关系：
 
