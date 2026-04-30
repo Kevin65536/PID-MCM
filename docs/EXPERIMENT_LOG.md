@@ -4,7 +4,7 @@
 
 ## ⚠️ Lessons Learned from Pre-Experiments
 
-**Archived Results:** Previous experiment runs and logs have been archived to `docs/ARCHIVED_PRE_EXPERIMENTS.md` and `experiments/runs/archive/pre_experiments`.
+**Archived Results:** Previous experiment runs and logs have been archived to `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md` and `experiments/runs/archive/pre_experiments`.
 
 **Key Bottleneck:**
 The downstream Motor Imagery (MI) classification task suffered from a severe lack of cross-subject generalization (hovering around ~50% accuracy, essentially chance level for binary classification), despite performing reasonably well on within-subject tests. 

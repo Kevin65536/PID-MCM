@@ -138,7 +138,7 @@ TokenFlow 给出的最强支持不是 overlap，而是：
 
 因此，它支持继续坚持：
 
-- [docs/NEXT_STAGE_ALIGNMENT_PLAN.md](../NEXT_STAGE_ALIGNMENT_PLAN.md)
+- [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](../archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
 - [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
 
 而不是回到 shared-codebook overlap-first 路线。

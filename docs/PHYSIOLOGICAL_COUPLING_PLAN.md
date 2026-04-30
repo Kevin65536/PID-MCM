@@ -2,7 +2,7 @@
 
 > Created: 2026-04-30
 > Status: Active development plan — next-stage tokenizer innovation
-> Supersedes: [NEXT_STAGE_ALIGNMENT_PLAN.md](NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
+> Supersedes: [archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
 > Reference implementation: [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
 
 ---

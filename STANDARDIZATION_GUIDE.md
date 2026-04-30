@@ -175,4 +175,4 @@ While `metrics.json` and automated logs capture exact numbers, context must be c
 When an experimental phase reaches a major conclusion (whether successful or hitting a defined bottleneck/dead end):
 1.  **Document Learnings**: Summarize the critical bottleneck or successful breakthrough at the top of the main experiment log.
 2.  **Archive Runs**: Move the associated run folders into `experiments/runs/archive/<phase_or_topic_name>/`.
-3.  **Archive Logs**: Move the raw text block of those experiments into a dedicated archive doc (e.g., `docs/ARCHIVED_PRE_EXPERIMENTS.md`) to keep the primary log clean and readable for the next phase.
+3.  **Archive Logs**: Move the raw text block of those experiments into a dedicated archive doc (e.g., `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md`) to keep the primary log clean and readable for the next phase.
