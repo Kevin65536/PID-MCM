@@ -1,8 +1,21 @@
-# EEG-fNIRS Tokenizer Reset Plan
+# EEG-fNIRS Tokenizer Reset Plan (ARCHIVED)
 
+> **ARCHIVED: 2026-04-30**
+> This document has been superseded by [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md).
+> It is preserved for historical reference. The stable conclusions (Section 4), evidence base (Section 2), and decision matrix (Section 6) remain valid as design foundations.
+>
+> **What is still load-bearing:**
+> - Section 4: Stable Conclusions (especially 4.2 on token identity, 4.4 on shared branch target definition, 4.5 on factorization)
+> - Section 6: Mainline Decision Matrix (what to keep/remove in default mainline)
+> - Section 7: Physiological Token Semantics (especially 7.1)
+>
+> **What is superseded:**
+> - Section 8-9: Development focus and backlog → replaced by PHYSIOLOGICAL_COUPLING_PLAN.md
+> - Section 11: Bottom line → the reset is complete; forward direction is now physiological coupling constraints
+>
 > Last Updated: 2026-04-08
-> Status: Active tokenizer mainline reset document
-> This document replaces the previous alignment-first interpretation of the next stage.
+> Status: Archived — preserved as design foundation
+> This document was the tokenizer mainline reset document that replaced the previous alignment-first interpretation.
 
 ## 1. Reset Statement
 

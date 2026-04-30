@@ -6,12 +6,13 @@
 
 ---
 
-## Update Notice (2026-03-15)
+## Update Notice (2026-04-30)
 
-For the current foundation-model reflection and tokenizer-reset direction, see:
+For the current active development direction, see:
 
-- [docs/NEXT_STAGE_ALIGNMENT_PLAN.md](NEXT_STAGE_ALIGNMENT_PLAN.md)
-- [docs/notes/2026.3.4_current_problem_of_physiological_foundation_model.md](notes/2026.3.4_current_problem_of_physiological_foundation_model.md)
+- [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — Active: physiological coupling constraints plan
+- [docs/NEXT_STAGE_ALIGNMENT_PLAN.md](NEXT_STAGE_ALIGNMENT_PLAN.md) — Archived: tokenizer reset design foundations
+- [docs/notes/2026.3.4_current_problem_of_physiological_foundation_model.md](notes/2026.3.4_current_problem_of_physiological_foundation_model.md) — Background: EEG foundation model challenges
 
 ---
 
