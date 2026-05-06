@@ -1,7 +1,7 @@
 # Neuro-Tokenization Implementation Plan
 
-> Rewritten: 2026-04-30 | Last revised: 2026-04-30
-> Status: Active mainline execution guide — branch semantics gate PASSED, entering Phase 1 implementation
+> Rewritten: 2026-04-30 | Last revised: 2026-05-06
+> Status: Active mainline execution guide — direct migration to the Source/Observation architecture
 > Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md) — Section 2 contains the complete Source/Observation redesign
 > Archived reset foundation: [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
 > Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md)
@@ -11,62 +11,65 @@
 
 ## 1. Role of This Document
 
-本文件是当前仓库的实现主文档。从现在开始：
+本文件是当前仓库唯一的 tokenizer 主实现计划文档。从现在开始，它同时负责回答四类问题：
 
-1. **IMPLEMENTATION_PLAN.md** 负责回答“接下来先做什么、做到什么程度算通过、哪些内容明确延后”。
-2. **docs/PHYSIOLOGICAL_COUPLING_PLAN.md** 负责回答“为什么这样做、机制的数学形式是什么、预期生理含义是什么”。
-3. **docs/SEMANTIC_TOKEN_SCORECARD.md** 负责回答“如何评价 tokenizer 是否真的更好”。
-4. **docs/EXPERIMENT_LOG.md** 负责记录正式实验结论。
+1. 接下来按什么顺序修改主线代码；
+2. 哪些旧结构要直接删除，哪些机制要继续保留；
+3. 分析工具需要怎么精简；
+4. 历史实验如何归档，以及新实验结果如何标准化保存。
 
-如果多个文档之间出现实现顺序冲突，以本文件为准；如果是机制定义或数学细节冲突，以生理耦合计划为准。
+文档分工固定如下：
+
+1. **IMPLEMENTATION_PLAN.md**：实现顺序、代码改造范围、分析与实验产物规范。
+2. **docs/PHYSIOLOGICAL_COUPLING_PLAN.md**：机制动机、数学形式、生理解释。
+3. **docs/SEMANTIC_TOKEN_SCORECARD.md**：Layer A-D 的评价框架。
+4. **docs/EXPERIMENT_LOG.md**：正式实验结论。
+
+如果多个文档之间出现冲突，以本文件的实现顺序为准；如果是机制定义或数学细节冲突，以生理耦合计划为准。
 
 ---
 
 ## 2. Current Mainline Status
 
-### 2.1 Current recommended baseline
+### 2.1 Current starting surface
 
-当前默认主线是 **V6 codebook-focused factorized tokenizer**，参考实现为：
+当前仓库的主实现面仍然落在以下文件上：
 
 - [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
 - [src/tokenizers/factorized_labram_vqnsp.py](src/tokenizers/factorized_labram_vqnsp.py)
 - [src/losses/multimodal_tokenizer.py](src/losses/multimodal_tokenizer.py)
+- [src/visualization/factorized_alignment_analysis.py](src/visualization/factorized_alignment_analysis.py)
 
-该主线已经明确保留以下结构：
+这些文件当前仍带有 shared/private 语义和相应的 smooth common / residual 训练代理。它们只是**当前需要被重构的实现表面**，不再被视为需要长期保留的对照架构。
 
-1. EEG / fNIRS shared-private factorization
-2. lag-aware coupling for shared branch
-3. temporal-smoothed common target for shared branch as the current working proxy **(待替换为 HRF model target)**
-4. temporal residual target for private branches as the current working proxy **(待替换为 observation branch 隐式定义)**
-5. codebook health regularization and branch responsibility separation
+### 2.2 Mainline decision after redesign
 
-**⚠️ 分支语义 redesign 已完成**：shared/private 将被重命名为 source/observation，单一 shared quantizer 将被替换为双 source codebook + constrained coupling，HRF 卷积模型将替代 smooth_signal proxy。详见 [PHYSIOLOGICAL_COUPLING_PLAN.md Section 2](docs/PHYSIOLOGICAL_COUPLING_PLAN.md)。V6 仍然是当前运行的基线，但已被指定为 S1 对照，不再是最终目标架构。
+当前决策已经明确：
 
-### 2.2 What has changed in the innovation story
+1. 主线架构从 shared/private 直接切换到 **source/observation**；
+2. 单一 shared quantizer 直接切换到 **双 source codebook + constrained coupling**；
+3. `smooth_signal` 代理直接退出主训练路径，由 **HRF convolution target** 接管；
+4. private residual 监督直接退出主训练路径，observation branch 通过 reconstruction debt 隐式定义；
+5. 旧 shared/private 代码不再作为仓库内长期对照面保留。
 
-上一阶段的主要问题不是“模型不能工作”，而是“创新表达不够主动”。
+这意味着：**Source/Observation 不是旁路试验实现，而是对当前主线的直接升级。**
 
-此前的叙事是：
+### 2.3 Control policy
 
-- tokenizer 学出 EEG 与 fNIRS token 之间的条件概率；
-- 我们在事后分析这些条件概率，并据此提供可解释性。
+本轮主线推进不再依赖“把旧 shared/private 代码继续留在仓库里”来形成对照。对照面改为以下两类：
 
-这个叙事的问题在于，它更像分析结果，而不是机制设计。
+1. **外部研究方法对照**：来自 [comparative_methods](comparative_methods) 和 [reference_repository](reference_repository) 的方法实现或复现结果；
+2. **历史主线参考**：通过 git 历史、归档 run、归档实验记录回看 shared/private 阶段结果，而不是让旧代码继续留在活跃主线上。
 
-新的主线改为：
-
-- 在 coupling 参数本身加入生理指导的结构先验；
-- 让“神经血管耦合原理”直接体现在离散表示学习机制里；
-- 把创新从 post-hoc interpretability 转为 explicit structured alignment design。
-
-### 2.3 What is no longer the main target
+### 2.4 What is no longer the main target
 
 以下目标不再作为 tokenizer 主线的出发点：
 
-1. shared token identity overlap 最大化
-2. alignment-first 叙事
-3. 通过让 shared branch 承担更强 raw reconstruction 来“逼出”跨模态共性
-4. 只依赖分析指标来支撑创新陈述
+1. shared token identity overlap 最大化；
+2. alignment-first 叙事；
+3. 通过让 shared branch 承担更强 raw reconstruction 来“逼出”跨模态共性；
+4. 通过保留旧架构代码来维持所谓控制面；
+5. 只依赖事后分析指标支撑创新陈述。
 
 ---
 
@@ -75,266 +78,431 @@
 任何后续实现都必须满足以下规则：
 
 1. **生理先验只加在 coupling 参数上**
-   - 不直接改 encoder / quantizer 的主梯度路径
-   - 不把 reconstruction 训练变成先验对抗问题
+    - 不直接改 encoder / quantizer 的主梯度路径；
+    - 不把 reconstruction 训练变成先验对抗问题。
 
 2. **先验必须是软约束**
-   - 小系数 regularizer
-   - 允许数据覆盖先验
-   - 禁止硬编码不可违背的波形或拓扑规则
+    - 小系数 regularizer；
+    - 允许数据覆盖先验；
+    - 禁止硬编码不可违背的波形或拓扑规则。
 
-3. **当前阶段不组合机制 A 与机制 C**
-   - 先分别与 V6 baseline 比较
-   - 只有单机制独立通过后，才讨论组合实验
+3. **A 与 C 仍然分开验证**
+    - 先有 Phase 3 concentration baseline；
+    - 再分别验证 Mechanism A 与 Mechanism C；
+    - 当前阶段不做 A + C 联合实验。
 
 4. **Layer A 不退化是硬门槛**
-   - reconstruction / codebook health 退化，则该机制不能进入默认主线
+    - reconstruction / codebook health 退化，则该机制不能进入默认主线。
 
-5. **在新增 coupling 结构先验之前，必须先通过 branch semantics gate**
-   - 如果 shared/private 的职责定义仍然模糊，不应继续给 shared branch 叠加新的生理先验
-   - A/C 机制只应加在已经通过职责审查的 shared branch 上
+5. **Branch semantics gate 已通过，但旧语义不应残留在活跃主线里**
+    - shared/private 命名、旧 loss 名称、common/residual 代理指标都不应继续作为活跃实现的一部分；
+    - 如果某个文件或接口继续用 shared/private 命名表达主语义，它就还没有完成迁移。
+
+6. **历史可追溯性交给 git 与 archive，而不是活跃代码兼容层**
+    - 不为了保留旧架构而维持并行类、并行 loss 路径或默认关闭的 legacy 分支。
 
 ---
 
 ## 4. Active Document Layout
 
-当前文档分工固定如下：
+当前活跃文档固定如下：
 
 | 类型 | 位置 | 用途 |
 |------|------|------|
-| 主实现计划 | `IMPLEMENTATION_PLAN.md` | 当前开发顺序、优先级、准入标准 |
+| 主实现计划 | `IMPLEMENTATION_PLAN.md` | 开发顺序、文件改造、分析精简、归档与结果格式 |
 | 活跃机制设计 | `docs/PHYSIOLOGICAL_COUPLING_PLAN.md` | 生理耦合约束的动机、公式、实验设计 |
 | 活跃理论背景 | `docs/THEORY.md` | 总体理论框架与长期背景 |
 | 活跃评价标准 | `docs/SEMANTIC_TOKEN_SCORECARD.md` | Layer A-D 评价框架 |
 | 活跃实验记录 | `docs/EXPERIMENT_LOG.md` | 项目级实验结论 |
-| 归档计划 | `docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md` | V6 reset 的设计基础 |
+| 归档计划 | `docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md` | reset 阶段设计基础 |
 | 归档实验日志 | `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md` | 第一轮预实验历史记录 |
 
-顶层 `docs/` 只保留当前阅读时需要频繁访问的活跃文档；历史材料统一进入 `docs/archive/`。
+顶层 [docs](docs) 只保留当前主线需要反复阅读的活跃文档；历史材料统一进入 [docs/archive](docs/archive)。
 
 ---
 
 ## 5. Current Development Goal
 
-当前阶段的核心目标：
+当前阶段的核心目标只有一个：
 
-1. ~~**先重新审阅 shared/private branch 是否必要，以及每个分支的语义是否足够明确**~~ ✅ **已完成** — S2 design selected
-2. **实现 source/observation branch semantics redesign**（Phase 1-3），然后在明确的 branch semantics 上做 A/C 机制实验
+**直接把当前主线 tokenizer 从 shared/private 改造成 source/observation，并在同一条主线上依次完成 Structural Migration、HRF Source Target、Concentration Prior。**
 
-### 5.1 Branch semantics review: conclusion ✅ DECIDED
+### 5.1 Architecture decision
 
-经过对 V6 baseline、TokenFlow 论文、以及神经血管耦合生理模型的分析，结论如下：
+当前已经明确的架构结论：
 
-1. ✅ 保留 factorization 这个大方向；
-2. ✅ 重新定义 shared/private 的职责边界 —— 现在命名为 **source/observation**：
-   - **source branch** = HRF-modeled neurovascular coupling state
-   - **observation branch** = modality-specific reconstruction debt
-3. ✅ 当前 `shared = smoothed common`、`private = temporal residual` 已被正式弃用；
-4. ✅ 单一 shared quantizer 被替换为双 source codebook + constrained coupling matrix；
-5. ⚠️ equal token count per window 当前保留为工作假设，延后至 Phase 5 审计。
+1. 保留 factorization 大方向；
+2. shared/private 直接改名并改义为 **source/observation**；
+3. 单一 shared quantizer 直接替换为 **双独立 source codebook**；
+4. smooth common proxy 直接替换为 **HRF convolution target**；
+5. observation branch 不再接显式 residual target，而由 reconstruction necessity 定义；
+6. coupling 从自由参数化升级为 **concentration-constrained physiological mapping**。
 
-### 5.2 Decision: S2 selected as new architecture target
+### 5.2 Mainline replacement policy
 
-在 S0 / S1 / S2 的比较中，**S2 (explicit-semantics factorized variant)** 被选定为新的架构目标：
+本轮实现采用**直接替换**而不是**并排新增**：
 
-| 结构 | 决策 | 理由 |
-|------|------|------|
-| S0: remove factorization | ❌ 不采用 | 不做 control experiment；factorization 必要性由 TokenFlow 分析和生理直觉支持 |
-| S1: V6 factorized baseline | ⚠️ 保留为对照 | 作为 Phase 1-3 实验的 comparison baseline |
-| **S2: explicit-semantics factorized** | ✅ **选定** | 完整设计规范见 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2 |
+1. 主线 tokenizer、loss、config、analysis surface 都将直接改成 source/observation 语义；
+2. 不保留 shared/private 活跃类、活跃 loss 汇总、活跃 config schema 作为兼容层；
+3. 如果某个旧实现需要回看，依赖 git 与 archive，而不是仓库工作树中的 legacy 代码。
 
-S2 的核心变更：
-1. shared/private → **source/observation**（命名 + 语义）
-2. 单一 shared quantizer → **双独立 source codebook**（eeg_source + fnirs_source）
-3. smooth_signal proxy → **HRF convolution model** 作为 source target
-4. 自由 coupling → **concentration-constrained coupling**
+### 5.3 External comparison policy
 
-### 5.3 Branch semantics exit gate ✅ PASSED
+正式实验比较不再以“旧 shared/private tokenizer 继续可运行”作为前提，而改为：
 
-以下条件已满足，允许进入 A/C 机制实验（在 Phase 3 concentration baseline 完成后）：
-
-1. ✅ S2 的设计规范明确（PHYSIOLOGICAL_COUPLING_PLAN.md Section 2）
-2. ✅ source branch 语义 = HRF-modeled neurovascular coupling state（生理可解释，非低频重建捷径）
-3. ✅ observation branch 语义 = modality-specific reconstruction debt（由 ablation gap 定义，非平滑残差桶）
-4. ✅ 耦合结构从”事后统计量”升级为”concentration-constrained physiological mapping”
-5. ✅ 损失函数精简（V6: 12 terms → S2: 9 terms）
-
-**不再需要比较 S0 作为 gate condition**——S2 的设计已经充分论证了 factorization 的必要性和每个分支的独立生理语义。
+1. 采用 [comparative_methods](comparative_methods) 下的独立方法结果作为控制面；
+2. 采用 [reference_repository](reference_repository) 中参考方法的复现/迁移结果作为控制面；
+3. 所有对照方法统一输出到同一套 scorecard 与 summary schema 中，避免比较口径不一致。
 
 ---
 
-## 6. Workstream 0: Freeze and Audit the V6 Baseline
+## 6. Direct Mainline Replacement Plan
 
-在实现任何新机制之前，先把 V6 baseline 作为固定对照面。
+### 6.1 File-level migration scope
 
-### 6.1 Baseline definition
+本轮不是在旧代码旁边加一套新实现，而是直接改造主线文件。计划如下：
 
-当前 baseline 必须满足：
+| 文件/目录 | 处理方式 |
+|------|------|
+| `src/tokenizers/factorized_labram_vqnsp.py` | 直接替换为 source/observation 主实现，shared/private 逻辑退出主类 |
+| `src/tokenizers/codebook_focus_factorized_labram_vqnsp.py` | 直接替换为 codebook-focused source/observation 主实现 |
+| `src/losses/multimodal_tokenizer.py` | 删除 shared/private 专属 loss 汇总，只保留 source/observation 主线所需逻辑 |
+| `src/tokenizers/registry.py` | 删除旧 shared/private config 解析与旧模型类型注册，切到 source/observation schema |
+| `src/tokenizers/__init__.py` | 删除旧类导出，切换到新主类导出 |
+| `src/visualization/factorized_alignment_analysis.py` | 改造或替换为 source/observation 对齐分析入口 |
+| `src/visualization/semantic_space_analysis.py` | 移除 common/residual 代理指标，保留 Layer A-D 所需主线指标 |
+| `src/visualization/tokenizer_analysis_suite.py` | 作为唯一标准化分析入口继续保留 |
+| `experiments/scripts/train_shared_tokenizer.py` | 切换到 source/observation 主线参数与产物协议 |
+| `experiments/scripts/probe/*` | 清理 shared/private 旧语义依赖，只保留标准 rerun 入口 |
+| `experiments/configs/**` | 清掉 shared/private 活跃配置面，建立新的 source/observation 配置簇 |
 
-1. 使用 codebook-focused factorized tokenizer
-2. 保留 lag-aware shared coupling
-3. 不启用 coupling smoothness
-4. 不启用 asymmetric coupling
-5. 使用当前 canonical evaluation pipeline 输出 Layer A-D 指标
-6. 保留 shared-only / private-only ablation 诊断
+### 6.2 Phase 1: Structural Migration
 
-### 6.2 Required baseline artifacts
+目标：完成架构语义切换，但此阶段不引入 HRF target 和 concentration prior。
 
-每次新机制实验都必须对齐以下 baseline 工件：
+**需要落地的变更**：
 
-1. reconstruction metrics
-2. codebook health metrics
-3. shared-branch structure metrics
-4. subject leakage / task signal diagnostics
-5. coupling matrix visualization
-6. shared-only vs private-only reconstruction diagnostics
-7. branch responsibility gap summary
+1. `shared` 全面替换为 `source`；
+2. `private` 全面替换为 `observation`；
+3. 单一 shared quantizer 替换为 `eeg_source_quantizer` 与 `fnirs_source_quantizer`；
+4. `eeg_private_quantizer` / `fnirs_private_quantizer` 替换为 `eeg_observation_quantizer` / `fnirs_observation_quantizer`；
+5. 输出字典、分析键名、logger 指标键名、配置字段名同步改为 source/observation；
+6. 删除以下旧 loss 项：
+    - `latent_align_loss`
+    - `assignment_align_loss`
+    - `hard_assignment_align_loss`
+    - `shared_entropy_loss`
+    - `private_entropy_loss`
+    - `shared_eeg_common_loss`
+    - `shared_fnirs_common_loss`
+    - `eeg_private_residual_loss`
+    - `fnirs_private_residual_loss`
+    - `shared_eeg_recon_loss`
+    - `shared_fnirs_recon_loss`
 
-如果 baseline 工件不完整，不进入 A/C 机制比较。
+**Phase 1 输出要求**：
 
-### 6.3 Audit questions — all answered ✅
+1. active code 中不再出现 shared/private 作为主语义分支名称；
+2. 主 tokenizer forward 只暴露 source/observation 结构；
+3. reconstruction、codebook utilization、dead-code behavior 保持稳定；
+4. observation branch 先只通过 full reconstruction 贡献与 orthogonality 约束定义，不重新引入显式 residual 目标。
 
-在进入 A/C 之前需要回答的四个问题：
+### 6.3 Phase 2: Source Target Introduction
 
-1. ~~当前 shared branch 学到的是跨模态共性状态，还是仅仅是更容易重建的低频成分？~~ → **V6 shared branch 确实退化为低频重建捷径（smooth_signal proxy）。S2 redesign 用 HRF 物理模型替代。**
-2. ~~当前 private branch 学到的是 modality-specific 信息，还是只是 shared 之外的剩余误差桶？~~ → **V6 private branch 是残差桶（raw - smoothed）。S2 redesign 用 reconstruction necessity 定义 observation branch。**
-3. ~~`single shared quantizer` 是否是必要结构，还是当前 shared semantics 模糊的来源之一？~~ → **单一 shared quantizer 是 shared semantics 模糊的来源之一。S2 采用双 source codebook + constrained coupling。**
-4. ~~`equal token count per window` 是否是科学假设，还是暂时的工程便利？~~ → **是工程便利。当前保留为工作假设，延后至 Phase 5 审计。**
+目标：用 HRF 卷积 target 替代 smooth proxy。
 
-所有四个 audit 问题已在 S2 redesign 中得到回答。
+**需要落地的变更**：
 
----
+1. 实现 double-gamma HRF kernel；
+2. 从 EEG 侧生成 fNIRS source target；
+3. 为 EEG source branch 保留弱辅助 target，防止 source collapse；
+4. 在 trainer 中加入 source target warmup 调度；
+5. 在 analysis suite 中加入 source target reconstruction 与 source codebook 健康诊断。
 
-## 7. Workstream A: Coupling Smoothness
+**Phase 2 输出要求**：
 
-本 workstream 现在有两个前置条件：
-1. ~~Section 5 的 branch semantics exit gate 通过~~ ✅
-2. **Phase 3 (concentration baseline) 完成并通过 gate** ← 当前阻塞
-3. 机制 A 不与机制 C 同时启用（文档要求）
+1. `source_target_loss` 可稳定下降；
+2. fNIRS source codebook 不 collapse；
+3. source-only 结果不再以低频平滑代理解释，而是以 HRF-modeled coupling target 解释。
 
-### 7.1 Objective
+### 6.4 Phase 3: Concentration Prior
 
-为 forward coupling 矩阵加入局部平滑先验：相近的 shared EEG token 应映射到相近的 fNIRS token 分布。
+目标：形成第一版 physiology-aware source/observation baseline。
 
-### 7.2 Implementation scope
+**需要落地的变更**：
 
-需要修改的主文件：
+1. 实现 `concentration_loss`；
+2. 记录 row entropy、concentration ratio、best lag；
+3. 完成小系数 sweep：`0.001 / 0.005 / 0.01`；
+4. 把 concentration 结果接入 scorecard 与 final summary。
+
+**Phase 3 输出要求**：
+
+1. coupling row entropy 明显低于 `log(K)` 基线；
+2. Layer A 不退化；
+3. concentration ratio 稳定大于 1.5。
+
+### 6.5 Workstream A: Coupling Smoothness
+
+前置条件：Phase 3 完成并通过 gate。
+
+**Objective**：为 forward source coupling 加局部平滑先验，让相近 EEG source token 映射到相近 fNIRS token 分布。
+
+**Implementation scope**：
 
 | 文件 | 变更 |
 |------|------|
 | `src/losses/multimodal_tokenizer.py` | 新增 `coupling_smoothness_loss()` |
-| `src/losses/multimodal_tokenizer.py` | 在 `compute_factorized_shared_alignment_losses` 中返回 `smoothness_loss` |
-| `src/tokenizers/factorized_labram_vqnsp.py` | 新增 smoothness 参数并接入 loss 汇总 |
-| `src/tokenizers/codebook_focus_factorized_labram_vqnsp.py` | 透传新参数，默认关闭 |
-| `experiments/configs/**` | 新增 A1 / A2 配置 |
+| `src/tokenizers/factorized_labram_vqnsp.py` | 接入 smoothness 参数与 loss 汇总 |
+| `experiments/configs/source_observation/**` | 新增 A1 / A2 配置 |
 
-### 7.3 Parameter contract
-
-最小参数面如下：
+**Parameter contract**：
 
 ```yaml
 loss:
-  alignment:
-    coupling_smoothness_weight: 0.0
-    coupling_smoothness_neighbors: 5
+   coupling:
+      smoothness_weight: 0.0
+      smoothness_neighbors: 5
+      smoothness_warmup_epochs: 30
 ```
 
-warm-start 调度属于训练策略，不是 tokenizer 本体结构。调度参数应放在训练配置或 trainer 逻辑中，而不是硬编码进模型架构：
-
-```yaml
-loss:
-  alignment:
-    coupling_smoothness_warmup_epochs: 30
-    coupling_smoothness_final_weight: 0.01
-```
-
-### 7.4 Required diagnostics
-
-机制 A 至少记录以下诊断：
+**Required diagnostics**：
 
 1. `smoothness_loss`
 2. 邻居 token vs 随机 token 的 coupling JS 散度差距
-3. coupling row variance，防止所有行塌成同一分布
-4. Layer A reconstruction/codebook health 是否稳定
+3. coupling row variance
+4. Layer A reconstruction / codebook health
 
-### 7.5 Experiment queue
+**Pass / fail gate**：
 
-1. **Exp A1**: `coupling_smoothness_weight` sweep = 0.005 / 0.01 / 0.02
-2. **Exp A2**: 在 V6 稳定后启用 warm-start smoothness
+- ✅ Pass：Layer A 不退化，coupling 结构更平滑，至少一项 Layer C 指标改善
+- ❌ Fail：reconstruction / codebook health 退化，或 coupling 结构改善不可辨认
 
-### 7.6 Pass / fail gate
+### 6.6 Workstream C: Causal Direction Asymmetry
 
-- ✅ Pass: Layer A 不退化，且 coupling 结构更平滑，至少一项 Layer C 指标改善
-- ❌ Fail: reconstruction / codebook health 退化，或 coupling 结构改善不可辨认
+前置条件：Phase 3 完成并通过 gate。
 
----
+**Objective**：把 EEG→fNIRS 与 fNIRS→EEG 从共享一组参数改为独立参数化。
 
-## 8. Workstream C: Causal Direction Asymmetry
-
-本 workstream 现在有两个前置条件：
-1. ~~Section 5 的 branch semantics exit gate 通过~~ ✅
-2. **Phase 3 (concentration baseline) 完成并通过 gate** ← 当前阻塞
-3. 机制 C 不与机制 A 同时启用（文档要求）
-
-### 8.1 Objective
-
-把“前向 EEG→fNIRS”和“反向 fNIRS→EEG”从共享一组参数改为独立参数化，让生理因果方向的不对称性可以通过参数化自由度体现出来。
-
-### 8.2 Implementation scope
-
-需要修改的主文件：
+**Implementation scope**：
 
 | 文件 | 变更 |
 |------|------|
-| `src/tokenizers/factorized_labram_vqnsp.py` | 新增 `coupling_asymmetric` 开关与 `coupling_logits_fwd/rev` |
-| `src/losses/multimodal_tokenizer.py` | `compute_factorized_shared_alignment_losses` 支持 fwd/rev 独立 logits |
-| `src/tokenizers/codebook_focus_factorized_labram_vqnsp.py` | 透传 asymmetric 参数，默认关闭 |
-| `experiments/configs/**` | 新增 C1 配置 |
+| `src/tokenizers/factorized_labram_vqnsp.py` | 新增 `coupling_logits_fwd/rev` 与 `coupling_asymmetric` |
+| `src/losses/multimodal_tokenizer.py` | 支持 fwd/rev 独立 logits |
+| `experiments/configs/source_observation/**` | 新增 C1 配置 |
 
-### 8.3 Current-stage constraint
+**Current-stage constraint**：
 
-当前阶段的 C 机制只做两件事：
+1. C1 只做参数独立化与不对称诊断；
+2. 不在 C1 中叠加 smoothness；
+3. 反向路径保持自由参数化，不追加 margin 式显式不对称损失。
 
-1. 前向与反向 coupling 参数独立化
-2. 记录不对称诊断指标
-
-**不在 C1 中叠加 smoothness 正则。**
-
-也就是说，虽然机制设计上允许“前向带结构先验、反向自由参数化”，但当前执行顺序仍然要求：
-
-- A 单独验证
-- C 单独验证
-- A + C 组合延后
-
-### 8.4 Required diagnostics
-
-机制 C 至少记录以下诊断：
+**Required diagnostics**：
 
 1. `asymmetry_ratio`
 2. forward / reverse per-row entropy
 3. 双向 coupling loss
-4. forward vs reverse 的下游比较（若当前 probe 已具备）
+4. forward vs reverse 的下游比较
 
-### 8.5 Experiment queue
+**Pass / fail gate**：
 
-1. **Exp C1**: `coupling_asymmetric = true`, `coupling_bidirectional = true`
+- ✅ Pass：`asymmetry_ratio` 稳定大于 1，且 Layer A 不退化
+- ⚠️ Inconclusive：`asymmetry_ratio` 接近 1，但 Layer A/C 没有倒退
+- ❌ Fail：Layer A 退化，或反向路径明显失稳
 
-### 8.6 Pass / fail gate
+---
 
-- ✅ Pass: `asymmetry_ratio` 稳定大于 1，且 Layer A 不退化
-- ⚠️ Inconclusive: `asymmetry_ratio` 接近 1，但 Layer A/C 没有倒退
-- ❌ Fail: Layer A 退化，或反向路径明显失稳
+## 7. Config, Analysis, and Tool Simplification
+
+### 7.1 Config surface simplification
+
+新的活跃配置面不再沿用 shared/private schema，而统一切到 source/observation schema：
+
+```yaml
+model:
+   type: source_observation_labram_vqnsp
+   source:
+      codebook_size: 128
+      eeg_codebook_dim: 48
+      fnirs_codebook_dim: 48
+   eeg_observation:
+      codebook_size: 256
+      codebook_dim: 64
+   fnirs_observation:
+      codebook_size: 128
+      codebook_dim: 48
+
+loss:
+   reconstruction:
+      eeg_amplitude_weight: 1.0
+      eeg_phase_weight: 1.0
+      eeg_time_weight: 0.9
+      fnirs_amplitude_weight: 1.0
+      fnirs_phase_weight: 0.2
+      fnirs_time_weight: 1.0
+   source_target:
+      weight: 0.15
+      eeg_aux_weight: 0.075
+      warmup_epochs: 30
+   coupling:
+      weight: 0.07
+      concentration_weight: 0.0
+      bidirectional: true
+      lag_candidates: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+   branch:
+      orthogonality_weight: 0.01
+   codebook:
+      balance_weight: 0.02
+```
+
+活跃配置目录调整为：
+
+```text
+experiments/configs/source_observation/
+   phase1/
+   phase2/
+   phase3/
+   mechanism_a/
+   mechanism_c/
+```
+
+旧 shared/private 配置全部迁出活跃目录。
+
+### 7.2 Analysis surface simplification
+
+S2 活跃分析面只保留：
+
+1. `tokenizer_analysis_suite.py` 作为唯一标准化入口；
+2. source/observation alignment analysis；
+3. semantic scorecard 汇总；
+4. 手动 rerun 入口：
+    - `experiments/scripts/probe/analyze_alignment.py`
+    - `experiments/scripts/probe/analyze_semantic_token_space.py`
+    - `experiments/scripts/probe/generate_tokenizer_analysis_suite.py`
+
+以下 shared/private 旧语义内容退出活跃报告：
+
+1. common / residual target MSE
+2. `shared_*_common_loss_objective`
+3. `*_private_residual_loss_objective`
+4. 任何把 smooth proxy 当作分支定义依据的图表
+5. 以 shared/private 为主命名的主报告标题
+
+### 7.3 Probe cleanup policy
+
+`experiments/scripts/probe/` 只保留对标准化分析有价值的脚本。凡是依赖旧 shared/private 代理定义的 exploratory probe，都应迁入 archive，而不是继续作为主线分析入口。
+
+---
+
+## 8. Historical Archive and New Artifact Standard
+
+### 8.1 Historical archive policy
+
+进入 source/observation 主线前，需要先把 shared/private 阶段实验产物从活跃目录中移开，避免与新结果混淆。
+
+新增归档位置：
+
+```text
+experiments/runs/archive/source_observation_reset_20260506/
+experiments/probe_results/archive/source_observation_reset_20260506/
+experiments/configs/archive/source_observation_reset_20260506/
+docs/archive/logs/ARCHIVED_SHARED_PRIVATE_MAINLINE.md
+```
+
+归档对象包括：
+
+1. 所有 shared/private 阶段 tokenizer runs；
+2. 所有依赖 common/residual 语义的 probe results；
+3. 所有 shared/private 活跃配置；
+4. 与这些结果直接绑定的日志摘要。
+
+历史信息保留在 archive 和 git 中，不再通过活跃主线代码表达。
+
+### 8.2 New run naming convention
+
+新的 source/observation run 统一命名：
+
+```text
+s2_<phase>_<variant>_<timestamp>
+```
+
+示例：
+
+1. `s2_p1_structural_20260506_101500`
+2. `s2_p2_hrf_20260506_143000`
+3. `s2_p3_concentration_0005_20260507_090000`
+
+### 8.3 Required run artifacts
+
+每个正式 run 目录必须包含：
+
+```text
+experiments/runs/<run_name>/
+   config.yaml
+   metrics.json
+   run_manifest.json
+   final_summary.json
+   checkpoints/
+   figures/
+   analysis/
+      tokenizer_report/
+         manifest.json
+         scorecard/
+            layer_ad_summary.json
+            layer_ad_summary.md
+```
+
+### 8.4 Manifest and summary schema
+
+`run_manifest.json` 至少包含：
+
+1. `schema_version`
+2. `run_name`
+3. `model_type`
+4. `semantics_version = s2_source_observation_v1`
+5. `phase`
+6. `config_hash`
+7. `git_commit`
+8. `dataset`
+9. `analysis_type`
+10. `control_group`
+
+`final_summary.json` 只记录最终结论：
+
+1. Layer A-D 核心指标
+2. gate pass/fail
+3. best checkpoint
+4. best lag
+5. 简短结论
+
+### 8.5 External control standardization
+
+所有外部方法对照也必须导出到同一套 summary schema。换句话说，控制面不再靠保留旧主线代码，而靠**统一的实验结果协议**。
+
+新增聚合索引：
+
+`experiments/results/source_observation_index.json`
+
+每条记录至少包含：
+
+1. run name
+2. phase
+3. method family
+4. config path
+5. Layer A-D 核心指标
+6. promotion verdict
 
 ---
 
 ## 9. Validation Standard
 
-所有 A/C 实验统一按 Layer A-D 评价，不允许只看单一漂亮指标。
+所有正式实验统一按 Layer A-D 评价，不允许只看单一漂亮指标。
 
 | Layer | 必看内容 | 当前要求 |
 |------|----------|----------|
 | Layer A | reconstruction, perplexity, utilization, dead-code behavior | 不退化 |
-| Layer B | semantic consistency, branch responsibility, prototype separation | 不退化，最好改善 |
+| Layer B | source/observation 语义一致性、branch responsibility、prototype separation | 不退化，最好改善 |
 | Layer C | best-lag MI, conditional KL gain, coupling structure diagnostics | 至少一项明确改善 |
 | Layer D | subject leakage, task signal, downstream sanity | 不明显倒退 |
 
@@ -342,11 +510,12 @@ loss:
 
 任何机制要进入默认 mainline，必须同时满足：
 
-1. Layer A 不退化
-2. Layer B 不退化
-3. Layer C 有明确增益
-4. Layer D 不出现明显倒退
-5. 能通过 ablation 解释，不把 shared branch 重新变成第二条全能重建捷径
+1. Layer A 不退化；
+2. Layer B 不退化；
+3. Layer C 有明确增益；
+4. Layer D 不出现明显倒退；
+5. 能通过 ablation 解释，不把 source branch 重新变成另一条全能重建捷径；
+6. 与至少一类外部研究方法对照相比，能够给出清晰的结构性增益说明。
 
 ---
 
@@ -354,23 +523,19 @@ loss:
 
 当前严格执行以下顺序：
 
-1. ~~维护 V6 baseline 作为固定对照~~ ✅ V6 baseline 维护中
-2. ~~完成 shared/private branch semantics audit~~ ✅ **已完成** — 结论见 Section 5
-3. ~~比较 S0 / S1 / S2 三类结构，决定是否保留当前 factorization 以及如何定义 shared branch~~ ✅ **已完成** — S2 selected
-4. ~~选定通过 gate 的 branch semantics baseline~~ ✅ **已完成** — S2 design spec in PHYSIOLOGICAL_COUPLING_PLAN.md Section 2
-5. **← 当前步骤**：实现 Phase 1: Structural Migration（拆分 quantizer、重命名、删除废弃 loss）
-6. 实现 Phase 2: Source Target Introduction（HRF convolution model）
-7. 实现 Phase 3: Concentration Prior（coupling row entropy）
-8. 在 Phase 3 baseline 上实现并验证 Mechanism A (coupling smoothness)
-9. 记录 A 的 scorecard 与实验结论
-10. 回到 Phase 3 baseline，独立实现并验证 Mechanism C (causal asymmetry)
-11. 记录 C 的 scorecard 与实验结论
-12. 只有当 A 或 C 中至少一个独立通过后，才讨论 A + C 组合
-13. tokenizer 证据充分后，才考虑 foundation model 层面的目标替换
+1. ~~完成 shared/private branch semantics audit~~ ✅ 已完成
+2. ~~确定 source/observation redesign 机制定义~~ ✅ 已完成
+3. **归档 shared/private 阶段实验产物，清理活跃配置与分析入口**
+4. **直接改造主线 tokenizer / loss / registry / config surface，完成 Phase 1 Structural Migration**
+5. 实现 Phase 2 Source Target Introduction（HRF convolution model）
+6. 实现 Phase 3 Concentration Prior（coupling row entropy）
+7. 在 Phase 3 baseline 上独立实现并验证 Mechanism A（coupling smoothness）
+8. 在 Phase 3 baseline 上独立实现并验证 Mechanism C（causal asymmetry）
+9. 统一导出主线与外部方法对照结果到同一 summary schema
+10. 更新 scorecard 与 experiment log
+11. tokenizer 证据充分后，再考虑 foundation model 层面的目标替换
 
-**Phase 1-3 的具体实现步骤见 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2.9。**
-
-任何跳步都意味着解释链断裂，不能作为主线证据。
+任何跳步都会导致解释链断裂，不能作为主线证据。
 
 ---
 
@@ -378,12 +543,14 @@ loss:
 
 任何进入主线候选的改动都必须同时交付：
 
-1. 默认关闭的向后兼容实现
-2. 对应实验配置
-3. 至少一份正式实验记录
-4. Layer A-D scorecard 摘要
-5. 必要的可视化或诊断图
-6. 本文件中的状态更新
+1. 直接替换后的主线实现，而不是默认关闭的兼容层；
+2. 对应 source/observation 配置；
+3. archive manifest（如果清理了旧结果或旧配置）；
+4. 至少一份正式实验记录；
+5. Layer A-D scorecard 摘要；
+6. 必要的可视化或诊断图；
+7. `run_manifest.json` 与 `final_summary.json`；
+8. 本文件中的状态更新。
 
 没有文档和评价闭环的改动，不视为主线推进。
 
@@ -393,30 +560,29 @@ loss:
 
 以下内容当前明确延后，不进入这轮实现主线：
 
-1. A 与 C 同时启用的联合实验
-2. HRF-shaped lag weighting
-3. 显式熵 margin 式 asymmetry loss
-4. 重新引入 identity-style alignment losses
-5. foundation model 预训练目标的大改
-6. 把 shared branch 改回 full raw reconstruction 主通路
+1. A 与 C 同时启用的联合实验；
+2. HRF-shaped lag weighting；
+3. 显式熵 margin 式 asymmetry loss；
+4. 重新引入 identity-style alignment losses；
+5. foundation model 预训练目标的大改；
+6. equal token count per window 的结构审计。
 
-这些方向不是永久否定，而是必须等到 A/C 的单机制证据成立后再决定是否继续。
+这些方向不是永久否定，而是必须等到 Phase 1-3 与 A/C 单机制证据成立后再决定是否继续。
 
 ---
 
 ## 13. Bottom Line
 
-当前项目的 tokenizer 主线已经从”证明 token 条件概率可分析”切换到”设计一个带有生理结构先验的离散表示机制”。
+当前项目的 tokenizer 主线已经从“证明 token 条件概率可分析”切换到“设计一个带有生理结构先验的离散表示机制”。
 
-**Branch semantics gate 已通过**：shared/private 已被重新定义为 **source/observation**。Source branch 编码 HRF-modeled neurovascular coupling state；observation branch 编码 modality-specific reconstruction debt。单一 shared quantizer 被双 source codebook + constrained coupling 替代。
+**当前主线决策非常明确**：
 
-**接下来的工作重点是**：
+1. shared/private 将被 source/observation 直接取代；
+2. 旧架构代码不会继续作为活跃对照面保留；
+3. 历史可追溯性由 git 和 archive 提供；
+4. 对照实验改由外部研究方法承担；
+5. 分析、归档与结果格式规范全部以本文件为准。
 
-1. 将 V6 baseline 作为 S1 固定对照，保留不动；
-2. 按 PHYSIOLOGICAL_COUPLING_PLAN.md Section 2.9 的 Phase 1-3 顺序实现 S2 architecture；
-3. 在 Phase 3 concentration baseline 通过 gate 后，按顺序独立验证 Mechanism A 和 Mechanism C；
-4. 只在 Layer A-D 评价闭环成立时推进默认主线。
-
-**当前步骤**：Phase 1 — Structural Migration（拆分 dual source quantizer、重命名 shared→source/private→observation、删除废弃 loss terms）。
+**当前步骤**：先完成 shared/private 阶段实验与配置归档，然后直接改造主线实现面，进入 Phase 1 Structural Migration。
 
 本文件即为当前实现顺序与准入标准的唯一主文档。
