@@ -4,7 +4,7 @@
 > Status: Active mainline execution guide — direct migration to the Source/Observation architecture
 > Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md) — Section 2 contains the complete Source/Observation redesign
 > Archived reset foundation: [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
-> Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md)
+> Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md) — simplified to 4 evaluation gates (Health / Semantics / Structure / Utility)
 > Experiment log: [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md)
 
 ---
@@ -22,7 +22,7 @@
 
 1. **IMPLEMENTATION_PLAN.md**：实现顺序、代码改造范围、分析与实验产物规范。
 2. **docs/PHYSIOLOGICAL_COUPLING_PLAN.md**：机制动机、数学形式、生理解释。
-3. **docs/SEMANTIC_TOKEN_SCORECARD.md**：Layer A-D 的评价框架。
+3. **docs/SEMANTIC_TOKEN_SCORECARD.md**：4-gate 评价框架（Health / Semantics / Structure / Utility）。
 4. **docs/EXPERIMENT_LOG.md**：正式实验结论。
 
 如果多个文档之间出现冲突，以本文件的实现顺序为准；如果是机制定义或数学细节冲突，以生理耦合计划为准。
@@ -91,7 +91,7 @@
     - 再分别验证 Mechanism A 与 Mechanism C；
     - 当前阶段不做 A + C 联合实验。
 
-4. **Layer A 不退化是硬门槛**
+4. **Gate 1 (Health) 不退化是硬门槛**
     - reconstruction / codebook health 退化，则该机制不能进入默认主线。
 
 5. **Branch semantics gate 已通过，但旧语义不应残留在活跃主线里**
@@ -112,7 +112,7 @@
 | 主实现计划 | `IMPLEMENTATION_PLAN.md` | 开发顺序、文件改造、分析精简、归档与结果格式 |
 | 活跃机制设计 | `docs/PHYSIOLOGICAL_COUPLING_PLAN.md` | 生理耦合约束的动机、公式、实验设计 |
 | 活跃理论背景 | `docs/THEORY.md` | 总体理论框架与长期背景 |
-| 活跃评价标准 | `docs/SEMANTIC_TOKEN_SCORECARD.md` | Layer A-D 评价框架 |
+| 活跃评价标准 | `docs/SEMANTIC_TOKEN_SCORECARD.md` | 4-gate 评价框架（Health / Semantics / Structure / Utility） |
 | 活跃实验记录 | `docs/EXPERIMENT_LOG.md` | 项目级实验结论 |
 | 归档计划 | `docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md` | reset 阶段设计基础 |
 | 归档实验日志 | `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md` | 第一轮预实验历史记录 |
@@ -170,7 +170,7 @@
 | `src/tokenizers/registry.py` | 删除旧 shared/private config 解析与旧模型类型注册，切到 source/observation schema |
 | `src/tokenizers/__init__.py` | 删除旧类导出，切换到新主类导出 |
 | `src/visualization/factorized_alignment_analysis.py` | 改造或替换为 source/observation 对齐分析入口 |
-| `src/visualization/semantic_space_analysis.py` | 移除 common/residual 代理指标，保留 Layer A-D 所需主线指标 |
+| `src/visualization/semantic_space_analysis.py` | 移除 common/residual 代理指标，保留 Gate 1-4 所需主线指标 |
 | `src/visualization/tokenizer_analysis_suite.py` | 作为唯一标准化分析入口继续保留 |
 | `experiments/scripts/train_shared_tokenizer.py` | 切换到 source/observation 主线参数与产物协议 |
 | `experiments/scripts/probe/*` | 清理 shared/private 旧语义依赖，只保留标准 rerun 入口 |
@@ -239,7 +239,7 @@
 **Phase 3 输出要求**：
 
 1. coupling row entropy 明显低于 `log(K)` 基线；
-2. Layer A 不退化；
+2. Gate 1 (Health) 不退化；
 3. concentration ratio 稳定大于 1.5。
 
 ### 6.5 Workstream A: Coupling Smoothness
@@ -271,11 +271,11 @@ loss:
 1. `smoothness_loss`
 2. 邻居 token vs 随机 token 的 coupling JS 散度差距
 3. coupling row variance
-4. Layer A reconstruction / codebook health
+4. Gate 1 (Health) reconstruction / codebook health 是否稳定
 
 **Pass / fail gate**：
 
-- ✅ Pass：Layer A 不退化，coupling 结构更平滑，至少一项 Layer C 指标改善
+- ✅ Pass：Gate 1 (Health) 不退化，coupling 结构更平滑，Gate 3 (Structure) 至少一项指标改善
 - ❌ Fail：reconstruction / codebook health 退化，或 coupling 结构改善不可辨认
 
 ### 6.6 Workstream C: Causal Direction Asymmetry
@@ -307,9 +307,9 @@ loss:
 
 **Pass / fail gate**：
 
-- ✅ Pass：`asymmetry_ratio` 稳定大于 1，且 Layer A 不退化
-- ⚠️ Inconclusive：`asymmetry_ratio` 接近 1，但 Layer A/C 没有倒退
-- ❌ Fail：Layer A 退化，或反向路径明显失稳
+- ✅ Pass：`asymmetry_ratio` 稳定大于 1，且 Gate 1 (Health) 不退化
+- ⚠️ Inconclusive：`asymmetry_ratio` 接近 1，但 Gate 1/3 没有倒退
+- ❌ Fail：Gate 1 (Health) 退化，或反向路径明显失稳
 
 ---
 
@@ -375,7 +375,7 @@ S2 活跃分析面只保留：
 
 1. `tokenizer_analysis_suite.py` 作为唯一标准化入口；
 2. source/observation alignment analysis；
-3. semantic scorecard 汇总；
+3. Gate 1-4 scorecard 汇总；
 4. 手动 rerun 入口：
     - `experiments/scripts/probe/analyze_alignment.py`
     - `experiments/scripts/probe/analyze_semantic_token_space.py`
@@ -449,8 +449,8 @@ experiments/runs/<run_name>/
       tokenizer_report/
          manifest.json
          scorecard/
-            layer_ad_summary.json
-            layer_ad_summary.md
+            gate_summary.json
+            gate_summary.md
 ```
 
 ### 8.4 Manifest and summary schema
@@ -470,8 +470,8 @@ experiments/runs/<run_name>/
 
 `final_summary.json` 只记录最终结论：
 
-1. Layer A-D 核心指标
-2. gate pass/fail
+1. Gate 1-4 核心指标（Health / Semantics / Structure / Utility）
+2. gate pass/fail verdict
 3. best checkpoint
 4. best lag
 5. 简短结论
@@ -490,30 +490,39 @@ experiments/runs/<run_name>/
 2. phase
 3. method family
 4. config path
-5. Layer A-D 核心指标
+5. Gate 1-4 核心指标
 6. promotion verdict
 
 ---
 
-## 9. Validation Standard
+## 9. Validation Gates
 
-所有正式实验统一按 Layer A-D 评价，不允许只看单一漂亮指标。
+所有正式实验统一按 4-gate 体系评价，不允许只看单一漂亮指标。Gate 定义详见 [SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md)。
 
-| Layer | 必看内容 | 当前要求 |
-|------|----------|----------|
-| Layer A | reconstruction, perplexity, utilization, dead-code behavior | 不退化 |
-| Layer B | source/observation 语义一致性、branch responsibility、prototype separation | 不退化，最好改善 |
-| Layer C | best-lag MI, conditional KL gain, coupling structure diagnostics | 至少一项明确改善 |
-| Layer D | subject leakage, task signal, downstream sanity | 不明显倒退 |
+| Gate | 回答的问题 | 当前要求 |
+|------|-----------|----------|
+| **Gate 1: Health** | codebook 是否健康？reconstruction 是否收敛？ | 4 个 quantizer 均满足健康阈值；full recon 收敛 |
+| **Gate 2: Semantics** | source/observation 是否在做各自该做的事？ | HRF target 收敛；obs gap > 0；cross-modal predictability > chance |
+| **Gate 3: Structure** | coupling matrix 是否表现出生理合理的集中结构？ | row entropy < log(K)/2；concentration ratio > 1.5 |
+| **Gate 4: Utility** | 表示空间是否有 downstream value？ | source SSR > 1.0；subject leakage 集中在 observation |
+
+### Gate dependency
+
+```
+Gate 1 ──→ Gate 2 ──→ Gate 3 ──→ Gate 4
+(Phase 1)  (Phase 2)  (Phase 3)  (Phase 4+)
+```
+
+每个 Phase 只验证一个 Gate。不通过则阻塞，不回退到更早的 Gate。
 
 ### Promotion rule
 
 任何机制要进入默认 mainline，必须同时满足：
 
-1. Layer A 不退化；
-2. Layer B 不退化；
-3. Layer C 有明确增益；
-4. Layer D 不出现明显倒退；
+1. Gate 1 (Health) 不退化；
+2. Gate 2 (Semantics) 不退化；
+3. Gate 3 (Structure) 有明确增益；
+4. Gate 4 (Utility) 不出现明显倒退；
 5. 能通过 ablation 解释，不把 source branch 重新变成另一条全能重建捷径；
 6. 与至少一类外部研究方法对照相比，能够给出清晰的结构性增益说明。
 
@@ -547,7 +556,7 @@ experiments/runs/<run_name>/
 2. 对应 source/observation 配置；
 3. archive manifest（如果清理了旧结果或旧配置）；
 4. 至少一份正式实验记录；
-5. Layer A-D scorecard 摘要；
+5. Gate 1-4 scorecard 摘要；
 6. 必要的可视化或诊断图；
 7. `run_manifest.json` 与 `final_summary.json`；
 8. 本文件中的状态更新。

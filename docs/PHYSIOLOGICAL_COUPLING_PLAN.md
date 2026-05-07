@@ -386,17 +386,17 @@ loss:
 
 ```python
 total_loss = (
-    # === Layer A: Reconstruction (unchanged from V6) ===
+    # === Gate 1 (Health): Reconstruction (unchanged from V6) ===
     eeg_rec_loss +                         # full EEG reconstruction (amp + phase + time)
     fnirs_rec_loss +                       # full fNIRS reconstruction (amp + phase + time)
     vq_loss +                              # VQ commitment loss for all quantizers
     
-    # === Layer B: Branch Semantics ===
+    # === Gate 2 (Semantics): Branch Roles ===
     alpha_source_target * source_target_loss +    # HRF model target for fNIRS source decoder (NEW)
     alpha_source_target * 0.5 * eeg_source_aux_loss +  # coarse EEG target for EEG source decoder (NEW)
     alpha_orth * orthogonality_loss +              # source ⊥ observation (retained from V6)
     
-    # === Layer C: Coupling with Physiological Prior ===
+    # === Gate 3 (Structure): Coupling with Physiological Prior ===
     alpha_coupling * coupling_kl_loss +            # basic coupling training (retained)
     alpha_conc * concentration_loss +              # sparsity prior on coupling rows (NEW, core)
     
@@ -504,7 +504,7 @@ Phase 1: Structural Migration (no new loss terms)
   │   shared_eeg_common, shared_fnirs_common, eeg_private_residual, fnirs_private_residual,
   │   shared_eeg_recon, shared_fnirs_recon, hard_assignment_align)
   ├── 保留 coupling_logits 不变
-  └── Gate: Layer A (reconstruction + codebook health) 不退化
+  └── Gate: Gate 1 (Health) — reconstruction + codebook health 不退化
             + 两个 source codebook 各自利用率 > 50%
 
 Phase 2: Source Target Introduction
@@ -520,7 +520,7 @@ Phase 3: Concentration Prior
   ├── 小系数 sweep [0.001, 0.005, 0.01]
   ├── 监控 coupling row entropy vs log(K) baseline
   └── Gate: coupling row entropy < log(K)/2
-            + Layer A 不退化
+            + Gate 1 (Health) 不退化
             + concentration_ratio > 1.5
 
 Phase 4: Independent Mechanism Validation
@@ -627,7 +627,7 @@ coupling_smoothness_neighbors: int = 5,
 
 1. **Codebook 未收敛时无意义**：如果 codebook 本身还在剧烈变化，邻居关系不稳定，平滑性约束会引入噪声。缓解：在 reconstruction 稳定后再 warm-start 此约束。
 2. **系数过大导致所有 token 耦合相同**：如果 $\lambda_{smooth}$ 过大，所有行收敛到相同分布。缓解：从小系数（0.005）开始，监控行间方差。
-3. **Codebook collapse 时退化为无操作**：如果所有 codebook 向量都相似，邻居没有意义。缓解：此约束假设 Layer A health gates 已通过。
+3. **Codebook collapse 时退化为无操作**：如果所有 codebook 向量都相似，邻居没有意义。缓解：此约束假设 Gate 1 (Health) 已通过。
 
 ---
 
@@ -815,15 +815,15 @@ loss:
 
 **Comparison metrics vs. V6 baseline**:
 
-1. Layer A: reconstruction (full/common/residual), codebook health
-2. Layer B: intra-token consistency, prototype separation ratio
-3. Layer C: best-lag MI, conditional KL gain, coupling matrix structure
-4. Layer D: subject leakage, task signal
+1. Gate 1 (Health): reconstruction (full/common/residual), codebook health
+2. Gate 2 (Semantics): intra-token consistency, prototype separation ratio
+3. Gate 3 (Structure): best-lag MI, conditional KL gain, coupling matrix structure
+4. Gate 4 (Utility): subject leakage, task signal
 
 **Decision gate**:
 
-- ✅ Pass: Layer A 不退化 + coupling 矩阵呈现可辨识的平滑结构 + ≥1 项 Layer C 指标改善
-- ❌ Fail: Layer A 退化，或 coupling 矩阵无明显结构改善，或无任何 Layer B/C 指标改善
+- ✅ Pass: Gate 1 (Health) 不退化 + coupling 矩阵呈现可辨识的平滑结构 + ≥1 项 Gate 3 (Structure) 指标改善
+- ❌ Fail: Gate 1 (Health) 退化，或 coupling 矩阵无明显结构改善，或无任何 Gate 2/3 指标改善
 
 ### 5.4 Exp C: Causal asymmetry
 
@@ -838,22 +838,22 @@ loss:
 
 **Comparison metrics vs. V6 baseline**:
 
-1. Layer A: reconstruction, codebook health
-2. Layer C: asymmetry_ratio, forward vs. reverse coupling entropy, CMTP direction comparison
-3. Layer D: subject leakage, task signal
+1. Gate 1 (Health): reconstruction, codebook health
+2. Gate 3 (Structure): asymmetry_ratio, forward vs. reverse coupling entropy, CMTP direction comparison
+3. Gate 4 (Utility): subject leakage, task signal
 
 **Decision gate**:
 
-- ✅ Pass: asymmetry_ratio 稳定 > 1.0 + Layer A 不退化 + 前向 CMTP 优于反向
-- ⚠️ Inconclusive: asymmetry_ratio ≈ 1.0 但 Layer A/C 不退化（说明数据不支持不对称先验）
-- ❌ Fail: Layer A 退化
+- ✅ Pass: asymmetry_ratio 稳定 > 1.0 + Gate 1 (Health) 不退化 + 前向 CMTP 优于反向
+- ⚠️ Inconclusive: asymmetry_ratio ≈ 1.0 但 Gate 1/3 (Health/Structure) 不退化（说明数据不支持不对称先验）
+- ❌ Fail: Gate 1 (Health) 退化
 
 ### 5.5 What NOT to do
 
 - ❌ 同时启用机制 A 和机制 C（当前阶段）
 - ❌ 在 shared codebook baseline 上测试这些机制（它们依赖 factorization）
 - ❌ 在没有 warm-start 的情况下直接启用以 reconstruction 为主的 run
-- ❌ 把 coupling 结构改善当作唯一的成功指标——Layer A（reconstruction/codebook health）是前提
+- ❌ 把 coupling 结构改善当作唯一的成功指标——Gate 1 (Health)（reconstruction/codebook health）是前提
 
 ---
 
@@ -883,11 +883,11 @@ loss:
 
 任何机制要进入默认 mainline，必须满足（继承自 V6 reset 的 promotion rule）：
 
-1. Layer A codebook health 不退化
-2. Layer B semantic state quality 不退化，最好有明确提升
-3. Layer C shared-branch structured value 有明确提升
-4. Layer D invariance / downstream sanity 不出现明显倒退
-5. 可以通过 ablation 解释，且不把 shared branch 变回第二条全能重建捷径
+1. Gate 1 (Health) codebook health 不退化
+2. Gate 2 (Semantics) branch role quality 不退化，最好有明确提升
+3. Gate 3 (Structure) coupling structured value 有明确提升
+4. Gate 4 (Utility) invariance / downstream sanity 不出现明显倒退
+5. 可以通过 ablation 解释，且不把 source branch 变回第二条全能重建捷径
 
 ---
 

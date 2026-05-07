@@ -1,231 +1,238 @@
-# Physiological Token Semantic Scorecard
+# Tokenizer Evaluation Gates
 
-> Last Updated: 2026-04-13
-> Status: Active tokenizer evaluation design for the codebook-first mainline
+> Last Updated: 2026-04-30
+> Status: Simplified for S2 source/observation architecture — replaces pre-S2 five-layer scorecard
+> Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md Section 2](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
+> Supersedes: pre-S2 five-layer scorecard (Layer A-E) — archived by this rewrite
 
-## 1. Why This Scorecard Exists
+---
 
-当前仓库已经完成一次重要方向切换：tokenizer 的主线目标不再是更高的 token identity overlap，而是更健康、更可解释、且更能承载 shared/private 生理语义分工的离散状态空间。
+## 1. Why This Document Exists
 
-因此，旧的评估口径已经不够了。只看 reconstruction、perplexity 和 overlap，会漏掉三个更关键的问题：
+S2 redesign 已将 tokenizer 主线从"事后分析条件概率"转为"设计带有生理结构先验的离散表示机制"。旧 scorecard 的五个 layer（A-E）中有大量指标是为 V6 的 shared/private + smooth_signal proxy 架构设计的，在 S2 中不再适用。
 
-1. token 是否真的对应稳定的局部生理状态；
-2. token 序列是否保留了状态转移和跨模态滞后耦合；
-3. shared branch 是否真的在表达跨模态共性，而不是被训练成另一条 reconstruction 通路。
+**旧 scorecard 的问题**：
+- Layer B (ITSC, PSR, TPG, AC) 是 word2vec 时代"几何语义"的遗产——衡量 token 空间的内部结构是否优美，但从未建立与下游性能的因果联系
+- Layer C (LMIG, CKG, SUB) 计算的是耦合的事后统计量，但 S2 的 concentration prior 已将耦合结构注入训练——这些指标变成了训练目标的回响，不是独立验证
+- Layer E (gradient diagnostics) 为 V6 的 12-term loss 设计，S2 的 9-term loss 更简洁
+- BRG 依赖 smooth_signal 产生的 common/residual target（已在 S2 中删除）
 
-这个 scorecard 的目标，就是把“token 的语义是否成立”变成一套固定、可复盘、可比较的报告结构。
+**新 scorecard 的设计原则**：
+1. 每个 gate 必须对应一个明确的决策——"通过/不通过"意味着"进入下一阶段/回退修复"
+2. 指标应尽可能从模型参数或训练损失中直接读取，不需要 heavy post-hoc 计算
+3. 评估范式对齐当前领域共识：功能验证（tokenizer 是否做对事）优先于几何验证（token 空间是否优美）
 
-## 2. Semantic Target
+---
 
-当前 mainline 里，token 的语义目标应明确区分为三类。
+## 2. S2 Semantic Target
 
-1. shared token：跨模态共通的局部生理状态，尤其是允许时滞的 EEG-fNIRS 共同因子；
-2. EEG private token：快速电生理残差状态，例如频段活动、瞬时波形和局部相位结构；
-3. fNIRS private token：慢速血流动力学残差状态，例如 HRF 形状、缓慢上升/回落和局部血氧轨迹。
+S2 架构中，token 的语义目标分为两类：
 
-判断一个 tokenization 是否成功，不是看它是否让两模态在同一时间输出相同 index，而是看它是否让这些状态在离散空间中变得可压缩、可预测、可迁移、可解释。
+| Token 类型 | 语义定义 | 验证方式 |
+|-----------|----------|----------|
+| **source token** (EEG side) | EEG 侧的神经血管耦合状态——可通过 coupling 预测 fNIRS token，可通过 HRF 模型重建 fNIRS | Semantic Gate |
+| **source token** (fNIRS side) | fNIRS 侧的神经血管耦合状态——与 EEG source token 通过 coupling matrix 建立对应 | Semantic Gate |
+| **observation token** (EEG) | EEG 的模态特异重建债务——不能被 fNIRS source 预测，对 subject 敏感 | Semantic Gate + Utility Gate |
+| **observation token** (fNIRS) | fNIRS 的模态特异重建债务——不能被 EEG source 预测，对 subject 敏感 | Semantic Gate + Utility Gate |
 
-## 3. Canonical Metric Layers
+判断 tokenization 成功与否的标准：**source tokens 编码了可跨模态预测的神经血管耦合状态，observation tokens 编码了不能跨模态预测的模态特异信息，耦合矩阵具有生理合理的集中结构。**
 
-### 3.1 Layer A: codebook health guardrails
+---
 
-这是所有语义讨论之前的进入门槛。
+## 3. Evaluation Gates
 
-| 指标 | 记号 / 计算 | 解释 |
-|------|-------------|------|
-| Shared/private perplexity | $\exp(-\sum_k p_k \log p_k)$ | 检查 shared 或 private codebook 是否 collapse |
-| Active-code coverage | active codes / total codes | 检查实际使用范围 |
-| Dead-code count | $\sum_k \mathbf{1}[p_k = 0]$ | 检查是否存在大面积无效 code |
-| Gini / top-k coverage | usage distribution statistics | 检查是否被极少数 token 垄断 |
-| Reconstruction guardrails | full/common/residual reconstruction metrics | 保证语义讨论不是建立在严重失真上 |
-| Branch ablation gaps | branch-only decoding degradation | 检查 shared/private 是否在承担不同职责 |
+每个 gate 是进入下一实现阶段的准入条件。Gate 1 不通过 → 不进入 Gate 2，以此类推。
 
-没有通过 Layer A 的 run，不应继续解释它的“语义”。
+### Gate 1: Architecture Health
 
-### 3.2 Layer B: semantic state quality
+**回答的问题**：tokenizer 的基本组件是否健康？
 
-这一层回答：token 是否真的对应稳定的局部生理状态。
+这是所有语义讨论之前的硬性进入门槛。不通过此 gate 的 run 不应被解释其"语义"。
 
-#### 3.2.1 Intra-token state consistency (ITSC)
+| 指标 | 计算 | 健康阈值 | 来源 |
+|------|------|----------|------|
+| **Codebook perplexity** (每个 quantizer) | $\exp(-\sum_k p_k \log p_k)$ | $\geq 0.3 \times K$ | 直接从 quantizer 统计 |
+| **Active code ratio** | active codes / total codes | $\geq 0.5$ | 直接从 quantizer 统计 |
+| **Dead code count** | $\sum_k \mathbf{1}[p_k = 0]$ | $\leq 0.3 \times K$ | 直接从 quantizer 统计 |
+| **Top-5 coverage** | 使用最多的 5 个 code 的频率之和 | $\leq 0.5$ | 直接从 quantizer 统计 |
+| **EEG full reconstruction** | MSE(raw, recon_full) | 随训练收敛 | 从 forward 输出读取 |
+| **fNIRS full reconstruction** | MSE(raw, recon_full) | 随训练收敛 | 从 forward 输出读取 |
 
-设 $\phi(x_t)$ 是窗口的状态摘要，可以取 shared-common target、branch latent summary，或固定的生理特征摘要（EEG bandpower/topography, fNIRS HRF summary）。定义：
+**通过条件**：所有 4 个 quantizer（eeg_source, fnirs_source, eeg_obs, fnirs_obs）均满足健康阈值，且 full reconstruction 收敛。
 
-$$
-ITSC = \sum_k p_k \mathbb{E}[\|\phi(x_t) - \mu_k\|_2^2 \mid z_t = k]
-$$
+**失败处理**：检查 VQ 超参数（beta, decay, codebook size）、学习率、encoder 容量。
 
-其中 $\mu_k$ 是 token $k$ 对应样本的状态原型。ITSC 越低，说明同一 token 内部越稳定。实践中应报告归一化版本：
+### Gate 2: Branch Semantics
 
-$$
-ITSC_{norm} = \frac{ITSC}{\mathrm{Var}(\phi(x_t))}
-$$
+**回答的问题**：source 和 observation 分支是否在做各自该做的事？
 
-#### 3.2.2 Prototype separation ratio (PSR)
+| 指标 | 计算 | 健康阈值 | 来源 |
+|------|------|----------|------|
+| **Source HRF target MSE** | MSE(fnirs_source_recon, HRF_target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
+| **Observation contribution gap** | MSE(source_only_recon) - MSE(source+obs_recon) | $> 0$（observation 有正贡献） | 从 forward 输出计算 |
+| **Cross-modal token predictability** | 给定 EEG source token，预测 fNIRS source token 的 top-1 accuracy | $> 1/K_{src}$（random baseline） | 从 coupling_logits 直接计算 |
+| **Source codebook independence** | eeg_source_quantizer 和 fnirs_source_quantizer 各自的利用率偏差 | $|u_{eeg} - u_{fnirs}| < 0.3$ | 从两个 quantizer 的 marginal 统计 |
 
-$$
-PSR = \frac{\sum_{i \neq j} \|\mu_i - \mu_j\|_2^2}{\sum_k p_k \mathbb{E}[\|\phi(x_t) - \mu_k\|_2^2 \mid z_t = k] + \epsilon}
-$$
+**通过条件**：HRF target reconstruction 显著优于 random；observation gap > 0；cross-modal predictability > chance；两个 source codebook 都健康。
 
-PSR 越高，说明 token 原型之间的区分度越强。
+**失败处理**：
+- HRF target 不收敛 → 检查 HRF 核参数初始化、source_target_weight、warmup schedule
+- Observation gap ≈ 0 → observation branch 可能 collapse；检查 orthogonality weight
+- Cross-modal predictability ≈ random → coupling training 可能失败；进入 Gate 3 诊断
 
-#### 3.2.3 Transition predictability gain (TPG)
+### Gate 3: Coupling Structure
 
-$$
-TPG(\Delta) = H(Z_{t+\Delta}) - H(Z_{t+\Delta} \mid Z_t)
-$$
+**回答的问题**：coupling matrix 是否表现出生理合理的信息结构？
 
-TPG 越高，说明 token 序列保留了状态转移结构，而不是接近独立采样。
+| 指标 | 计算 | 健康阈值 | 来源 |
+|------|------|----------|------|
+| **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | $< \log(K)/2$（显著非均匀） | 直接从 coupling_logits 计算 |
+| **Concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$，按行平均 | $> 1.5$（行有明确峰值） | 直接从 coupling_logits 计算 |
+| **Row entropy variance** | $\text{Var}(H(T_{i,:}))$ across rows | $> 0$（不同 source state 有不同的确定性） | 直接从 coupling_logits 计算 |
+| **Coupling matrix visualization** | 按行熵排序的热力图 | 可见块状或带状结构 | 单次 matplotlib 可视化 |
 
-#### 3.2.4 Augmentation consistency (AC)
+**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）。
 
-对不改变生理语义的扰动 $a(\cdot)$，例如轻度加噪、幅值缩放、时间轻微平移，定义：
+**失败处理**：
+- Row entropy ≈ log(K)（接近均匀）→ concentration_weight 太小，增大或检查 coupling_kl_loss 是否正常
+- Concentration ratio < 1.5 → concentration prior 未生效，sweep weight
+- 所有行熵相同 → coupling 可能 collapsed 到 trivial solution
 
-$$
-AC = P\big(z(x) = z(a(x))\big)
-$$
+### Gate 4: Representation Utility
+
+**回答的问题**：离散表示空间是否有 downstream value？
+
+| 指标 | 计算 | 健康阈值 | 来源 |
+|------|------|----------|------|
+| **Subject leakage** (source branch) | 冻结 tokenizer，用 nearest-centroid probe 预测 subject ID 的 accuracy | 显著低于 observation branch 的 subject leakage | 独立 probe 脚本 |
+| **Subject leakage** (observation branch) | 同上，但用 observation tokens | 应 > source branch | 独立 probe 脚本 |
+| **Task signal** (source branch) | 冻结 tokenizer，用 nearest-centroid probe 预测 task/condition | $>$ chance | 独立 probe 脚本 |
+| **Semantic selectivity ratio** | $\text{SSR} = \frac{\text{TCS}}{\text{SLS} + \epsilon}$ (for source branch) | $> 1.0$（task 信息 > subject 信息） | 由上述两项计算 |
+
+**通过条件**：
+- source branch 的 subject leakage < observation branch 的 subject leakage（subject identity 集中在 observation）
+- source branch 的 SSR > 1.0（source 更关注 task，而非 subject）
+- task signal > chance
 
-也可以放宽为近邻一致率。AC 越高，说明 token 对 nuisance factor 更稳。
-
-#### 3.2.5 Branch responsibility gap (BRG)
-
-BRG 不是单一数字，而是一组对照差分：
-
-1. shared ablation 对 common target reconstruction 的损害，应明显大于对 residual target 的损害；
-2. private ablation 对 residual target reconstruction 的损害，应明显大于对 common target 的损害。
-
-如果这个模式不成立，就说明 branch semantics 仍然是模糊的。
-
-### 3.3 Layer C: structured cross-modal semantics
-
-这一层回答：token 是否真的表达了 EEG-fNIRS 之间有时滞的结构关系。
-
-#### 3.3.1 Lagged mutual information gain (LMIG)
-
-$$
-LMIG = I(Z^{eeg}_{t-\tau}; Z^{fnirs}_t) - I(Z^{eeg}_t; Z^{fnirs}_t)
-$$
-
-如果 LMIG 稳定为正，说明 shared tokens 更接近真实生理耦合，而不是被迫做同步匹配。
-
-#### 3.3.2 Conditional KL gain (CKG)
-
-$$
-CKG = \mathbb{E}_{e \sim P(Z^{eeg})}\left[D_{KL}\big(P(Z^{fnirs} \mid Z^{eeg}=e) \| P(Z^{fnirs})\big)\right]
-$$
-
-CKG 越高，说明 EEG token 对 fNIRS token 分布提供了真实条件约束。
-
-#### 3.3.3 Cross-modal masked token prediction gain (CMG)
-
-冻结 tokenizer，仅训练轻量 probe，比较：
-
-1. EEG + partial fNIRS context；
-2. only partial fNIRS context；
-3. shuffled EEG + partial fNIRS context。
-
-定义 CMG 为版本 1 相对版本 2 和版本 3 的预测收益。CMG 稳定为正，说明 shared states 具备跨模态可计算价值。
-
-#### 3.3.4 Shared usage balance (SUB)
-
-shared branch 不应被单一模态长期垄断。可报告：
-
-$$
-SUB = 1 - \frac{|u_{shared}^{eeg} - u_{shared}^{fnirs}|}{u_{shared}^{eeg} + u_{shared}^{fnirs} + \epsilon}
-$$
-
-它不是越高越好到无条件，而是用于检查 shared branch 是否已经退化成某一模态的专用通道。
-
-#### 3.3.5 Overlap is supplementary only
-
-token identity overlap 和 exact match rate 仍可保留，但只能作为补充诊断。它们不能再作为 shared branch 是否成功的主要结论依据。
-
-### 3.4 Layer D: invariance and utility
-
-这一层回答：语义空间是否保留了真正有用的信息，同时压低 nuisance factor。
-
-#### 3.4.1 Subject leakage score (SLS)
-
-冻结表示，用轻量 probe 预测 subject ID。SLS 越低越好，特别是在 shared branch 上。
-
-#### 3.4.2 Task / condition signal (TCS)
-
-冻结表示，用同量级 probe 预测 task / condition。TCS 不要求一开始很高，但不能长期接近 chance。
-
-#### 3.4.3 Semantic selectivity ratio (SSR)
-
-$$
-SSR = \frac{TCS}{SLS + \epsilon}
-$$
-
-如果 SSR 很低，说明 shared 表示更多记住了被试特征，而不是生理任务状态。
-
-#### 3.4.4 Session / device stability (SDS)
-
-可使用 session-split retrieval agreement、MMD 或 distribution shift diagnostics。目标不是完全不变，而是在同任务/同状态条件下，shared token 统计不应随采集条件大幅漂移。
-
-### 3.5 Layer E: optimization support diagnostics
-
-这一层不直接定义语义本身，但用来解释为什么语义没有形成。最近的 gradient diagnostics 已经说明这一层必须纳入 mainline report。
-
-| 指标 | 解释 |
-|------|------|
-| Semantic gradient share | shared-common / coupling / semantic losses 是否长期几乎拿不到梯度预算 |
-| Reconstruction dominance ratio | reconstruction losses 是否长期压制其它目标 |
-| Conflict rate | 多目标训练的冲突是否持续存在 |
-| Mean / min pairwise cosine | 是否存在长期结构性对抗 |
-
-如果 Layer B-D 失败，而 Layer E 同时显示 semantic gradient share 长期接近 0，那么问题更可能在训练动力学，而不是表征容量本身。
-
-## 4. Canonical Report Contract
-
-从现在开始，每一个 mainline tokenizer run 至少应输出以下内容。
-
-1. Reconstruction guardrails：EEG full、fNIRS full、shared-common、EEG residual、fNIRS residual；
-2. Codebook health：shared/private perplexity、active codes、usage coverage、gini、top-k coverage；
-3. Branch semantics：branch ablation gaps 与 BRG；
-4. State semantics：ITSC、PSR、TPG、AC；
-5. Cross-modal semantics：LMIG、CKG、CMG、shared usage balance；
-6. Invariance：SLS、TCS、SSR、SDS；
-7. Optimization support：gradient semantic-share、conflict dashboard milestone snapshots；
-8. Narrative conclusion：明确说明 shared branch 当前表达的是共性状态、重建捷径，还是某一模态偏置通道。
-
-## 5. Implementation Priority
-
-为了让这套 scorecard 能落地，建议分三步实现，而不是一次性把所有分析脚本都铺开。
-
-### P0: immediately mandatory
-
-这些指标已经最接近当前主线，可以优先纳入标准报告：
-
-1. reconstruction guardrails；
-2. codebook health；
-3. branch ablation gaps；
-4. lagged MI gain；
-5. shared usage balance；
-6. gradient conflict / semantic gradient share。
-
-### P1: next evaluation pass
-
-这些指标需要基于 token dump、common/residual targets 或 lightweight feature summaries 实现：
-
-1. ITSC；
-2. PSR；
-3. TPG；
-4. CKG。
-
-### P2: probe-based semantic validation
-
-这些指标最能说明“语义空间是否真的有 foundation value”，但需要轻量 probe：
-
-1. CMG；
-2. SLS；
-3. TCS；
-4. SSR；
-5. SDS；
-6. AC。
-
-## 6. Bottom Line
-
-对 EEG-fNIRS foundation model 来说，tokenization 的目标不是造出一个更漂亮的离散压缩器，也不是追求更高的同步 overlap。它的目标是构建一个离散生理语义空间，使 shared/private 状态、时序转移和滞后耦合都能够被稳定地计算、比较、预测和解释。
-
-因此，今后任何 tokenizer 改动都应该回答同一个问题：它到底是在改善生理语义空间，还是只是在改变 reconstruction 曲线和 token 频率统计。
+**失败处理**：
+- 两个分支的 subject leakage 相似 → orthogonality 或 branch semantics 可能失败
+- SSR < 1.0 → source branch 可能记忆了 subject identity 而非 task-relevant coupling state
+
+---
+
+## 4. Gate Decision Protocol
+
+每个实现 phase 只关注一个 gate。不通过则阻塞，不回退到更早的 gate。
+
+```
+Phase 1: Structural Migration
+  └── Gate 1: Architecture Health
+      ├── ✅ PASS → proceed to Phase 2
+      └── ❌ FAIL → fix VQ/encoder; do NOT proceed
+
+Phase 2: Source Target Introduction
+  └── Gate 2: Branch Semantics
+      ├── ✅ PASS → proceed to Phase 3
+      └── ❌ FAIL → fix HRF target or branch training; do NOT proceed
+
+Phase 3: Concentration Prior
+  └── Gate 3: Coupling Structure
+      ├── ✅ PASS → S2 baseline established; proceed to Phase 4
+      └── ❌ FAIL → sweep concentration weight; do NOT proceed
+
+Phase 4: Independent Mechanism Validation (A or C)
+  └── Gate 2 + Gate 3 (re-check)
+      ├── ✅ PASS → mechanism validated
+      ├── ⚠️ INCONCLUSIVE → mechanism is neutral, not harmful
+      └── ❌ FAIL → mechanism degrades S2 baseline; archive experiment
+```
+
+### Cross-phase comparison rule
+
+当比较 S1 (V6) 和 S2 时，**不要求 S2 在 Gate 4 上立刻超越 S1**。S2 的核心创新是 source/observation 语义的清晰性和 coupling 的生理结构化——这些由 Gate 2 和 Gate 3 验证。Gate 4 (utility) 是长期指标，受限于当前 probe 数据规模和下游任务设计。
+
+比较 S1 vs S2 的有效口径：
+1. Gate 1: 两者都应通过
+2. Gate 2: S2 应有**定性更清晰**的 branch semantics（HRF target vs. smooth_signal proxy）
+3. Gate 3: S2 应有**定量更结构化**的 coupling（concentration prior vs. free parameter）
+4. Gate 4: 期望 S2 不倒退
+
+---
+
+## 5. S1 vs S2 Comparison Framework
+
+| 维度 | S1 (V6) | S2 (Source/Observation) | 期望差异 |
+|------|---------|------------------------|----------|
+| **Branch naming** | shared / private | source / observation | — |
+| **Source semantics** | smooth_signal(low-freq) proxy | HRF convolution model target | S2 语义更清晰 |
+| **Observation semantics** | raw - smooth_signal residual | modality-specific reconstruction debt | S2 语义更明确 |
+| **Source codebook** | 单一 shared quantizer (K=128) | 双独立 source codebook (K=128 each) | S2 不强制同一空间 |
+| **Coupling** | 自由参数 `[K,K]` | concentration-constrained `[K,K]` | S2 结构化 |
+| **Loss count** | 12 terms | 9 terms | S2 更简洁 |
+| **Gate 1** | 通过 | 应通过 | 不应退化 |
+| **Gate 2** | BRG (common/residual) | HRF target + obs gap | 定性差异 |
+| **Gate 3** | post-hoc CKG/LMIG | concentration metrics from logits | S2 应更结构化 |
+| **Gate 4** | SLS/TCS on shared/private | SLS/TCS on source/obs | S2 不倒退 |
+
+---
+
+## 6. Report Contract
+
+每个正式 mainline 实验至少输出以下内容：
+
+```
+Gate 1: Architecture Health
+  - 4 个 codebook 的 perplexity, utilization, dead codes, top-5 coverage
+  - EEG/fNIRS full reconstruction MSE
+
+Gate 2: Branch Semantics
+  - Source HRF target MSE（含 random baseline 对比）
+  - Observation contribution gap (source_only vs source+obs)
+  - Cross-modal token predictability (from coupling_logits)
+
+Gate 3: Coupling Structure
+  - Coupling row entropy（与 log(K) 的比值）
+  - Concentration ratio
+  - Coupling matrix visualization（按行熵排序的热力图）
+
+Gate 4: Representation Utility
+  - Subject leakage (source vs observation branches)
+  - Task signal (source branch)
+  - Semantic selectivity ratio (source branch)
+
+Comparison (if applicable)
+  - S1 vs S2 gate-by-gate summary
+  - Narrative: 是否 S2 在 branch semantics (Gate 2) 和 coupling structure (Gate 3) 上
+    提供了比 V6 更清晰、更有生理依据的离散表示
+```
+
+---
+
+## 7. What Is Deliberately Removed
+
+以下内容从旧 scorecard 中明确删除：
+
+| 删除项 | 删除理由 |
+|--------|----------|
+| ITSC (intra-token state consistency) | word2vec 几何语义遗产；无明确决策阈值；依赖 feature extractor 选择 |
+| PSR (prototype separation ratio) | 同上；token 原型分离度对下游 performance 无已知因果关系 |
+| TPG (transition predictability gain) | 过渡结构重要但应由 downstream probing 验证，非 tokenizer 层指标 |
+| AC (augmentation consistency) | 对 S2 意义不大；HRF target 已提供更强的一致性约束 |
+| BRG (branch responsibility gap) | 依赖 V6 的 smooth_signal common/residual target；在 S2 中无对应概念 |
+| LMIG (lagged MI gain) | 被 coupling concentration metrics (Gate 3) 替代——从 coupling_logits 直接读取 |
+| CKG (conditional KL gain) | 同上；CKG 本质上 = coupling_kl_loss 的 post-hoc 计算，是训练目标回响 |
+| SUB (shared usage balance) | Dual source codebook 后不再有"共享垄断"问题 |
+| Overlap / token match rate | 旧共识已否定；TokenFlow analysis 确认不应追求 token identity overlap |
+| Gradient diagnostics (Layer E) | 为 V6 的 12-term loss 设计；S2 的 9-term loss 更简洁，不需要此层 |
+| Session/device stability (SDS) | P2 级别，从未实现；延后至 foundation model 层面评估 |
+
+---
+
+## 8. Bottom Line
+
+S2 的评估逻辑与 V6 有根本性差异：
+
+- **V6**：tokenizer 产生离散 token → 事后分析 token 统计量 → 从分析中推断"语义可能存在"
+- **S2**：tokenizer 设计时注入生理先验（HRF target, concentration prior）→ 验证这些先验是否确实塑造了表示 → Gate 1-3 验证训练是否按预期工作，Gate 4 验证表示是否有 downstream value
+
+这意味着 S2 的"语义"不是从事后分析中发现的——它是在训练目标中构建的。Scorecard 的角色从"发现语义"变为"验证设计是否生效"。
