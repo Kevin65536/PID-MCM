@@ -1,12 +1,9 @@
 """
-TensorBoard Logger for Tokenizer Training.
+TensorBoard logging utilities.
 
-Provides comprehensive logging including:
-1. Scalar metrics (loss, utilization, etc.)
-2. Signal reconstruction plots
-3. Codebook usage histograms
-4. t-SNE/PCA embedding visualizations
-5. Spectral analysis plots
+Phase 1 keeps TensorBoard focused on event streams for live monitoring.
+Legacy figure mirroring is now opt-in so run directories are not repopulated
+with the old tokenizer-era PNG dump by default.
 """
 
 import numpy as np
@@ -80,7 +77,8 @@ class TensorBoardLogger:
         self,
         run_dir: Union[str, Path],
         log_subdir: str = "tensorboard",
-        comment: str = ""
+        comment: str = "",
+        save_figure_snapshots: bool = False,
     ):
         """
         Initialize TensorBoard logger.
@@ -89,13 +87,14 @@ class TensorBoardLogger:
             run_dir: Experiment run directory
             log_subdir: Subdirectory for TensorBoard logs
             comment: Optional comment for the run (not used to avoid subdirectories)
+            save_figure_snapshots: When true, also persist image copies beside events
         """
         self.run_dir = Path(run_dir)
         self.log_dir = self.run_dir / log_subdir
-        self.figures_dir = self.run_dir / "figures"
-        self.tensorboard_figures_dir = self.figures_dir / "tensorboard"
-        self.figures_dir.mkdir(parents=True, exist_ok=True)
-        self.tensorboard_figures_dir.mkdir(parents=True, exist_ok=True)
+        self.tensorboard_figures_dir: Optional[Path] = None
+        if save_figure_snapshots:
+            self.tensorboard_figures_dir = self.run_dir / "tensorboard_snapshots"
+            self.tensorboard_figures_dir.mkdir(parents=True, exist_ok=True)
 
         if not HAS_TENSORBOARD:
             print("[TensorBoard] Warning: TensorBoard not available. Install with: pip install tensorboard")
@@ -130,6 +129,8 @@ class TensorBoardLogger:
             self.writer.close()
 
     def _save_figure_copy(self, fig, tag: str, step: int):
+        if self.tensorboard_figures_dir is None:
+            return
         safe_tag = re.sub(r'[^A-Za-z0-9_.-]+', '_', tag).strip('_') or 'figure'
         output_path = self.tensorboard_figures_dir / f"{safe_tag}_step{step:04d}.png"
         fig.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -217,7 +218,7 @@ class TensorBoardLogger:
             fs: Sampling frequency
             tag: Tag for the image
         """
-        if not self.enabled and not self.tensorboard_figures_dir.exists():
+        if not self.enabled and self.tensorboard_figures_dir is None:
             return
         
         # Convert to numpy
@@ -297,7 +298,7 @@ class TensorBoardLogger:
             n_samples: Number of samples to average
             tag: Tag for the image
         """
-        if not self.enabled and not self.tensorboard_figures_dir.exists():
+        if not self.enabled and self.tensorboard_figures_dir is None:
             return
         
         # Convert to numpy
@@ -380,7 +381,7 @@ class TensorBoardLogger:
             step: Global step
             tag: Tag for the image
         """
-        if not self.enabled and not self.tensorboard_figures_dir.exists():
+        if not self.enabled and self.tensorboard_figures_dir is None:
             return
         
         # Compute usage
@@ -477,7 +478,7 @@ class TensorBoardLogger:
             perplexity: t-SNE perplexity
             tag: Tag for the image
         """
-        if (not self.enabled and not self.tensorboard_figures_dir.exists()) or not HAS_SKLEARN:
+        if (not self.enabled and self.tensorboard_figures_dir is None) or not HAS_SKLEARN:
             if not HAS_SKLEARN:
                 print("[TensorBoard] Warning: sklearn not available for t-SNE/PCA")
             return
@@ -625,7 +626,7 @@ class TensorBoardLogger:
             step: Global step
             tag: Tag for the image
         """
-        if (not self.enabled and not self.tensorboard_figures_dir.exists()) or not loss_dict:
+        if (not self.enabled and self.tensorboard_figures_dir is None) or not loss_dict:
             return
         
         # Filter positive losses

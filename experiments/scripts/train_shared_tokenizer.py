@@ -32,7 +32,7 @@ from src.utils import (
     setup_logging,
     write_json,
 )
-from src.visualization import generate_tokenizer_analysis_suite
+from src.visualization import TensorBoardLogger, generate_tokenizer_analysis_suite
 
 
 def setup_device(config: dict) -> torch.device:
@@ -56,6 +56,50 @@ def tensor_to_float(value: Any) -> float:
     if hasattr(value, 'item'):
         return float(value.item())
     return float(value)
+
+
+def filter_numeric_scalars(
+    values: Dict[str, Any],
+    strip_prefix: Optional[str] = None,
+) -> Dict[str, float]:
+    scalars: Dict[str, float] = {}
+    for key, value in values.items():
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            numeric_value = tensor_to_float(value)
+        except (TypeError, ValueError):
+            continue
+        if np.isnan(numeric_value) or np.isinf(numeric_value):
+            continue
+        tag = key
+        if strip_prefix and tag.startswith(strip_prefix):
+            tag = tag[len(strip_prefix):]
+        scalars[tag] = numeric_value
+    return scalars
+
+
+def build_tensorboard_hparams(config: Dict[str, Any]) -> Dict[str, Any]:
+    experiment_cfg = config.get('experiment', {})
+    data_cfg = config.get('data', {})
+    model_cfg = config.get('model', {})
+    training_cfg = config.get('training', {})
+    loss_cfg = config.get('loss', {})
+    return {
+        'experiment_name': experiment_cfg.get('name'),
+        'dataset': data_cfg.get('dataset'),
+        'task': data_cfg.get('task'),
+        'batch_size': training_cfg.get('batch_size'),
+        'learning_rate': training_cfg.get('learning_rate'),
+        'weight_decay': training_cfg.get('weight_decay'),
+        'epochs': training_cfg.get('epochs'),
+        'source_codebook_size': model_cfg.get('source', {}).get('codebook_size'),
+        'eeg_observation_codebook_size': model_cfg.get('eeg_observation', {}).get('codebook_size'),
+        'fnirs_observation_codebook_size': model_cfg.get('fnirs_observation', {}).get('codebook_size'),
+        'coupling_weight': loss_cfg.get('coupling', {}).get('weight'),
+        'codebook_balance_weight': loss_cfg.get('codebook', {}).get('balance_weight'),
+        'spectral_weight': loss_cfg.get('spectral', {}).get('weight', 0.0),
+    }
 
 
 def _resolve_gradient_component_specs(model) -> Dict[str, float]:
@@ -611,6 +655,14 @@ def main():
     logger = ExperimentLogger(config_path=args.config, run_name=args.run_name)
     config = logger.config
     tee_logger = setup_logging(logger.run_dir)
+    tb_cfg = config.get('logging', {}).get('tensorboard', {})
+    tb_logger: Optional[TensorBoardLogger] = None
+    if tb_cfg.get('enabled', True):
+        tb_logger = TensorBoardLogger(
+            run_dir=logger.run_dir,
+            log_subdir=tb_cfg.get('subdir', 'tensorboard'),
+            save_figure_snapshots=bool(tb_cfg.get('save_figure_snapshots', False)),
+        )
 
     try:
         print("=" * 70)
@@ -620,6 +672,22 @@ def main():
         print(f"Run directory: {logger.run_dir}")
         print(f"Experiment: {config['experiment']['name']}")
         print(f"Description: {config['experiment'].get('description', 'N/A')}")
+        if tb_logger is not None:
+            print(f"TensorBoard: tensorboard --logdir {tb_logger.log_dir}")
+            tb_logger.log_text_summary(
+                json.dumps(
+                    {
+                        'run_name': logger.run_name,
+                        'config_path': args.config,
+                        'experiment': config['experiment']['name'],
+                        'description': config['experiment'].get('description', ''),
+                    },
+                    indent=2,
+                ),
+                step=0,
+                tag='run/metadata',
+            )
+            tb_logger.flush()
 
         device = setup_device(config)
         print(f"Training device: {device}")
@@ -693,7 +761,10 @@ def main():
         epochs_without_improvement = 0
         save_every = int(config['training'].get('checkpoint', {}).get('save_every', 1))
         grad_clip = float(config['training'].get('gradient', {}).get('clip_norm', 1.0))
-        gradient_attribution_cfg = {'enabled': False, 'max_batches': 1, 'log_interval': 1}
+        gradient_attribution_cfg = {
+            'enabled': bool(config['training'].get('gradient_attribution', {}).get('enabled', False)),
+            'max_batches': int(config['training'].get('gradient_attribution', {}).get('max_batches', 1)),
+        }
 
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
         interrupted = False
@@ -740,6 +811,21 @@ def main():
                     },
                     metrics=merged_metrics,
                 )
+
+                if tb_logger is not None:
+                    tb_logger.log_scalars('train', filter_numeric_scalars(train_metrics), epoch)
+                    tb_logger.log_scalars('val', filter_numeric_scalars(val_metrics, strip_prefix='val_'), epoch)
+                    tb_logger.log_learning_rate(lr, epoch)
+                    tb_logger.log_scalars('schedule', {'alignment_scale': alignment_scale}, epoch)
+                    if gradient_dashboard is not None:
+                        tb_logger.log_gradient_conflict_dashboard(
+                            component_names=gradient_dashboard['component_names'],
+                            cosine_matrix=gradient_dashboard['cosine_matrix'],
+                            component_norms=gradient_dashboard['component_norms'],
+                            component_shares=gradient_dashboard['component_shares'],
+                            step=epoch,
+                        )
+                    tb_logger.flush()
 
                 monitor_value = val_metrics.get(monitor_metric)
                 if monitor_value is None:
@@ -797,6 +883,18 @@ def main():
             best_monitor=best_monitor,
             skip_post_analysis=args.skip_post_analysis,
         )
+        if tb_logger is not None:
+            tb_logger.log_scalars(
+                'test',
+                filter_numeric_scalars(final_metrics),
+                int(final_metrics.get('best_epoch', stop_epoch)),
+            )
+            if tb_cfg.get('log_hparams', True):
+                tb_logger.log_hparams(
+                    build_tensorboard_hparams(config),
+                    filter_numeric_scalars(final_metrics),
+                )
+            tb_logger.flush()
 
         if args.skip_post_analysis:
             print(
@@ -811,6 +909,8 @@ def main():
         print(f"Best epoch: {final_metrics['best_epoch']}")
         print(f"Final metrics saved to: {logger.run_dir / 'metrics.json'}")
     finally:
+        if tb_logger is not None:
+            tb_logger.close()
         tee_logger.close()
 
 
