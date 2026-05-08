@@ -225,7 +225,125 @@
 2. fNIRS source codebook 不 collapse；
 3. source-only 结果不再以低频平滑代理解释，而是以 HRF-modeled coupling target 解释。
 
-### 6.4 Phase 3: Concentration Prior
+### 6.4 Phase 2A: Coupling-Aware Quantization Bridge
+
+**动机**：
+
+当前架构中，量化步骤与 coupling 模块是完全解耦的。EEG source 和 fNIRS source 各自独立做 argmin 量化，coupling matrix 仅在事后通过 KL loss 接收训练信号。这导致了以下结构性问题：
+
+1. **训练信号矛盾**：量化器可能在一个 batch 中给相似 EEG 输入分配 token 3，但给对应的 fNIRS 输入分配 token 12——仅仅因为 $z_{fnirs}$ 在当时离 $e_{12}$ 更近。Coupling loss 试图让 token 3 和 token 7 配对，但量化器**不参与这个目标**，它只关心 reconstruction。
+
+2. **Coupling 信息不参与前向路径**：与 TokenFlow "量化即对齐"的设计不同，我们的 coupling matrix 是**纯事后分析式的**——它观察量化器产生了什么 token pair，然后报告 divergence，但从不影响"什么 token pair 会被产生"。这削弱了 token 索引携带跨模态语义的能力。
+
+3. **索引语义割裂**：EEG source token 5 的语义完全由 EEG 重建定义，它"不知道"自己在 coupling 结构中对应 fNIRS token 7。如果量化器在决策时能感知这种生理对应关系，token 索引就能同时承载"我是哪种神经状态"和"我倾向于引发哪种血流响应"两层信息。
+
+**机制核心思想**：
+
+在 fNIRS source 量化步骤中引入来自 coupling matrix 的**软先验引导**。EEG source 先独立量化（作为 anchor），然后将 coupling matrix 学到的 $P(\text{fNIRS token} \mid \text{EEG source token}, \text{lag})$ 作为 fNIRS 量化 argmin 的**附加项**：
+
+$$\text{i\_fnirs}[p,t] = \arg\min_j\Bigg[ \|z_{fnirs}[p,t] - e^{fnirs}_j\|^2 - \lambda_q \cdot \log P(j \mid \text{i\_eeg}[p,t]) \Bigg]$$
+
+其中 log-prior 项通过**梯度断开（detach）**引入，确保 coupling 参数不通过量化路径接收梯度——coupling 仍然只通过 KL loss 优化，量化引导只是"消费"学到的 coupling 知识。
+
+**关键设计决策**：
+
+1. **EEG→fNIRS 方向引导**：只沿生理因果方向（EEG 引导 fNIRS）。反向（fNIRS→EEG）不加引导，因为神经血管耦合在生理上有明确的方向性。
+
+2. **梯度断开（detach）**：$\log P(j \mid i_{eeg})$ 在参与 argmin 时 detach。这保证了：
+   - Coupling matrix 只通过 coupling loss 接收梯度（不通过重建路径注入噪声）
+   - fNIRS 量化通过 argmin 的 straight-through estimator 保持端到端可微
+   - 引导项是"建议"而非"命令"
+
+3. **Warmup schedule**：$\lambda_q$ 从 0 开始线性上升，只有当 coupling matrix 基本稳定后才提供有意义的引导：
+   ```yaml
+   coupling_quantization:
+      weight: 0.05              # 最终引导强度
+      warmup_epochs: 30         # λ ramp 长度
+      lambda_max: 0.10          # sweep 上限
+   ```
+
+4. **Selection method**：选择 best lag（当前 `alignment_selection='min'` 的行为），用 best lag 下的 coupling matrix 行作为先验。
+
+**Implementation scope**：
+
+| 文件 | 变更 |
+|------|------|
+| `src/tokenizers/factorized_labram_vqnsp.py` | 在 `forward()` 中修改 fNIRS source 量化逻辑，接入 coupling prior |
+| `src/tokenizers/factorized_labram_vqnsp.py` | 新增 `coupling_quantization_weight`, `coupling_quantization_warmup_epochs` 参数 |
+| `src/tokenizers/factorized_labram_vqnsp.py` | 新增 `_quantize_with_coupling_prior()` 方法 |
+| `experiments/configs/source_observation/phase2a/` | 新增 Q1 配置 |
+
+**参数合约**：
+
+```yaml
+coupling_quantization:
+   weight: 0.05                # λ_q 最终值（小系数引导）
+   warmup_epochs: 30           # ramp 长度
+   stale_lag_tolerance: 5      # 在量化批次中使用的 lag 候选数（best lag 附近）
+```
+
+**量化伪代码**：
+
+```python
+def _quantize_with_coupling_prior(
+    z_fnirs: Tensor,                    # [B, N, D_f]
+    eeg_source_indices: Tensor,         # [B, N]  — EEG anchor
+    coupling_logits: Tensor,            # [K_src, K_src] at best lag
+    lambda_q: float,                    # current coupling guidance weight
+) -> Tuple[Tensor, Tensor]:
+    # EEG indices as anchor: [B, N] → [B, N, 1]
+    anchor_idx = eeg_source_indices  # [B, N]
+    
+    # log P(fnirs token = j | EEG token = anchor_idx)
+    T = F.log_softmax(coupling_logits, dim=-1)  # [K_src, K_src]
+    log_prior = T[anchor_idx]                   # [B, N, K_src]  — detach!
+    log_prior = log_prior.detach()
+    
+    # Standard quantization distances
+    distances = -self._assignment_logits(z_fnirs, self.fnirs_source_quantizer.weight)
+    # distances: [B, N, K_src], lower = better
+    
+    # Coupling-guided distance
+    guided_distances = distances - lambda_q * log_prior
+    # Lower guided_distances[j] → either z close to e_j, OR high P(j | i_eeg)
+    
+    # Argmin with coupling prior
+    i_fnirs = guided_distances.argmin(dim=-1)  # [B, N]
+    
+    return i_fnirs
+```
+
+**注意**：上述逻辑仅影响 argmin 的索引选择，不改变 straight-through estimator 的梯度路径。量化后取出 embedding 的方式与当前一致：
+```python
+fnirs_source_q = self.fnirs_source_quantizer.weight[i_fnirs] + (z_fnirs - z_fnirs.detach())
+```
+
+**诊断指标**：
+
+1. `coupling_quantization_weight` 当前值（用于确认 warmup schedule 工作）
+2. `coupling_guided_token_agreement`：量化时选择 token j 与 coupling 预测的 top-1 token 一致的比例
+3. `fNIRS source utilization` 变化（确认引导项没有导致 codebook collapse）
+4. `source_coupling_loss` 变化（预期下降，因为量化结果更符合 coupling 结构）
+5. Gate 1 (Health) reconstruction 是否稳定
+
+**门控标准**：
+
+- ✅ Pass：`coupling_guided_token_agreement` 稳定 > chance (1/K)，且 Gate 1 (Health) 不退化
+- ⚠️ Inconclusive：token agreement 接近 chance，但 Gate 1 稳定（说明 coupling 尚无足够结构来提供有效引导——这不否决机制，但需要更长 warmup）
+- ❌ Fail：Gate 1 (Health) 退化（引导项强度过大，数据信号被覆盖）
+
+**与后续 Phase 的关系**：
+
+- Phase 2A 是 Phase 3 (Concentration Prior) 的前置步骤。当量化步骤感知 coupling 后，concentration prior 对 coupling matrix 的约束和量化决策形成了**一致的闭环**——concentration 要求 coupling 更集中，而 coupling-aware quantization 让这种集中映射真正影响了 token index 的分配。
+- Mechanism A (smoothness) 和 Mechanism C (asymmetry) 在本 Phase 通过 gate 后叠加实验。
+
+**设计理念总结（来自 TokenFlow 的启示）**：
+
+TokenFlow 的设计中，量化即对齐——同一索引绑定了 semantic 和 pixel 两种原型。我们无法也不应照搬这个机制（因为 EEG 和 fNIRS 是不同的物理过程，有因果时延，不应该是 1:1 绑定）。但 TokenFlow 的核心设计原则——**对齐不应是纯事后机制**——是完全适用于我们的。
+
+Coupling-aware quantization 是我们的回答：对齐不是"先量化再加映射"，而是让生理耦合知识**参与量化决策**。这样，fNIRS source token 的索引不仅表达"这个信号片段是什么"，还表达"在当前的耦合结构下，这个 token 最可能是由哪个 EEG 神经状态引起的"。
+
+### 6.5 Phase 3: Concentration Prior
 
 目标：形成第一版 physiology-aware source/observation baseline。
 
@@ -242,7 +360,7 @@
 2. Gate 1 (Health) 不退化；
 3. concentration ratio 稳定大于 1.5。
 
-### 6.5 Workstream A: Coupling Smoothness
+### 6.6 Workstream A: Coupling Smoothness
 
 前置条件：Phase 3 完成并通过 gate。
 
@@ -278,7 +396,7 @@ loss:
 - ✅ Pass：Gate 1 (Health) 不退化，coupling 结构更平滑，Gate 3 (Structure) 至少一项指标改善
 - ❌ Fail：reconstruction / codebook health 退化，或 coupling 结构改善不可辨认
 
-### 6.6 Workstream C: Causal Direction Asymmetry
+### 6.7 Workstream C: Causal Direction Asymmetry
 
 前置条件：Phase 3 完成并通过 gate。
 
@@ -350,6 +468,9 @@ loss:
       concentration_weight: 0.0
       bidirectional: true
       lag_candidates: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+   coupling_quantization:
+      weight: 0.05               # λ_q: coupling guidance strength in fNIRS source argmin
+      warmup_epochs: 30          # λ_q ramp from 0 to weight over this many epochs
    branch:
       orthogonality_weight: 0.01
    codebook:
@@ -362,6 +483,7 @@ loss:
 experiments/configs/source_observation/
    phase1/
    phase2/
+   phase2a/
    phase3/
    mechanism_a/
    mechanism_c/
@@ -503,15 +625,18 @@ experiments/runs/<run_name>/
 |------|-----------|----------|
 | **Gate 1: Health** | codebook 是否健康？reconstruction 是否收敛？ | 4 个 quantizer 均满足健康阈值；full recon 收敛 |
 | **Gate 2: Semantics** | source/observation 是否在做各自该做的事？ | HRF target 收敛；obs gap > 0；cross-modal predictability > chance |
+| **Gate 2A: Quantization-Coupling Consistency** | coupling 先验是否能有效引导量化决策？ | token agreement > 1/K；Gate 1 不退化；fNIRS source utilization 稳定 |
 | **Gate 3: Structure** | coupling matrix 是否表现出生理合理的集中结构？ | row entropy < log(K)/2；concentration ratio > 1.5 |
 | **Gate 4: Utility** | 表示空间是否有 downstream value？ | source SSR > 1.0；subject leakage 集中在 observation |
 
 ### Gate dependency
 
 ```
-Gate 1 ──→ Gate 2 ──→ Gate 3 ──→ Gate 4
-(Phase 1)  (Phase 2)  (Phase 3)  (Phase 4+)
+Gate 1 ──→ Gate 2 ──→ Gate 2A ──→ Gate 3 ──→ Gate 4
+(Phase 1)  (Phase 2)  (Phase 2A)  (Phase 3)  (Phase 4+)
 ```
+
+Gate 2A (Coupling-Aware Quantization) 验证 coupling 结构是否已有足够信息量来影响量化决策，以及量化引导是否不损害 reconstruction health。
 
 每个 Phase 只验证一个 Gate。不通过则阻塞，不回退到更早的 Gate。
 
@@ -521,10 +646,11 @@ Gate 1 ──→ Gate 2 ──→ Gate 3 ──→ Gate 4
 
 1. Gate 1 (Health) 不退化；
 2. Gate 2 (Semantics) 不退化；
-3. Gate 3 (Structure) 有明确增益；
-4. Gate 4 (Utility) 不出现明显倒退；
-5. 能通过 ablation 解释，不把 source branch 重新变成另一条全能重建捷径；
-6. 与至少一类外部研究方法对照相比，能够给出清晰的结构性增益说明。
+3. Gate 2A (Quantization-Coupling Consistency) 通过（coupling 引导有效）；
+4. Gate 3 (Structure) 有明确增益；
+5. Gate 4 (Utility) 不出现明显倒退；
+6. 能通过 ablation 解释，不把 source branch 重新变成另一条全能重建捷径；
+7. 与至少一类外部研究方法对照相比，能够给出清晰的结构性增益说明。
 
 ---
 
@@ -537,12 +663,13 @@ Gate 1 ──→ Gate 2 ──→ Gate 3 ──→ Gate 4
 3. **归档 shared/private 阶段实验产物，清理活跃配置与分析入口**
 4. **直接改造主线 tokenizer / loss / registry / config surface，完成 Phase 1 Structural Migration**
 5. 实现 Phase 2 Source Target Introduction（HRF convolution model）
-6. 实现 Phase 3 Concentration Prior（coupling row entropy）
-7. 在 Phase 3 baseline 上独立实现并验证 Mechanism A（coupling smoothness）
-8. 在 Phase 3 baseline 上独立实现并验证 Mechanism C（causal asymmetry）
-9. 统一导出主线与外部方法对照结果到同一 summary schema
-10. 更新 scorecard 与 experiment log
-11. tokenizer 证据充分后，再考虑 foundation model 层面的目标替换
+6. **实现 Phase 2A Coupling-Aware Quantization Bridge（量化步骤感知 coupling 先验）**
+7. 实现 Phase 3 Concentration Prior（coupling row entropy）
+8. 在 Phase 3 baseline 上独立实现并验证 Mechanism A（coupling smoothness）
+9. 在 Phase 3 baseline 上独立实现并验证 Mechanism C（causal asymmetry）
+10. 统一导出主线与外部方法对照结果到同一 summary schema
+11. 更新 scorecard 与 experiment log
+12. tokenizer 证据充分后，再考虑 foundation model 层面的目标替换
 
 任何跳步都会导致解释链断裂，不能作为主线证据。
 
@@ -576,7 +703,7 @@ Gate 1 ──→ Gate 2 ──→ Gate 3 ──→ Gate 4
 5. foundation model 预训练目标的大改；
 6. equal token count per window 的结构审计。
 
-这些方向不是永久否定，而是必须等到 Phase 1-3 与 A/C 单机制证据成立后再决定是否继续。
+这些方向不是永久否定，而是必须等到 Phase 1-3 与 2A/A/C 单机制证据成立后再决定是否继续。
 
 ---
 
