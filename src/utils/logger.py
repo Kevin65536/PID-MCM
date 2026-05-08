@@ -64,7 +64,6 @@ class ExperimentLogger:
         self.checkpoints_dir = self.run_dir / "checkpoints"
         self.figures_dir = self.run_dir / "figures"
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        self.figures_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize metrics storage
         if existing_run and metrics_path.exists():
@@ -190,6 +189,8 @@ class ExperimentLogger:
         if not HAS_MATPLOTLIB:
             print("[Warning] matplotlib not available, skipping figure generation")
             return
+
+        self.figures_dir.mkdir(parents=True, exist_ok=True)
         
         if not self.metrics["epochs"]:
             print("[Warning] No epochs logged, skipping figure generation")

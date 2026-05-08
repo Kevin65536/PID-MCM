@@ -30,9 +30,9 @@ def main():
     parser.add_argument('--probe-seed', type=int, default=None, help='Optional random seed override for lightweight probes')
     parser.add_argument(
         '--analysis-type',
-        choices=['shared_alignment', 'factorized_alignment'],
-        default=None,
-        help='Optional explicit alignment analyzer override; defaults to model.get_analysis_type()',
+        choices=['source_observation_alignment'],
+        default='source_observation_alignment',
+        help='The standardized suite now resolves to the source/observation scorecard only.',
     )
     args = parser.parse_args()
 
@@ -55,7 +55,7 @@ def main():
     model.eval()
 
     dataloaders = create_multimodal_dataloaders(config)
-    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'tokenizer_report'
+    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis'
 
     suite_results = generate_tokenizer_analysis_suite(
         model=model,
@@ -72,16 +72,16 @@ def main():
         augmentation_probe_batches=args.augmentation_probe_batches,
         probe_seed=args.probe_seed,
     )
-    alignment_results = suite_results['alignment']
-    semantic_results = suite_results['semantic']
+    scorecard_results = suite_results['scorecard']
 
     print(
         json.dumps(
             {
                 'output_dir': str(suite_results['output_dir']),
-                'alignment_root': str(alignment_results.get('artifact_root', output_dir)),
-                'semantic_root': str(semantic_results.get('artifact_root', output_dir)),
-                'splits': list(semantic_results.get('splits', {}).keys()),
+                'analysis_root': str(scorecard_results.get('artifact_root', output_dir)),
+                'primary_split': scorecard_results.get('primary_split'),
+                'promotion_verdict': scorecard_results.get('promotion_verdict'),
+                'splits': list(scorecard_results.get('splits', {}).keys()),
             },
             indent=2,
         )

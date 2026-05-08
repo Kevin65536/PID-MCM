@@ -3,6 +3,7 @@ experiments/configs
 experiments/logs
 experiments/results
 experiments/probe_results
+experiments/archive
 
 reference_repository
 

@@ -5,8 +5,7 @@ from typing import Dict, Iterable, Optional
 
 import torch
 
-from .alignment_analysis import analyze_alignment
-from .semantic_space_analysis import analyze_semantic_space
+from .source_observation_analysis import generate_source_observation_scorecard
 
 
 def generate_tokenizer_analysis_suite(
@@ -25,18 +24,10 @@ def generate_tokenizer_analysis_suite(
     augmentation_probe_batches: Optional[int] = None,
     probe_seed: Optional[int] = None,
 ) -> Dict[str, object]:
-    suite_root = Path(output_dir) if output_dir is not None else Path(run_dir) / 'analysis' / 'tokenizer_report'
+    suite_root = Path(output_dir) if output_dir is not None else Path(run_dir) / 'analysis'
+    del analysis_type, max_batches, max_feature_samples, max_probe_samples, augmentation_probe_batches, probe_seed
 
-    alignment_results = analyze_alignment(
-        model=model,
-        dataloaders=dataloaders,
-        config=config,
-        output_dir=suite_root,
-        device=device,
-        splits=splits,
-        analysis_type=analysis_type,
-    )
-    semantic_results = analyze_semantic_space(
+    scorecard_results = generate_source_observation_scorecard(
         model=model,
         dataloaders=dataloaders,
         config=config,
@@ -44,17 +35,11 @@ def generate_tokenizer_analysis_suite(
         device=device,
         splits=splits,
         run_dir=Path(run_dir),
-        max_batches=max_batches,
-        max_feature_samples=max_feature_samples,
-        max_probe_samples=max_probe_samples,
-        augmentation_probe_batches=augmentation_probe_batches,
-        probe_seed=probe_seed,
     )
 
     return {
         'output_dir': str(suite_root),
-        'alignment': alignment_results,
-        'semantic': semantic_results,
+        'scorecard': scorecard_results,
     }
 
 

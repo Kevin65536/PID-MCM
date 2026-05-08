@@ -13,11 +13,11 @@ sys.path.insert(0, str(project_root))
 from experiments.scripts.train_shared_tokenizer import create_multimodal_dataloaders, setup_device
 from src.tokenizers import create_tokenizer
 from src.utils import load_checkpoint_file
-from src.visualization import analyze_semantic_space
+from src.visualization import generate_source_observation_scorecard
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Analyze semantic reasonableness of a completed tokenizer run')
+    parser = argparse.ArgumentParser(description='Re-run Gate 4 related scorecard metrics for a completed tokenizer run')
     parser.add_argument('--run-dir', required=True, help='Run directory containing config.yaml and checkpoints')
     parser.add_argument('--checkpoint', default='best_model.pt', help='Checkpoint filename inside run_dir/checkpoints')
     parser.add_argument('--output-dir', default=None, help='Optional output directory for semantic analysis results')
@@ -49,8 +49,8 @@ def main():
     model.eval()
 
     dataloaders = create_multimodal_dataloaders(config)
-    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'tokenizer_report'
-    results = analyze_semantic_space(
+    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis'
+    results = generate_source_observation_scorecard(
         model=model,
         dataloaders=dataloaders,
         config=config,
@@ -58,18 +58,15 @@ def main():
         device=device,
         splits=args.splits,
         run_dir=run_dir,
-        max_batches=args.max_batches,
-        max_feature_samples=args.max_feature_samples,
-        max_probe_samples=args.max_probe_samples,
-        augmentation_probe_batches=args.augmentation_probe_batches,
-        probe_seed=args.probe_seed,
     )
+    gate4 = results.get('gates', {}).get('gate4', {})
     print(
         json.dumps(
             {
                 'output_dir': str(results.get('artifact_root', output_dir)),
+                'primary_split': results.get('primary_split'),
+                'gate4_status': gate4.get('status'),
                 'splits': list(results.get('splits', {}).keys()),
-                'training_dynamics_available': bool(results.get('training_dynamics', {}).get('available')),
             },
             indent=2,
         )

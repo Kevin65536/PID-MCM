@@ -25,9 +25,9 @@ def main():
     parser.add_argument('--device', default=None, help='Optional device override, e.g. cpu or cuda')
     parser.add_argument(
         '--analysis-type',
-        choices=['shared_alignment', 'factorized_alignment'],
-        default=None,
-        help='Optional explicit analyzer override; defaults to model.get_analysis_type()',
+        choices=['source_observation_alignment'],
+        default='source_observation_alignment',
+        help='Alignment rerun now only supports the source/observation scorecard path.',
     )
     args = parser.parse_args()
 
@@ -50,8 +50,8 @@ def main():
     model.eval()
 
     dataloaders = create_multimodal_dataloaders(config)
-    analysis_type = args.analysis_type or getattr(model, 'get_analysis_type', lambda: 'shared_alignment')()
-    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis' / 'tokenizer_report'
+    analysis_type = args.analysis_type or getattr(model, 'get_analysis_type', lambda: 'source_observation_alignment')()
+    output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis'
     results = analyze_alignment(
         model=model,
         dataloaders=dataloaders,
