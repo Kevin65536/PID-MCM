@@ -19,7 +19,7 @@ matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from .gradient_diagnostics import plot_gradient_conflict_dashboard
+from .gradient_diagnostics import plot_gradient_conflict_dashboard, plot_gradient_influence_dashboard
 
 # TensorBoard
 try:
@@ -189,6 +189,32 @@ class TensorBoardLogger:
             cosine_matrix=cosine_matrix,
             component_norms=component_norms,
             component_shares=component_shares,
+            step=step,
+            colors=self.colors,
+        )
+        self._record_figure(fig, tag, step)
+
+    def log_gradient_influence_dashboard(
+        self,
+        component_names: List[str],
+        group_labels: List[str],
+        component_group_shares: Union[np.ndarray, List[List[float]]],
+        group_component_shares: Union[np.ndarray, List[List[float]]],
+        group_total_shares: Union[np.ndarray, List[float]],
+        group_abs_grad_quantiles: Dict[str, Union[np.ndarray, List[float]]],
+        step: int,
+        tag: str = "gradient_influence",
+    ):
+        """Log a dashboard showing how loss components drive architecture blocks."""
+        if not component_names or not group_labels:
+            return
+        fig = plot_gradient_influence_dashboard(
+            component_names=component_names,
+            group_labels=group_labels,
+            component_group_shares=component_group_shares,
+            group_component_shares=group_component_shares,
+            group_total_shares=group_total_shares,
+            group_abs_grad_quantiles=group_abs_grad_quantiles,
             step=step,
             colors=self.colors,
         )

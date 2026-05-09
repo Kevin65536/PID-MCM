@@ -33,6 +33,10 @@ from src.utils import (
     write_json,
 )
 from src.visualization import TensorBoardLogger, generate_tokenizer_analysis_suite
+from src.visualization.gradient_diagnostics import (
+    compute_component_group_attribution,
+    summarize_total_gradient_groups,
+)
 
 
 def setup_device(config: dict) -> torch.device:
@@ -117,13 +121,104 @@ def _pairwise_metric_name(left: str, right: str) -> str:
     return f'{left}__vs__{right}'
 
 
+GRADIENT_DASHBOARD_ARRAY_KEYS = (
+    'cosine_matrix',
+    'component_norms',
+    'component_shares',
+    'component_group_norms',
+    'component_group_shares',
+    'group_component_shares',
+    'group_total_norms',
+    'group_total_shares',
+)
+
+
+def _initialize_gradient_dashboard(artifacts: Dict[str, Any]) -> Dict[str, Any]:
+    dashboard: Dict[str, Any] = {
+        'component_names': list(artifacts['component_names']),
+    }
+    if 'group_names' in artifacts:
+        dashboard['group_names'] = list(artifacts['group_names'])
+        dashboard['group_labels'] = list(artifacts.get('group_labels', artifacts['group_names']))
+    if 'parameter_group_counts' in artifacts:
+        dashboard['parameter_group_counts'] = list(artifacts['parameter_group_counts'])
+    for key in GRADIENT_DASHBOARD_ARRAY_KEYS:
+        if key in artifacts:
+            dashboard[key] = np.asarray(artifacts[key], dtype=np.float32)
+    if 'group_abs_grad_quantiles' in artifacts:
+        dashboard['group_abs_grad_quantiles'] = {
+            name: np.asarray(values, dtype=np.float32)
+            for name, values in artifacts['group_abs_grad_quantiles'].items()
+        }
+    return dashboard
+
+
+def _accumulate_gradient_dashboard(
+    aggregate: Optional[Dict[str, Any]],
+    artifacts: Optional[Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], bool]:
+    if not artifacts:
+        return aggregate, False
+    if aggregate is None:
+        return _initialize_gradient_dashboard(artifacts), True
+
+    if aggregate['component_names'] != list(artifacts.get('component_names', [])):
+        return aggregate, False
+    if aggregate.get('group_names') != artifacts.get('group_names'):
+        return aggregate, False
+
+    for key in GRADIENT_DASHBOARD_ARRAY_KEYS:
+        if key in aggregate and key in artifacts:
+            aggregate[key] += np.asarray(artifacts[key], dtype=np.float32)
+        elif key in aggregate or key in artifacts:
+            return aggregate, False
+
+    if 'group_abs_grad_quantiles' in aggregate and 'group_abs_grad_quantiles' in artifacts:
+        if set(aggregate['group_abs_grad_quantiles']) != set(artifacts['group_abs_grad_quantiles']):
+            return aggregate, False
+        for key, values in artifacts['group_abs_grad_quantiles'].items():
+            aggregate['group_abs_grad_quantiles'][key] += np.asarray(values, dtype=np.float32)
+    elif 'group_abs_grad_quantiles' in aggregate or 'group_abs_grad_quantiles' in artifacts:
+        return aggregate, False
+
+    return aggregate, True
+
+
+def _finalize_gradient_dashboard(
+    aggregate: Optional[Dict[str, Any]],
+    batches: int,
+) -> Optional[Dict[str, Any]]:
+    if aggregate is None or batches <= 0:
+        return None
+
+    finalized: Dict[str, Any] = {
+        'component_names': list(aggregate['component_names']),
+    }
+    if 'group_names' in aggregate:
+        finalized['group_names'] = list(aggregate['group_names'])
+        finalized['group_labels'] = list(aggregate.get('group_labels', aggregate['group_names']))
+    if 'parameter_group_counts' in aggregate:
+        finalized['parameter_group_counts'] = list(aggregate['parameter_group_counts'])
+    for key in GRADIENT_DASHBOARD_ARRAY_KEYS:
+        if key in aggregate:
+            finalized[key] = (aggregate[key] / batches).tolist()
+    if 'group_abs_grad_quantiles' in aggregate:
+        finalized['group_abs_grad_quantiles'] = {
+            key: (values / batches).tolist()
+            for key, values in aggregate['group_abs_grad_quantiles'].items()
+        }
+    return finalized
+
+
 def compute_gradient_attribution(
     model,
     outputs: Dict[str, Any],
 ) -> Tuple[Dict[str, float], Optional[Dict[str, Any]]]:
-    params = [param for param in model.parameters() if param.requires_grad]
-    if not params:
+    named_params = [(name, param) for name, param in model.named_parameters() if param.requires_grad]
+    if not named_params:
         return {}, None
+    param_names = [name for name, _ in named_params]
+    params = [param for _, param in named_params]
 
     component_specs = _resolve_gradient_component_specs(model)
     component_entries: List[Dict[str, Any]] = []
@@ -195,12 +290,24 @@ def compute_gradient_attribution(
     attribution_metrics['grad_component_count'] = float(len(component_entries))
     attribution_metrics.update(component_values)
 
-    return attribution_metrics, {
+    gradient_artifacts: Dict[str, Any] = {
         'component_names': component_names,
         'component_norms': component_norms.tolist(),
         'component_shares': component_shares.tolist(),
         'cosine_matrix': cosine_matrix.tolist(),
     }
+    group_specs = None
+    if hasattr(model, 'get_gradient_parameter_group_specs'):
+        group_specs = getattr(model, 'get_gradient_parameter_group_specs')()
+    group_artifacts = compute_component_group_attribution(
+        component_entries,
+        param_names,
+        group_specs=group_specs,
+    )
+    if group_artifacts is not None:
+        gradient_artifacts.update(group_artifacts)
+
+    return attribution_metrics, gradient_artifacts
 
 
 def _flatten_signal_for_spectral(x: torch.Tensor) -> torch.Tensor:
@@ -291,6 +398,7 @@ def train_epoch(
         outputs = model(eeg, fnirs)
         aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         loss = outputs['loss'] + aux_loss
+        batch_gradient_dashboard: Optional[Dict[str, Any]] = None
 
         if grad_cfg.get('enabled', False) and grad_batches < int(grad_cfg.get('max_batches', 1)):
             grad_outputs = dict(outputs)
@@ -301,25 +409,24 @@ def train_epoch(
                 for key, value in grad_metrics.items():
                     grad_totals[key] = grad_totals.get(key, 0.0) + value
             if grad_artifacts:
-                component_names = grad_artifacts['component_names']
-                cosine_matrix = np.asarray(grad_artifacts['cosine_matrix'], dtype=np.float32)
-                component_norms = np.asarray(grad_artifacts['component_norms'], dtype=np.float32)
-                component_shares = np.asarray(grad_artifacts['component_shares'], dtype=np.float32)
-                if gradient_dashboard is None:
-                    gradient_dashboard = {
-                        'component_names': component_names,
-                        'cosine_matrix': cosine_matrix,
-                        'component_norms': component_norms,
-                        'component_shares': component_shares,
-                    }
-                    gradient_dashboard_batches = 1
-                elif gradient_dashboard['component_names'] == component_names:
-                    gradient_dashboard['cosine_matrix'] += cosine_matrix
-                    gradient_dashboard['component_norms'] += component_norms
-                    gradient_dashboard['component_shares'] += component_shares
-                    gradient_dashboard_batches += 1
+                batch_gradient_dashboard = grad_artifacts
 
         loss.backward()
+
+        if batch_gradient_dashboard is not None and 'group_names' in batch_gradient_dashboard:
+            group_specs = None
+            if hasattr(model, 'get_gradient_parameter_group_specs'):
+                group_specs = getattr(model, 'get_gradient_parameter_group_specs')()
+            total_gradient_groups = summarize_total_gradient_groups(model, group_specs=group_specs)
+            if total_gradient_groups is not None and total_gradient_groups.get('group_names') == batch_gradient_dashboard.get('group_names'):
+                batch_gradient_dashboard = {**batch_gradient_dashboard, **total_gradient_groups}
+
+        gradient_dashboard, dashboard_added = _accumulate_gradient_dashboard(
+            gradient_dashboard,
+            batch_gradient_dashboard,
+        )
+        if dashboard_added:
+            gradient_dashboard_batches += 1
 
         if grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -340,12 +447,7 @@ def train_epoch(
     if grad_batches > 0:
         averaged.update({key: value / grad_batches for key, value in grad_totals.items()})
     if gradient_dashboard is not None and gradient_dashboard_batches > 0:
-        gradient_dashboard = {
-            'component_names': gradient_dashboard['component_names'],
-            'cosine_matrix': (gradient_dashboard['cosine_matrix'] / gradient_dashboard_batches).tolist(),
-            'component_norms': (gradient_dashboard['component_norms'] / gradient_dashboard_batches).tolist(),
-            'component_shares': (gradient_dashboard['component_shares'] / gradient_dashboard_batches).tolist(),
-        }
+        gradient_dashboard = _finalize_gradient_dashboard(gradient_dashboard, gradient_dashboard_batches)
     return averaged, gradient_dashboard
 
 
@@ -825,6 +927,22 @@ def main():
                             component_shares=gradient_dashboard['component_shares'],
                             step=epoch,
                         )
+                        if (
+                            'group_names' in gradient_dashboard and
+                            'component_group_shares' in gradient_dashboard and
+                            'group_component_shares' in gradient_dashboard and
+                            'group_total_shares' in gradient_dashboard and
+                            'group_abs_grad_quantiles' in gradient_dashboard
+                        ):
+                            tb_logger.log_gradient_influence_dashboard(
+                                component_names=gradient_dashboard['component_names'],
+                                group_labels=gradient_dashboard.get('group_labels', gradient_dashboard['group_names']),
+                                component_group_shares=gradient_dashboard['component_group_shares'],
+                                group_component_shares=gradient_dashboard['group_component_shares'],
+                                group_total_shares=gradient_dashboard['group_total_shares'],
+                                group_abs_grad_quantiles=gradient_dashboard['group_abs_grad_quantiles'],
+                                step=epoch,
+                            )
                     tb_logger.flush()
 
                 monitor_value = val_metrics.get(monitor_metric)
