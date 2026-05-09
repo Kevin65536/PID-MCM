@@ -752,7 +752,7 @@ def main():
     parser.add_argument('--skip-post-analysis', action='store_true', help='Skip default tokenizer analysis suite at the end of training')
     args = parser.parse_args()
 
-    require_standard_training_launcher('shared-tokenizer')
+    require_standard_training_launcher('source-observation-tokenizer')
 
     logger = ExperimentLogger(config_path=args.config, run_name=args.run_name)
     config = logger.config

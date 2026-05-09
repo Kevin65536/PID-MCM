@@ -10,7 +10,7 @@ import yaml
 project_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(project_root))
 
-from experiments.scripts.train_shared_tokenizer import create_multimodal_dataloaders, setup_device
+from experiments.scripts.train_source_observation_tokenizer import create_multimodal_dataloaders, setup_device
 from src.tokenizers import create_tokenizer
 from src.utils import load_checkpoint_file
 from src.visualization import generate_source_observation_scorecard

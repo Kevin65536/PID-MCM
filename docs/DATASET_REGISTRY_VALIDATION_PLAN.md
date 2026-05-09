@@ -54,10 +54,10 @@ The actual dataset object creation path is now also unified in:
 
 - src/data/factory.py
 - experiments/scripts/train_tokenizer.py
-- experiments/scripts/train_shared_tokenizer.py
+- experiments/scripts/train_source_observation_tokenizer.py
 - experiments/scripts/train_downstream.py
 
-Because train_tokenizer.py and train_shared_tokenizer.py already load configs through ExperimentLogger, they also inherit the shared registry interface automatically.
+Because train_tokenizer.py and train_source_observation_tokenizer.py already load configs through ExperimentLogger, they also inherit the shared registry interface automatically.
 
 ## Original documentation reviewed
 
@@ -201,7 +201,7 @@ Example:
 
 ```bash
 python experiments/scripts/signal_visualization/visualize_continuous_alignment.py \
-	--config phase0plus/shared_labram_lag_warmstart_eeg_fnirs_30s_2s_cb512.yaml \
+	--config source_observation/phase1/default.yaml \
 	--subject-id 1 \
 	--session-idx 0 \
 	--focus-trial-idx 0

@@ -33,7 +33,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.data import create_continuous_visualization_dataset, load_experiment_config, require_dataset_loader
 
 
-DEFAULT_CONFIG = 'phase0plus/shared_labram_lag_warmstart_eeg_fnirs_30s_2s_cb512.yaml'
+DEFAULT_CONFIG = 'source_observation/phase1/default.yaml'
 DEFAULT_EEG_CHANNELS = ('C3', 'Cz', 'C4')
 DEFAULT_FNIRS_CHANNELS = ('AF7', 'AFF5', 'AFp7', 'AF5h')
 

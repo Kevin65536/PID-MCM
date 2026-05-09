@@ -379,6 +379,46 @@ class PatchEmbedding(nn.Module):
         return embeddings
 
 
+class MultiChannelPatchEmbedding(nn.Module):
+    """Embed multi-channel temporal patches into a transformer space."""
+
+    def __init__(
+        self,
+        input_channels: int,
+        patch_size: int,
+        embed_dim: int,
+        use_frequency: bool = True,
+    ):
+        super().__init__()
+        self.input_channels = input_channels
+        self.patch_size = patch_size
+        self.use_frequency = use_frequency
+        self.fft_size = patch_size // 2 + 1
+
+        if use_frequency:
+            input_dim = input_channels * self.fft_size * 2
+        else:
+            input_dim = input_channels * patch_size
+        self.proj = nn.Linear(input_dim, embed_dim)
+
+    def forward(self, patches: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            patches: [B, N, C, P]
+        Returns:
+            [B, N, D]
+        """
+        if self.use_frequency:
+            fft = torch.fft.rfft(patches, dim=-1)
+            amplitude = torch.log(torch.abs(fft) + 1e-8)
+            phase = torch.angle(fft) / math.pi
+            features = torch.cat([amplitude, phase], dim=-1)
+        else:
+            features = patches
+
+        return self.proj(features.flatten(start_dim=2))
+
+
 class TransformerEncoder(nn.Module):
     """Transformer encoder for patches."""
     

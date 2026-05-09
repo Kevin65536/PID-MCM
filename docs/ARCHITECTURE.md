@@ -205,7 +205,7 @@ graph LR
 
 | File | Role |
 |------|------|
-| [experiments/scripts/train_shared_tokenizer.py](../experiments/scripts/train_shared_tokenizer.py) | **Main training script** — loads config, creates model/dataloaders, runs training loop |
+| [experiments/scripts/train_source_observation_tokenizer.py](../experiments/scripts/train_source_observation_tokenizer.py) | **Main training script** — loads config, creates model/dataloaders, runs training loop |
 | [experiments/scripts/launch_training_nohup.sh](../experiments/scripts/launch_training_nohup.sh) | Standardized launcher for training runs |
 
 ### Configs

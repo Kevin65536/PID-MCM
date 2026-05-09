@@ -13,9 +13,9 @@ Direct execution of `train_*.py` entrypoints is intentionally rejected; train ta
 
 ## Supported Tasks
 
-### shared-tokenizer
+### source-observation-tokenizer
 
-Script: `experiments/scripts/train_shared_tokenizer.py`
+Script: `experiments/scripts/train_source_observation_tokenizer.py`
 
 Supported task-specific arguments:
 
@@ -28,9 +28,9 @@ Example:
 
 ```bash
 bash experiments/scripts/launch_training_nohup.sh \
-  --task shared-tokenizer \
+  --task source-observation-tokenizer \
   --config debug/simultaneous_nback_short_train.yaml \
-  --run-name smoke_shared_nback
+  --run-name smoke_s2
 ```
 
 ### tokenizer

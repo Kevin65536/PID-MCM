@@ -17,7 +17,7 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertEqual(normalized['dataset_registry']['sync_strategy'], 'shared_parallel_port_markers')
 
     def test_load_experiment_config_normalizes_shared_config(self):
-        config = load_experiment_config('phase0plus/shared_labram_lag_warmstart_eeg_fnirs_30s_2s_cb512.yaml')
+        config = load_experiment_config('source_observation/phase1/default.yaml')
         self.assertEqual(config['data']['dataset'], 'eeg_fnirs_single_trial')
         self.assertEqual(config['data']['data_root'], 'data/EEG+NIRS Single-Trial')
         self.assertIn('dataset_registry', config['data'])

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from experiments.scripts.train_shared_tokenizer import compute_gradient_attribution
+from experiments.scripts.train_source_observation_tokenizer import compute_gradient_attribution
 from src.tokenizers.factorized_labram_vqnsp import SourceObservationLaBraMVQNSP
 from src.visualization.gradient_diagnostics import (
     plot_gradient_influence_dashboard,

@@ -11,8 +11,8 @@ Usage:
   bash experiments/scripts/launch_training_nohup.sh --task TASK [--foreground] [task args]
 
 Supported tasks:
-  shared-tokenizer
-    Script: experiments/scripts/train_shared_tokenizer.py
+  source-observation-tokenizer
+    Script: experiments/scripts/train_source_observation_tokenizer.py
     Args: --config PATH [--resume PATH] [--run-name NAME] [--skip-post-analysis]
 
   tokenizer
@@ -28,7 +28,7 @@ Supported tasks:
     Args: [--config PATH]
 
 Examples:
-  bash experiments/scripts/launch_training_nohup.sh --task shared-tokenizer --config debug/simultaneous_nback_short_train.yaml --run-name smoke_run
+  bash experiments/scripts/launch_training_nohup.sh --task source-observation-tokenizer --config debug/simultaneous_nback_short_train.yaml --run-name smoke_run
   bash experiments/scripts/launch_training_nohup.sh --task tokenizer --config phase0plus/eeg_labram_vqnsp.yaml
   bash experiments/scripts/launch_training_nohup.sh --task downstream --config downstream/P1A_eeg_classification.yaml
 
@@ -41,8 +41,8 @@ EOF
 
 resolve_script() {
     case "$1" in
-        shared-tokenizer)
-            echo "experiments/scripts/train_shared_tokenizer.py"
+        source-observation-tokenizer)
+            echo "experiments/scripts/train_source_observation_tokenizer.py"
             ;;
         tokenizer)
             echo "experiments/scripts/train_tokenizer.py"

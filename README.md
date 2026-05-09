@@ -63,9 +63,9 @@ pip install torch numpy scipy matplotlib pyyaml
 ### Launch Training
 
 ```bash
-# Shared multimodal tokenizer
+# Source/observation multimodal tokenizer
 bash experiments/scripts/launch_training_nohup.sh \
-  --task shared-tokenizer \
+  --task source-observation-tokenizer \
   --config debug/simultaneous_nback_short_train.yaml
 
 # Single-modality tokenizer

@@ -17,8 +17,13 @@ from src.losses.multimodal_tokenizer import (
 )
 
 from .base import BaseTokenizer
-from .labram_vqnsp import NormEMAVectorQuantizer, TransformerDecoder, TransformerEncoder, l2norm
-from .shared_labram_vqnsp import MultiChannelPatchEmbedding
+from .labram_vqnsp import (
+    MultiChannelPatchEmbedding,
+    NormEMAVectorQuantizer,
+    TransformerDecoder,
+    TransformerEncoder,
+    l2norm,
+)
 
 
 class SourceObservationLaBraMVQNSP(BaseTokenizer):
@@ -791,6 +796,31 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'codebook_balance_loss': self.codebook_balance_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }
+
+    def get_gradient_parameter_group_specs(self) -> List[Dict[str, Any]]:
+        return [
+            {'name': 'eeg_patch_embed', 'label': 'EEG Patch', 'prefixes': ('eeg_patch_embed.',)},
+            {'name': 'fnirs_patch_embed', 'label': 'fNIRS Patch', 'prefixes': ('fnirs_patch_embed.',)},
+            {'name': 'eeg_encoder', 'label': 'EEG Encoder', 'prefixes': ('eeg_encoder.',)},
+            {'name': 'fnirs_encoder', 'label': 'fNIRS Encoder', 'prefixes': ('fnirs_encoder.',)},
+            {'name': 'eeg_source_proj', 'label': 'EEG Source Proj', 'prefixes': ('eeg_source_proj.',)},
+            {'name': 'eeg_observation_proj', 'label': 'EEG Obs Proj', 'prefixes': ('eeg_observation_proj.',)},
+            {'name': 'fnirs_source_proj', 'label': 'fNIRS Source Proj', 'prefixes': ('fnirs_source_proj.',)},
+            {'name': 'fnirs_observation_proj', 'label': 'fNIRS Obs Proj', 'prefixes': ('fnirs_observation_proj.',)},
+            {'name': 'eeg_source_quantizer', 'label': 'EEG Source Quant', 'prefixes': ('eeg_source_quantizer.',)},
+            {'name': 'fnirs_source_quantizer', 'label': 'fNIRS Source Quant', 'prefixes': ('fnirs_source_quantizer.',)},
+            {'name': 'eeg_observation_quantizer', 'label': 'EEG Obs Quant', 'prefixes': ('eeg_observation_quantizer.',)},
+            {'name': 'fnirs_observation_quantizer', 'label': 'fNIRS Obs Quant', 'prefixes': ('fnirs_observation_quantizer.',)},
+            {'name': 'coupling_logits', 'label': 'Coupling', 'prefixes': ('coupling_logits',)},
+            {'name': 'eeg_decode_input_proj', 'label': 'EEG Decode In', 'prefixes': ('eeg_decode_input_proj.',)},
+            {'name': 'fnirs_decode_input_proj', 'label': 'fNIRS Decode In', 'prefixes': ('fnirs_decode_input_proj.',)},
+            {'name': 'eeg_decoder', 'label': 'EEG Decoder', 'prefixes': ('eeg_decoder.',)},
+            {'name': 'fnirs_decoder', 'label': 'fNIRS Decoder', 'prefixes': ('fnirs_decoder.',)},
+            {'name': 'eeg_amplitude_head', 'label': 'EEG Amp Head', 'prefixes': ('eeg_amplitude_head.',)},
+            {'name': 'eeg_phase_head', 'label': 'EEG Phase Head', 'prefixes': ('eeg_phase_head.',)},
+            {'name': 'fnirs_amplitude_head', 'label': 'fNIRS Amp Head', 'prefixes': ('fnirs_amplitude_head.',)},
+            {'name': 'fnirs_phase_head', 'label': 'fNIRS Phase Head', 'prefixes': ('fnirs_phase_head.',)},
+        ]
 
 
 __all__ = ['SourceObservationLaBraMVQNSP']
