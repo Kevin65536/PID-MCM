@@ -972,8 +972,14 @@ def main():
                     is_best=improved,
                 )
 
-                if epoch % save_every == 0 or improved:
-                    logger.save_checkpoint(checkpoint_payload, epoch=epoch, is_best=improved)
+                save_periodic_checkpoint = (epoch % save_every == 0)
+                if save_periodic_checkpoint or improved:
+                    logger.save_checkpoint(
+                        checkpoint_payload,
+                        epoch=epoch,
+                        is_best=improved,
+                        keep_epoch_copy=save_periodic_checkpoint,
+                    )
 
                 selected_lag = val_metrics.get('val_selected_alignment_lag')
                 lag_candidates = getattr(model, 'alignment_lag_candidates', None)

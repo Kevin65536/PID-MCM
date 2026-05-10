@@ -172,17 +172,27 @@ class ExperimentLogger:
         """Save metrics to JSON file."""
         write_json(self.run_dir / "metrics.json", self.metrics)
     
-    def save_checkpoint(self, state_dict: Dict, epoch: int, is_best: bool = False):
+    def save_checkpoint(
+        self,
+        state_dict: Dict,
+        epoch: int,
+        is_best: bool = False,
+        keep_epoch_copy: bool = True,
+    ):
         """Save model checkpoint."""
         # Ensure directory exists
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        
+
         checkpoint_path = self.checkpoints_dir / f"checkpoint_epoch_{epoch}.pt"
-        save_checkpoint_payload(state_dict, checkpoint_path)
-        
+        if keep_epoch_copy:
+            save_checkpoint_payload(state_dict, checkpoint_path)
+
         if is_best:
             best_path = self.checkpoints_dir / "best_model.pt"
-            shutil.copy(checkpoint_path, best_path)
+            if keep_epoch_copy:
+                shutil.copy(checkpoint_path, best_path)
+            else:
+                save_checkpoint_payload(state_dict, best_path)
     
     def generate_figures(self):
         """Generate visualization figures from logged metrics."""
