@@ -4,6 +4,7 @@ experiments/logs
 experiments/results
 experiments/probe_results
 experiments/archive
+experiments/comparison_reports
 
 reference_repository
 

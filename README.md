@@ -85,6 +85,38 @@ For the full task list and task-specific parameters, see [docs/TRAIN_LAUNCH_STAN
 
 Direct execution of `experiments/scripts/train_*.py` is intentionally disabled to avoid multiple competing launch paths.
 
+### Compare Completed Runs
+
+Use the batch comparison tool to aggregate frozen configs, best-checkpoint metrics, and Gate summaries across multiple runs. Each invocation now creates a uniquely named report directory under `experiments/comparison_reports/`, containing CSV, JSON, Markdown, trajectory analysis, and PNG visualizations:
+
+```bash
+python experiments/scripts/compare_run_metrics.py \
+  --glob 'gate1_health_*' \
+  --baseline gate1_health_uniform32 \
+  --report-name gate1_health_iteration_05
+```
+
+The tool reads `metrics.json`, `final_summary.json`, and `analysis/split_<split>.json`, then prints a sortable table with run-level outcomes, key config knobs, Gate1 bottlenecks, and writes a report package like:
+
+```text
+experiments/comparison_reports/20260510_221530_gate1_health_iteration_05/
+  analysis.json
+  report.md
+  metadata.json
+  summary.csv
+  summary.json
+  figures/
+    best_val_loss_ranking.png
+    gate1_health_overview.png
+    trajectory_patterns.png
+    branch_perplexity_trajectories.png
+    stability_overview.png
+```
+
+The generated report now includes three layers of evidence in one place: final summary tables, TensorBoard-style multi-metric trajectory plots, and an automatically written pattern-analysis section that groups runs, explains likely causes of the observed differences, and judges whether the modification appears effective relative to the chosen baseline.
+
+You can still pass `--output-csv`, `--output-json`, or `--output-md` if you want extra copies in custom locations, but the report directory is now created automatically on every run.
+
 ## Current Status
 
 **Phase 0: Real Data Tokenization** (Active)
