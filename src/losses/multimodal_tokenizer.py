@@ -60,6 +60,16 @@ def batch_usage_entropy_loss(probs: torch.Tensor) -> torch.Tensor:
     return 1.0 - normalized_entropy
 
 
+def straight_through_assignment_probs(logits: torch.Tensor, temperature: float) -> torch.Tensor:
+    if logits.numel() == 0:
+        return logits
+    scale = max(float(temperature), 1e-3)
+    soft_probs = F.softmax(logits / scale, dim=-1)
+    hard_indices = torch.argmax(soft_probs, dim=-1)
+    hard_probs = F.one_hot(hard_indices, num_classes=soft_probs.shape[-1]).to(dtype=soft_probs.dtype)
+    return hard_probs + soft_probs - soft_probs.detach()
+
+
 def orthogonality_loss(source_z: torch.Tensor, observation_z: torch.Tensor) -> torch.Tensor:
     source_flat = F.normalize(source_z.reshape(-1, source_z.shape[-1]), dim=-1)
     observation_flat = F.normalize(observation_z.reshape(-1, observation_z.shape[-1]), dim=-1)
@@ -72,5 +82,6 @@ __all__ = [
     'batch_usage_entropy_loss',
     'coupling_kl_loss',
     'orthogonality_loss',
+    'straight_through_assignment_probs',
     'symmetric_kl_from_logits',
 ]

@@ -14,6 +14,7 @@ from src.losses.multimodal_tokenizer import (
     batch_usage_entropy_loss,
     coupling_kl_loss,
     orthogonality_loss,
+    straight_through_assignment_probs,
 )
 
 from .base import BaseTokenizer
@@ -71,7 +72,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         codebook_balance_weight: float = 0.02,
         coupling_bidirectional: bool = True,
         orthogonality_weight: float = 0.01,
-        assignment_temperature: float = 0.2,
+        assignment_temperature: float = 1.0,
+        coupling_temperature: float = 0.2,
         alignment_lag_candidates: List[int] | None = None,
         alignment_selection: str = 'min',
         alignment_compare_mode: str = 'variable',
@@ -128,6 +130,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.coupling_bidirectional = bool(coupling_bidirectional)
         self.orthogonality_weight = orthogonality_weight
         self.assignment_temperature = assignment_temperature
+        self.balance_assignment_temperature = assignment_temperature
+        self.coupling_temperature = coupling_temperature
         self.alignment_lag_candidates = sorted({max(int(lag), 0) for lag in (alignment_lag_candidates or [0])})
         if not self.alignment_lag_candidates:
             self.alignment_lag_candidates = [0]
@@ -338,7 +342,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             codebook_balance_weight=codebook_cfg.get('balance_weight', 0.02),
             coupling_bidirectional=coupling_cfg.get('bidirectional', True),
             orthogonality_weight=branch_cfg.get('orthogonality_weight', 0.01),
-            assignment_temperature=coupling_cfg.get('temperature', 0.2),
+            assignment_temperature=codebook_cfg.get('assignment_temperature', 1.0),
+            coupling_temperature=coupling_cfg.get('temperature', 0.2),
             alignment_lag_candidates=coupling_cfg.get('lag_candidates', validation_cfg.get('lag_set', [0])),
             alignment_selection=coupling_cfg.get('selection', 'min'),
             alignment_compare_mode=coupling_cfg.get('compare_mode', 'variable'),
@@ -423,7 +428,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_source_logits: torch.Tensor,
         fnirs_source_logits: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
-        temperature = max(float(self.assignment_temperature), 1e-3)
+        temperature = max(float(self.coupling_temperature), 1e-3)
         eeg_source_probs = F.softmax(eeg_source_logits / temperature, dim=-1)
         fnirs_source_probs = F.softmax(fnirs_source_logits / temperature, dim=-1)
 
@@ -631,16 +636,20 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         alignment_usable_tokens = source_coupling['alignment_usable_tokens']
         eeg_source_probs = source_coupling['eeg_source_probs']
         fnirs_source_probs = source_coupling['fnirs_source_probs']
-        eeg_observation_probs = F.softmax(eeg_observation_logits / max(self.assignment_temperature, 1e-3), dim=-1)
-        fnirs_observation_probs = F.softmax(fnirs_observation_logits / max(self.assignment_temperature, 1e-3), dim=-1)
+
+        balance_temperature = max(float(self.balance_assignment_temperature), 1e-3)
+        eeg_source_balance_probs = straight_through_assignment_probs(eeg_source_logits, balance_temperature)
+        fnirs_source_balance_probs = straight_through_assignment_probs(fnirs_source_logits, balance_temperature)
+        eeg_observation_balance_probs = straight_through_assignment_probs(eeg_observation_logits, balance_temperature)
+        fnirs_observation_balance_probs = straight_through_assignment_probs(fnirs_observation_logits, balance_temperature)
 
         source_balance_loss = 0.5 * (
-            batch_usage_entropy_loss(eeg_source_probs) +
-            batch_usage_entropy_loss(fnirs_source_probs)
+            batch_usage_entropy_loss(eeg_source_balance_probs) +
+            batch_usage_entropy_loss(fnirs_source_balance_probs)
         )
         observation_balance_loss = 0.5 * (
-            batch_usage_entropy_loss(eeg_observation_probs) +
-            batch_usage_entropy_loss(fnirs_observation_probs)
+            batch_usage_entropy_loss(eeg_observation_balance_probs) +
+            batch_usage_entropy_loss(fnirs_observation_balance_probs)
         )
         codebook_balance_loss = 0.5 * (source_balance_loss + observation_balance_loss)
 
