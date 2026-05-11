@@ -24,6 +24,8 @@ Supported task-specific arguments:
 - `--run-name NAME`
 - `--skip-post-analysis`
 
+Default post-analysis writes the gate scorecard plus codebook usage, reconstruction, and token pattern visualizations under the run `analysis/` directory.
+
 Example:
 
 ```bash

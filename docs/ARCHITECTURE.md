@@ -1,9 +1,10 @@
 # Current Architecture: Source/Observation Tokenizer
 
 > **Semantics version**: `s2_source_observation_v1`
-> **Last updated**: 2026-05-08
-> **Current phase**: Phase 1 (Structural Migration) — Complete
-> **Active phase**: Phase 2 (HRF Source Target) — Ready to begin
+> **Last updated**: 2026-05-11
+> **Current phase**: Phase 1 (Structural Migration) — Complete and Gate1-stable
+> **Active phase**: Phase 2 (HRF Source Target) — Next implementation target from locked baseline
+> **Config note**: the diagrams below show the nominal source/observation topology; the locked Phase 1 handoff baseline uses uniform32 codebooks and sets `source_coupling_loss` to `0.0`
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
@@ -129,8 +130,8 @@ sequenceDiagram
     Coup->>Loss: source_coupling_loss (KL div)
 
     Quant->>Dec: source_q + observation_q concat
-    Dec->>Loss: Amplitude + Phase prediction
-    Loss->>Loss: rec_loss = amp + phase + time
+    Dec->>Loss: Amplitude prediction + ISTFT time reconstruction
+    Loss->>Loss: rec_loss = amp + time
     Loss->>Loss: vq_loss = commitment losses
     Loss->>Loss: orthogonality_loss (source ⊥ obs)
     Loss->>Loss: codebook_balance_loss (entropy)
@@ -147,8 +148,8 @@ graph LR
     TOTAL --> BAL[codebook_balance_loss]
     TOTAL --> ORTHO[orthogonality_loss]
 
-    REC --> E_REC[eeg_rec_loss<br/>amp + phase + time]
-    REC --> F_REC[fnirs_rec_loss<br/>amp + phase + time]
+    REC --> E_REC[eeg_rec_loss<br/>amp + time]
+    REC --> F_REC[fnirs_rec_loss<br/>amp + time]
 
     VQ --> VQ_S[vq_source_loss<br/>eeg + fnirs]
     VQ --> VQ_O[vq_observation_loss<br/>eeg + fnirs]
@@ -163,12 +164,14 @@ graph LR
     ORTHO --> O_F[orthogonality_loss<br/>fnirs_source ⊥ fnirs_obs]
 ```
 
-### Current Loss Weights
+### Default Structural-Migration Loss Weights
+
+The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and raises `codebook_balance_loss` to `0.08`; see the locked handoff section below.
 
 | Loss Term | Weight | Purpose |
 |-----------|--------|---------|
-| `eeg_rec_loss` | 1.0 | EEG full reconstruction (amp 1.0 + phase 1.0 + time 0.9) |
-| `fnirs_rec_loss` | 1.0 | fNIRS full reconstruction (amp 1.0 + phase 0.2 + time 1.0) |
+| `eeg_rec_loss` | 1.0 | EEG full reconstruction (amp 1.0 + time 0.9; no explicit phase supervision) |
+| `fnirs_rec_loss` | 1.0 | fNIRS full reconstruction (amp 1.0 + time 1.0; no explicit phase supervision) |
 | `vq_loss` | 1.0 | Commitment + EMA codebook loss (all 4 quantizers) |
 | `source_coupling_loss` | 0.07 | KL divergence: predicted vs actual source token distributions |
 | `codebook_balance_loss` | 0.02 | Entropy-based dead-code prevention (all 4 quantizers) |
@@ -213,7 +216,7 @@ graph LR
 | Directory | Purpose |
 |-----------|---------|
 | [experiments/configs/base.yaml](../experiments/configs/base.yaml) | Dataset, preprocessing, and hardware defaults |
-| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Structural Migration configs |
+| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 configs, including the locked Gate1 baseline and best-current alias |
 | [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs (ready) |
 | [experiments/configs/source_observation/phase3/](../experiments/configs/source_observation/phase3/) | Phase 3 Concentration Prior configs (ready) |
 | [experiments/configs/source_observation/mechanism_a/](../experiments/configs/source_observation/mechanism_a/) | Mechanism A Smoothness configs (ready) |
@@ -229,6 +232,8 @@ graph LR
 | `fnirs_observation_quantizer` | K=128 | D=48 | fNIRS modality-specific encoding debt |
 
 All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized).
+
+The locked Phase 1 Gate1 handoff baseline temporarily uses uniform32 codebooks across all four quantizers to preserve the validated health profile.
 
 ## 6. Coupling Mechanism
 
@@ -255,6 +260,15 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 | Mechanism A | Coupling Smoothness | 📋 Planned | Local smoothness prior on coupling rows |
 | Mechanism C | Causal Asymmetry | 📋 Planned | Independent fwd/rev coupling parameterization |
 
+### Locked Phase1 Handoff
+
+| Artifact | Role |
+|----------|------|
+| [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Current best Gate1-stable baseline alias |
+| [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline outside the historical tuning chain |
+| [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass; best epoch 278, val_loss 1.6395270029703777 |
+| [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json) | Formal archive bundle for the full Phase 1 Gate1 search surface |
+
 ## 8. Related Documents
 
 | Document | Role |
@@ -263,5 +277,6 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 | [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
 | [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |
+| [archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md](archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md) | Formal closure log for the Phase 1 Gate1 search bundle |
 | [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records |
 | [STANDARDIZATION_GUIDE.md](../STANDARDIZATION_GUIDE.md) | Naming conventions, run protocols, artifact standards |

@@ -1,9 +1,9 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
-> Created: 2026-04-30 | Last revised: 2026-04-30
-> Status: Active development plan — branch semantics redesign complete, ready for Phase 1 implementation
+> Created: 2026-04-30 | Last revised: 2026-05-11
+> Status: Active development plan — Phase 1 complete, Gate1 stable, Phase 2 source-target implementation is the current blocker
 > Supersedes: [archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
-> Reference implementation: [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
+> Reference implementation: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > New design specification: Section 2 (Source/Observation Branch Semantics)
 
 ---
