@@ -702,6 +702,41 @@ def _resolve_reconstruction_visualization_config(config: Dict[str, object]) -> D
     }
 
 
+def _resolve_token_pattern_visualization_config(config: Dict[str, object]) -> Dict[str, object]:
+    analysis_cfg = config.get('analysis', {})
+    if not isinstance(analysis_cfg, dict):
+        analysis_cfg = {}
+
+    token_pattern_cfg = analysis_cfg.get('token_pattern_visualization', {})
+    if not isinstance(token_pattern_cfg, dict):
+        token_pattern_cfg = {}
+
+    channel_indices_cfg = token_pattern_cfg.get('channel_indices', {})
+    if not isinstance(channel_indices_cfg, dict):
+        channel_indices_cfg = {}
+
+    frequency_range_cfg = token_pattern_cfg.get('frequency_range_hz', {})
+    if not isinstance(frequency_range_cfg, dict):
+        frequency_range_cfg = {}
+
+    return {
+        'enabled': bool(token_pattern_cfg.get('enabled', True)),
+        'subdir': str(token_pattern_cfg.get('subdir', 'token_pattern_visualizations')),
+        'max_samples': max(int(token_pattern_cfg.get('max_samples', 32)), 1),
+        'top_k': max(int(token_pattern_cfg.get('top_k', 8)), 1),
+        'max_patches_per_code': max(int(token_pattern_cfg.get('max_patches_per_code', 96)), 1),
+        'max_overlay_patches': max(int(token_pattern_cfg.get('max_overlay_patches', 20)), 1),
+        'channel_indices': {
+            'eeg': max(int(channel_indices_cfg.get('eeg', 0)), 0),
+            'fnirs': max(int(channel_indices_cfg.get('fnirs', 0)), 0),
+        },
+        'frequency_range_hz': {
+            'eeg': _parse_frequency_range(frequency_range_cfg.get('eeg')),
+            'fnirs': _parse_frequency_range(frequency_range_cfg.get('fnirs')),
+        },
+    }
+
+
 def _resolve_modality_sample_rate(
     dataloader,
     config: Dict[str, object],
@@ -1012,6 +1047,235 @@ def _generate_reconstruction_visualizations(
     return artifacts
 
 
+def _extract_token_aligned_patches(
+    signals: np.ndarray,
+    tokens: np.ndarray,
+    patch_size: int,
+    code: int,
+    max_patches: int,
+) -> np.ndarray:
+    signal_array = np.asarray(signals)
+    token_array = np.asarray(tokens)
+    if signal_array.ndim != 2 or token_array.ndim != 2:
+        return np.empty((0, max(patch_size, 1)), dtype=np.float32)
+    if patch_size <= 0 or max_patches <= 0:
+        return np.empty((0, max(patch_size, 1)), dtype=np.float32)
+
+    n_samples = min(signal_array.shape[0], token_array.shape[0])
+    n_positions = min(token_array.shape[-1], signal_array.shape[-1] // patch_size)
+    if n_samples <= 0 or n_positions <= 0:
+        return np.empty((0, patch_size), dtype=np.float32)
+
+    patches: List[np.ndarray] = []
+    for sample_index in range(n_samples):
+        sample_tokens = token_array[sample_index, :n_positions]
+        positions = np.flatnonzero(sample_tokens == int(code))
+        if positions.size == 0:
+            continue
+        sample_signal = signal_array[sample_index, : n_positions * patch_size]
+        for position in positions:
+            start = int(position) * patch_size
+            end = start + patch_size
+            patches.append(sample_signal[start:end].astype(np.float32, copy=False))
+            if len(patches) >= max_patches:
+                return np.stack(patches, axis=0)
+
+    if not patches:
+        return np.empty((0, patch_size), dtype=np.float32)
+    return np.stack(patches, axis=0)
+
+
+def _compute_patch_power_spectrum(
+    patches: np.ndarray,
+    sample_rate: float,
+    frequency_range: Optional[Tuple[float, float]],
+) -> Tuple[np.ndarray, np.ndarray]:
+    patch_array = np.asarray(patches, dtype=np.float32)
+    if patch_array.ndim != 2 or patch_array.shape[0] == 0:
+        return np.empty((0,), dtype=np.float64), np.empty((0,), dtype=np.float64)
+
+    window = np.hanning(patch_array.shape[-1]).astype(np.float32, copy=False)
+    fft = np.fft.rfft(patch_array * window[None, :], axis=-1)
+    power = np.abs(fft) ** 2
+    frequencies = np.fft.rfftfreq(patch_array.shape[-1], d=1.0 / max(float(sample_rate), 1e-12))
+
+    if frequency_range is not None:
+        mask = (frequencies >= frequency_range[0]) & (frequencies <= frequency_range[1])
+        frequencies = frequencies[mask]
+        power = power[:, mask]
+
+    if power.shape[-1] == 0:
+        return np.empty((0,), dtype=np.float64), np.empty((0,), dtype=np.float64)
+    return frequencies, power.mean(axis=0)
+
+
+def _plot_token_pattern_grid(
+    *,
+    split_name: str,
+    codebook_name: str,
+    modality: str,
+    signals: object,
+    tokens: object,
+    output_path: Path,
+    sample_rate: float,
+    patch_size: int,
+    codebook_size: int,
+    top_k: int,
+    max_patches_per_code: int,
+    max_overlay_patches: int,
+    frequency_range: Optional[Tuple[float, float]],
+) -> Optional[str]:
+    if not HAS_MATPLOTLIB:
+        return None
+
+    signal_array = np.asarray(signals)
+    token_array = np.asarray(tokens)
+    if signal_array.ndim != 2 or token_array.ndim != 2:
+        return None
+    if signal_array.shape[0] == 0 or token_array.shape[0] == 0 or patch_size <= 0:
+        return None
+
+    n_positions = min(token_array.shape[-1], signal_array.shape[-1] // patch_size)
+    if n_positions <= 0:
+        return None
+    token_array = token_array[:, :n_positions]
+    flat_tokens = token_array.reshape(-1)
+    if flat_tokens.size == 0:
+        return None
+
+    counts = np.bincount(flat_tokens.astype(np.int64, copy=False), minlength=max(int(codebook_size), 1))
+    active_codes = np.flatnonzero(counts > 0)
+    if active_codes.size == 0:
+        return None
+    ranked_codes = active_codes[np.argsort(counts[active_codes])[::-1][:top_k]]
+    if ranked_codes.size == 0:
+        return None
+
+    figure, axes = plt.subplots(
+        ranked_codes.size,
+        3,
+        figsize=(14.5, 2.7 * ranked_codes.size),
+        squeeze=False,
+    )
+    safe_sample_rate = max(float(sample_rate), 1e-12)
+    pretty_name = codebook_name.replace('_', ' ').title()
+
+    for row_index, code in enumerate(ranked_codes):
+        patches = _extract_token_aligned_patches(
+            signal_array,
+            token_array,
+            patch_size,
+            int(code),
+            max_patches_per_code,
+        )
+        waveform_axis, spectrum_axis, overlay_axis = axes[row_index]
+
+        if patches.shape[0] == 0:
+            for axis in (waveform_axis, spectrum_axis, overlay_axis):
+                axis.axis('off')
+                axis.text(0.5, 0.5, 'No captured patches', ha='center', va='center', fontsize=10)
+            continue
+
+        mean_patch = patches.mean(axis=0)
+        std_patch = patches.std(axis=0)
+        time_axis = np.arange(patch_size, dtype=np.float64) / safe_sample_rate
+
+        waveform_axis.plot(time_axis, mean_patch, color='#2E86AB', linewidth=2.0)
+        waveform_axis.fill_between(
+            time_axis,
+            mean_patch - std_patch,
+            mean_patch + std_patch,
+            alpha=0.25,
+            color='#2E86AB',
+        )
+        waveform_axis.set_title(f'Code {int(code)} (n={patches.shape[0]})')
+        waveform_axis.set_xlabel('Time (s)')
+        waveform_axis.set_ylabel('Amplitude')
+        waveform_axis.grid(True, alpha=0.25)
+
+        frequencies, mean_power = _compute_patch_power_spectrum(patches, safe_sample_rate, frequency_range)
+        if frequencies.size == 0:
+            spectrum_axis.axis('off')
+            spectrum_axis.text(0.5, 0.5, 'Spectrum unavailable', ha='center', va='center', fontsize=10)
+        else:
+            spectrum_axis.semilogy(frequencies, np.maximum(mean_power, 1e-12), color='#2CA02C', linewidth=1.8)
+            if frequency_range is not None:
+                spectrum_axis.set_xlim(frequency_range)
+            spectrum_axis.set_xlabel('Frequency (Hz)')
+            spectrum_axis.set_ylabel('Power')
+            spectrum_axis.set_title('Average Spectrum')
+            spectrum_axis.grid(True, alpha=0.25)
+
+        for patch in patches[:max_overlay_patches]:
+            overlay_axis.plot(time_axis, patch, color='#BFBFBF', alpha=0.25, linewidth=0.6)
+        overlay_axis.plot(time_axis, mean_patch, color='#D62728', linewidth=1.8)
+        overlay_axis.set_xlabel('Time (s)')
+        overlay_axis.set_ylabel('Amplitude')
+        overlay_axis.set_title('Patch Overlay')
+        overlay_axis.grid(True, alpha=0.25)
+
+    figure.suptitle(
+        f'{split_name.upper()} {pretty_name} Token Patterns ({modality.upper()})',
+        fontsize=14,
+        fontweight='bold',
+    )
+    figure.tight_layout()
+    return _save_figure(figure, output_path)
+
+
+def _generate_token_pattern_visualizations(
+    *,
+    split_name: str,
+    split_stats: Dict[str, object],
+    analysis_root: Path,
+    token_pattern_viz_cfg: Dict[str, object],
+) -> Dict[str, Optional[str]]:
+    if not token_pattern_viz_cfg.get('enabled', False):
+        return {}
+
+    sample_payload = split_stats.get('token_pattern_samples')
+    if not isinstance(sample_payload, dict):
+        return {}
+
+    output_root = analysis_root / str(token_pattern_viz_cfg.get('subdir', 'token_pattern_visualizations'))
+    signal_payload = sample_payload.get('signals', {})
+    token_payload = sample_payload.get('tokens', {})
+    sample_rates = sample_payload.get('sample_rates', {})
+    patch_sizes = sample_payload.get('patch_sizes', {})
+    codebook_order = (
+        ('eeg_source', 'eeg'),
+        ('fnirs_source', 'fnirs'),
+        ('eeg_observation', 'eeg'),
+        ('fnirs_observation', 'fnirs'),
+    )
+
+    artifacts: Dict[str, Optional[str]] = {}
+    for codebook_name, modality in codebook_order:
+        signal_bank = signal_payload.get(modality)
+        token_bank = token_payload.get(codebook_name)
+        codebook_summary = split_stats.get('codebooks', {}).get(codebook_name, {})
+        if signal_bank is None or token_bank is None or not isinstance(codebook_summary, dict):
+            continue
+
+        artifacts[codebook_name] = _plot_token_pattern_grid(
+            split_name=split_name,
+            codebook_name=codebook_name,
+            modality=modality,
+            signals=signal_bank,
+            tokens=token_bank,
+            output_path=output_root / f'{split_name}_{codebook_name}_token_patterns.png',
+            sample_rate=float(sample_rates.get(modality, 1.0)),
+            patch_size=int(patch_sizes.get(modality, 1)),
+            codebook_size=int(codebook_summary.get('codebook_size', 0)),
+            top_k=int(token_pattern_viz_cfg.get('top_k', 8)),
+            max_patches_per_code=int(token_pattern_viz_cfg.get('max_patches_per_code', 96)),
+            max_overlay_patches=int(token_pattern_viz_cfg.get('max_overlay_patches', 20)),
+            frequency_range=token_pattern_viz_cfg.get('frequency_range_hz', {}).get(modality),
+        )
+
+    return artifacts
+
+
 def _flatten_artifacts(value: object) -> List[str]:
     if value is None:
         return []
@@ -1037,6 +1301,7 @@ def _collect_split_statistics(
     *,
     config: Dict[str, object],
     reconstruction_viz_cfg: Dict[str, object],
+    token_pattern_viz_cfg: Dict[str, object],
 ) -> Dict[str, object]:
     scalar_totals: Dict[str, float] = {}
     index_bank: Dict[str, List[np.ndarray]] = {
@@ -1069,6 +1334,21 @@ def _collect_split_statistics(
                 'full': {'eeg': [], 'fnirs': []},
                 'source_only': {'eeg': [], 'fnirs': []},
                 'observation_only': {'eeg': [], 'fnirs': []},
+            },
+        }
+
+    capture_token_patterns = bool(token_pattern_viz_cfg.get('enabled', False))
+    token_pattern_limit = int(token_pattern_viz_cfg.get('max_samples', 0)) if capture_token_patterns else 0
+    token_pattern_capture_count = 0
+    token_pattern_bank: Optional[Dict[str, object]] = None
+    if token_pattern_limit > 0:
+        token_pattern_bank = {
+            'signals': {'eeg': [], 'fnirs': []},
+            'tokens': {
+                'eeg_source': [],
+                'fnirs_source': [],
+                'eeg_observation': [],
+                'fnirs_observation': [],
             },
         }
 
@@ -1141,6 +1421,20 @@ def _collect_split_statistics(
                         outputs['fnirs_observation_only_reconstructed'][:capture_take].detach().cpu()
                     )
                     reconstruction_capture_count += capture_take
+
+                if token_pattern_bank is not None and token_pattern_capture_count < token_pattern_limit:
+                    capture_take = min(token_pattern_limit - token_pattern_capture_count, int(eeg.shape[0]))
+                    eeg_channel_index = int(token_pattern_viz_cfg.get('channel_indices', {}).get('eeg', 0))
+                    fnirs_channel_index = int(token_pattern_viz_cfg.get('channel_indices', {}).get('fnirs', 0))
+                    token_pattern_bank['signals']['eeg'].append(_select_channel_series(eeg[:capture_take], eeg_channel_index))
+                    token_pattern_bank['signals']['fnirs'].append(
+                        _select_channel_series(fnirs[:capture_take], fnirs_channel_index)
+                    )
+                    token_pattern_bank['tokens']['eeg_source'].append(eeg_source_tokens[:capture_take])
+                    token_pattern_bank['tokens']['fnirs_source'].append(fnirs_source_tokens[:capture_take])
+                    token_pattern_bank['tokens']['eeg_observation'].append(eeg_observation_tokens[:capture_take])
+                    token_pattern_bank['tokens']['fnirs_observation'].append(fnirs_observation_tokens[:capture_take])
+                    token_pattern_capture_count += capture_take
     finally:
         if was_training:
             model.train()
@@ -1219,6 +1513,39 @@ def _collect_split_statistics(
             'fnirs': int(getattr(model, 'fnirs_patch_size', 1)),
         }
         result['reconstruction_samples'] = reconstruction_samples
+
+    if token_pattern_bank is not None and token_pattern_capture_count > 0:
+        token_pattern_samples = {
+            'signals': {
+                modality: np.concatenate(chunks, axis=0)
+                for modality, chunks in token_pattern_bank['signals'].items()
+                if chunks
+            },
+            'tokens': {
+                name: np.concatenate(chunks, axis=0)
+                for name, chunks in token_pattern_bank['tokens'].items()
+                if chunks
+            },
+        }
+        token_pattern_samples['sample_rates'] = {
+            'eeg': _resolve_modality_sample_rate(
+                dataloader,
+                config,
+                'eeg',
+                int(token_pattern_samples['signals']['eeg'].shape[-1]),
+            ),
+            'fnirs': _resolve_modality_sample_rate(
+                dataloader,
+                config,
+                'fnirs',
+                int(token_pattern_samples['signals']['fnirs'].shape[-1]),
+            ),
+        }
+        token_pattern_samples['patch_sizes'] = {
+            'eeg': int(getattr(model, 'eeg_patch_size', 1)),
+            'fnirs': int(getattr(model, 'fnirs_patch_size', 1)),
+        }
+        result['token_pattern_samples'] = token_pattern_samples
 
     return result
 
@@ -1403,6 +1730,7 @@ def _build_split_gate_summary(
     metrics_payload: Dict[str, object],
     analysis_root: Path,
     reconstruction_viz_cfg: Dict[str, object],
+    token_pattern_viz_cfg: Dict[str, object],
 ) -> Tuple[Dict[str, object], Dict[str, object]]:
     best_lag = int(round(float(split_stats['mean_scalars'].get('selected_source_lag', 0.0))))
     coupling = _compute_coupling_structure(model=split_stats['model_ref'], lag=best_lag)
@@ -1427,6 +1755,13 @@ def _build_split_gate_summary(
         analysis_root=analysis_root,
         reconstruction_viz_cfg=reconstruction_viz_cfg,
     )
+    token_pattern_paths = _generate_token_pattern_visualizations(
+        split_name=split_name,
+        split_stats=split_stats,
+        analysis_root=analysis_root,
+        token_pattern_viz_cfg=token_pattern_viz_cfg,
+    )
+    gate_1['artifacts']['token_pattern_paths'] = token_pattern_paths
     gates = {
         'gate1': gate_1,
         'gate2': gate_2,
@@ -1440,6 +1775,7 @@ def _build_split_gate_summary(
         'coupling_structure_path': structure_profile_path,
         'codebook_usage_paths': codebook_usage_paths,
         'reconstruction_visualization_paths': reconstruction_visualization_paths,
+        'token_pattern_paths': token_pattern_paths,
     }
 
 
@@ -1506,6 +1842,7 @@ def generate_source_observation_scorecard(
     analysis_root = Path(output_dir)
     analysis_root.mkdir(parents=True, exist_ok=True)
     reconstruction_viz_cfg = _resolve_reconstruction_visualization_config(config)
+    token_pattern_viz_cfg = _resolve_token_pattern_visualization_config(config)
 
     metrics_payload = _load_metrics_payload(run_dir)
     training_gate_metrics_path = _plot_training_gate_metrics(metrics_payload, analysis_root / 'training_gate_metrics.png')
@@ -1524,6 +1861,7 @@ def generate_source_observation_scorecard(
             device,
             config=config,
             reconstruction_viz_cfg=reconstruction_viz_cfg,
+            token_pattern_viz_cfg=token_pattern_viz_cfg,
         )
         if not split_stats.get('available', False):
             split_payloads[split_name] = split_stats
@@ -1536,6 +1874,7 @@ def generate_source_observation_scorecard(
             metrics_payload,
             analysis_root,
             reconstruction_viz_cfg,
+            token_pattern_viz_cfg,
         )
         split_payload = {
             'available': True,
