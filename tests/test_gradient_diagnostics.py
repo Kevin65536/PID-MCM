@@ -3,9 +3,11 @@ import unittest
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from experiments.scripts.train_source_observation_tokenizer import compute_gradient_attribution
 from src.tokenizers.factorized_labram_vqnsp import SourceObservationLaBraMVQNSP
+from src.tokenizers.labram_vqnsp import NormEMAVectorQuantizer
 from src.visualization.gradient_diagnostics import (
     plot_gradient_influence_dashboard,
     summarize_total_gradient_groups,
@@ -13,8 +15,8 @@ from src.visualization.gradient_diagnostics import (
 
 
 class GradientDiagnosticsTests(unittest.TestCase):
-    def _build_tiny_model(self) -> SourceObservationLaBraMVQNSP:
-        return SourceObservationLaBraMVQNSP(
+    def _build_tiny_model(self, **overrides) -> SourceObservationLaBraMVQNSP:
+        params = dict(
             eeg_seq_length=40,
             eeg_patch_size=20,
             eeg_channels=3,
@@ -46,6 +48,8 @@ class GradientDiagnosticsTests(unittest.TestCase):
             drop_path=0.0,
             dropout=0.0,
         )
+        params.update(overrides)
+        return SourceObservationLaBraMVQNSP(**params)
 
     def test_component_group_attribution_matches_architecture_groups(self):
         torch.manual_seed(7)
@@ -104,6 +108,88 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertTrue(np.all(p25 <= p50 + 1e-12))
         self.assertTrue(np.all(p50 <= p75 + 1e-12))
         self.assertTrue(np.all(p75 <= p95 + 1e-12))
+
+    def test_learnable_codebook_transform_receives_gradient(self):
+        torch.manual_seed(5)
+        quantizer = NormEMAVectorQuantizer(
+            n_embed=4,
+            embedding_dim=3,
+            beta=0.5,
+            decay=0.95,
+            kmeans_init=False,
+            revive_dead_codes=False,
+            learnable_codebook_transform=True,
+            codebook_transform_loss_weight=0.5,
+        )
+        z = torch.randn(6, 3, requires_grad=True)
+
+        _, _, info = quantizer(z)
+        info['vq_loss'].backward()
+
+        self.assertGreater(float(info['codebook_loss'].item()), 0.0)
+        self.assertIsNotNone(quantizer.codebook_transform.weight.grad)
+        self.assertGreater(float(quantizer.codebook_transform.weight.grad.abs().sum().item()), 0.0)
+
+    def test_quantization_strength_zero_returns_continuous_normalized_latents(self):
+        torch.manual_seed(17)
+        quantizer = NormEMAVectorQuantizer(
+            n_embed=4,
+            embedding_dim=3,
+            beta=0.5,
+            decay=0.95,
+            kmeans_init=False,
+            revive_dead_codes=False,
+        )
+        quantizer.set_quantization_strength(0.0)
+        z = torch.randn(5, 3)
+
+        z_q, _, info = quantizer(z)
+
+        self.assertTrue(torch.allclose(z_q, F.normalize(z, p=2, dim=-1), atol=1e-6))
+        self.assertAlmostEqual(float(info['vq_loss'].item()), 0.0, places=6)
+        self.assertAlmostEqual(float(info['quantization_strength'].item()), 0.0, places=6)
+
+    def test_source_only_balance_scale_disables_observation_pressure(self):
+        torch.manual_seed(13)
+        model = self._build_tiny_model(
+            source_balance_scale=1.0,
+            observation_balance_scale=0.0,
+            source_balance_temperature=2.0,
+            observation_balance_temperature=1.0,
+        )
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+
+        outputs = model(eeg, fnirs)
+
+        self.assertGreater(float(outputs['observation_balance_loss'].item()), 0.0)
+        self.assertAlmostEqual(
+            float(outputs['codebook_balance_loss'].item()),
+            0.5 * float(outputs['source_balance_loss'].item()),
+            places=5,
+        )
+
+    def test_phase_loss_wraps_at_pi_boundary(self):
+        model = self._build_tiny_model()
+        pred_phase = torch.full((1, 1, 1, 1), np.pi, dtype=torch.float32)
+        target_phase = torch.full((1, 1, 1, 1), -np.pi, dtype=torch.float32)
+        weights = torch.ones_like(pred_phase)
+
+        loss = model._compute_phase_loss(pred_phase, target_phase, weights)
+
+        self.assertAlmostEqual(float(loss.item()), 0.0, places=6)
+
+    def test_phase_loss_downweights_low_energy_bins(self):
+        model = self._build_tiny_model()
+        target_phase = torch.zeros((1, 1, 1, 2), dtype=torch.float32)
+        high_energy_error = torch.tensor([[[[0.5, 0.0]]]], dtype=torch.float32)
+        low_energy_error = torch.tensor([[[[0.0, 0.5]]]], dtype=torch.float32)
+        phase_weights = torch.tensor([[[[1.0, 0.01]]]], dtype=torch.float32)
+
+        high_energy_loss = model._compute_phase_loss(high_energy_error, target_phase, phase_weights)
+        low_energy_loss = model._compute_phase_loss(low_energy_error, target_phase, phase_weights)
+
+        self.assertGreater(float(high_energy_loss.item()), float(low_energy_loss.item()))
 
     def test_gradient_influence_dashboard_plot_smoke(self):
         component_names = ['eeg_rec_loss', 'fnirs_rec_loss', 'vq_loss']

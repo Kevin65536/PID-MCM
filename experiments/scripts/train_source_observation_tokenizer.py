@@ -528,6 +528,82 @@ def compute_alignment_scale(epoch: int, config: dict) -> float:
     return start_scale + (1.0 - start_scale) * progress
 
 
+def compute_schedule_value(epoch: int, schedule_cfg: Dict[str, Any], default_value: float) -> float:
+    if not schedule_cfg.get('enabled', False):
+        return float(default_value)
+
+    start_epoch = int(schedule_cfg.get('start_epoch', 1))
+    ramp_epochs = max(int(schedule_cfg.get('ramp_epochs', 1)), 1)
+    start_scale = float(schedule_cfg.get('start_scale', default_value))
+    end_scale = float(schedule_cfg.get('end_scale', default_value))
+    if epoch < start_epoch:
+        return start_scale
+    if ramp_epochs == 1:
+        return end_scale
+
+    progress = min(max((epoch - start_epoch) / (ramp_epochs - 1), 0.0), 1.0)
+    return start_scale + (end_scale - start_scale) * progress
+
+
+def snapshot_model_schedule_state(model) -> Dict[str, float]:
+    state: Dict[str, float] = {}
+    if hasattr(model, 'get_alignment_scale'):
+        state['alignment_scale'] = float(model.get_alignment_scale())
+    if hasattr(model, 'get_balance_scales'):
+        state.update(getattr(model, 'get_balance_scales')())
+    if hasattr(model, 'get_quantization_strength'):
+        state['quantization_strength'] = float(model.get_quantization_strength())
+    return state
+
+
+def apply_model_schedule_state(model, schedule_state: Dict[str, Any]) -> None:
+    if not schedule_state:
+        return
+    if 'alignment_scale' in schedule_state and hasattr(model, 'set_alignment_scale'):
+        model.set_alignment_scale(float(schedule_state['alignment_scale']))
+    if hasattr(model, 'set_balance_scales'):
+        getattr(model, 'set_balance_scales')(
+            source_scale=schedule_state.get('source_balance_scale'),
+            observation_scale=schedule_state.get('observation_balance_scale'),
+        )
+    if 'quantization_strength' in schedule_state and hasattr(model, 'set_quantization_strength'):
+        model.set_quantization_strength(float(schedule_state['quantization_strength']))
+
+
+def apply_epoch_schedules(model, epoch: int, config: dict) -> Dict[str, float]:
+    schedule_metrics: Dict[str, float] = {}
+
+    alignment_scale = compute_alignment_scale(epoch, config)
+    schedule_metrics['alignment_scale'] = alignment_scale
+    if hasattr(model, 'set_alignment_scale'):
+        model.set_alignment_scale(alignment_scale)
+
+    balance_warmup_cfg = config.get('training', {}).get('balance_warmup', {})
+    source_default = float(getattr(model, 'default_source_balance_scale', 1.0))
+    observation_default = float(getattr(model, 'default_observation_balance_scale', 1.0))
+    source_balance_scale = compute_schedule_value(epoch, balance_warmup_cfg.get('source', {}), source_default)
+    observation_balance_scale = compute_schedule_value(
+        epoch,
+        balance_warmup_cfg.get('observation', {}),
+        observation_default,
+    )
+    schedule_metrics['source_balance_scale'] = source_balance_scale
+    schedule_metrics['observation_balance_scale'] = observation_balance_scale
+    if hasattr(model, 'set_balance_scales'):
+        model.set_balance_scales(
+            source_scale=source_balance_scale,
+            observation_scale=observation_balance_scale,
+        )
+
+    quantization_warmup_cfg = config.get('training', {}).get('quantization_warmup', {})
+    quantization_strength = compute_schedule_value(epoch, quantization_warmup_cfg, 1.0)
+    schedule_metrics['quantization_strength'] = quantization_strength
+    if hasattr(model, 'set_quantization_strength'):
+        model.set_quantization_strength(quantization_strength)
+
+    return schedule_metrics
+
+
 def maybe_apply_warm_start(model, config: dict, device: torch.device):
     warm_cfg = config.get('warm_start', {})
     if not warm_cfg:
@@ -599,6 +675,7 @@ def build_checkpoint_payload(
         'best_epoch': int(best_epoch),
         'best_monitor': float(best_monitor),
         'alignment_scale': float(alignment_scale),
+        'schedule_state': snapshot_model_schedule_state(model),
         'is_best': bool(is_best),
     }
 
@@ -674,6 +751,7 @@ def finalize_training_run(
     if best_path.exists():
         print(f"\nLoading best checkpoint from {best_path}")
         best_checkpoint = load_training_checkpoint(best_path, model, device=device)
+        apply_model_schedule_state(model, best_checkpoint.get('schedule_state', {}))
         best_epoch = int(best_checkpoint.get('best_epoch', best_checkpoint.get('epoch', best_epoch)))
         best_monitor = float(best_checkpoint.get('best_monitor', best_monitor))
         monitor_metric = best_checkpoint.get('monitor_metric', 'val_loss')
@@ -844,6 +922,7 @@ def main():
         start_epoch = 0
         if args.resume:
             checkpoint = load_training_checkpoint(Path(args.resume), model, optimizer, device)
+            apply_model_schedule_state(model, checkpoint.get('schedule_state', {}))
             start_epoch = int(checkpoint.get('epoch', 0))
             resume_best_epoch = checkpoint.get('best_epoch')
             resume_best_monitor = checkpoint.get('best_monitor')
@@ -874,9 +953,8 @@ def main():
         try:
             for epoch in range(start_epoch + 1, total_epochs + 1):
                 stop_epoch = epoch
-                alignment_scale = compute_alignment_scale(epoch, config)
-                if hasattr(model, 'set_alignment_scale'):
-                    model.set_alignment_scale(alignment_scale)
+                schedule_metrics = apply_epoch_schedules(model, epoch, config)
+                alignment_scale = schedule_metrics['alignment_scale']
 
                 train_metrics, gradient_dashboard = train_epoch(
                     model,
@@ -895,7 +973,7 @@ def main():
                 lr = optimizer.param_groups[0]['lr']
                 train_loss = train_metrics.get('loss', float('nan'))
                 val_loss = val_metrics.get('val_loss', float('nan'))
-                merged_metrics = {'lr': lr, 'alignment_scale': alignment_scale}
+                merged_metrics = {'lr': lr, **schedule_metrics}
                 merged_metrics.update({
                     key: value
                     for key, value in train_metrics.items()
@@ -918,7 +996,7 @@ def main():
                     tb_logger.log_scalars('train', filter_numeric_scalars(train_metrics), epoch)
                     tb_logger.log_scalars('val', filter_numeric_scalars(val_metrics, strip_prefix='val_'), epoch)
                     tb_logger.log_learning_rate(lr, epoch)
-                    tb_logger.log_scalars('schedule', {'alignment_scale': alignment_scale}, epoch)
+                    tb_logger.log_scalars('schedule', schedule_metrics, epoch)
                     if gradient_dashboard is not None:
                         tb_logger.log_gradient_conflict_dashboard(
                             component_names=gradient_dashboard['component_names'],

@@ -70,10 +70,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_time_weight: float = 1.0,
         coupling_weight: float = 0.07,
         codebook_balance_weight: float = 0.02,
+        source_balance_scale: float = 1.0,
+        observation_balance_scale: float = 1.0,
         coupling_bidirectional: bool = True,
         orthogonality_weight: float = 0.01,
         assignment_temperature: float = 1.0,
+        source_balance_temperature: float | None = None,
+        observation_balance_temperature: float | None = None,
         coupling_temperature: float = 0.2,
+        source_simvq_enabled: bool = False,
+        source_simvq_loss_weight: float = 1.0,
+        observation_simvq_enabled: bool = False,
+        observation_simvq_loss_weight: float = 1.0,
         alignment_lag_candidates: List[int] | None = None,
         alignment_selection: str = 'min',
         alignment_compare_mode: str = 'variable',
@@ -119,6 +127,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
         self.eeg_fft_size = eeg_patch_size // 2 + 1
         self.fnirs_fft_size = fnirs_patch_size // 2 + 1
+        self.register_buffer('eeg_fft_loss_window', torch.hann_window(eeg_patch_size), persistent=False)
+        self.register_buffer('fnirs_fft_loss_window', torch.hann_window(fnirs_patch_size), persistent=False)
         self.eeg_amplitude_weight = eeg_amplitude_weight
         self.eeg_phase_weight = eeg_phase_weight
         self.eeg_time_weight = eeg_time_weight
@@ -127,10 +137,20 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.fnirs_time_weight = fnirs_time_weight
         self.coupling_weight = coupling_weight
         self.codebook_balance_weight = codebook_balance_weight
+        self.source_balance_scale = max(float(source_balance_scale), 0.0)
+        self.observation_balance_scale = max(float(observation_balance_scale), 0.0)
+        self.default_source_balance_scale = float(self.source_balance_scale)
+        self.default_observation_balance_scale = float(self.observation_balance_scale)
         self.coupling_bidirectional = bool(coupling_bidirectional)
         self.orthogonality_weight = orthogonality_weight
         self.assignment_temperature = assignment_temperature
         self.balance_assignment_temperature = assignment_temperature
+        self.source_balance_temperature = float(
+            assignment_temperature if source_balance_temperature is None else source_balance_temperature
+        )
+        self.observation_balance_temperature = float(
+            assignment_temperature if observation_balance_temperature is None else observation_balance_temperature
+        )
         self.coupling_temperature = coupling_temperature
         self.alignment_lag_candidates = sorted({max(int(lag), 0) for lag in (alignment_lag_candidates or [0])})
         if not self.alignment_lag_candidates:
@@ -155,6 +175,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.eeg_observation_branch_dropout = max(float(eeg_observation_branch_dropout), 0.0)
         self.fnirs_observation_branch_dropout = max(float(fnirs_observation_branch_dropout), 0.0)
         self.alignment_scale = 1.0
+        self.use_smooth_l1 = bool(use_smooth_l1)
         self.loss_fn = F.smooth_l1_loss if use_smooth_l1 else F.mse_loss
 
         self.eeg_patch_embed = MultiChannelPatchEmbedding(
@@ -216,6 +237,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             kmeans_init=kmeans_init,
             revive_dead_codes=revive_dead_codes,
             dead_code_threshold=dead_code_threshold,
+            learnable_codebook_transform=source_simvq_enabled,
+            codebook_transform_loss_weight=source_simvq_loss_weight,
         )
         self.fnirs_source_quantizer = NormEMAVectorQuantizer(
             n_embed=source_codebook_size,
@@ -225,6 +248,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             kmeans_init=kmeans_init,
             revive_dead_codes=revive_dead_codes,
             dead_code_threshold=dead_code_threshold,
+            learnable_codebook_transform=source_simvq_enabled,
+            codebook_transform_loss_weight=source_simvq_loss_weight,
         )
         self.eeg_observation_quantizer = NormEMAVectorQuantizer(
             n_embed=eeg_observation_codebook_size,
@@ -234,6 +259,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             kmeans_init=kmeans_init,
             revive_dead_codes=revive_dead_codes,
             dead_code_threshold=dead_code_threshold,
+            learnable_codebook_transform=observation_simvq_enabled,
+            codebook_transform_loss_weight=observation_simvq_loss_weight,
         )
         self.fnirs_observation_quantizer = NormEMAVectorQuantizer(
             n_embed=fnirs_observation_codebook_size,
@@ -243,9 +270,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             kmeans_init=kmeans_init,
             revive_dead_codes=revive_dead_codes,
             dead_code_threshold=dead_code_threshold,
+            learnable_codebook_transform=observation_simvq_enabled,
+            codebook_transform_loss_weight=observation_simvq_loss_weight,
         )
 
         self.quantizer = self.eeg_source_quantizer
+        self.quantization_strength = 1.0
         self.coupling_logits = nn.Parameter(
             torch.zeros(len(self.alignment_lag_candidates), source_codebook_size, source_codebook_size)
         )
@@ -340,10 +370,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             fnirs_time_weight=reconstruction_cfg.get('fnirs_time_weight', 1.0),
             coupling_weight=coupling_cfg.get('weight', 0.07),
             codebook_balance_weight=codebook_cfg.get('balance_weight', 0.02),
+            source_balance_scale=codebook_cfg.get('source_balance_scale', 1.0),
+            observation_balance_scale=codebook_cfg.get('observation_balance_scale', 1.0),
             coupling_bidirectional=coupling_cfg.get('bidirectional', True),
             orthogonality_weight=branch_cfg.get('orthogonality_weight', 0.01),
             assignment_temperature=codebook_cfg.get('assignment_temperature', 1.0),
+            source_balance_temperature=codebook_cfg.get('source_assignment_temperature'),
+            observation_balance_temperature=codebook_cfg.get('observation_assignment_temperature'),
             coupling_temperature=coupling_cfg.get('temperature', 0.2),
+            source_simvq_enabled=quantizer_cfg.get('source_simvq_enabled', False),
+            source_simvq_loss_weight=quantizer_cfg.get('source_simvq_loss_weight', 1.0),
+            observation_simvq_enabled=quantizer_cfg.get('observation_simvq_enabled', False),
+            observation_simvq_loss_weight=quantizer_cfg.get('observation_simvq_loss_weight', 1.0),
             alignment_lag_candidates=coupling_cfg.get('lag_candidates', validation_cfg.get('lag_set', [0])),
             alignment_selection=coupling_cfg.get('selection', 'min'),
             alignment_compare_mode=coupling_cfg.get('compare_mode', 'variable'),
@@ -369,11 +407,37 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         n_patches = seq_len // patch_size
         return x.view(batch_size, channels, n_patches, patch_size).permute(0, 2, 1, 3).contiguous()
 
-    def _compute_fft_targets(self, patches: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        fft = torch.fft.rfft(patches, dim=-1)
-        amplitude = torch.log(torch.abs(fft) + 1e-8)
-        phase = torch.angle(fft) / math.pi
-        return amplitude, phase
+    def _compute_fft_targets(
+        self,
+        patches: torch.Tensor,
+        window: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        shaped_window = window.to(device=patches.device, dtype=patches.dtype).view(1, 1, 1, -1)
+        fft = torch.fft.rfft(patches * shaped_window, dim=-1)
+        magnitude = torch.abs(fft)
+        amplitude = torch.log1p(magnitude)
+        phase = torch.angle(fft)
+        return amplitude, phase, magnitude
+
+    def _elementwise_loss(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        if self.use_smooth_l1:
+            return F.smooth_l1_loss(prediction, target, reduction='none')
+        return F.mse_loss(prediction, target, reduction='none')
+
+    def _compute_phase_weights(self, magnitude: torch.Tensor) -> torch.Tensor:
+        peak_magnitude = magnitude.amax(dim=-1, keepdim=True).clamp_min(1e-6)
+        return torch.sqrt(magnitude / peak_magnitude)
+
+    def _compute_phase_loss(
+        self,
+        pred_phase: torch.Tensor,
+        target_phase: torch.Tensor,
+        phase_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        wrapped_delta = torch.atan2(torch.sin(pred_phase - target_phase), torch.cos(pred_phase - target_phase))
+        normalized_delta = wrapped_delta / math.pi
+        weighted_loss = self._elementwise_loss(normalized_delta, torch.zeros_like(normalized_delta)) * phase_weights
+        return weighted_loss.sum() / phase_weights.sum().clamp_min(1.0)
 
     def _reconstruct_time(self, amplitude: torch.Tensor, phase: torch.Tensor, patch_size: int) -> torch.Tensor:
         amp = torch.exp(amplitude)
@@ -606,8 +670,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
         eeg_patches = self._split_to_patches(eeg, self.eeg_patch_size)
         fnirs_patches = self._split_to_patches(fnirs, self.fnirs_patch_size)
-        eeg_target_amp, eeg_target_phase = self._compute_fft_targets(eeg_patches)
-        fnirs_target_amp, fnirs_target_phase = self._compute_fft_targets(fnirs_patches)
+        eeg_target_amp, eeg_target_phase, eeg_target_magnitude = self._compute_fft_targets(
+            eeg_patches,
+            self.eeg_fft_loss_window,
+        )
+        fnirs_target_amp, fnirs_target_phase, fnirs_target_magnitude = self._compute_fft_targets(
+            fnirs_patches,
+            self.fnirs_fft_loss_window,
+        )
 
         latents = self.encode_modalities(eeg, fnirs)
         eeg_source = latents['eeg_source']
@@ -625,10 +695,16 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_observation_q = self._branch_dropout(eeg_observation_q, self.eeg_observation_branch_dropout)
         fnirs_observation_q = self._branch_dropout(fnirs_observation_q, self.fnirs_observation_branch_dropout)
 
-        eeg_source_logits = self._assignment_logits(eeg_source, self.eeg_source_quantizer.weight)
-        fnirs_source_logits = self._assignment_logits(fnirs_source, self.fnirs_source_quantizer.weight)
-        eeg_observation_logits = self._assignment_logits(eeg_observation, self.eeg_observation_quantizer.weight)
-        fnirs_observation_logits = self._assignment_logits(fnirs_observation, self.fnirs_observation_quantizer.weight)
+        eeg_source_logits = self._assignment_logits(eeg_source, self.eeg_source_quantizer.get_codebook_weight())
+        fnirs_source_logits = self._assignment_logits(fnirs_source, self.fnirs_source_quantizer.get_codebook_weight())
+        eeg_observation_logits = self._assignment_logits(
+            eeg_observation,
+            self.eeg_observation_quantizer.get_codebook_weight(),
+        )
+        fnirs_observation_logits = self._assignment_logits(
+            fnirs_observation,
+            self.fnirs_observation_quantizer.get_codebook_weight(),
+        )
 
         source_coupling = self._compute_source_coupling_loss(eeg_source_logits, fnirs_source_logits)
         source_coupling_loss = source_coupling['source_coupling_loss']
@@ -637,11 +713,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_source_probs = source_coupling['eeg_source_probs']
         fnirs_source_probs = source_coupling['fnirs_source_probs']
 
-        balance_temperature = max(float(self.balance_assignment_temperature), 1e-3)
-        eeg_source_balance_probs = straight_through_assignment_probs(eeg_source_logits, balance_temperature)
-        fnirs_source_balance_probs = straight_through_assignment_probs(fnirs_source_logits, balance_temperature)
-        eeg_observation_balance_probs = straight_through_assignment_probs(eeg_observation_logits, balance_temperature)
-        fnirs_observation_balance_probs = straight_through_assignment_probs(fnirs_observation_logits, balance_temperature)
+        source_balance_temperature = max(float(self.source_balance_temperature), 1e-3)
+        observation_balance_temperature = max(float(self.observation_balance_temperature), 1e-3)
+        eeg_source_balance_probs = straight_through_assignment_probs(eeg_source_logits, source_balance_temperature)
+        fnirs_source_balance_probs = straight_through_assignment_probs(fnirs_source_logits, source_balance_temperature)
+        eeg_observation_balance_probs = straight_through_assignment_probs(
+            eeg_observation_logits,
+            observation_balance_temperature,
+        )
+        fnirs_observation_balance_probs = straight_through_assignment_probs(
+            fnirs_observation_logits,
+            observation_balance_temperature,
+        )
 
         source_balance_loss = 0.5 * (
             batch_usage_entropy_loss(eeg_source_balance_probs) +
@@ -651,7 +734,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             batch_usage_entropy_loss(eeg_observation_balance_probs) +
             batch_usage_entropy_loss(fnirs_observation_balance_probs)
         )
-        codebook_balance_loss = 0.5 * (source_balance_loss + observation_balance_loss)
+        codebook_balance_loss = 0.5 * (
+            self.source_balance_scale * source_balance_loss +
+            self.observation_balance_scale * observation_balance_loss
+        )
 
         reconstructions = self.decode_from_components(
             eeg_source_q,
@@ -664,9 +750,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_pred_amp = reconstructions['fnirs_pred_amp']
         fnirs_pred_phase = reconstructions['fnirs_pred_phase']
 
-        eeg_amp_loss = self.loss_fn(eeg_pred_amp, eeg_target_amp)
-        eeg_phase_loss = self.loss_fn(eeg_pred_phase, eeg_target_phase)
         eeg_rec = reconstructions['eeg_reconstructed']
+        eeg_rec_patches = self._split_to_patches(eeg_rec, self.eeg_patch_size)
+        eeg_rec_amp, eeg_rec_phase, _ = self._compute_fft_targets(eeg_rec_patches, self.eeg_fft_loss_window)
+        eeg_amp_loss = self.loss_fn(eeg_rec_amp, eeg_target_amp)
+        eeg_phase_loss = self._compute_phase_loss(
+            eeg_rec_phase,
+            eeg_target_phase,
+            self._compute_phase_weights(eeg_target_magnitude),
+        )
         eeg_time_loss = self.loss_fn(eeg_rec, eeg)
         eeg_rec_loss = (
             self.eeg_amplitude_weight * eeg_amp_loss +
@@ -674,9 +766,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.eeg_time_weight * eeg_time_loss
         )
 
-        fnirs_amp_loss = self.loss_fn(fnirs_pred_amp, fnirs_target_amp)
-        fnirs_phase_loss = self.loss_fn(fnirs_pred_phase, fnirs_target_phase)
         fnirs_rec = reconstructions['fnirs_reconstructed']
+        fnirs_rec_patches = self._split_to_patches(fnirs_rec, self.fnirs_patch_size)
+        fnirs_rec_amp, fnirs_rec_phase, _ = self._compute_fft_targets(fnirs_rec_patches, self.fnirs_fft_loss_window)
+        fnirs_amp_loss = self.loss_fn(fnirs_rec_amp, fnirs_target_amp)
+        fnirs_phase_loss = self._compute_phase_loss(
+            fnirs_rec_phase,
+            fnirs_target_phase,
+            self._compute_phase_weights(fnirs_target_magnitude),
+        )
         fnirs_time_loss = self.loss_fn(fnirs_rec, fnirs)
         fnirs_rec_loss = (
             self.fnirs_amplitude_weight * fnirs_amp_loss +
@@ -794,6 +892,36 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
     def get_alignment_scale(self) -> float:
         return float(self.alignment_scale)
+
+    def set_balance_scales(
+        self,
+        source_scale: float | None = None,
+        observation_scale: float | None = None,
+    ):
+        if source_scale is not None:
+            self.source_balance_scale = max(float(source_scale), 0.0)
+        if observation_scale is not None:
+            self.observation_balance_scale = max(float(observation_scale), 0.0)
+
+    def get_balance_scales(self) -> Dict[str, float]:
+        return {
+            'source_balance_scale': float(self.source_balance_scale),
+            'observation_balance_scale': float(self.observation_balance_scale),
+        }
+
+    def set_quantization_strength(self, strength: float):
+        self.quantization_strength = min(max(float(strength), 0.0), 1.0)
+        for quantizer in (
+            self.eeg_source_quantizer,
+            self.fnirs_source_quantizer,
+            self.eeg_observation_quantizer,
+            self.fnirs_observation_quantizer,
+        ):
+            if hasattr(quantizer, 'set_quantization_strength'):
+                quantizer.set_quantization_strength(self.quantization_strength)
+
+    def get_quantization_strength(self) -> float:
+        return float(self.quantization_strength)
 
     def get_gradient_component_weights(self) -> Dict[str, float]:
         alignment_scale = float(self.get_alignment_scale())

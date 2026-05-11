@@ -114,6 +114,8 @@ class NormEMAVectorQuantizer(nn.Module):
         kmeans_init: bool = True,
         dead_code_threshold: float = 1.0,
         revive_dead_codes: bool = True,
+        learnable_codebook_transform: bool = False,
+        codebook_transform_loss_weight: float = 1.0,
     ):
         super().__init__()
         self.num_tokens = n_embed
@@ -123,6 +125,9 @@ class NormEMAVectorQuantizer(nn.Module):
         self.eps = eps
         self.dead_code_threshold = dead_code_threshold
         self.revive_dead_codes = revive_dead_codes
+        self.learnable_codebook_transform = bool(learnable_codebook_transform)
+        self.codebook_transform_loss_weight = max(float(codebook_transform_loss_weight), 0.0)
+        self.quantization_strength = 1.0
         
         # Codebook initialization
         if kmeans_init:
@@ -135,6 +140,12 @@ class NormEMAVectorQuantizer(nn.Module):
         self.register_buffer('cluster_size', torch.zeros(n_embed))
         self.register_buffer('initted', torch.tensor([not kmeans_init]))
         self.register_buffer('update_count', torch.tensor([0]))
+        if self.learnable_codebook_transform:
+            self.codebook_transform = nn.Linear(embedding_dim, embedding_dim, bias=False)
+            with torch.no_grad():
+                self.codebook_transform.weight.copy_(torch.eye(embedding_dim))
+        else:
+            self.codebook_transform = None
     
     def init_embed_(self, data: torch.Tensor):
         """Initialize codebook with k-means if not already done."""
@@ -183,6 +194,20 @@ class NormEMAVectorQuantizer(nn.Module):
             # Reinitialize
             self.weight.data[dead_indices] = samples
             self.cluster_size[dead_indices] = self.dead_code_threshold
+
+    def get_codebook_weight(self) -> torch.Tensor:
+        """Return the effective codebook used for assignments and lookups."""
+        weight = self.weight
+        if self.codebook_transform is not None:
+            weight = self.codebook_transform(weight)
+            weight = l2norm(weight)
+        return weight
+
+    def set_quantization_strength(self, strength: float):
+        self.quantization_strength = min(max(float(strength), 0.0), 1.0)
+
+    def get_quantization_strength(self) -> float:
+        return float(self.quantization_strength)
     
     def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
         """
@@ -206,18 +231,27 @@ class NormEMAVectorQuantizer(nn.Module):
         
         # Initialize codebook with k-means on first batch
         self.init_embed_(z.detach())
+
+        codebook_weight = self.get_codebook_weight()
         
         # Compute distances using cosine similarity (since both are L2 normalized)
         # Distance = 2 - 2 * cosine_sim = 2 - 2 * (z @ weight.T)
         # Minimizing distance = Maximizing cosine similarity
-        sim = z @ self.weight.t()  # [B*N, K]
+        sim = z @ codebook_weight.t()  # [B*N, K]
         indices = sim.argmax(dim=-1)  # [B*N]
         
         # Get quantized vectors
-        z_q = F.embedding(indices, self.weight)  # [B*N, D]
+        z_q_lookup = F.embedding(indices, codebook_weight)  # [B*N, D]
         
-        # Compute loss (commitment loss only, codebook updates via EMA)
-        commitment_loss = self.beta * F.mse_loss(z_q.detach(), z)
+        # Compute loss (commitment/codebook terms can be progressively ramped in).
+        quantization_strength = self.get_quantization_strength()
+        commitment_loss = quantization_strength * self.beta * F.mse_loss(z_q_lookup.detach(), z)
+        codebook_loss = z.new_tensor(0.0)
+        if self.codebook_transform is not None and self.codebook_transform_loss_weight > 0.0:
+            codebook_loss = (
+                quantization_strength * self.codebook_transform_loss_weight * F.mse_loss(z_q_lookup, z.detach())
+            )
+        vq_loss = commitment_loss + codebook_loss
         
         # EMA codebook update
         if self.training:
@@ -249,8 +283,8 @@ class NormEMAVectorQuantizer(nn.Module):
             self._revive_dead_codes(z.detach())
             self.update_count += 1
         
-        # Straight-through estimator
-        z_q = z + (z_q - z).detach()
+        # Progressive quantization interpolates between continuous latents and hard VQ outputs.
+        z_q = z + quantization_strength * (z_q_lookup - z).detach()
         
         # Compute perplexity
         with torch.no_grad():
@@ -267,7 +301,10 @@ class NormEMAVectorQuantizer(nn.Module):
             indices = indices.view(B, N)
         
         info = {
-            'vq_loss': commitment_loss,
+            'vq_loss': vq_loss,
+            'commitment_loss': commitment_loss,
+            'codebook_loss': codebook_loss,
+            'quantization_strength': z.new_tensor(quantization_strength),
             'perplexity': perplexity,
             'utilization': utilization,
         }
@@ -276,7 +313,7 @@ class NormEMAVectorQuantizer(nn.Module):
     
     def get_codebook_entry(self, indices: torch.Tensor) -> torch.Tensor:
         """Get codebook vectors for given indices."""
-        return F.embedding(indices, self.weight)
+        return F.embedding(indices, self.get_codebook_weight())
 
 
 # =============================================================================
