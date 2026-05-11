@@ -19,15 +19,15 @@ gantt
         Gate1 Model Stabilization         :done, 2026-05-11, 2026-05-11
         Gate1 Baseline Lock               :done, 2026-05-11, 2026-05-11
     section Phase 2: Source Target
-        HRF Convolution Target            :active, 2026-05-11, 2026-05-20
-    section Phase 2A: Q-Coupling
-        Coupling-Aware Quantization       :      2026-05-20, 2026-05-30
-    section Phase 3: Concentration
-        Concentration Prior               :      2026-05-30, 2026-06-10
-    section Mechanism A
-        Coupling Smoothness               :      2026-06-10, 2026-06-20
+        HRF Convolution Target            :done, 2026-05-11, 2026-05-11
+    section Phase 2A: Redesign
+        Branch Target + Dual Decoder     :active, 2026-05-11, 2026-05-18
+    section Phase 2B: Coupling Priors
+        Concentration + Smoothness       :      2026-05-18, 2026-05-25
+    section Phase 2C: Cross-Modal + CoupQ
+        fNIRS→EEG Predictor + CoupQ     :      2026-05-25, 2026-06-05
     section Mechanism C
-        Causal Asymmetry                  :      2026-06-20, 2026-06-30
+        Causal Asymmetry                  :      2026-06-05, 2026-06-15
 ```
 
 ## Change Records
@@ -37,6 +37,7 @@ gantt
 | 1 | 2026-05-06 | Phase 1 | [Source/Observation Architecture Migration](2026-05-06_source_observation_migration.md) | `factorized_labram_vqnsp.py`, `registry.py`, `multimodal_tokenizer.py`, `__init__.py` | Merged |
 | 2 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Model Stabilization](2026-05-11_phase1_gate1_model_stabilization.md) | `factorized_labram_vqnsp.py`, `multimodal_tokenizer.py`, `labram_vqnsp.py`, `train_source_observation_tokenizer.py` | Merged |
 | 3 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Baseline Lock and Archive](2026-05-11_phase1_gate1_baseline_lock.md) | `phase1 configs`, `ARCHITECTURE.md`, `EXPERIMENT_LOG.md`, `IMPLEMENTATION_PLAN.md` | Merged |
+| 4 | 2026-05-11 | Phase 2A | [Branch Target Redesign + Dual Decoder Architecture](2026-05-11_phase2a_branch_target_redesign_dual_decoder.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `IMPLEMENTATION_PLAN.md` | Planned |
 
 ## How to Add a New Entry
 

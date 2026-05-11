@@ -382,26 +382,30 @@ loss:
 
 ### 2.7 Complete Loss Function
 
+> **Last revised**: 2026-05-11 — Phase 2A revision: added observation_loss, moved smoothness to Phase 2B, updated weights
+
 #### 2.7.1 Loss Terms Specification
 
 ```python
 total_loss = (
-    # === Gate 1 (Health): Reconstruction (unchanged from V6) ===
-    eeg_rec_loss +                         # full EEG reconstruction (amp + phase + time)
-    fnirs_rec_loss +                       # full fNIRS reconstruction (amp + phase + time)
+    # === Gate 1 (Health): Reconstruction ===
+    eeg_rec_loss +                         # EEG full reconstruction (source + observation sum)
+    fnirs_rec_loss +                       # fNIRS full reconstruction (source + observation sum)
     vq_loss +                              # VQ commitment loss for all quantizers
     
     # === Gate 2 (Semantics): Branch Roles ===
-    alpha_source_target * source_target_loss +    # HRF model target for fNIRS source decoder (NEW)
-    alpha_source_target * 0.5 * eeg_source_aux_loss +  # coarse EEG target for EEG source decoder (NEW)
-    alpha_orth * orthogonality_loss +              # source ⊥ observation (retained from V6)
+    alpha_source_target * source_target_loss +    # fNIRS source decoder → HRF(EEG_power)
+    alpha_source_target * eeg_source_aux_weight * eeg_source_aux_loss +  # EEG source decoder → power envelope
+    alpha_obs * observation_loss +                # observation decoder → (original - source_target) (NEW)
+    alpha_orth * orthogonality_loss +              # source ⊥ observation
     
     # === Gate 3 (Structure): Coupling with Physiological Prior ===
-    alpha_coupling * coupling_kl_loss +            # basic coupling training (retained)
-    alpha_conc * concentration_loss +              # sparsity prior on coupling rows (NEW, core)
+    alpha_coupling * coupling_kl_loss +            # basic coupling training
+    alpha_conc * concentration_loss +              # row entropy penalty (P0)
+    alpha_smooth * smoothness_loss +               # neighbor JS divergence (P1, moved from Phase 4)
     
     # === Codebook Health ===
-    alpha_balance * codebook_balance_loss          # utilization / perplexity (retained)
+    alpha_balance * codebook_balance_loss          # utilization / perplexity
 )
 ```
 
@@ -409,61 +413,99 @@ total_loss = (
 
 | 符号 | 损失项 | 来源 | 说明 |
 |------|--------|------|------|
-| `eeg_rec_loss` | EEG reconstruction | V6 保留 | amplitude + phase + time weights |
-| `fnirs_rec_loss` | fNIRS reconstruction | V6 保留 | amplitude + phase + time weights |
+| `eeg_rec_loss` | EEG reconstruction | V6 保留 | source + observation sum vs original |
+| `fnirs_rec_loss` | fNIRS reconstruction | V6 保留 | source + observation sum vs original |
 | `vq_loss` | VQ commitment | V6 保留 | across all 4 quantizers |
-| `source_target_loss` | Source branch HRF target | **新增** | fNIRS source decoder → HRF(EEG) |
-| `eeg_source_aux_loss` | EEG source coarse target | **新增** | EEG source decoder → raw EEG (weak auxiliary) |
+| `source_target_loss` | fNIRS source HRF target | Phase 2 新增 | fNIRS source decoder → HRF(EEG_power_envelope) |
+| `eeg_source_aux_loss` | EEG source target | Phase 2A 重定义 | EEG source decoder → power envelope @ full resolution |
+| `observation_loss` | Observation residual target | **Phase 2A 新增** | observation decoder → (original - source_target) |
 | `orthogonality_loss` | Source ⊥ Observation | V6 保留 | cross-correlation penalty |
 | `coupling_kl_loss` | Coupling KL | V6 保留 | P(fNIRS token \| EEG token) vs actual |
-| `concentration_loss` | Coupling row entropy | **新增** | encourages sparse/concentrated coupling |
+| `concentration_loss` | Coupling row entropy | Phase 2B 新增 (P0) | encourages sparse/concentrated coupling |
+| `smoothness_loss` | Coupling neighbor JS | Phase 2B 新增 (P1) | encourages local smoothness in coupling rows |
 | `codebook_balance_loss` | Codebook utilization | V6 保留 | entropy-based balance |
 
 **Removed from V6**:
 
 | 已删除项 | 删除理由 |
 |----------|----------|
-| `latent_align_loss` | Dual codebook 架构下，source latent 在不同空间，MSE 无意义；coupling 已提供跨模态桥接 |
+| `latent_align_loss` | Dual codebook 架构下，source latent 在不同空间，MSE 无意义 |
 | `assignment_align_loss` | TokenFlow analysis 确认不应追求同 token identity |
 | `hard_assignment_align_loss` | 同上 |
 | `shared_entropy_loss` | 功能被 `codebook_balance_loss` 覆盖 |
 | `private_entropy_loss` | 功能被 `codebook_balance_loss` 覆盖 |
 | `shared_eeg_common_loss` | 被 `source_target_loss` (HRF model) 替代 |
 | `shared_fnirs_common_loss` | 被 `source_target_loss` (HRF model) 替代 |
-| `eeg_private_residual_loss` | Observation branch 不再使用显式残差 target |
-| `fnirs_private_residual_loss` | Observation branch 不再使用显式残差 target |
-| `shared_eeg_recon_loss` | Source decoder 已有 aux target，不需要重复的 shared-only recon loss |
+| `eeg_private_residual_loss` | 被 `observation_loss` 替代（但 target 改为 original - source_target，不再是 smooth residual） |
+| `fnirs_private_residual_loss` | 被 `observation_loss` 替代（同上） |
+| `shared_eeg_recon_loss` | Source decoder 已有 explicit target，不需要重复 loss |
 | `shared_fnirs_recon_loss` | 同上 |
 
-**Loss count**: V6 = 12 loss terms → New design = 9 loss terms (减少 3 项，同时语义更清晰)
+**Loss count**: V6 = 12 → New design = 11 (observation_loss 恢复但语义已改为 explicit residual; concentration + smoothness 新增)
 
-#### 2.7.2 Default Weights
+#### 2.7.2 Default Weights (Phase 2A/B Target)
 
 ```yaml
 loss:
   reconstruction:
     eeg_amplitude_weight: 1.0
-    eeg_phase_weight: 1.0
-    eeg_time_weight: 0.75
+    eeg_time_weight: 0.9
     fnirs_amplitude_weight: 1.0
-    fnirs_phase_weight: 0.25
-    fnirs_time_weight: 1.25
+    fnirs_time_weight: 1.0
   
   source_target:
-    source_target_weight: 0.15        # HRF model target weight
-    source_target_warmup_epochs: 30   # warm-start: wait for reconstruction to stabilize
+    weight: 0.3                      # Phase 2A: 0.15 → 0.3
+    eeg_source_aux_weight: 1.0       # Phase 2A: 0.5 → 1.0 (target now meaningful)
+    warmup_epochs: 30
+  
+  observation_target:
+    weight: 0.15                     # Phase 2A: NEW
+    warmup_epochs: 30
   
   coupling:
-    coupling_weight: 0.07             # (retained from V6)
-    concentration_weight: 0.005       # new: start small, sweep [0.001, 0.005, 0.01]
-    coupling_bidirectional: true      # (retained from V6)
+    weight: 0.07                     # coupling_kl_loss (retained)
+    concentration_weight: 0.01       # Phase 2B: sweep [0.005, 0.01, 0.02]
+    smoothness_weight: 0.002         # Phase 2B: sweep [0.001, 0.002, 0.005]
+    smoothness_neighbors: 5
+    smoothness_warmup_epochs: 30     # enable after concentration stabilizes
+    bidirectional: true
   
   branch:
-    orthogonality_weight: 0.01        # (retained from V6)
+    orthogonality_weight: 0.05       # Phase 2A: 0.01 → 0.05
   
   codebook:
-    codebook_balance_weight: 0.02     # (retained from V6)
+    balance_weight: 0.08
+    source_balance_scale: 1.0
+    observation_balance_scale: 0.5   # Phase 2A: 0.0 → 0.5
 ```
+
+#### 2.7.3 Coupling Loss Triplet: Potential Conflicts and Monitoring
+
+**⚠️ 这三个 loss 作用在同一 `coupling_logits` 矩阵上，存在理论张力：**
+
+| Loss | 推向 | 极端后果 |
+|------|------|---------|
+| `coupling_kl_loss` | 匹配数据中的 token 共现统计 | 均匀分布（如当前 Phase 2 结果） |
+| `concentration_loss` | 每行低熵 | 每行坍缩为 one-hot |
+| `smoothness_loss` | 相邻行相似 | 所有行坍缩为同一分布 |
+
+**冲突场景：**
+- concentration 强 + smoothness 弱 → 每行 one-hot 但相邻行可能指向不同 token（失去平滑结构）
+- smoothness 强 + concentration 弱 → 所有行坍缩到同一分布（失去区分度）
+- 两者都强 → 所有行坍缩到同一个 one-hot（coupling 彻底退化）
+- coupling_kl_loss 过弱 → 数据信号被先验覆盖，学不到真实跨模态结构
+
+**必须监控的指标（训练时实时输出到 TensorBoard/log）：**
+
+1. `concentration_loss` 时间序列 — 应下降后稳定，不应持续下降至零
+2. `smoothness_loss` 时间序列 — 应下降后稳定
+3. `source_coupling_loss` 时间序列 — **不应显著上升**（如上升说明先验压倒数据）
+4. Per-row entropy 分布直方图 — 应集中在 [0.5×logK, 0.8×logK]，不应坍缩到接近零或接近 logK
+5. Neighbor JS divergence vs random pair JS divergence — 前者应显著低于后者
+6. **constraint_balance_ratio (CBR)** = `concentration_loss / (coupling_kl_loss + 1e-8)` — 健康范围 0.1–2.0；CBR > 5.0 表示 concentration 过强
+7. Coupling heatmap — 应呈现可辨识的集中结构
+
+详见 [IMPLEMENTATION_PLAN.md §6.5](../../IMPLEMENTATION_PLAN.md) 中"耦合三项 Loss 的潜在冲突与监控要求"。
 
 ### 2.8 Diagnostic Metrics for Branch Semantics Validation
 
@@ -473,9 +515,10 @@ loss:
 
 | 指标 | 计算 | 健康范围 |
 |------|------|----------|
-| **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | 显著 < $\log K$（非均匀） |
+| **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | [0.5×logK, 0.8×logK]（集中但不坍缩） |
 | **Coupling concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$ averaged over rows | > 1.5（行有峰值） |
-| **Source target reconstruction** | MSE(fNIRS_source_recon, HRF_target) | 随训练下降 |
+| **Source target reconstruction (fNIRS)** | MSE(fNIRS_source_recon, HRF_target) | 随训练下降 |
+| **Source target reconstruction (EEG)** | MSE(eeg_source_recon, power_envelope) | 随训练下降 |
 | **Cross-modal token predictability** | P(fNIRS_token \| EEG_token) top-1 accuracy | > 1/K (random baseline) |
 
 #### 2.8.2 Observation Branch Diagnostics
@@ -483,52 +526,69 @@ loss:
 | 指标 | 计算 | 健康范围 |
 |------|------|----------|
 | **Observation contribution gap** | MSE(source_only) - MSE(source+obs) | > 0（observation 有正贡献） |
+| **Observation target reconstruction** | MSE(obs_recon, original - source_target) | 随训练下降 |
 | **Observation cross-modal unpredictability** | MI(EEG_obs_token, fNIRS_source_token) | 接近 0（观测是模态特异的） |
 | **Subject leakage ratio** | MI(EEG_obs, subject_id) / MI(EEG_source, subject_id) | > 1.0（subject 信息集中在 observation） |
 
-#### 2.8.3 Architecture Comparison Metrics
+#### 2.8.3 Coupling Health Diagnostics (Phase 2B)
+
+| 指标 | 计算 | 健康范围 |
+|------|------|----------|
+| **concentration_loss** | Row entropy mean over all lags | 下降后稳定，不接近零 |
+| **smoothness_loss** | Neighbor JS divergence | 下降后稳定 |
+| **constraint_balance_ratio (CBR)** | concentration_loss / (coupling_kl_loss + 1e-8) | [0.1, 2.0] |
+| **Neighbor vs random JS gap** | JS_random - JS_neighbor | > 0（邻居更相似） |
+| **Per-row entropy histogram** | Distribution of H(T_i,:) over i | 集中在 [0.5×logK, 0.8×logK] |
+
+#### 2.8.4 Architecture Comparison Metrics
 
 | 指标 | 用于比较 |
 |------|----------|
 | Source codebook perplexity (EEG vs fNIRS) | 两个 source codebook 各自健康度 |
+| Observation codebook perplexity (EEG vs fNIRS) | 扩容后 observation codebook 是否健康 |
 | Coupling structure visualization | 热力图：按行熵排序后的 coupling matrix |
-| Ablation: source-only vs full reconstruction | 比较 S0/S1/S2 的 gap 大小 |
+| Ablation: source-only vs observation-only vs full | 比较三种模式的 gap 大小 |
 
-### 2.9 Implementation Phases
+### 2.9 Implementation Phases (Revised 2026-05-11)
 
 ```
-Phase 1: Structural Migration (no new loss terms)
+Phase 1: Structural Migration ✅ Complete
   ├── 拆分 shared_quantizer → eeg_source_quantizer + fnirs_source_quantizer
   ├── 重命名参数和方法: shared→source, private→observation
-  ├── 删除已废弃的 loss terms (latent_align, assignment_align, shared/private entropy,
-  │   shared_eeg_common, shared_fnirs_common, eeg_private_residual, fnirs_private_residual,
-  │   shared_eeg_recon, shared_fnirs_recon, hard_assignment_align)
-  ├── 保留 coupling_logits 不变
-  └── Gate: Gate 1 (Health) — reconstruction + codebook health 不退化
-            + 两个 source codebook 各自利用率 > 50%
+  ├── 删除已废弃的 loss terms
+  └── Gate 1 (Health) — 已通过
 
-Phase 2: Source Target Introduction
-  ├── 实现 HRF 卷积模型 (方案 A: 可学习参数的 double-gamma HRF)
-  ├── 新增 source_target_loss (fNIRS source decoder → HRF target)
-  ├── 新增 eeg_source_aux_loss (EEG source decoder → coarse raw EEG)
-  ├── 新增 source branch diagnostics
-  └── Gate: source target reconstruction 显著优于随机 baseline
-            + fNIRS source codebook 不 collapse
+Phase 2: Source Target Introduction ✅ Implemented (Gate 2-4 fail)
+  ├── 实现 HRF 卷积模型
+  ├── 新增 source_target_loss (fNIRS source → HRF target)
+  ├── 新增 eeg_source_aux_loss (EEG source → coarse raw EEG)
+  └── 问题：coupling 均匀坍塌、source target 语义不统一、observation 不可辨识
 
-Phase 3: Concentration Prior
-  ├── 实现 concentration_loss (coupling row entropy)
-  ├── 小系数 sweep [0.001, 0.005, 0.01]
-  ├── 监控 coupling row entropy vs log(K) baseline
-  └── Gate: coupling row entropy < log(K)/2
-            + Gate 1 (Health) 不退化
-            + concentration_ratio > 1.5
+Phase 2A: Branch Target Redesign + Dual Decoder 🔜 ACTIVE
+  ├── 新增 4 个独立 decoder（source/obs 分离）
+  ├── 重定义 source target：统一为 EEG power envelope driver
+  ├── 新增 observation_loss：explicit residual target
+  ├── 扩容 observation codebook（32→64）
+  ├── Loss 权重重新平衡
+  └── Gate 2 (Semantics) — 当前阻塞目标
 
-Phase 4: Independent Mechanism Validation
-  ├── 在 Phase 3 baseline 上单独验证 Mechanism A (smoothness)
-  ├── 在 Phase 3 baseline 上单独验证 Mechanism C (asymmetry)
-  └── Gate: 按 promotion rule 各自评估 (Section 6)
+Phase 2B: Coupling Structure Priors
+  ├── 实现 concentration_loss (row entropy penalty) [P0]
+  ├── 实现 smoothness_loss (neighbor JS divergence) [P1, 从 Phase 4 提前]
+  ├── 监控 coupling loss triplet 冲突（CBR, per-row entropy histogram, neighbor JS）
+  ├── Smoothness warmup：concentration 稳定后启用
+  └── Gate 3 (Structure) — coupling row entropy < log(K)/2, concentration_ratio > 1.5
 
-Phase 5 (延后): Structural Assumption Audit
+Phase 2C (延后): Cross-Modal Source Target + Coupling-Aware Quantization
+  ├── fNIRS→EEG 预测器（让 EEG source target 包含 fNIRS 侧信息）
+  ├── Coupling-aware quantization（原 Phase 2A）
+  └── Gate 2A (Quantization-Coupling Consistency)
+
+Phase 3 (延后): Mechanism C — Causal Asymmetry
+  ├── 独立 fwd/rev coupling 参数化
+  └── Gate: asymmetry_ratio > 1.0, Gate 1 不退化
+
+Phase 4 (延后): Structural Assumption Audit
   ├── 评估 equal token count per window 是否应松动
   ├── 评估 patch boundary alignment 是否必要
   └── 评估 source codebook size ratio (EEG vs fNIRS) 的最优配置
@@ -537,6 +597,8 @@ Phase 5 (延后): Structural Assumption Audit
 ---
 
 ## 3. Mechanism A: Token-Space Coupling Smoothness
+
+> **Status update (2026-05-11)**：本机制已从独立 Phase 4 提前至 Phase 2B，与 concentration prior 在同一阶段实现。以下数学规范和实现细节保留不变，作为 Phase 2B 中 smoothness 部分的技术参考。smoothness_weight 从 0.002 开始 sweep，显著小于 concentration_weight (0.01)。
 
 ### 3.1 Physiological basis
 

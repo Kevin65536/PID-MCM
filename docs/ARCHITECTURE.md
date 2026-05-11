@@ -1,16 +1,15 @@
-# Current Architecture: Source/Observation Tokenizer
+# Current Architecture: Source/Observation Tokenizer (Dual Decoder)
 
-> **Semantics version**: `s2_source_observation_v1_gate1_stable`
-> **Last updated**: 2026-05-11 (Gate1 stabilization complete)
-> **Current phase**: Phase 1 (Structural Migration) — Complete and Gate1-stable (val_loss 1.6395)
-> **Active phase**: Phase 2 (HRF Source Target) — Next implementation target from locked baseline
-> **Config note**: the diagrams below show the nominal source/observation topology; the locked Phase 1 handoff baseline uses uniform32 codebooks, sets `source_coupling_loss` to `0.0`, and raises `codebook_balance_weight` to `0.08`
+> **Semantics version**: `s2_source_observation_v2_phase2a_planned`
+> **Last updated**: 2026-05-11 (Phase 2A plan ratified)
+> **Current phase**: Phase 2 (HRF Source Target) — Implemented but Gate 2-4 failed; Phase 2A revision planned
+> **Active phase**: Phase 2A (Branch Target Redesign + Dual Decoder) — Next implementation target
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
 ---
 
-## 1. Component Architecture
+## 1. Component Architecture (Phase 2A Target)
 
 ```mermaid
 graph TB
@@ -37,37 +36,48 @@ graph TB
     end
 
     subgraph Quantizers["Quantizers (4× NormEMAVectorQuantizer)"]
-        E_SQ[eeg_source_quantizer<br/>K=128 D=48]
-        F_SQ[fnirs_source_quantizer<br/>K=128 D=48]
-        E_OQ[eeg_observation_quantizer<br/>K=256 D=64]
-        F_OQ[fnirs_observation_quantizer<br/>K=128 D=48]
+        E_SQ[eeg_source_quantizer<br/>K=32 D=48]
+        F_SQ[fnirs_source_quantizer<br/>K=32 D=48]
+        E_OQ[eeg_observation_quantizer<br/>K=64 D=64]
+        F_OQ[fnirs_observation_quantizer<br/>K=64 D=48]
     end
 
     subgraph Coupling["Cross-Modal Coupling"]
         COUP_LOGITS[coupling_logits<br/>Parameter: n_lags x K_src x K_src]
-        COUP_LOSS[source_coupling_loss<br/>KL div on token distributions]
+        COUP_LOSS[source_coupling_loss<br/>+ concentration_loss<br/>+ smoothness_loss]
     end
 
-    subgraph DecodePrep["Decode Input Projection"]
-        E_DP[eeg_decode_input_proj<br/>48+64=112 → 256]
-        F_DP[fnirs_decode_input_proj<br/>48+48=96 → 160]
+    subgraph SourceDecoders["Source Decoders (2×)"]
+        E_SD[eeg_source_decoder<br/>d=256 depth=3 heads=8]
+        F_SD[fnirs_source_decoder<br/>d=160 depth=2 heads=4]
     end
 
-    subgraph Decoders
-        E_DEC[TransformerDecoder<br/>d=256 depth=4 heads=8]
-        F_DEC[TransformerDecoder<br/>d=160 depth=3 heads=4]
+    subgraph ObsDecoders["Observation Decoders (2×)"]
+        E_OD[eeg_observation_decoder<br/>d=256 depth=3 heads=8]
+        F_OD[fnirs_observation_decoder<br/>d=160 depth=2 heads=4]
     end
 
-    subgraph OutputHeads["Output Heads (4×)"]
-        E_AH[eeg_amplitude_head<br/>256 → 30x201]
-        E_PH[eeg_phase_head<br/>256 → 30x201]
-        F_AH[fnirs_amplitude_head<br/>160 → 36x11]
-        F_PH[fnirs_phase_head<br/>160 → 36x11]
+    subgraph OutputHeads["Output Heads (8×)"]
+        E_SA[eeg_src_amp_head<br/>256→30x201]
+        E_SPH[eeg_src_phase_head<br/>256→30x201]
+        E_OA[eeg_obs_amp_head<br/>256→30x201]
+        E_OPH[eeg_obs_phase_head<br/>256→30x201]
+        F_SA[fnirs_src_amp_head<br/>160→36x11]
+        F_SPH[fnirs_src_phase_head<br/>160→36x11]
+        F_OA[fnirs_obs_amp_head<br/>160→36x11]
+        F_OPH[fnirs_obs_phase_head<br/>160→36x11]
     end
 
     subgraph Reconstruction
-        E_REC[EEG Reconstruction<br/>Freq→Time ISTFT]
-        F_REC[fNIRS Reconstruction<br/>Freq→Time ISTFT]
+        E_SUM[Σ source + observation<br/>= eeg_full_recon]
+        F_SUM[Σ source + observation<br/>= fnirs_full_recon]
+    end
+
+    subgraph Targets[Target Construction]
+        E_ST[EEG source target<br/>power envelope @ 200Hz]
+        F_ST[fNIRS source target<br/>HRF(power envelope)]
+        E_OT[EEG obs target<br/>= original - source_target]
+        F_OT[fNIRS obs target<br/>= original - source_target]
     end
 
     EEG --> E_PE --> E_ENC
@@ -85,21 +95,30 @@ graph TB
     F_SQ --> COUP_LOGITS
     COUP_LOGITS --> COUP_LOSS
 
-    E_SQ --> E_DP
-    E_OQ --> E_DP
-    F_SQ --> F_DP
-    F_OQ --> F_DP
+    E_SQ --> E_SD --> E_SA & E_SPH
+    E_OQ --> E_OD --> E_OA & E_OPH
+    F_SQ --> F_SD --> F_SA & F_SPH
+    F_OQ --> F_OD --> F_OA & F_OPH
 
-    E_DP --> E_DEC --> E_AH & E_PH
-    F_DP --> F_DEC --> F_AH & F_PH
+    E_SA & E_SPH --> E_SUM
+    E_OA & E_OPH --> E_SUM
+    F_SA & F_SPH --> F_SUM
+    F_OA & F_OPH --> F_SUM
 
-    E_AH & E_PH --> E_REC
-    F_AH & F_PH --> F_REC
+    EEG --> E_ST
+    EEG --> E_OT
+    FNIRS --> F_OT
+    E_ST --> F_ST
 
     style Coupling fill:#e1f5fe
     style Quantizers fill:#fff3e0
     style Projection fill:#f3e5f5
+    style SourceDecoders fill:#e8f5e9
+    style ObsDecoders fill:#fce4ec
+    style Targets fill:#fff9c4
 ```
+
+**Key architectural change from Phase 1/2**: Single shared decoder per modality → dual independent decoders (source + observation). Full reconstruction = source_recon + observation_recon (additive in signal space).
 
 ## 2. Data Flow (Forward Pass)
 
@@ -107,94 +126,104 @@ graph TB
 sequenceDiagram
     participant EEG as EEG [B,30,2000]
     participant fNIRS as fNIRS [B,36,100]
-    participant Patch as PatchEmbedding
-    participant Enc as TransformerEncoder
+    participant Enc as Encoders
     participant Proj as Projection Heads
     participant Quant as Quantizers (4×)
     participant Coup as Coupling Matrix
-    participant Dec as Decoder
+    participant DecS as Source Decoders
+    participant DecO as Observation Decoders
+    participant Target as Target Construction
     participant Loss as Loss Computation
 
-    EEG->>Patch: split_to_patches (400 stride)
-    fNIRS->>Patch: split_to_patches (20 stride)
-    Patch->>Enc: embeddings [B,5,D]
-    Enc->>Proj: encoded [B,5,D]
+    EEG->>Target: compute source target (power envelope @ full res)
+    fNIRS->>Target: compute source target (HRF of power envelope)
+    Target->>Target: obs_target = original - source_target
 
-    Proj->>Quant: eeg_source [B,5,48]
-    Proj->>Quant: fnirs_source [B,5,48]
-    Proj->>Quant: eeg_observation [B,5,64]
-    Proj->>Quant: fnirs_observation [B,5,48]
+    EEG->>Enc: EEG encoder
+    fNIRS->>Enc: fNIRS encoder
+    Enc->>Proj: 4 projection heads
+    Proj->>Quant: 4 quantizers (straight-through)
 
-    Quant-->>Coup: eeg_source_probs [B,5,128]
-    Quant-->>Coup: fnirs_source_probs [B,5,128]
-    Coup->>Loss: source_coupling_loss (KL div)
+    Quant-->>Coup: eeg_source_probs, fnirs_source_probs
+    Coup->>Loss: coupling_kl_loss + concentration_loss + smoothness_loss
 
-    Quant->>Dec: source_q + observation_q concat
-    Dec->>Dec: Amplitude + Phase prediction
-    Dec->>Dec: ISTFT → reconstructed time signal
-    Dec->>Dec: Re-split to patches → FFT with Hann window
-    Dec->>Loss: Amplitude (log1p magnitude) loss
-    Dec->>Loss: Time-domain loss (MSE or SmoothL1)
-    Loss->>Loss: rec_loss = amp + time (no phase)
+    Quant->>DecS: source_q → source decoder → source_recon
+    Quant->>DecO: obs_q → observation decoder → obs_recon
+
+    DecS->>Loss: source_target_loss (source_recon vs source_target)
+    DecO->>Loss: observation_loss (obs_recon vs obs_target)
+    DecS->>Loss: full_recon_loss ((source_recon + obs_recon) vs original)
+    DecO->>Loss: (same, additive)
+
     Loss->>Loss: vq_loss = commitment (× quantization_strength)
     Loss->>Loss: orthogonality_loss (source ⊥ obs)
-    Loss->>Loss: codebook_balance_loss (straight-through hard assignment, per-branch temps)
-    Loss->>Loss: total = rec + vq + coupling + balance + ortho
+    Loss->>Loss: codebook_balance_loss (straight-through hard assign, per-branch temps)
+    Loss->>Loss: total = rec + source_target + obs_target + vq + coupling + balance + ortho
 ```
 
-## 3. Loss Composition
+## 3. Loss Composition (Phase 2A Target)
 
 ```mermaid
 graph LR
-    TOTAL[total_loss] --> REC[reconstruction]
+    TOTAL[total_loss] --> REC[full reconstruction]
+    TOTAL --> ST[source_target_loss<br/>fNIRS + EEG]
+    TOTAL --> OT[observation_loss<br/>fNIRS + EEG]
     TOTAL --> VQ[vq_loss<br/>× quantization_strength]
-    TOTAL --> COUP[source_coupling_loss]
-    TOTAL --> BAL[codebook_balance_loss<br/>straight-through hard assign]
+    TOTAL --> COUP[coupling losses]
+    TOTAL --> BAL[codebook_balance_loss]
     TOTAL --> ORTHO[orthogonality_loss]
 
-    REC --> E_REC[eeg_rec_loss<br/>amp + time]
-    REC --> F_REC[fnirs_rec_loss<br/>amp + time]
+    REC --> E_REC[eeg_full: source + obs vs original]
+    REC --> F_REC[fnirs_full: source + obs vs original]
+
+    ST --> ST_F[fnirs_source_target_loss<br/>source_recon vs HRF target]
+    ST --> ST_E[eeg_source_aux_loss<br/>source_recon vs power envelope]
+
+    OT --> OT_F[fnirs_obs_loss<br/>obs_recon vs obs_target]
+    OT --> OT_E[eeg_obs_loss<br/>obs_recon vs obs_target]
 
     VQ --> VQ_S[vq_source_loss<br/>eeg + fnirs]
     VQ --> VQ_O[vq_observation_loss<br/>eeg + fnirs]
-    VQ --> VQ_SIMVQ[simvq_transform_loss<br/>opt-in, disabled by default]
 
-    COUP --> COUP_FWD[EEG → fNIRS KL]
-    COUP --> COUP_REV[fNIRS → EEG KL<br/>bidirectional]
+    COUP --> COUP_KL[source_coupling_loss<br/>KL div, bidirectional]
+    COUP --> COUP_CONC[concentration_loss<br/>row entropy penalty]
+    COUP --> COUP_SMTH[smoothness_loss<br/>neighbor JS divergence]
 
-    BAL --> BAL_S[source_balance_loss<br/>temp=source_balance_temperature<br/>scale=source_balance_scale]
-    BAL --> BAL_O[observation_balance_loss<br/>temp=observation_balance_temperature<br/>scale=observation_balance_scale]
+    BAL --> BAL_S[source_balance_loss]
+    BAL --> BAL_O[observation_balance_loss]
 
     ORTHO --> O_E[orthogonality_loss<br/>eeg_source ⊥ eeg_obs]
     ORTHO --> O_F[orthogonality_loss<br/>fnirs_source ⊥ fnirs_obs]
 ```
 
-### Default Gate1-Stable Loss Weights
-
-The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and raises `codebook_balance_weight` to `0.08`; see the locked handoff section below.
+### Current Target Loss Weights (Phase 2A)
 
 | Loss Term | Weight | Purpose |
 |-----------|--------|---------|
-| `eeg_rec_loss` | 1.0 | EEG full reconstruction (amp 1.0 + time 0.9; phase supervision removed) |
-| `fnirs_rec_loss` | 1.0 | fNIRS full reconstruction (amp 1.0 + time 1.0; phase supervision removed) |
-| `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers); strength scheduled via `quantization_warmup` |
-| `source_coupling_loss` | 0.07 | KL divergence: predicted vs actual source token distributions (0.0 in Gate1 baseline) |
-| `codebook_balance_loss` | 0.02 (0.08 in Gate1 baseline) | Entropy-based dead-code prevention via straight-through hard assignment; source/observation have independent temperatures and scales |
-| `orthogonality_loss` | 0.01 | Cosine similarity penalty between source and observation within each modality |
-| `simvq_transform_loss` | 0.0 (opt-in) | SimVQ codebook transform consistency loss; disabled by default, enabled via `quantizer.source_simvq_enabled` / `observation_simvq_enabled` |
+| `eeg_rec_loss` | 1.0 (amp 1.0 + time 0.9) | EEG full reconstruction via source + observation sum |
+| `fnirs_rec_loss` | 1.0 (amp 1.0 + time 1.0) | fNIRS full reconstruction via source + observation sum |
+| `source_target_loss` (fNIRS) | 0.3 | fNIRS source decoder → HRF(EEG_power_envelope) |
+| `eeg_source_aux_loss` | 0.3 (weight × aux_weight) | EEG source decoder → power envelope at full resolution |
+| `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → original - source_target |
+| `observation_loss` (EEG) | 0.15 | EEG observation decoder → original - source_target |
+| `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers) |
+| `source_coupling_loss` | 0.07 | KL divergence on coupling matrix (bidirectional) |
+| `concentration_loss` | 0.01 | Row entropy penalty on coupling matrix **(Phase 2B)** |
+| `smoothness_loss` | 0.002 | Neighbor JS divergence on coupling matrix **(Phase 2B)** |
+| `codebook_balance_loss` | 0.08 | Entropy-based dead-code prevention |
+| `orthogonality_loss` | 0.05 | Cosine similarity penalty: source ⊥ observation |
 
-### Schedule-Driven Parameters
+### Coupling Loss Triplet Monitoring
 
-These parameters are modulated per-epoch by the training schedule framework:
+Three losses act on the same `coupling_logits` matrix. Their interaction must be monitored:
 
-| Parameter | Default | Schedule Config Key | Description |
-|-----------|---------|---------------------|-------------|
-| `alignment_scale` | 0→1 ramp | `training.alignment_warmup` | Scales coupling loss weight during warmup |
-| `source_balance_scale` | 1.0 | `training.balance_warmup.source` | Scales source codebook balance loss independently |
-| `observation_balance_scale` | 1.0 | `training.balance_warmup.observation` | Scales observation codebook balance loss independently |
-| `quantization_strength` | 1.0 | `training.quantization_warmup` | Modulates VQ commitment loss strength (0→1 ramp) |
+| Loss | Role | Healthy range | Danger signal |
+|------|------|--------------|---------------|
+| `source_coupling_loss` | Data-driven anchor | 0.3–0.7 | Rising after priors enabled → priors overpowering data |
+| `concentration_loss` | Per-row entropy penalty | 1.5–3.0 (below log K) | Approaching 0 → rows collapsing to one-hot |
+| `smoothness_loss` | Neighbor similarity | Decreasing, then stable | Increasing → conflict with concentration |
 
-All schedule state is persisted in checkpoints under `schedule_state` for correct training resume.
+**constraint_balance_ratio** (CBR) = `concentration_loss / (coupling_kl_loss + 1e-8)`. Healthy: 0.1–2.0. CBR > 5.0 means concentration is overpowering data.
 
 ## 4. Component Catalog
 
@@ -202,60 +231,45 @@ All schedule state is persisted in checkpoints under `schedule_state` for correc
 
 | File | Role |
 |------|------|
-| [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py) | **Mainline tokenizer**: `SourceObservationLaBraMVQNSP` — encoders, projectors, 4 quantizers, coupling, decoders |
+| [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py) | **Mainline tokenizer**: `SourceObservationLaBraMVQNSP` — encoders, projectors, 4 quantizers, coupling, dual source/observation decoders |
 | [src/tokenizers/labram_vqnsp.py](../src/tokenizers/labram_vqnsp.py) | **Shared components**: `NormEMAVectorQuantizer`, `TransformerEncoder`, `TransformerDecoder`, `l2norm`, `MultiChannelPatchEmbedding` |
 | [src/tokenizers/base.py](../src/tokenizers/base.py) | Abstract `BaseTokenizer` class |
 | [src/tokenizers/registry.py](../src/tokenizers/registry.py) | Tokenizer factory: config → constructor mapping, `StandardizedOutput` interface |
-| [src/tokenizers/__init__.py](../src/tokenizers/__init__.py) | Tokenizer exports and registration |
 
 ### Loss Functions
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `coupling_kl_loss`, `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair`, `symmetric_kl_from_logits` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `coupling_kl_loss`, `coupling_concentration_loss`, `coupling_smoothness_loss`, `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair` |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Analysis & Visualization
 
 | File | Role |
 |------|------|
-| [src/visualization/tokenizer_analysis_suite.py](../src/visualization/tokenizer_analysis_suite.py) | **Standardized analysis entry point** — generates full tokenizer report |
-| [src/visualization/source_observation_analysis.py](../src/visualization/source_observation_analysis.py) | Source/observation alignment analysis, scorecard generation, Gate 1-4 metrics |
-| [src/visualization/tensorboard_logger.py](../src/visualization/tensorboard_logger.py) | TensorBoard metric logging during training |
-
-### Training
-
-| File | Role |
-|------|------|
-| [experiments/scripts/train_source_observation_tokenizer.py](../experiments/scripts/train_source_observation_tokenizer.py) | **Main training script** — loads config, creates model/dataloaders, runs training loop with per-epoch schedule dispatch (`apply_epoch_schedules`) and schedule-aware checkpointing |
-| [experiments/scripts/launch_training_nohup.sh](../experiments/scripts/launch_training_nohup.sh) | Standardized launcher for training runs |
+| [src/visualization/tokenizer_analysis_suite.py](../src/visualization/tokenizer_analysis_suite.py) | Standardized analysis entry point |
+| [src/visualization/source_observation_analysis.py](../src/visualization/source_observation_analysis.py) | Source/observation alignment analysis, Gate 1-4 scorecard |
 
 ### Configs
 
 | Directory | Purpose |
 |-----------|---------|
-| [experiments/configs/base.yaml](../experiments/configs/base.yaml) | Dataset, preprocessing, and hardware defaults |
-| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 configs, including the locked Gate1 baseline and best-current alias |
-| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs (ready) |
-| [experiments/configs/source_observation/phase3/](../experiments/configs/source_observation/phase3/) | Phase 3 Concentration Prior configs (ready) |
-| [experiments/configs/source_observation/mechanism_a/](../experiments/configs/source_observation/mechanism_a/) | Mechanism A Smoothness configs (ready) |
-| [experiments/configs/source_observation/mechanism_c/](../experiments/configs/source_observation/mechanism_c/) | Mechanism C Asymmetry configs (ready) |
+| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 configs, including locked Gate1 baseline |
+| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs |
+| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Phase 2A Branch Target Redesign + Dual Decoder (**active**) |
+| [experiments/configs/source_observation/phase2b/](../experiments/configs/source_observation/phase2b/) | Phase 2B Coupling Structure Priors |
+| [experiments/configs/source_observation/mechanism_c/](../experiments/configs/source_observation/mechanism_c/) | Mechanism C Causal Asymmetry |
 
 ## 5. Quantizer Summary
 
 | Quantizer | Codebook Size | Embedding Dim | Semantics |
 |-----------|---------------|---------------|-----------|
-| `eeg_source_quantizer` | K=128 | D=48 | EEG neurovascular coupling state |
-| `fnirs_source_quantizer` | K=128 | D=48 | fNIRS neurovascular coupling state |
-| `eeg_observation_quantizer` | K=256 | D=64 | EEG modality-specific encoding debt |
-| `fnirs_observation_quantizer` | K=128 | D=48 | fNIRS modality-specific encoding debt |
+| `eeg_source_quantizer` | K=32 | D=48 | EEG neurovascular coupling state (shared neural driver) |
+| `fnirs_source_quantizer` | K=32 | D=48 | fNIRS neurovascular coupling state (shared neural driver) |
+| `eeg_observation_quantizer` | K=64 | D=64 | EEG modality-specific encoding debt |
+| `fnirs_observation_quantizer` | K=64 | D=48 | fNIRS modality-specific encoding debt |
 
-All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). Each quantizer supports:
-- **Quantization strength**: `set_quantization_strength(strength)` modulates VQ commitment loss (0→1), scheduled via `training.quantization_warmup`
-- **SimVQ (opt-in)**: `learnable_codebook_transform` applies a learned linear transform to codebook vectors before assignment, with an auxiliary consistency loss; controlled via `quantizer.source_simvq_enabled` / `observation_simvq_enabled` (default: false)
-- **`get_codebook_weight()`**: Returns the effective codebook weight (with SimVQ transform applied if enabled), used for assignment logit computation
-
-The locked Phase 1 Gate1 handoff baseline temporarily uses uniform32 codebooks across all four quantizers to preserve the validated health profile.
+All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). Phase 2A expands observation codebooks to 64 while keeping source at 32, providing more capacity for modality-specific details.
 
 ## 6. Coupling Mechanism
 
@@ -267,19 +281,67 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 3. KL divergence between predicted and actual fNIRS token distributions
 4. When bidirectional: also compute `fNIRS → predicted_EEG` and average
 
+**Structural priors** (Phase 2B):
+- **Concentration** (row entropy penalty): each EEG source token should map deterministically to fNIRS tokens
+- **Smoothness** (neighbor JS divergence): nearby EEG tokens in codebook space should have similar coupling distributions
+
 **Selection**: Choose lag with minimum coupling loss (`alignment_selection='min'`).
 
 **Current lags**: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]`
 
-## 7. Phase Status
+## 7. Source Target Construction
+
+### Neural Driver Definition
+
+D(t) = EEG broadband power envelope (channel-averaged squared amplitude).
+
+### fNIRS Source Target
+
+```
+EEG [B,30,2000] → power² → mean(channels) → avg_pool → [B,1,100]
+                                                           ↓
+                                               HRF convolution (learnable double-gamma)
+                                                           ↓
+                                               per-channel mean/std rescale → [B,36,100]
+```
+
+### EEG Source Target
+
+```
+EEG [B,30,2000] → power² → mean(channels) → [B,1,2000]
+                                              ↓
+                                    expand to 30 channels → [B,30,2000]
+```
+
+Both targets derive from the same D(t), ensuring semantic consistency. The EEG source target is at full EEG temporal resolution (200Hz, not downsampled to fNIRS rate).
+
+### Observation Target
+
+```
+obs_target = original - source_target  (computed independently per modality)
+```
+
+## 8. Decoder Modes
+
+Three decoder input modes are explicitly trained:
+
+| Mode | Input to source decoder | Input to obs decoder | Target | Loss |
+|------|------------------------|---------------------|--------|------|
+| Full | source_q | obs_q | original | full reconstruction loss |
+| Source-only | source_q | zeros | source_target | source_target_loss |
+| Observation-only | zeros | obs_q | obs_target | observation_loss |
+
+Full reconstruction = source_recon + observation_recon (additive in signal space).
+
+## 9. Phase Status
 
 | Phase | Name | Status | Key Deliverable |
 |-------|------|--------|-----------------|
-| Phase 1 | Structural Migration | ✅ Complete | Source/Observation tokenizer running, shared/private removed |
-| Phase 2 | HRF Source Target | 🔜 Ready | Double-gamma HRF kernel, fNIRS source target from EEG |
-| Phase 2A | Coupling-Aware Quantization | 📋 Planned | Coupling prior guides fNIRS source argmin |
-| Phase 3 | Concentration Prior | 📋 Planned | Row entropy regularization on coupling matrix |
-| Mechanism A | Coupling Smoothness | 📋 Planned | Local smoothness prior on coupling rows |
+| Phase 1 | Structural Migration | ✅ Complete | Source/Observation tokenizer, shared/private removed |
+| Phase 2 | HRF Source Target | ✅ Implemented | Double-gamma HRF kernel; Gate 2-4 fail, needs Phase 2A |
+| Phase 2A | Branch Target Redesign + Dual Decoder | 🔜 **Active** | Dual decoder, unified source target, explicit observation target |
+| Phase 2B | Coupling Structure Priors | 📋 Planned | Concentration + Smoothness on coupling matrix |
+| Phase 2C | Cross-Modal Source + Coupling-Aware Q | 📋 Deferred | fNIRS→EEG predictor, coupling-guided quantization |
 | Mechanism C | Causal Asymmetry | 📋 Planned | Independent fwd/rev coupling parameterization |
 
 ### Locked Phase1 Handoff
@@ -287,11 +349,17 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 | Artifact | Role |
 |----------|------|
 | [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Current best Gate1-stable baseline alias |
-| [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline outside the historical tuning chain |
-| [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass; best epoch 278, val_loss 1.6395270029703777 |
-| [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json) | Formal archive bundle for the full Phase 1 Gate1 search surface |
+| [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline |
+| [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
 
-## 8. Related Documents
+### Phase 2 Diagnostic Baseline
+
+| Artifact | Role |
+|----------|------|
+| [experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/](../experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/) | Phase 2 run with full Gate 1-4 analysis |
+| [experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json](../experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json) | Gate scorecard: Gate1=pending, Gate2/3/4=fail |
+
+## 10. Related Documents
 
 | Document | Role |
 |----------|------|
@@ -299,7 +367,4 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 | [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
 | [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |
-| [archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md](archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md) | Formal closure log for the Phase 1 Gate1 search bundle |
-| [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records (3 entries) |
-| [architecture_changelog/2026-05-11_phase1_gate1_model_stabilization.md](architecture_changelog/2026-05-11_phase1_gate1_model_stabilization.md) | Gate1 model stabilization: balance loss, schedule framework, phase removal |
-| [STANDARDIZATION_GUIDE.md](../STANDARDIZATION_GUIDE.md) | Naming conventions, run protocols, artifact standards |
+| [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records |
