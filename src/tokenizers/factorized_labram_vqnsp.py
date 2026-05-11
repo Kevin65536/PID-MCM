@@ -63,10 +63,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         revive_dead_codes: bool = True,
         dead_code_threshold: int = 10,
         eeg_amplitude_weight: float = 1.0,
-        eeg_phase_weight: float = 1.0,
         eeg_time_weight: float = 0.9,
         fnirs_amplitude_weight: float = 1.0,
-        fnirs_phase_weight: float = 0.2,
         fnirs_time_weight: float = 1.0,
         coupling_weight: float = 0.07,
         codebook_balance_weight: float = 0.02,
@@ -130,10 +128,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.register_buffer('eeg_fft_loss_window', torch.hann_window(eeg_patch_size), persistent=False)
         self.register_buffer('fnirs_fft_loss_window', torch.hann_window(fnirs_patch_size), persistent=False)
         self.eeg_amplitude_weight = eeg_amplitude_weight
-        self.eeg_phase_weight = eeg_phase_weight
         self.eeg_time_weight = eeg_time_weight
         self.fnirs_amplitude_weight = fnirs_amplitude_weight
-        self.fnirs_phase_weight = fnirs_phase_weight
         self.fnirs_time_weight = fnirs_time_weight
         self.coupling_weight = coupling_weight
         self.codebook_balance_weight = codebook_balance_weight
@@ -363,10 +359,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             revive_dead_codes=quantizer_cfg.get('revive_dead_codes', True),
             dead_code_threshold=quantizer_cfg.get('dead_code_threshold', 10),
             eeg_amplitude_weight=reconstruction_cfg.get('eeg_amplitude_weight', 1.0),
-            eeg_phase_weight=reconstruction_cfg.get('eeg_phase_weight', 1.0),
             eeg_time_weight=reconstruction_cfg.get('eeg_time_weight', 0.9),
             fnirs_amplitude_weight=reconstruction_cfg.get('fnirs_amplitude_weight', 1.0),
-            fnirs_phase_weight=reconstruction_cfg.get('fnirs_phase_weight', 0.2),
             fnirs_time_weight=reconstruction_cfg.get('fnirs_time_weight', 1.0),
             coupling_weight=coupling_cfg.get('weight', 0.07),
             codebook_balance_weight=codebook_cfg.get('balance_weight', 0.02),
@@ -407,37 +401,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         n_patches = seq_len // patch_size
         return x.view(batch_size, channels, n_patches, patch_size).permute(0, 2, 1, 3).contiguous()
 
-    def _compute_fft_targets(
+    def _compute_fft_amplitude_targets(
         self,
         patches: torch.Tensor,
         window: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         shaped_window = window.to(device=patches.device, dtype=patches.dtype).view(1, 1, 1, -1)
         fft = torch.fft.rfft(patches * shaped_window, dim=-1)
-        magnitude = torch.abs(fft)
-        amplitude = torch.log1p(magnitude)
-        phase = torch.angle(fft)
-        return amplitude, phase, magnitude
-
-    def _elementwise_loss(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        if self.use_smooth_l1:
-            return F.smooth_l1_loss(prediction, target, reduction='none')
-        return F.mse_loss(prediction, target, reduction='none')
-
-    def _compute_phase_weights(self, magnitude: torch.Tensor) -> torch.Tensor:
-        peak_magnitude = magnitude.amax(dim=-1, keepdim=True).clamp_min(1e-6)
-        return torch.sqrt(magnitude / peak_magnitude)
-
-    def _compute_phase_loss(
-        self,
-        pred_phase: torch.Tensor,
-        target_phase: torch.Tensor,
-        phase_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        wrapped_delta = torch.atan2(torch.sin(pred_phase - target_phase), torch.cos(pred_phase - target_phase))
-        normalized_delta = wrapped_delta / math.pi
-        weighted_loss = self._elementwise_loss(normalized_delta, torch.zeros_like(normalized_delta)) * phase_weights
-        return weighted_loss.sum() / phase_weights.sum().clamp_min(1.0)
+        return torch.log1p(torch.abs(fft))
 
     def _reconstruct_time(self, amplitude: torch.Tensor, phase: torch.Tensor, patch_size: int) -> torch.Tensor:
         amp = torch.exp(amplitude)
@@ -586,10 +557,6 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         return {
             'eeg_reconstructed': self._reconstruct_time(eeg_pred_amp, eeg_pred_phase, self.eeg_patch_size),
             'fnirs_reconstructed': self._reconstruct_time(fnirs_pred_amp, fnirs_pred_phase, self.fnirs_patch_size),
-            'eeg_pred_amp': eeg_pred_amp,
-            'eeg_pred_phase': eeg_pred_phase,
-            'fnirs_pred_amp': fnirs_pred_amp,
-            'fnirs_pred_phase': fnirs_pred_phase,
         }
 
     @torch.no_grad()
@@ -670,11 +637,11 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
         eeg_patches = self._split_to_patches(eeg, self.eeg_patch_size)
         fnirs_patches = self._split_to_patches(fnirs, self.fnirs_patch_size)
-        eeg_target_amp, eeg_target_phase, eeg_target_magnitude = self._compute_fft_targets(
+        eeg_target_amp = self._compute_fft_amplitude_targets(
             eeg_patches,
             self.eeg_fft_loss_window,
         )
-        fnirs_target_amp, fnirs_target_phase, fnirs_target_magnitude = self._compute_fft_targets(
+        fnirs_target_amp = self._compute_fft_amplitude_targets(
             fnirs_patches,
             self.fnirs_fft_loss_window,
         )
@@ -745,40 +712,24 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             fnirs_source_q,
             fnirs_observation_q,
         )
-        eeg_pred_amp = reconstructions['eeg_pred_amp']
-        eeg_pred_phase = reconstructions['eeg_pred_phase']
-        fnirs_pred_amp = reconstructions['fnirs_pred_amp']
-        fnirs_pred_phase = reconstructions['fnirs_pred_phase']
 
         eeg_rec = reconstructions['eeg_reconstructed']
         eeg_rec_patches = self._split_to_patches(eeg_rec, self.eeg_patch_size)
-        eeg_rec_amp, eeg_rec_phase, _ = self._compute_fft_targets(eeg_rec_patches, self.eeg_fft_loss_window)
+        eeg_rec_amp = self._compute_fft_amplitude_targets(eeg_rec_patches, self.eeg_fft_loss_window)
         eeg_amp_loss = self.loss_fn(eeg_rec_amp, eeg_target_amp)
-        eeg_phase_loss = self._compute_phase_loss(
-            eeg_rec_phase,
-            eeg_target_phase,
-            self._compute_phase_weights(eeg_target_magnitude),
-        )
         eeg_time_loss = self.loss_fn(eeg_rec, eeg)
         eeg_rec_loss = (
             self.eeg_amplitude_weight * eeg_amp_loss +
-            self.eeg_phase_weight * eeg_phase_loss +
             self.eeg_time_weight * eeg_time_loss
         )
 
         fnirs_rec = reconstructions['fnirs_reconstructed']
         fnirs_rec_patches = self._split_to_patches(fnirs_rec, self.fnirs_patch_size)
-        fnirs_rec_amp, fnirs_rec_phase, _ = self._compute_fft_targets(fnirs_rec_patches, self.fnirs_fft_loss_window)
+        fnirs_rec_amp = self._compute_fft_amplitude_targets(fnirs_rec_patches, self.fnirs_fft_loss_window)
         fnirs_amp_loss = self.loss_fn(fnirs_rec_amp, fnirs_target_amp)
-        fnirs_phase_loss = self._compute_phase_loss(
-            fnirs_rec_phase,
-            fnirs_target_phase,
-            self._compute_phase_weights(fnirs_target_magnitude),
-        )
         fnirs_time_loss = self.loss_fn(fnirs_rec, fnirs)
         fnirs_rec_loss = (
             self.fnirs_amplitude_weight * fnirs_amp_loss +
-            self.fnirs_phase_weight * fnirs_phase_loss +
             self.fnirs_time_weight * fnirs_time_loss
         )
 
@@ -826,10 +777,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'eeg_rec_loss': eeg_rec_loss,
             'fnirs_rec_loss': fnirs_rec_loss,
             'eeg_amp_loss': eeg_amp_loss,
-            'eeg_phase_loss': eeg_phase_loss,
             'eeg_time_loss': eeg_time_loss,
             'fnirs_amp_loss': fnirs_amp_loss,
-            'fnirs_phase_loss': fnirs_phase_loss,
             'fnirs_time_loss': fnirs_time_loss,
             'vq_loss': vq_loss,
             'vq_source_loss': vq_source_loss,

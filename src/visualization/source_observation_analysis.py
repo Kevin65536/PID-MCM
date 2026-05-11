@@ -651,16 +651,16 @@ def _resolve_reconstruction_visualization_config(config: Dict[str, object]) -> D
     if not isinstance(reconstruction_cfg, dict):
         return {'enabled': False}
 
-    domains_value = reconstruction_cfg.get('domains', ['time', 'frequency', 'phase'])
+    domains_value = reconstruction_cfg.get('domains', ['time', 'frequency'])
     if isinstance(domains_value, str):
         domains = [domains_value]
     elif isinstance(domains_value, (list, tuple)):
         domains = [str(item) for item in domains_value]
     else:
-        domains = ['time', 'frequency', 'phase']
-    domains = [domain for domain in domains if domain in {'time', 'frequency', 'phase'}]
+        domains = ['time', 'frequency']
+    domains = [domain for domain in domains if domain in {'time', 'frequency'}]
     if not domains:
-        domains = ['time', 'frequency', 'phase']
+        domains = ['time', 'frequency']
 
     channel_indices_cfg = reconstruction_cfg.get('channel_indices', {})
     if not isinstance(channel_indices_cfg, dict):
@@ -745,6 +745,35 @@ def _select_channel_series(batch: object, channel_index: int) -> np.ndarray:
     raise ValueError(f'Expected [B, C, T] or [B, T] arrays, got shape {array.shape}')
 
 
+def _compute_loss_aligned_frequency_spectrum(
+    signal: np.ndarray,
+    sample_rate: float,
+    patch_size: int,
+    frequency_range: Optional[Tuple[float, float]],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if signal.ndim != 1:
+        raise ValueError(f'Expected 1D signal for loss-aligned spectrum, got shape {signal.shape}')
+    if patch_size <= 0:
+        raise ValueError(f'patch_size must be positive, got {patch_size}')
+
+    usable_points = (signal.shape[-1] // patch_size) * patch_size
+    if usable_points <= 0:
+        return np.empty((0,), dtype=np.float64), np.empty((0,), dtype=np.float64), np.empty((0,), dtype=np.float64)
+
+    patches = torch.as_tensor(signal[:usable_points], dtype=torch.float32).view(-1, patch_size)
+    window = torch.hann_window(patch_size, periodic=True, dtype=patches.dtype)
+    fft = torch.fft.rfft(patches * window.view(1, -1), dim=-1)
+    amplitude = torch.log1p(torch.abs(fft)).cpu().numpy()
+    frequencies = np.fft.rfftfreq(patch_size, d=1.0 / max(float(sample_rate), 1e-12))
+
+    if frequency_range is not None:
+        mask = (frequencies >= frequency_range[0]) & (frequencies <= frequency_range[1])
+        frequencies = frequencies[mask]
+        amplitude = amplitude[:, mask]
+
+    return frequencies, amplitude.mean(axis=0), amplitude
+
+
 def _compute_signal_spectrum(signal: np.ndarray, sample_rate: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     fft = np.fft.rfft(signal)
     frequencies = np.fft.rfftfreq(signal.shape[-1], d=1.0 / max(float(sample_rate), 1e-12))
@@ -805,6 +834,7 @@ def _plot_reconstruction_domain_grid(
     frequency_range: Optional[Tuple[float, float]],
     time_window_s: float,
     max_time_points: int,
+    patch_size: int,
 ) -> Optional[str]:
     if not HAS_MATPLOTLIB:
         return None
@@ -833,13 +863,11 @@ def _plot_reconstruction_domain_grid(
 
     domain_titles = {
         'time': 'Time-domain reconstruction',
-        'frequency': 'Frequency-domain reconstruction',
-        'phase': 'Phase reconstruction',
+        'frequency': 'Loss-aligned spectral reconstruction',
     }
     ylabels = {
         'time': 'Amplitude',
-        'frequency': 'PSD (dB/Hz)',
-        'phase': 'Phase / pi',
+        'frequency': 'Log amplitude',
     }
 
     for sample_index in range(n_samples):
@@ -865,31 +893,25 @@ def _plot_reconstruction_domain_grid(
                 metric_label = f'Window MSE={metric_value:.4f}'
                 axis.set_xlabel('Time (s)')
             else:
-                phase_frequencies, _, original_phase = _compute_signal_spectrum(original_signal, sample_rate)
-                _, _, reconstructed_phase = _compute_signal_spectrum(reconstructed_signal, sample_rate)
-                psd_frequencies, original_psd = _compute_welch_psd(original_signal, sample_rate)
-                _, reconstructed_psd = _compute_welch_psd(reconstructed_signal, sample_rate)
-                if frequency_range is not None:
-                    phase_mask = (phase_frequencies >= frequency_range[0]) & (phase_frequencies <= frequency_range[1])
-                    psd_mask = (psd_frequencies >= frequency_range[0]) & (psd_frequencies <= frequency_range[1])
-                    phase_frequencies = phase_frequencies[phase_mask]
-                    psd_frequencies = psd_frequencies[psd_mask]
-                    original_phase = original_phase[phase_mask]
-                    reconstructed_phase = reconstructed_phase[phase_mask]
+                x_axis, original_view, original_patch_spectra = _compute_loss_aligned_frequency_spectrum(
+                    original_signal,
+                    sample_rate,
+                    patch_size,
+                    frequency_range,
+                )
+                _, reconstructed_view, reconstructed_patch_spectra = _compute_loss_aligned_frequency_spectrum(
+                    reconstructed_signal,
+                    sample_rate,
+                    patch_size,
+                    frequency_range,
+                )
 
                 if domain == 'frequency':
-                    x_axis = psd_frequencies
-                    original_view = original_psd if frequency_range is None else original_psd[psd_mask]
-                    reconstructed_view = reconstructed_psd if frequency_range is None else reconstructed_psd[psd_mask]
-                    metric_value = float(np.mean(np.abs(original_view - reconstructed_view)))
-                    metric_label = f'Mean |ΔPSD|={metric_value:.4f} dB'
+                    metric_value = float(np.mean((original_patch_spectra - reconstructed_patch_spectra) ** 2))
+                    metric_label = f'Patch MSE={metric_value:.4f}'
+                    axis.set_xlabel('Frequency (Hz)')
                 else:
-                    x_axis = phase_frequencies
-                    original_view = original_phase
-                    reconstructed_view = reconstructed_phase
-                    metric_value = float(np.mean(np.abs(original_view - reconstructed_view)))
-                    metric_label = f'Mean |Δphase|={metric_value:.4f}'
-                axis.set_xlabel('Frequency (Hz)')
+                    raise ValueError(f'Unsupported reconstruction domain: {domain}')
 
             axis.plot(x_axis, original_view, color='#2E86AB', linewidth=1.4, alpha=0.9, label='Original')
             axis.plot(
@@ -944,6 +966,7 @@ def _generate_reconstruction_visualizations(
     original_payload = sample_payload.get('original', {})
     branch_payload = sample_payload.get('branches', {})
     sample_rates = sample_payload.get('sample_rates', {})
+    patch_sizes = sample_payload.get('patch_sizes', {})
     artifacts: Dict[str, object] = {}
 
     for modality in ('eeg', 'fnirs'):
@@ -961,6 +984,7 @@ def _generate_reconstruction_visualizations(
 
         modality_artifacts: Dict[str, Optional[str]] = {}
         sample_rate = float(sample_rates.get(modality, 1.0))
+        patch_size = int(patch_sizes.get(modality, 1))
         channel_index = int(reconstruction_viz_cfg.get('channel_indices', {}).get(modality, 0))
         frequency_range = reconstruction_viz_cfg.get('frequency_range_hz', {}).get(modality)
         time_window_s = float(reconstruction_viz_cfg.get('time_window_s', {}).get(modality, 2.0))
@@ -980,6 +1004,7 @@ def _generate_reconstruction_visualizations(
                 frequency_range=frequency_range,
                 time_window_s=time_window_s,
                 max_time_points=max_time_points,
+                patch_size=patch_size,
             )
 
         artifacts[modality] = modality_artifacts
@@ -1188,6 +1213,10 @@ def _collect_split_statistics(
                 'fnirs',
                 int(reconstruction_samples['original']['fnirs'].shape[-1]),
             ),
+        }
+        reconstruction_samples['patch_sizes'] = {
+            'eeg': int(getattr(model, 'eeg_patch_size', 1)),
+            'fnirs': int(getattr(model, 'fnirs_patch_size', 1)),
         }
         result['reconstruction_samples'] = reconstruction_samples
 

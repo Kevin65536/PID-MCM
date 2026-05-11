@@ -169,27 +169,17 @@ class GradientDiagnosticsTests(unittest.TestCase):
             places=5,
         )
 
-    def test_phase_loss_wraps_at_pi_boundary(self):
+    def test_forward_outputs_drop_explicit_phase_losses(self):
         model = self._build_tiny_model()
-        pred_phase = torch.full((1, 1, 1, 1), np.pi, dtype=torch.float32)
-        target_phase = torch.full((1, 1, 1, 1), -np.pi, dtype=torch.float32)
-        weights = torch.ones_like(pred_phase)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
 
-        loss = model._compute_phase_loss(pred_phase, target_phase, weights)
+        outputs = model(eeg, fnirs)
 
-        self.assertAlmostEqual(float(loss.item()), 0.0, places=6)
-
-    def test_phase_loss_downweights_low_energy_bins(self):
-        model = self._build_tiny_model()
-        target_phase = torch.zeros((1, 1, 1, 2), dtype=torch.float32)
-        high_energy_error = torch.tensor([[[[0.5, 0.0]]]], dtype=torch.float32)
-        low_energy_error = torch.tensor([[[[0.0, 0.5]]]], dtype=torch.float32)
-        phase_weights = torch.tensor([[[[1.0, 0.01]]]], dtype=torch.float32)
-
-        high_energy_loss = model._compute_phase_loss(high_energy_error, target_phase, phase_weights)
-        low_energy_loss = model._compute_phase_loss(low_energy_error, target_phase, phase_weights)
-
-        self.assertGreater(float(high_energy_loss.item()), float(low_energy_loss.item()))
+        self.assertNotIn('eeg_phase_loss', outputs)
+        self.assertNotIn('fnirs_phase_loss', outputs)
+        self.assertIn('eeg_amp_loss', outputs)
+        self.assertIn('fnirs_time_loss', outputs)
 
     def test_gradient_influence_dashboard_plot_smoke(self):
         component_names = ['eeg_rec_loss', 'fnirs_rec_loss', 'vq_loss']
