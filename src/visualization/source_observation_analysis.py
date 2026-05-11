@@ -616,6 +616,377 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
     return _save_figure(figure, output_path)
 
 
+def _parse_frequency_range(value: object) -> Optional[Tuple[float, float]]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    low = float(value[0])
+    high = float(value[1])
+    if high <= low:
+        return None
+    return low, high
+
+
+def _parse_positive_float(value: object, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return parsed if parsed > 0.0 else float(default)
+
+
+def _parse_positive_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return int(default)
+    return parsed if parsed > 0 else int(default)
+
+
+def _resolve_reconstruction_visualization_config(config: Dict[str, object]) -> Dict[str, object]:
+    analysis_cfg = config.get('analysis', {})
+    if not isinstance(analysis_cfg, dict):
+        return {'enabled': False}
+
+    reconstruction_cfg = analysis_cfg.get('reconstruction_visualization', {})
+    if not isinstance(reconstruction_cfg, dict):
+        return {'enabled': False}
+
+    domains_value = reconstruction_cfg.get('domains', ['time', 'frequency', 'phase'])
+    if isinstance(domains_value, str):
+        domains = [domains_value]
+    elif isinstance(domains_value, (list, tuple)):
+        domains = [str(item) for item in domains_value]
+    else:
+        domains = ['time', 'frequency', 'phase']
+    domains = [domain for domain in domains if domain in {'time', 'frequency', 'phase'}]
+    if not domains:
+        domains = ['time', 'frequency', 'phase']
+
+    channel_indices_cfg = reconstruction_cfg.get('channel_indices', {})
+    if not isinstance(channel_indices_cfg, dict):
+        channel_indices_cfg = {}
+
+    frequency_range_cfg = reconstruction_cfg.get('frequency_range_hz', {})
+    if not isinstance(frequency_range_cfg, dict):
+        frequency_range_cfg = {}
+
+    time_window_cfg = reconstruction_cfg.get('time_window_s', {})
+    if not isinstance(time_window_cfg, dict):
+        time_window_cfg = {}
+
+    max_time_points_cfg = reconstruction_cfg.get('max_time_points', {})
+    if not isinstance(max_time_points_cfg, dict):
+        max_time_points_cfg = {}
+
+    return {
+        'enabled': bool(reconstruction_cfg.get('enabled', False)),
+        'subdir': str(reconstruction_cfg.get('subdir', 'reconstruction_visualizations')),
+        'max_samples': max(int(reconstruction_cfg.get('max_samples', 4)), 1),
+        'domains': domains,
+        'channel_indices': {
+            'eeg': max(int(channel_indices_cfg.get('eeg', 0)), 0),
+            'fnirs': max(int(channel_indices_cfg.get('fnirs', 0)), 0),
+        },
+        'frequency_range_hz': {
+            'eeg': _parse_frequency_range(frequency_range_cfg.get('eeg')),
+            'fnirs': _parse_frequency_range(frequency_range_cfg.get('fnirs')),
+        },
+        'time_window_s': {
+            'eeg': _parse_positive_float(time_window_cfg.get('eeg'), 2.0),
+            'fnirs': _parse_positive_float(time_window_cfg.get('fnirs'), 5.0),
+        },
+        'max_time_points': {
+            'eeg': _parse_positive_int(max_time_points_cfg.get('eeg'), 500),
+            'fnirs': _parse_positive_int(max_time_points_cfg.get('fnirs'), 250),
+        },
+    }
+
+
+def _resolve_modality_sample_rate(
+    dataloader,
+    config: Dict[str, object],
+    modality: str,
+    sample_length: int,
+) -> float:
+    dataset = getattr(dataloader, 'dataset', None)
+    sample_rate_getter = getattr(dataset, f'get_{modality}_sample_rate', None)
+    if callable(sample_rate_getter):
+        try:
+            return float(sample_rate_getter())
+        except Exception:
+            pass
+
+    data_cfg = config.get('data', {})
+    if isinstance(data_cfg, dict):
+        window_cfg = data_cfg.get('window', {})
+        if isinstance(window_cfg, dict):
+            duration_s = window_cfg.get('duration_s')
+            if duration_s is not None and float(duration_s) > 0.0:
+                return float(sample_length) / float(duration_s)
+
+        preprocessing_cfg = data_cfg.get('preprocessing', {})
+        if modality == 'eeg' and isinstance(preprocessing_cfg, dict):
+            resample_rate = preprocessing_cfg.get('resample_rate')
+            if resample_rate is not None:
+                return float(resample_rate)
+
+    return 1.0
+
+
+def _select_channel_series(batch: object, channel_index: int) -> np.ndarray:
+    if isinstance(batch, torch.Tensor):
+        batch = batch.detach().cpu().numpy()
+    array = np.asarray(batch)
+    if array.ndim == 3:
+        safe_channel_index = min(max(int(channel_index), 0), array.shape[1] - 1)
+        return array[:, safe_channel_index, :]
+    if array.ndim == 2:
+        return array
+    raise ValueError(f'Expected [B, C, T] or [B, T] arrays, got shape {array.shape}')
+
+
+def _compute_signal_spectrum(signal: np.ndarray, sample_rate: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    fft = np.fft.rfft(signal)
+    frequencies = np.fft.rfftfreq(signal.shape[-1], d=1.0 / max(float(sample_rate), 1e-12))
+    amplitude = np.log1p(np.abs(fft))
+    phase = np.unwrap(np.angle(fft)) / math.pi
+    return frequencies, amplitude, phase
+
+
+def _compute_welch_psd(signal: np.ndarray, sample_rate: float) -> Tuple[np.ndarray, np.ndarray]:
+    safe_sample_rate = max(float(sample_rate), 1e-12)
+    try:
+        from scipy.signal import welch
+
+        frequencies, psd = welch(
+            signal,
+            fs=safe_sample_rate,
+            nperseg=min(256, signal.shape[-1]),
+        )
+    except ImportError:
+        fft = np.fft.rfft(signal)
+        frequencies = np.fft.rfftfreq(signal.shape[-1], d=1.0 / safe_sample_rate)
+        psd = (np.abs(fft) ** 2) / max(signal.shape[-1], 1)
+    return frequencies, 10.0 * np.log10(psd + 1e-12)
+
+
+def _prepare_time_domain_view(
+    signal: np.ndarray,
+    sample_rate: float,
+    window_s: float,
+    max_points: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    total_points = int(signal.shape[-1])
+    if total_points == 0:
+        return np.empty((0,), dtype=np.float64), signal
+
+    safe_sample_rate = max(float(sample_rate), 1e-12)
+    window_points = min(total_points, max(int(round(window_s * safe_sample_rate)), 1))
+    view = signal[:window_points]
+    indices = np.arange(window_points, dtype=np.int64)
+
+    if view.shape[-1] > max_points:
+        indices = np.linspace(0, view.shape[-1] - 1, num=max_points, dtype=np.int64)
+        view = view[indices]
+
+    return indices.astype(np.float64) / safe_sample_rate, view
+
+
+def _plot_reconstruction_domain_grid(
+    *,
+    split_name: str,
+    modality: str,
+    original: object,
+    branches: Dict[str, object],
+    output_path: Path,
+    domain: str,
+    sample_rate: float,
+    channel_index: int,
+    frequency_range: Optional[Tuple[float, float]],
+    time_window_s: float,
+    max_time_points: int,
+) -> Optional[str]:
+    if not HAS_MATPLOTLIB:
+        return None
+
+    original_series = _select_channel_series(original, channel_index)
+    if original_series.shape[0] == 0:
+        return None
+
+    branch_order = (
+        ('full', 'Full'),
+        ('source_only', 'Source only'),
+        ('observation_only', 'Observation only'),
+    )
+    branch_series = {
+        branch_key: _select_channel_series(branches[branch_key], channel_index)
+        for branch_key, _ in branch_order
+    }
+
+    n_samples = int(original_series.shape[0])
+    figure, axes = plt.subplots(
+        n_samples,
+        len(branch_order),
+        figsize=(5.2 * len(branch_order), 2.9 * n_samples),
+        squeeze=False,
+    )
+
+    domain_titles = {
+        'time': 'Time-domain reconstruction',
+        'frequency': 'Frequency-domain reconstruction',
+        'phase': 'Phase reconstruction',
+    }
+    ylabels = {
+        'time': 'Amplitude',
+        'frequency': 'PSD (dB/Hz)',
+        'phase': 'Phase / pi',
+    }
+
+    for sample_index in range(n_samples):
+        original_signal = original_series[sample_index]
+        for branch_column, (branch_key, branch_label) in enumerate(branch_order):
+            axis = axes[sample_index, branch_column]
+            reconstructed_signal = branch_series[branch_key][sample_index]
+
+            if domain == 'time':
+                x_axis, original_view = _prepare_time_domain_view(
+                    original_signal,
+                    sample_rate,
+                    time_window_s,
+                    max_time_points,
+                )
+                _, reconstructed_view = _prepare_time_domain_view(
+                    reconstructed_signal,
+                    sample_rate,
+                    time_window_s,
+                    max_time_points,
+                )
+                metric_value = float(np.mean((original_view - reconstructed_view) ** 2))
+                metric_label = f'Window MSE={metric_value:.4f}'
+                axis.set_xlabel('Time (s)')
+            else:
+                phase_frequencies, _, original_phase = _compute_signal_spectrum(original_signal, sample_rate)
+                _, _, reconstructed_phase = _compute_signal_spectrum(reconstructed_signal, sample_rate)
+                psd_frequencies, original_psd = _compute_welch_psd(original_signal, sample_rate)
+                _, reconstructed_psd = _compute_welch_psd(reconstructed_signal, sample_rate)
+                if frequency_range is not None:
+                    phase_mask = (phase_frequencies >= frequency_range[0]) & (phase_frequencies <= frequency_range[1])
+                    psd_mask = (psd_frequencies >= frequency_range[0]) & (psd_frequencies <= frequency_range[1])
+                    phase_frequencies = phase_frequencies[phase_mask]
+                    psd_frequencies = psd_frequencies[psd_mask]
+                    original_phase = original_phase[phase_mask]
+                    reconstructed_phase = reconstructed_phase[phase_mask]
+
+                if domain == 'frequency':
+                    x_axis = psd_frequencies
+                    original_view = original_psd if frequency_range is None else original_psd[psd_mask]
+                    reconstructed_view = reconstructed_psd if frequency_range is None else reconstructed_psd[psd_mask]
+                    metric_value = float(np.mean(np.abs(original_view - reconstructed_view)))
+                    metric_label = f'Mean |ΔPSD|={metric_value:.4f} dB'
+                else:
+                    x_axis = phase_frequencies
+                    original_view = original_phase
+                    reconstructed_view = reconstructed_phase
+                    metric_value = float(np.mean(np.abs(original_view - reconstructed_view)))
+                    metric_label = f'Mean |Δphase|={metric_value:.4f}'
+                axis.set_xlabel('Frequency (Hz)')
+
+            axis.plot(x_axis, original_view, color='#2E86AB', linewidth=1.4, alpha=0.9, label='Original')
+            axis.plot(
+                x_axis,
+                reconstructed_view,
+                color='#A23B72',
+                linewidth=1.4,
+                alpha=0.9,
+                linestyle='--',
+                label='Reconstructed',
+            )
+            axis.grid(True, alpha=0.25)
+            axis.set_ylabel(ylabels[domain])
+            if sample_index == 0:
+                axis.set_title(branch_label)
+            axis.text(
+                0.02,
+                0.98,
+                metric_label,
+                transform=axis.transAxes,
+                verticalalignment='top',
+                fontsize=9,
+                bbox={'boxstyle': 'round', 'facecolor': 'white', 'alpha': 0.8},
+            )
+            if sample_index == 0 and branch_column == 0:
+                axis.legend(loc='upper right')
+
+    figure.suptitle(
+        f'{split_name} {modality.upper()} {domain_titles[domain]} (channel {channel_index})',
+        fontsize=14,
+        fontweight='bold',
+    )
+    figure.tight_layout()
+    return _save_figure(figure, output_path)
+
+
+def _generate_reconstruction_visualizations(
+    *,
+    split_name: str,
+    split_stats: Dict[str, object],
+    analysis_root: Path,
+    reconstruction_viz_cfg: Dict[str, object],
+) -> Dict[str, object]:
+    if not reconstruction_viz_cfg.get('enabled', False):
+        return {}
+
+    sample_payload = split_stats.get('reconstruction_samples')
+    if not isinstance(sample_payload, dict):
+        return {}
+
+    output_root = analysis_root / str(reconstruction_viz_cfg.get('subdir', 'reconstruction_visualizations'))
+    original_payload = sample_payload.get('original', {})
+    branch_payload = sample_payload.get('branches', {})
+    sample_rates = sample_payload.get('sample_rates', {})
+    artifacts: Dict[str, object] = {}
+
+    for modality in ('eeg', 'fnirs'):
+        original = original_payload.get(modality)
+        if original is None:
+            continue
+
+        modality_branches = {
+            'full': branch_payload.get('full', {}).get(modality),
+            'source_only': branch_payload.get('source_only', {}).get(modality),
+            'observation_only': branch_payload.get('observation_only', {}).get(modality),
+        }
+        if any(value is None for value in modality_branches.values()):
+            continue
+
+        modality_artifacts: Dict[str, Optional[str]] = {}
+        sample_rate = float(sample_rates.get(modality, 1.0))
+        channel_index = int(reconstruction_viz_cfg.get('channel_indices', {}).get(modality, 0))
+        frequency_range = reconstruction_viz_cfg.get('frequency_range_hz', {}).get(modality)
+        time_window_s = float(reconstruction_viz_cfg.get('time_window_s', {}).get(modality, 2.0))
+        max_time_points = int(reconstruction_viz_cfg.get('max_time_points', {}).get(modality, 500))
+
+        for domain in reconstruction_viz_cfg.get('domains', []):
+            output_path = output_root / f'{split_name}_{modality}_{domain}_reconstruction.png'
+            modality_artifacts[f'{domain}_path'] = _plot_reconstruction_domain_grid(
+                split_name=split_name,
+                modality=modality,
+                original=original,
+                branches=modality_branches,
+                output_path=output_path,
+                domain=domain,
+                sample_rate=sample_rate,
+                channel_index=channel_index,
+                frequency_range=frequency_range,
+                time_window_s=time_window_s,
+                max_time_points=max_time_points,
+            )
+
+        artifacts[modality] = modality_artifacts
+
+    return artifacts
+
+
 def _flatten_artifacts(value: object) -> List[str]:
     if value is None:
         return []
@@ -634,7 +1005,14 @@ def _flatten_artifacts(value: object) -> List[str]:
     return []
 
 
-def _collect_split_statistics(model, dataloader, device: torch.device) -> Dict[str, object]:
+def _collect_split_statistics(
+    model,
+    dataloader,
+    device: torch.device,
+    *,
+    config: Dict[str, object],
+    reconstruction_viz_cfg: Dict[str, object],
+) -> Dict[str, object]:
     scalar_totals: Dict[str, float] = {}
     index_bank: Dict[str, List[np.ndarray]] = {
         'eeg_source_indices': [],
@@ -655,6 +1033,19 @@ def _collect_split_statistics(model, dataloader, device: torch.device) -> Dict[s
     subject_id_chunks: List[np.ndarray] = []
     label_id_chunks: List[np.ndarray] = []
     batch_count = 0
+    capture_reconstructions = bool(reconstruction_viz_cfg.get('enabled', False))
+    reconstruction_limit = int(reconstruction_viz_cfg.get('max_samples', 0)) if capture_reconstructions else 0
+    reconstruction_capture_count = 0
+    reconstruction_bank: Optional[Dict[str, object]] = None
+    if reconstruction_limit > 0:
+        reconstruction_bank = {
+            'original': {'eeg': [], 'fnirs': []},
+            'branches': {
+                'full': {'eeg': [], 'fnirs': []},
+                'source_only': {'eeg': [], 'fnirs': []},
+                'observation_only': {'eeg': [], 'fnirs': []},
+            },
+        }
 
     source_codebook_size = int(getattr(model, 'source_codebook_size', model.get_codebook_size()))
     eeg_observation_codebook_size = int(getattr(model, 'eeg_observation_codebook_size', source_codebook_size))
@@ -705,6 +1096,26 @@ def _collect_split_statistics(model, dataloader, device: torch.device) -> Dict[s
                 label_ids = _maybe_batch_vector(batch, ('label', 'labels', 'task', 'condition'))
                 subject_id_chunks.append(_probe_id_array(subject_ids, take))
                 label_id_chunks.append(_probe_id_array(label_ids, take))
+
+                if reconstruction_bank is not None and reconstruction_capture_count < reconstruction_limit:
+                    capture_take = min(reconstruction_limit - reconstruction_capture_count, int(eeg.shape[0]))
+                    reconstruction_bank['original']['eeg'].append(eeg[:capture_take].detach().cpu())
+                    reconstruction_bank['original']['fnirs'].append(fnirs[:capture_take].detach().cpu())
+                    reconstruction_bank['branches']['full']['eeg'].append(outputs['eeg_reconstructed'][:capture_take].detach().cpu())
+                    reconstruction_bank['branches']['full']['fnirs'].append(outputs['fnirs_reconstructed'][:capture_take].detach().cpu())
+                    reconstruction_bank['branches']['source_only']['eeg'].append(
+                        outputs['eeg_source_only_reconstructed'][:capture_take].detach().cpu()
+                    )
+                    reconstruction_bank['branches']['source_only']['fnirs'].append(
+                        outputs['fnirs_source_only_reconstructed'][:capture_take].detach().cpu()
+                    )
+                    reconstruction_bank['branches']['observation_only']['eeg'].append(
+                        outputs['eeg_observation_only_reconstructed'][:capture_take].detach().cpu()
+                    )
+                    reconstruction_bank['branches']['observation_only']['fnirs'].append(
+                        outputs['fnirs_observation_only_reconstructed'][:capture_take].detach().cpu()
+                    )
+                    reconstruction_capture_count += capture_take
     finally:
         if was_training:
             model.train()
@@ -722,7 +1133,7 @@ def _collect_split_statistics(model, dataloader, device: torch.device) -> Dict[s
         'fnirs_observation_gap': mean_recon['fnirs_observation_only_mse'] - mean_recon['fnirs_full_mse'],
     }
 
-    return {
+    result = {
         'available': True,
         'num_batches': int(batch_count),
         'mean_scalars': mean_scalars,
@@ -747,6 +1158,40 @@ def _collect_split_statistics(model, dataloader, device: torch.device) -> Dict[s
             'fnirs_observation': _codebook_summary(index_bank['fnirs_observation_indices'], fnirs_observation_codebook_size),
         },
     }
+
+    if reconstruction_bank is not None and reconstruction_capture_count > 0:
+        reconstruction_samples = {
+            'original': {
+                modality: torch.cat(chunks, dim=0)
+                for modality, chunks in reconstruction_bank['original'].items()
+                if chunks
+            },
+            'branches': {
+                branch_name: {
+                    modality: torch.cat(chunks, dim=0)
+                    for modality, chunks in branch_payload.items()
+                    if chunks
+                }
+                for branch_name, branch_payload in reconstruction_bank['branches'].items()
+            },
+        }
+        reconstruction_samples['sample_rates'] = {
+            'eeg': _resolve_modality_sample_rate(
+                dataloader,
+                config,
+                'eeg',
+                int(reconstruction_samples['original']['eeg'].shape[-1]),
+            ),
+            'fnirs': _resolve_modality_sample_rate(
+                dataloader,
+                config,
+                'fnirs',
+                int(reconstruction_samples['original']['fnirs'].shape[-1]),
+            ),
+        }
+        result['reconstruction_samples'] = reconstruction_samples
+
+    return result
 
 
 def _build_gate_1(split_stats: Dict[str, object], metrics_payload: Dict[str, object]) -> Dict[str, object]:
@@ -928,6 +1373,7 @@ def _build_split_gate_summary(
     split_stats: Dict[str, object],
     metrics_payload: Dict[str, object],
     analysis_root: Path,
+    reconstruction_viz_cfg: Dict[str, object],
 ) -> Tuple[Dict[str, object], Dict[str, object]]:
     best_lag = int(round(float(split_stats['mean_scalars'].get('selected_source_lag', 0.0))))
     coupling = _compute_coupling_structure(model=split_stats['model_ref'], lag=best_lag)
@@ -946,6 +1392,12 @@ def _build_split_gate_summary(
         )
 
     gate_1['artifacts']['codebook_usage_paths'] = codebook_usage_paths
+    reconstruction_visualization_paths = _generate_reconstruction_visualizations(
+        split_name=split_name,
+        split_stats=split_stats,
+        analysis_root=analysis_root,
+        reconstruction_viz_cfg=reconstruction_viz_cfg,
+    )
     gates = {
         'gate1': gate_1,
         'gate2': gate_2,
@@ -958,6 +1410,7 @@ def _build_split_gate_summary(
         'coupling_heatmap_path': figure_path,
         'coupling_structure_path': structure_profile_path,
         'codebook_usage_paths': codebook_usage_paths,
+        'reconstruction_visualization_paths': reconstruction_visualization_paths,
     }
 
 
@@ -1021,9 +1474,9 @@ def generate_source_observation_scorecard(
     splits: Iterable[str] = ('val', 'test'),
     run_dir: Path | None = None,
 ) -> Dict[str, object]:
-    del config
     analysis_root = Path(output_dir)
     analysis_root.mkdir(parents=True, exist_ok=True)
+    reconstruction_viz_cfg = _resolve_reconstruction_visualization_config(config)
 
     metrics_payload = _load_metrics_payload(run_dir)
     training_gate_metrics_path = _plot_training_gate_metrics(metrics_payload, analysis_root / 'training_gate_metrics.png')
@@ -1036,13 +1489,25 @@ def generate_source_observation_scorecard(
         dataloader = dataloaders.get(split_name)
         if dataloader is None:
             continue
-        split_stats = _collect_split_statistics(model, dataloader, device)
+        split_stats = _collect_split_statistics(
+            model,
+            dataloader,
+            device,
+            config=config,
+            reconstruction_viz_cfg=reconstruction_viz_cfg,
+        )
         if not split_stats.get('available', False):
             split_payloads[split_name] = split_stats
             continue
         split_stats['model_ref'] = model
         split_stats['split_name'] = split_name
-        gates, split_artifacts = _build_split_gate_summary(split_name, split_stats, metrics_payload, analysis_root)
+        gates, split_artifacts = _build_split_gate_summary(
+            split_name,
+            split_stats,
+            metrics_payload,
+            analysis_root,
+            reconstruction_viz_cfg,
+        )
         split_payload = {
             'available': True,
             'num_batches': split_stats['num_batches'],
