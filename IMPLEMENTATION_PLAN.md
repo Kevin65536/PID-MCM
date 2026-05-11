@@ -1,8 +1,8 @@
 # Neuro-Tokenization Implementation Plan
 
-> Rewritten: 2026-04-30 | Last revised: 2026-05-06
-> Status: Active mainline execution guide — direct migration to the Source/Observation architecture
-> Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md) — Section 2 contains the complete Source/Observation redesign
+> Rewritten: 2026-04-30 | Last revised: 2026-05-12
+> Status: Active mainline execution guide — Phase 2A-spatial: Spatially-Informed Source Targets
+> Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md) — Section 2.4 contains the complete Spatially-Informed Source Target redesign
 > Archived reset foundation: [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
 > Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md) — simplified to 4 evaluation gates (Health / Semantics / Structure / Utility)
 > Experiment log: [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md)
@@ -551,6 +551,40 @@ S2 活跃分析面只保留：
 
 `experiments/scripts/probe/` 只保留对标准化分析有价值的脚本。凡是依赖旧 shared/private 代理定义的 exploratory probe，都应迁入 archive，而不是继续作为主线分析入口。
 
+### 7.4 Phase 2A-spatial: Spatially-Informed Source Targets (NEW)
+
+> Status: Design approved 2026-05-12, implementation pending
+> Detailed design: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md §2.4](docs/PHYSIOLOGICAL_COUPLING_PLAN.md#24-source-branch-target-spatially-informed-hrf-convolution-model)
+> Replaces: Section 12 item 8 "导联空间关系建模" (removed from deferred, now active)
+
+#### 7.4.1 Motivation
+
+Phase 2A 的离线梯度诊断揭示了当前 source target 的根本问题：EEG source target 是跨通道均值功率包络（所有通道相同），fNIRS source target 是全局 HRF-convolved 驱动（所有通道共享）。这导致 branch 相关 loss 占据 59-67% 梯度份额，且多个目标一起把 source branch 推向低方差、共享模板的退化解。
+
+修复方向：在 source target 中引入**空间结构**——每个 EEG 通道有自己的 RMS 包络作为 source target，每个 fNIRS 通道的 source target 由其**空间邻近**的 EEG 通道加权驱动。
+
+#### 7.4.2 Key Design Decisions
+
+1. **输入保持全通道** (30 EEG + 36 fNIRS)：EEG 容积传导需要全局上下文进行空间去混叠；耦合矩阵需要跨区域视野才能建立有意义的全局离散状态空间；配对输入会造成通道重复编码。
+2. **EEG source target = per-channel RMS 包络**：`sqrt(eeg_ch²)` → 电压单位，`observation = original - rms_envelope` 维度一致。
+3. **fNIRS source target = 空间加权 HRF 预测**：`Σ_{nearby_EEG} w * power → HRF → per_fNIRS_ch_target`。
+4. **空间权重基于导联实际位置校验**：优先使用 `mnt.mat` 中的 3D 坐标，回退到 10-10 标准邻居表；仅考虑 1 步邻居。
+5. **新增可视化**：导联位置散点图、邻接矩阵热力图、跨模态通道相关矩阵，集成到标准分析 pipeline。
+
+#### 7.4.3 Files
+
+| 文件 | 变更 |
+|------|------|
+| `src/data/channel_adjacency.py` | **新建** — 10-10 邻居表、fNIRS 通道名解析、mnt.mat 加载与校验、邻接矩阵构建、可视化 |
+| `src/tokenizers/factorized_labram_vqnsp.py` | `_compute_eeg_source_target` 重写为 per-channel RMS；`_compute_fnirs_source_target` 重写为空间加权 HRF；`__init__` 新增可选参数与 spatial buffer |
+| `experiments/scripts/train_source_observation_tokenizer.py` | 模型创建前注入通道名称到 config |
+| `src/visualization/source_observation_analysis.py` | 集成空间邻接可视化 |
+| `experiments/configs/source_observation/phase2a/` | 新增 `gate2_phase2a_spatial_target.yaml` |
+
+#### 7.4.4 Backward Compatibility
+
+所有新参数可空，默认回退到旧行为。旧 checkpoint 可正常加载（spatial buffer 为空时使用旧全局均值路径）。
+
 ---
 
 ## 8. Historical Archive and New Artifact Standard
@@ -712,6 +746,7 @@ Phase 2A (Branch Target Redesign) 阻塞 Gate 2 (Semantics)。Phase 2B (Coupling
 5. ~~锁定 no-phase Gate1 baseline，并归档 Phase 1 Gate1 调参结果~~ ✅ 已完成
 6. ~~实现 Phase 2 Source Target Introduction（HRF convolution model）~~ ✅ 已完成（Gate 2-4 均 fail，需要 Phase 2A 修复）
 7. **实现 Phase 2A Branch Target Redesign + Dual Decoder Architecture（**当前阻塞目标 **）**
+   7a. **实现 Phase 2A-spatial: Spatially-Informed Source Targets**（per-channel RMS envelope + 空间加权 fNIRS source target + 导联邻接模块，详见 [PHYSIOLOGICAL_COUPLING_PLAN.md §2.4](docs/PHYSIOLOGICAL_COUPLING_PLAN.md#24-source-branch-target-spatially-informed-hrf-convolution-model)）
 8. **实现 Phase 2B Coupling Structure Priors（concentration + smoothness，后者从 Mechanism A 提前）**
 9. 实现 Phase 2C Cross-Modal Source Target + Coupling-Aware Quantization（延后）
 10. 在 Phase 2B baseline 上独立实现并验证 Mechanism C（causal asymmetry）
@@ -753,9 +788,8 @@ Phase 2A (Branch Target Redesign) 阻塞 Gate 2 (Semantics)。Phase 2B (Coupling
 5. foundation model 预训练目标的大改；
 6. equal token count per window 的结构审计；
 7. HRF 频带分解（delta/theta/alpha/beta/gamma）；
-8. 导联空间关系建模（通道拓扑、区域 HRF 差异）；
-9. fNIRS→EEG 跨模态预测器（Phase 2C）；
-10. Coupling-aware quantization（原 Phase 2A，现 Phase 2C）。
+8. fNIRS→EEG 跨模态预测器（Phase 2C）；
+9. Coupling-aware quantization（原 Phase 2A，现 Phase 2C）。
 
 这些方向不是永久否定，而是必须等到 Phase 1-3 与 2A/A/C 单机制证据成立后再决定是否继续。
 
@@ -773,6 +807,6 @@ Phase 2A (Branch Target Redesign) 阻塞 Gate 2 (Semantics)。Phase 2B (Coupling
 4. 对照实验改由外部研究方法承担；
 5. 分析、归档与结果格式规范全部以本文件为准。
 
-**当前步骤**：Gate 1 已在 no-phase baseline 上稳定通过。Phase 2 (HRF Source Target) 已实现但 Gate 2-4 均 fail（coupling 均匀坍塌、source target 语义不统一、observation 分支不可辨识）。当前以 Phase 2 run `s2_phase2_gate2_hrf_target_uniform32_bs128_longrun` 作为诊断基线，进入 **Phase 2A: Branch Target Redesign + Dual Decoder Architecture**。
+**当前步骤**：Gate 1 已在 no-phase baseline 上稳定通过。Phase 2 (HRF Source Target) 已实现但 Gate 2-4 均 fail。Phase 2A (Branch Target Redesign + Dual Decoder) 已完成并实现 Gate 2 pass，但离线梯度诊断揭示了 source branch 扁平化的根本问题：跨通道均值 source target 导致 branch losses 主导梯度（59-67%）且多个目标共同推向低方差解。当前进入 **Phase 2A-spatial: Spatially-Informed Source Targets**，通过 per-channel RMS envelope + 空间加权 fNIRS neural driver 修复 branch 扁平化。
 
 本文件即为当前实现顺序与准入标准的唯一主文档。

@@ -1,10 +1,10 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
-> Created: 2026-04-30 | Last revised: 2026-05-11
-> Status: Active development plan — Phase 1 complete, Gate1 stable, Phase 2 source-target implementation is the current blocker
+> Created: 2026-04-30 | Last revised: 2026-05-12
+> Status: Active development plan — Phase 1 complete, Gate1 stable, Phase 2A-spatial source-target implementation is the current blocker
 > Supersedes: [archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
 > Reference implementation: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
-> New design specification: Section 2 (Source/Observation Branch Semantics)
+> New design specification: Section 2.4 (Spatially-Informed HRF Convolution Model) — replaced global-mean power envelope with per-channel RMS + spatial adjacency
 
 ---
 
@@ -211,117 +211,145 @@ eeg_source_q, eeg_source_idx, _ = self.eeg_source_quantizer(eeg_source)
 fnirs_source_q, fnirs_source_idx, _ = self.fnirs_source_quantizer(fnirs_source)
 ```
 
-### 2.4 Source Branch Target: HRF Convolution Model
+### 2.4 Source Branch Target: Spatially-Informed HRF Convolution Model
 
-这是本次 redesign 最重要的创新点之一。用神经血管耦合的物理模型替代 `smooth_signal` 代理。
+> **Last revised**: 2026-05-12 — replaced global-mean power envelope with per-channel RMS envelope + spatially-weighted fNIRS neural driver
+> **Motivation**: Phase 2A offline gradient diagnostics revealed that the cross-channel-mean source target was pushing both EEG and fNIRS source branches toward a shared low-variance template (branch losses = 59-67% of gradient norm, per-channel output std = 22-31% of target std)
+> **Input structure decision**: Keep full 30-channel EEG + 36-channel fNIRS input. Rationale: EEG volume conduction requires global spatial context; coupling matrix needs cross-region view; paired input would duplicate channels across regions.
 
-#### 2.4.1 Physiological Basis
+#### 2.4.1 Physiological Basis (Extended with Spatial Locality)
 
-神经血管耦合的标准模型：神经活动引起局部代谢需求增加 → 血管舒张 → 脑血流增加 → HbO/HbR 浓度变化。这个过程的时序关系可以用**血流动力学响应函数 (HRF)** 描述：
+神经血管耦合具有两个基本性质：
 
-$$\text{fNIRS}(t) = (\text{Neural Activity} * \text{HRF})(t) + \epsilon(t)$$
+1. **时序延迟**：神经活动引起局部代谢需求增加 → 血管舒张 → 脑血流增加 → HbO/HbR 浓度变化。这个过程用时序卷积描述：
+   $$\text{fNIRS}(t) = (\text{Neural Activity} * \text{HRF})(t) + \epsilon(t)$$
 
-其中 $*$ 表示时序卷积，HRF 在 fNIRS/fMRI 文献中有标准参数化形式。
+2. **空间局域性**：神经血管耦合在皮层上是**局域的**。运动皮层的神经活动驱动运动皮层的血流响应，不会跨半球驱动枕叶的 fNIRS 信号。因此，fNIRS 通道的 source target 应仅由其**空间邻近**的 EEG 电极的神经活动来预测，而非全局均值。
 
-#### 2.4.2 HRF Model Specification
+这两个性质共同定义了 source target 的计算方式：
+- 每个 EEG 通道独立计算神经活动包络（per-channel RMS envelope）
+- 每个 fNIRS 通道的 source target = HRF(Σ 邻近 EEG 通道的加权功率包络)
 
-使用标准双 Gamma HRF（SPM canonical HRF 的 fNIRS 适配版本）：
+#### 2.4.2 EEG Source Target: Per-Channel RMS Envelope
+
+**当前问题**：EEG source target 是跨通道均值功率包络 `mean(eeg² over channels)` 复制到所有通道。所有通道共享同一个 target → source decoder 学习单一模板 → 输出在跨通道和时间维度上均扁平化。且功率（电压²）与原始信号（电压）单位不一致，导致 `observation = original - source_target` 本质上不是有效分解。
+
+**新定义**：
+
+给定 EEG 信号 $x_{eeg}[c, t]$（通道 $c$，时间 $t$）：
+
+$$\text{eeg\_source\_target}[c, t] = \sqrt{\text{lowpass}(x_{eeg}[c, t]^2, \tau_{smooth}) + \epsilon}$$
+
+其中：
+- $x_{eeg}[c, t]^2$ 是瞬时功率（per-channel，不做跨通道均值）
+- $\text{lowpass}(\cdot, \tau_{smooth})$ 是可选的轻量时域平滑（Hann 窗，默认 200ms），用于减少瞬时功率的噪声波动
+- $\sqrt{\cdot}$ 将功率转换为 RMS 幅值，回到电压单位
+- $\epsilon$ 是数值稳定项
+
+**关键性质**：
+- Per-channel：每个 EEG 通道有独立的目标 → source decoder 必须学习空间有组织的表示
+- RMS = 电压单位：`observation_target = original - source_target` 维度一致，是干净的"慢幅值调制 + 快波动"分解
+- 非负：RMS 包络始终非负，语义上表示"该时刻该位置的神经活动强度"
+
+#### 2.4.3 fNIRS Source Target: Spatially-Weighted HRF Prediction
+
+**当前问题**：fNIRS source target 使用全局 EEG 功率均值 → HRF 卷积 → 广播到所有 fNIRS 通道（仅做 per-channel mean/std 匹配）。所有 fNIRS 通道共享同一个 neural driver → 没有空间特异性 → coupling 矩阵无结构可学。
+
+**新定义**：
+
+对于每个 fNIRS 通道 $f$，设 $W \in \mathbb{R}^{F \times E}$ 为空间邻接矩阵（$F$ = fNIRS 通道数，$E$ = EEG 通道数），其中 $W_{f,e}$ 表示 EEG 通道 $e$ 对 fNIRS 通道 $f$ 的空间权重（行归一化，$\sum_e W_{f,e} = 1$）：
+
+$$\text{neural\_driver}_f[t] = \sum_{e=1}^{E} W_{f,e} \cdot x_{eeg}[e, t]^2$$
+
+$$\text{fnirs\_source\_target}_f[t] = \text{scale\_match}\left((\text{neural\_driver}_f * h_{\text{HRF}})[t],\ \text{fnirs}_f[t]\right)$$
+
+其中：
+- $x_{eeg}[e, t]^2$ 是 EEG 通道 $e$ 的瞬时功率
+- $h_{\text{HRF}}$ 是可学习参数的 HRF 核（保持 §2.4.4 的双 Gamma 形式不变）
+- $\text{scale\_match}$ 对卷积输出做 per-channel 的 mean/std 对齐到 fNIRS 通道的信号尺度
+
+**与旧实现的差异**：
+| 方面 | 旧 (Phase 2) | 新 (Phase 2A-spatial) |
+|------|-------------|----------------------|
+| neural driver 来源 | 全局均值 `mean(eeg² over ch)` | 空间加权和 `Σ W[f,e] * eeg[e]²` |
+| driver 维度 | `[B, 1, T]` | `[B, F, T]` |
+| HRF 应用 | 单次卷积 | 每个 fNIRS 通道独立卷积 |
+| scale matching | 全局 broadcast | per-channel |
+
+#### 2.4.4 HRF Model Specification (Unchanged)
+
+继续使用标准双 Gamma HRF（可学习参数）：
 
 $$\text{HRF}(t; \theta) = A \cdot \left(\frac{t}{\tau_1}\right)^{\alpha_1} \cdot e^{-(t - \tau_1) / \beta_1} - B \cdot \left(\frac{t}{\tau_2}\right)^{\alpha_2} \cdot e^{-(t - \tau_2) / \beta_2}$$
 
-其中 $\theta = \{A, B, \tau_1, \tau_2, \alpha_1, \alpha_2, \beta_1, \beta_2\}$。
+参数初始化：peak $\tau_1 \approx 6s$，undershoot $\tau_2 \approx 16s$。所有参数作为 `nn.Parameter` 随训练优化。
 
-默认参数（基于 fNIRS 文献中的典型 HRF 形状）：
-- Peak time $\tau_1 \approx 6s$（fNIRS 的 HRF peak 通常比 fMRI BOLD 略晚）
-- Undershoot time $\tau_2 \approx 16s$
-- 正峰幅值 $A$ 和负峰比 $B$ 由数据尺度决定
+#### 2.4.5 Spatial Adjacency Matrix: Construction and Validation
 
-考虑到：
-1. **个体 HRF 变异大**：被试间、脑区间 HRF 形状显著不同
-2. **fNIRS 测量的是 HbO 和 HbR 两个信号**：两者的 HRF 形状不同（HbR 的 peak 通常更晚、更小）
-3. **深层/浅层信号混合**：fNIRS 包含 systemic 和 cerebral 两种成分
+空间邻接矩阵 $W$ 是固定权重（不参与梯度），在模型初始化时根据数据集通道布局构建，并通过 `mnt.mat` 中的实际 3D 坐标进行校验。
 
-当前阶段采用**简化方案**：
+**构建步骤**：
 
-**方案 A (可学习参数的 HRF Convolution Target)**：
-1. 从 EEG 提取宽带功率包络（或直接使用 EEG encoder 的中间表示）
-2. 用可学习参数的双 Gamma HRF 核进行时序卷积
-3. 卷积结果作为 source branch decoder 的 fNIRS 侧重建目标
-4. HRF 核参数受软约束（初始化为典型形状，允许有限偏离）
+1. **fNIRS 通道名解析**：从 fNIRS 通道名（如 `C5CP5` → source 在 C5 附近，detector 在 CP5 附近）提取两个 EEG-proximate 位置标签。Single-Trial 数据集有显式的 36 通道映射表；Simultaneous 数据集的 fNIRS 通道名直接用 EEG-proximate 标签。
 
-数学形式：
+2. **10-10 标准邻居表**：静态字典，约 74 个标准 10-10 位置 → 1 步网格邻居集合。用作回退方案。
 
-给定 EEG 信号 $x_{eeg}(t)$ 和当前 batch 的 HRF 核 $h(t; \theta)$，source branch 的 fNIRS 目标为：
+3. **3D 坐标校验**（优先）：从 `mnt.mat` 加载 EEG 电极的 `pos_3d` 和 fNIRS 光极的 3D 位置，计算欧氏距离。将 10-10 表推导的邻接关系与 3D 距离结果交叉验证。不一致时发出 warning 并优先采用 3D 距离。
 
-$$y_{source\_target}(t) = (x_{eeg}^{power} * h)(t)$$
+4. **权重分配（仅 1 步邻居）**：
+   - fNIRS source/detector 位置与 EEG 通道标签**直接匹配**：weight = 1.0
+   - 在 10-10 表中为 **1 步邻居**：weight = 0.5
+   - 其他：0
+   - 行归一化使每行和为 1
 
-其中 $x_{eeg}^{power}(t)$ 是 EEG 的瞬时功率包络（通过对 EEG 信号取绝对值 + 低通滤波得到，或直接使用 encoder 中间特征）。
+5. **回退策略**：若数据集中无 `mnt.mat`（如 Simultaneous 数据集），退回到纯名字解析 + 10-10 标准表。
 
-训练时，fNIRS source decoder 的损失为：
+#### 2.4.6 Spatial Visualization (New)
 
-$$\mathcal{L}_{source\_target} = \text{MSE}(\text{fNIRS}_{source\_recon}, y_{source\_target})$$
+新增三类空间可视化，集成到标准分析 pipeline：
 
-**方案 B (Learned HRF Kernel)** 作为 fallback：如果 HRF 参数化模型因个体差异过大而无法稳定训练，回退到纯学习的时序卷积核（初始化为 HRF 形状但允许更多自由度）。
+1. **导联位置散点图**：2D 投影（top-down view），标记 EEG 电极位置和 fNIRS 光极 source/detector 位置。
+2. **邻接矩阵热力图**：$W \in \mathbb{R}^{F \times E}$ 可视化，展示哪些 EEG-fNIRS 对被判定为空间相邻。
+3. **跨模态通道相关矩阵**：对一批验证样本，计算每个 EEG 通道的功率包络与每个 fNIRS 通道原始信号的 Pearson 相关系数，与邻接矩阵并排对比。生理耦合假设预测：邻接通道对的相关系数应系统性地高于远距离通道对。
 
-#### 2.4.3 Alternative: EEG Feature → fNIRS Prediction via Band Power
+#### 2.4.7 Source Target Loss Table (Updated)
 
-作为方案 A 的一个具体实现变体，使用 EEG 频带功率作为中间特征：
+| 目标 | 损失 | 权重 | 说明 |
+|------|------|------|------|
+| fNIRS source decoder → spatially-weighted HRF(EEG_power) | MSE | `source_target_weight` | **已修改**：每个 fNIRS 通道独立 spatial driver |
+| EEG source decoder → per-channel RMS envelope | MSE | `source_target_weight * eeg_source_aux_weight` | **已修改**：per-channel RMS 替代全局均值功率 |
+| Full decoder → raw signal | MSE | 1.0 | 不变 |
 
-1. 对 EEG 每个 patch 计算频带功率（delta/theta/alpha/beta/gamma）
-2. 对每个频带的功率时间序列分别与 HRF 卷积
-3. 加权求和得到 fNIRS 预测
-4. 该预测作为 source branch fNIRS decoder 的目标
+#### 2.4.8 Alternative (Deferred): EEG Feature → fNIRS Prediction via Band Power
 
-这种方法的优势在于：
-- EEG 频带具有明确的生理意义
-- 不同频带的 HRF 形状可能不同（alpha 和 gamma 的血管耦合可能有时序差异）
-- 可解释性强：可以分析哪些频带对 fNIRS 预测贡献最大
-
-但当前阶段**不采用**此变体，原因是：
-- 频带定义引入了额外的超参数（频带边界、功率计算方法）
-- 丢失了 EEG encoder 可能学到的非频带信息
-- 增加了计算复杂度
-
-它应作为未来的可解释性分析工具，而非训练目标的一部分。
-
-#### 2.4.4 Where the HRF Target Applies
-
-HRF 模型提供的是**单向**目标（EEG→fNIRS），因为只有这个方向在生理上有明确的卷积模型。因此：
-
-| 目标 | 损失 | 权重 |
-|------|------|------|
-| fNIRS source decoder → HRF(EEG_power) | MSE | `source_target_weight` |
-| EEG source decoder → raw EEG (coarse) | MSE | `source_target_weight * 0.5` |
-| Full decoder → raw signal | MSE | 1.0 (main reconstruction) |
-
-EEG source 使用弱辅助目标（raw EEG coarse reconstruction）是为了 prevent source codebook collapse——给它一个独立于 coupling 的训练信号，防止它退化。
+基于 EEG 频带功率的 HRF 分解方案保持延后。理由不变：频带边界引入额外超参数，丢失 encoder 可能学到的非频带信息，增加计算复杂度。在当前 spatial target 方案稳定后可作为可解释性分析工具重新评估。
 
 ### 2.5 Observation Branch Target
 
-Observation branch 的目标从"显式残差回归"转变为"隐式重建债务"。
+Observation branch 在 Phase 2A 中恢复为**显式残差 target**，不再只依赖隐式 ablation gap 解释。
 
-**旧定义**：
+**Phase 2A-spatial 定义**：
+
 ```python
-residual_target = raw_signal - smooth_signal(raw_signal, kernel_size)
-observation_loss = MSE(obs_recon, residual_target)
+observation_target = original_signal - source_target
+observation_loss = MSE(observation_recon, observation_target)
 ```
 
-**新定义**：
-Observation branch 不接受独立的显式 target。它的语义通过以下机制隐式定义：
+**单位一致性修复（Phase 2A-spatial）**：此前 EEG source target 为功率（电压²），observation target = 电压 - 功率，两者维度不一致导致 observation target 本质上是原始信号的微扰。Phase 2A-spatial 将 EEG source target 改为 RMS 包络（电压单位），使 `original - source_target` 成为干净的”慢幅值调制 + 快波动”加法分解。
 
-1. **Source-only vs full reconstruction gap**：observation branch 的质量通过 ablation gap 衡量
-   ```python
-   gap = MSE(recon(source_only), raw) - MSE(recon(source+obs), raw)
-   ```
-   gap 应该显著 > 0，证明 observation branch 提供了 source 无法提供的信息。
+Observation branch 的语义通过以下三个条件共同定义：
 
-2. **Orthogonality to source**（保留）：
-   $$\mathcal{L}_{orth} = \|\text{corr}(z_{source}, z_{obs})\|^2$$
-   确保 observation 不复制 source 已编码的信息。
+1. **Explicit residual reconstruction**：observation decoder 必须重建 `original - source_target`（其中 source_target 使用 RMS 单位，与原始信号维度一致）。
+2. **Source-only vs full reconstruction gap**：
+  ```python
+  gap = MSE(recon(source_only), raw) - MSE(recon(source+obs), raw)
+  ```
+  gap 应显著 > 0，证明 observation branch 提供了 source 无法独立承担的信息。
+3. **Orthogonality to source**（保留）：
+  $$\mathcal{L}_{orth} = \|\text{corr}(z_{source}, z_{obs})\|^2$$
+  确保 observation 不复制 source 已编码的信息。
 
-3. **No cross-modal predictability**：从 fNIRS source token 不应能预测 EEG observation token。这是未来的诊断指标，不作为训练损失。
-
-**Observation branch 的 codebook 使用独立的 quantizer**（与 V6 一致，保留不变）。
+**Observation branch 的 codebook 使用独立的 quantizer**（与 V6 一致，保留不变），但其 decoder 与 loss 在 Phase 2A 中首次获得显式监督。
 
 ### 2.6 Coupling Matrix Redesign
 
@@ -382,7 +410,7 @@ loss:
 
 ### 2.7 Complete Loss Function
 
-> **Last revised**: 2026-05-11 — Phase 2A revision: added observation_loss, moved smoothness to Phase 2B, updated weights
+> **Last revised**: 2026-05-12 — Phase 2A-spatial: source_target_loss and eeg_source_aux_loss redefined with spatial structure; observation_loss now uses RMS convention
 
 #### 2.7.1 Loss Terms Specification
 
@@ -394,9 +422,9 @@ total_loss = (
     vq_loss +                              # VQ commitment loss for all quantizers
     
     # === Gate 2 (Semantics): Branch Roles ===
-    alpha_source_target * source_target_loss +    # fNIRS source decoder → HRF(EEG_power)
-    alpha_source_target * eeg_source_aux_weight * eeg_source_aux_loss +  # EEG source decoder → power envelope
-    alpha_obs * observation_loss +                # observation decoder → (original - source_target) (NEW)
+    alpha_source_target * source_target_loss +    # fNIRS source decoder → spatially-weighted HRF(EEG_power)
+    alpha_source_target * eeg_source_aux_weight * eeg_source_aux_loss +  # EEG source decoder → per-channel RMS envelope
+    alpha_obs * observation_loss +                # observation decoder → (original - source_target), RMS convention
     alpha_orth * orthogonality_loss +              # source ⊥ observation
     
     # === Gate 3 (Structure): Coupling with Physiological Prior ===
@@ -416,9 +444,9 @@ total_loss = (
 | `eeg_rec_loss` | EEG reconstruction | V6 保留 | source + observation sum vs original |
 | `fnirs_rec_loss` | fNIRS reconstruction | V6 保留 | source + observation sum vs original |
 | `vq_loss` | VQ commitment | V6 保留 | across all 4 quantizers |
-| `source_target_loss` | fNIRS source HRF target | Phase 2 新增 | fNIRS source decoder → HRF(EEG_power_envelope) |
-| `eeg_source_aux_loss` | EEG source target | Phase 2A 重定义 | EEG source decoder → power envelope @ full resolution |
-| `observation_loss` | Observation residual target | **Phase 2A 新增** | observation decoder → (original - source_target) |
+| `source_target_loss` | fNIRS source HRF target | Phase 2A-spatial 重定义 | fNIRS source decoder → spatially-weighted HRF(per-channel EEG power) |
+| `eeg_source_aux_loss` | EEG source target | Phase 2A-spatial 重定义 | EEG source decoder → per-channel RMS envelope (电压单位) |
+| `observation_loss` | Observation residual target | Phase 2A-spatial 重定义 | observation decoder → (original - source_target), source_target 使用 RMS 单位 |
 | `orthogonality_loss` | Source ⊥ Observation | V6 保留 | cross-correlation penalty |
 | `coupling_kl_loss` | Coupling KL | V6 保留 | P(fNIRS token \| EEG token) vs actual |
 | `concentration_loss` | Coupling row entropy | Phase 2B 新增 (P0) | encourages sparse/concentrated coupling |
@@ -549,7 +577,7 @@ loss:
 | Coupling structure visualization | 热力图：按行熵排序后的 coupling matrix |
 | Ablation: source-only vs observation-only vs full | 比较三种模式的 gap 大小 |
 
-### 2.9 Implementation Phases (Revised 2026-05-11)
+### 2.9 Implementation Phases (Revised 2026-05-12)
 
 ```
 Phase 1: Structural Migration ✅ Complete
@@ -564,13 +592,22 @@ Phase 2: Source Target Introduction ✅ Implemented (Gate 2-4 fail)
   ├── 新增 eeg_source_aux_loss (EEG source → coarse raw EEG)
   └── 问题：coupling 均匀坍塌、source target 语义不统一、observation 不可辨识
 
-Phase 2A: Branch Target Redesign + Dual Decoder 🔜 ACTIVE
+Phase 2A: Branch Target Redesign + Dual Decoder ✅ Implemented (Gate 2 pass, Gate 3-4 fail)
   ├── 新增 4 个独立 decoder（source/obs 分离）
   ├── 重定义 source target：统一为 EEG power envelope driver
   ├── 新增 observation_loss：explicit residual target
   ├── 扩容 observation codebook（32→64）
   ├── Loss 权重重新平衡
-  └── Gate 2 (Semantics) — 当前阻塞目标
+  └── Gate 2 (Semantics) — 已通过，但 source branch 扁平化问题持续
+
+Phase 2A-spatial: Spatially-Informed Source Targets 🔜 ACTIVE
+  ├── EEG source target: per-channel RMS envelope (替代 cross-channel mean power)
+  ├── fNIRS source target: spatially-weighted HRF prediction (替代 global mean driver)
+  ├── 新建 src/data/channel_adjacency.py: 10-10 邻居表 + mnt.mat 校验 + 邻接矩阵
+  ├── 空间权重仅考虑 1 步邻居，优先使用 3D 坐标校验
+  ├── 新增可视化：导联位置图、邻接矩阵热力图、跨模态通道相关矩阵
+  ├── observation decomposition 因 RMS 单位一致性修复而语义更清晰
+  └── Gate 2 (Semantics) — 目标：消除 source branch 扁平化，建立空间有组织的表示
 
 Phase 2B: Coupling Structure Priors
   ├── 实现 concentration_loss (row entropy penalty) [P0]
