@@ -16,7 +16,8 @@ gantt
     section Phase 1: Structural
         Shared/Private baseline (archived) :done, 2026-04-01, 2026-05-05
         Source/Observation Migration      :done, 2026-05-06, 2026-05-08
-        Gate1 Baseline Lock               :done, 2026-05-08, 2026-05-11
+        Gate1 Model Stabilization         :done, 2026-05-11, 2026-05-11
+        Gate1 Baseline Lock               :done, 2026-05-11, 2026-05-11
     section Phase 2: Source Target
         HRF Convolution Target            :active, 2026-05-11, 2026-05-20
     section Phase 2A: Q-Coupling
@@ -34,7 +35,8 @@ gantt
 | # | Date | Phase | Title | Key Files | Status |
 |---|------|-------|-------|-----------|--------|
 | 1 | 2026-05-06 | Phase 1 | [Source/Observation Architecture Migration](2026-05-06_source_observation_migration.md) | `factorized_labram_vqnsp.py`, `registry.py`, `multimodal_tokenizer.py`, `__init__.py` | Merged |
-| 2 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Baseline Lock and Archive](2026-05-11_phase1_gate1_baseline_lock.md) | `phase1 configs`, `ARCHITECTURE.md`, `EXPERIMENT_LOG.md`, `IMPLEMENTATION_PLAN.md` | Merged |
+| 2 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Model Stabilization](2026-05-11_phase1_gate1_model_stabilization.md) | `factorized_labram_vqnsp.py`, `multimodal_tokenizer.py`, `labram_vqnsp.py`, `train_source_observation_tokenizer.py` | Merged |
+| 3 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Baseline Lock and Archive](2026-05-11_phase1_gate1_baseline_lock.md) | `phase1 configs`, `ARCHITECTURE.md`, `EXPERIMENT_LOG.md`, `IMPLEMENTATION_PLAN.md` | Merged |
 
 ## How to Add a New Entry
 

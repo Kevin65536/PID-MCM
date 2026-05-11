@@ -1,10 +1,10 @@
 # Current Architecture: Source/Observation Tokenizer
 
-> **Semantics version**: `s2_source_observation_v1`
-> **Last updated**: 2026-05-11
-> **Current phase**: Phase 1 (Structural Migration) — Complete and Gate1-stable
+> **Semantics version**: `s2_source_observation_v1_gate1_stable`
+> **Last updated**: 2026-05-11 (Gate1 stabilization complete)
+> **Current phase**: Phase 1 (Structural Migration) — Complete and Gate1-stable (val_loss 1.6395)
 > **Active phase**: Phase 2 (HRF Source Target) — Next implementation target from locked baseline
-> **Config note**: the diagrams below show the nominal source/observation topology; the locked Phase 1 handoff baseline uses uniform32 codebooks and sets `source_coupling_loss` to `0.0`
+> **Config note**: the diagrams below show the nominal source/observation topology; the locked Phase 1 handoff baseline uses uniform32 codebooks, sets `source_coupling_loss` to `0.0`, and raises `codebook_balance_weight` to `0.08`
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
@@ -130,11 +130,15 @@ sequenceDiagram
     Coup->>Loss: source_coupling_loss (KL div)
 
     Quant->>Dec: source_q + observation_q concat
-    Dec->>Loss: Amplitude prediction + ISTFT time reconstruction
-    Loss->>Loss: rec_loss = amp + time
-    Loss->>Loss: vq_loss = commitment losses
+    Dec->>Dec: Amplitude + Phase prediction
+    Dec->>Dec: ISTFT → reconstructed time signal
+    Dec->>Dec: Re-split to patches → FFT with Hann window
+    Dec->>Loss: Amplitude (log1p magnitude) loss
+    Dec->>Loss: Time-domain loss (MSE or SmoothL1)
+    Loss->>Loss: rec_loss = amp + time (no phase)
+    Loss->>Loss: vq_loss = commitment (× quantization_strength)
     Loss->>Loss: orthogonality_loss (source ⊥ obs)
-    Loss->>Loss: codebook_balance_loss (entropy)
+    Loss->>Loss: codebook_balance_loss (straight-through hard assignment, per-branch temps)
     Loss->>Loss: total = rec + vq + coupling + balance + ortho
 ```
 
@@ -143,9 +147,9 @@ sequenceDiagram
 ```mermaid
 graph LR
     TOTAL[total_loss] --> REC[reconstruction]
-    TOTAL --> VQ[vq_loss]
+    TOTAL --> VQ[vq_loss<br/>× quantization_strength]
     TOTAL --> COUP[source_coupling_loss]
-    TOTAL --> BAL[codebook_balance_loss]
+    TOTAL --> BAL[codebook_balance_loss<br/>straight-through hard assign]
     TOTAL --> ORTHO[orthogonality_loss]
 
     REC --> E_REC[eeg_rec_loss<br/>amp + time]
@@ -153,29 +157,44 @@ graph LR
 
     VQ --> VQ_S[vq_source_loss<br/>eeg + fnirs]
     VQ --> VQ_O[vq_observation_loss<br/>eeg + fnirs]
+    VQ --> VQ_SIMVQ[simvq_transform_loss<br/>opt-in, disabled by default]
 
     COUP --> COUP_FWD[EEG → fNIRS KL]
     COUP --> COUP_REV[fNIRS → EEG KL<br/>bidirectional]
 
-    BAL --> BAL_S[source_balance_loss<br/>entropy based]
-    BAL --> BAL_O[observation_balance_loss<br/>entropy based]
+    BAL --> BAL_S[source_balance_loss<br/>temp=source_balance_temperature<br/>scale=source_balance_scale]
+    BAL --> BAL_O[observation_balance_loss<br/>temp=observation_balance_temperature<br/>scale=observation_balance_scale]
 
     ORTHO --> O_E[orthogonality_loss<br/>eeg_source ⊥ eeg_obs]
     ORTHO --> O_F[orthogonality_loss<br/>fnirs_source ⊥ fnirs_obs]
 ```
 
-### Default Structural-Migration Loss Weights
+### Default Gate1-Stable Loss Weights
 
-The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and raises `codebook_balance_loss` to `0.08`; see the locked handoff section below.
+The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and raises `codebook_balance_weight` to `0.08`; see the locked handoff section below.
 
 | Loss Term | Weight | Purpose |
 |-----------|--------|---------|
-| `eeg_rec_loss` | 1.0 | EEG full reconstruction (amp 1.0 + time 0.9; no explicit phase supervision) |
-| `fnirs_rec_loss` | 1.0 | fNIRS full reconstruction (amp 1.0 + time 1.0; no explicit phase supervision) |
-| `vq_loss` | 1.0 | Commitment + EMA codebook loss (all 4 quantizers) |
-| `source_coupling_loss` | 0.07 | KL divergence: predicted vs actual source token distributions |
-| `codebook_balance_loss` | 0.02 | Entropy-based dead-code prevention (all 4 quantizers) |
+| `eeg_rec_loss` | 1.0 | EEG full reconstruction (amp 1.0 + time 0.9; phase supervision removed) |
+| `fnirs_rec_loss` | 1.0 | fNIRS full reconstruction (amp 1.0 + time 1.0; phase supervision removed) |
+| `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers); strength scheduled via `quantization_warmup` |
+| `source_coupling_loss` | 0.07 | KL divergence: predicted vs actual source token distributions (0.0 in Gate1 baseline) |
+| `codebook_balance_loss` | 0.02 (0.08 in Gate1 baseline) | Entropy-based dead-code prevention via straight-through hard assignment; source/observation have independent temperatures and scales |
 | `orthogonality_loss` | 0.01 | Cosine similarity penalty between source and observation within each modality |
+| `simvq_transform_loss` | 0.0 (opt-in) | SimVQ codebook transform consistency loss; disabled by default, enabled via `quantizer.source_simvq_enabled` / `observation_simvq_enabled` |
+
+### Schedule-Driven Parameters
+
+These parameters are modulated per-epoch by the training schedule framework:
+
+| Parameter | Default | Schedule Config Key | Description |
+|-----------|---------|---------------------|-------------|
+| `alignment_scale` | 0→1 ramp | `training.alignment_warmup` | Scales coupling loss weight during warmup |
+| `source_balance_scale` | 1.0 | `training.balance_warmup.source` | Scales source codebook balance loss independently |
+| `observation_balance_scale` | 1.0 | `training.balance_warmup.observation` | Scales observation codebook balance loss independently |
+| `quantization_strength` | 1.0 | `training.quantization_warmup` | Modulates VQ commitment loss strength (0→1 ramp) |
+
+All schedule state is persisted in checkpoints under `schedule_state` for correct training resume.
 
 ## 4. Component Catalog
 
@@ -193,7 +212,7 @@ The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and 
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `coupling_kl_loss`, `batch_usage_entropy_loss`, `orthogonality_loss`, `align_pair`, `symmetric_kl_from_logits` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `coupling_kl_loss`, `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair`, `symmetric_kl_from_logits` |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Analysis & Visualization
@@ -208,7 +227,7 @@ The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and 
 
 | File | Role |
 |------|------|
-| [experiments/scripts/train_source_observation_tokenizer.py](../experiments/scripts/train_source_observation_tokenizer.py) | **Main training script** — loads config, creates model/dataloaders, runs training loop |
+| [experiments/scripts/train_source_observation_tokenizer.py](../experiments/scripts/train_source_observation_tokenizer.py) | **Main training script** — loads config, creates model/dataloaders, runs training loop with per-epoch schedule dispatch (`apply_epoch_schedules`) and schedule-aware checkpointing |
 | [experiments/scripts/launch_training_nohup.sh](../experiments/scripts/launch_training_nohup.sh) | Standardized launcher for training runs |
 
 ### Configs
@@ -231,7 +250,10 @@ The locked Gate1 handoff baseline overrides `source_coupling_loss` to `0.0` and 
 | `eeg_observation_quantizer` | K=256 | D=64 | EEG modality-specific encoding debt |
 | `fnirs_observation_quantizer` | K=128 | D=48 | fNIRS modality-specific encoding debt |
 
-All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized).
+All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). Each quantizer supports:
+- **Quantization strength**: `set_quantization_strength(strength)` modulates VQ commitment loss (0→1), scheduled via `training.quantization_warmup`
+- **SimVQ (opt-in)**: `learnable_codebook_transform` applies a learned linear transform to codebook vectors before assignment, with an auxiliary consistency loss; controlled via `quantizer.source_simvq_enabled` / `observation_simvq_enabled` (default: false)
+- **`get_codebook_weight()`**: Returns the effective codebook weight (with SimVQ transform applied if enabled), used for assignment logit computation
 
 The locked Phase 1 Gate1 handoff baseline temporarily uses uniform32 codebooks across all four quantizers to preserve the validated health profile.
 
@@ -278,5 +300,6 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
 | [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |
 | [archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md](archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md) | Formal closure log for the Phase 1 Gate1 search bundle |
-| [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records |
+| [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records (3 entries) |
+| [architecture_changelog/2026-05-11_phase1_gate1_model_stabilization.md](architecture_changelog/2026-05-11_phase1_gate1_model_stabilization.md) | Gate1 model stabilization: balance loss, schedule framework, phase removal |
 | [STANDARDIZATION_GUIDE.md](../STANDARDIZATION_GUIDE.md) | Naming conventions, run protocols, artifact standards |
