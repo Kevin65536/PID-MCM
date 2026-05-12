@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
-from .registry import normalize_data_config, resolve_dataset_id
+from .registry import normalize_data_config, resolve_dataset_id, resolve_modality_preprocessing
 from .simultaneous_eeg_nirs_dataset import (
     SimultaneousContinuousDataset,
     SimultaneousEEGfNIRSDataset,
@@ -229,7 +229,6 @@ def create_unimodal_window_dataset(
     params = _dataset_params(data_cfg)
 
     if dataset_id == 'eeg_fnirs_single_trial':
-        preprocessing_key = 'eeg_preprocessing' if modality == 'eeg' else 'fnirs_preprocessing'
         return EEGfNIRSDataset(
             data_root=data_cfg['data_root'],
             modality=modality,
@@ -239,14 +238,13 @@ def create_unimodal_window_dataset(
             window_offset_ms=data_cfg['window'].get('offset_ms', 0),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            preprocessing=data_cfg.get(preprocessing_key, data_cfg.get('preprocessing', {})),
+            preprocessing=resolve_modality_preprocessing(data_cfg, modality),
             exclude_eog=data_cfg.get('exclude_eog', False),
             hbo_only=data_cfg.get('hbo_only', False),
             hbr_only=data_cfg.get('hbr_only', False),
         )
 
     if dataset_id == 'simultaneous_eeg_nirs':
-        preprocessing_key = 'eeg_preprocessing' if modality == 'eeg' else 'fnirs_preprocessing'
         return SimultaneousEEGfNIRSDataset(
             data_root=data_cfg['data_root'],
             modality=modality,
@@ -256,7 +254,7 @@ def create_unimodal_window_dataset(
             window_offset_ms=float(data_cfg['window'].get('offset_ms', 0)),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            preprocessing=data_cfg.get(preprocessing_key, data_cfg.get('preprocessing', {})),
+            preprocessing=resolve_modality_preprocessing(data_cfg, modality),
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
@@ -287,8 +285,8 @@ def create_multimodal_window_dataset(
             window_offset_ms=float(data_cfg['window'].get('offset_ms', 0)),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            eeg_preprocessing=data_cfg.get('eeg_preprocessing', {}),
-            fnirs_preprocessing=data_cfg.get('fnirs_preprocessing', {}),
+            eeg_preprocessing=resolve_modality_preprocessing(data_cfg, 'eeg'),
+            fnirs_preprocessing=resolve_modality_preprocessing(data_cfg, 'fnirs'),
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
@@ -303,8 +301,8 @@ def create_multimodal_window_dataset(
             window_offset_ms=float(data_cfg['window'].get('offset_ms', 0)),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            eeg_preprocessing=data_cfg.get('eeg_preprocessing', data_cfg.get('preprocessing', {})),
-            fnirs_preprocessing=data_cfg.get('fnirs_preprocessing', data_cfg.get('preprocessing', {})),
+            eeg_preprocessing=resolve_modality_preprocessing(data_cfg, 'eeg'),
+            fnirs_preprocessing=resolve_modality_preprocessing(data_cfg, 'fnirs'),
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
@@ -434,8 +432,8 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
             window_offset_ms=float(data_cfg['window'].get('offset_ms', 0)),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            eeg_preprocessing=data_cfg.get('eeg_preprocessing', {}),
-            fnirs_preprocessing=data_cfg.get('fnirs_preprocessing', {}),
+            eeg_preprocessing=resolve_modality_preprocessing(data_cfg, 'eeg'),
+            fnirs_preprocessing=resolve_modality_preprocessing(data_cfg, 'fnirs'),
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
@@ -479,7 +477,6 @@ def create_continuous_visualization_dataset(
     params = _dataset_params(data_cfg)
 
     if dataset_id == 'eeg_fnirs_single_trial':
-        preprocessing_key = 'eeg_preprocessing' if modality == 'eeg' else 'fnirs_preprocessing'
         window_length = data_cfg.get('window', {}).get('length', 1)
         return EEGfNIRSDataset(
             data_root=data_cfg['data_root'],
@@ -490,14 +487,13 @@ def create_continuous_visualization_dataset(
             window_offset_ms=float(data_cfg.get('window', {}).get('offset_ms', 0)),
             normalize=normalize,
             normalization_mode=normalization_mode,
-            preprocessing=data_cfg.get(preprocessing_key, data_cfg.get('preprocessing', {})),
+            preprocessing=resolve_modality_preprocessing(data_cfg, modality),
             exclude_eog=data_cfg.get('exclude_eog', True),
             hbo_only=data_cfg.get('hbo_only', True),
             hbr_only=data_cfg.get('hbr_only', False),
         )
 
     if dataset_id == 'simultaneous_eeg_nirs':
-        preprocessing_key = 'eeg_preprocessing' if modality == 'eeg' else 'fnirs_preprocessing'
         visualization_segmentation_mode = params.get('visualization_segmentation_mode', 'auto')
         if visualization_segmentation_mode == 'auto':
             visualization_segmentation_mode = resolve_segmentation_mode(
@@ -512,7 +508,7 @@ def create_continuous_visualization_dataset(
             subject_ids=[subject_id],
             normalize=normalize,
             normalization_mode=normalization_mode,
-            preprocessing=data_cfg.get(preprocessing_key, data_cfg.get('preprocessing', {})),
+            preprocessing=resolve_modality_preprocessing(data_cfg, modality),
             exclude_eog=data_cfg.get('exclude_eog', True),
             fnirs_signal=_resolve_fnirs_signal_from_config(data_cfg),
             segmentation_mode=visualization_segmentation_mode,

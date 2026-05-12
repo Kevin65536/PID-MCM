@@ -802,7 +802,7 @@ def plot_spatial_target_preview(
         if row < eeg_count:
             channel_index = int(eeg_indices[row])
             label = adjacency.eeg_channel_names[channel_index]
-            left_axis.plot(eeg_time, eeg[sample_index, channel_index], label='Raw', color='#2E86AB', linewidth=1.0)
+            left_axis.plot(eeg_time, eeg[sample_index, channel_index], label='Model input', color='#2E86AB', linewidth=1.0)
             left_axis.plot(eeg_time, eeg_target[sample_index, channel_index], label='RMS target', color='#F18F01', linewidth=1.0)
             left_axis.set_title(f'EEG {label}')
             left_axis.set_xlabel('Time (s)')
@@ -822,7 +822,7 @@ def plot_spatial_target_preview(
                 f"{adjacency.eeg_channel_names[index]} ({adjacency.adjacency_matrix[channel_index, index]:.2f})"
                 for index in top_driver_indices
             )
-            right_axis.plot(fnirs_time, fnirs[sample_index, channel_index], label='Raw', color='#6C757D', linewidth=1.0)
+            right_axis.plot(fnirs_time, fnirs[sample_index, channel_index], label='Model input', color='#6C757D', linewidth=1.0)
             right_axis.plot(fnirs_time, fnirs_target[sample_index, channel_index], label='Spatial HRF target', color='#2ECC71', linewidth=1.0)
             right_axis.set_title(f'fNIRS {label} | drivers: {top_driver_text}')
             right_axis.set_xlabel('Time (s)')

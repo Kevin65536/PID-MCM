@@ -285,6 +285,42 @@ def normalize_split_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
     return split
 
 
+_FNIRS_LEGACY_PREPROCESSING_KEYS = (
+    'highpass',
+    'lowpass',
+    'low_hz',
+    'high_hz',
+    'target_sampling_rate',
+    'resample_rate',
+    'sampling_rate',
+    'sample_rate',
+)
+
+
+def resolve_modality_preprocessing(data_cfg: Mapping[str, Any], modality: str) -> Dict[str, Any]:
+    normalized_modality = str(modality).strip().lower()
+    if normalized_modality not in ('eeg', 'fnirs'):
+        raise ValueError(f'Unsupported modality for preprocessing resolution: {modality!r}')
+
+    explicit_key = f'{normalized_modality}_preprocessing'
+    explicit_cfg = data_cfg.get(explicit_key)
+    if isinstance(explicit_cfg, Mapping):
+        return dict(explicit_cfg)
+
+    legacy_cfg = data_cfg.get('preprocessing')
+    if not isinstance(legacy_cfg, Mapping):
+        return {}
+
+    if normalized_modality == 'eeg':
+        return dict(legacy_cfg)
+
+    return {
+        key: value
+        for key, value in legacy_cfg.items()
+        if key in _FNIRS_LEGACY_PREPROCESSING_KEYS
+    }
+
+
 def normalize_data_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
     normalized = dict(data_cfg)
     if 'data_root' not in normalized and 'root' in normalized:
@@ -295,6 +331,8 @@ def normalize_data_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
         normalized['dataset'] = dataset_id
         normalized.setdefault('dataset_params', {})
         normalized['split'] = normalize_split_config(normalized)
+        normalized['eeg_preprocessing'] = resolve_modality_preprocessing(normalized, 'eeg')
+        normalized['fnirs_preprocessing'] = resolve_modality_preprocessing(normalized, 'fnirs')
         normalized['dataset_registry'] = {
             'dataset_id': 'multi_source',
             'display_name': 'Multi-source multimodal mix',
@@ -320,6 +358,8 @@ def normalize_data_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
     normalized.setdefault('task', registration.default_task)
     normalized.setdefault('dataset_params', {})
     normalized['split'] = normalize_split_config(normalized)
+    normalized['eeg_preprocessing'] = resolve_modality_preprocessing(normalized, 'eeg')
+    normalized['fnirs_preprocessing'] = resolve_modality_preprocessing(normalized, 'fnirs')
     normalized['dataset_registry'] = registration.runtime_metadata(normalized['data_root'])
     return normalized
 
