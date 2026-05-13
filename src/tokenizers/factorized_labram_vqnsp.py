@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from src.data.channel_adjacency import (
+    SpatialAdjacencyInfo,
+    build_channel_adjacency,
+    compute_per_channel_rms_envelope,
+    compute_spatial_fnirs_driver,
+)
 from src.losses.multimodal_tokenizer import (
     align_pair,
     batch_usage_entropy_loss,
-    coupling_kl_loss,
+    coupling_eeg_neighbor_smoothness_loss,
+    coupling_joint_probabilities,
+    coupling_lag_focus_loss,
     orthogonality_loss,
     straight_through_assignment_probs,
 )
@@ -66,7 +74,13 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_time_weight: float = 0.9,
         fnirs_amplitude_weight: float = 1.0,
         fnirs_time_weight: float = 1.0,
-        coupling_weight: float = 0.07,
+        coupling_weight: float = 0.0,
+        coupling_lag_focus_weight: float = 1.0,
+        coupling_smoothness_weight: float = 0.2,
+        coupling_smoothness_neighbors: int = 5,
+        source_target_weight: float = 0.0,
+        eeg_source_aux_weight: float = 0.5,
+        observation_target_weight: float = 0.0,
         codebook_balance_weight: float = 0.02,
         source_balance_scale: float = 1.0,
         observation_balance_scale: float = 1.0,
@@ -86,6 +100,25 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_branch_dropout: float = 0.0,
         eeg_observation_branch_dropout: float = 0.0,
         fnirs_observation_branch_dropout: float = 0.0,
+        window_duration_s: float = 10.0,
+        hrf_kernel_duration_s: float = 24.0,
+        hrf_peak_delay_s: float = 6.0,
+        hrf_peak_dispersion_s: float = 1.0,
+        hrf_undershoot_delay_s: float = 16.0,
+        hrf_undershoot_dispersion_s: float = 1.5,
+        hrf_peak_scale: float = 1.0,
+        hrf_undershoot_scale: float = 0.25,
+        spatial_source_prior_enabled: bool = False,
+        eeg_source_target_mode: str = 'signed_rms_carrier',
+        eeg_source_target_smoothing_ms: float = 200.0,
+        eeg_rms_smoothing_ms: float = 200.0,
+        shared_state_alpha: float = 0.90,
+        dataset_id: Optional[str] = None,
+        data_root: Optional[str] = None,
+        eeg_channel_names: Optional[Sequence[str]] = None,
+        fnirs_channel_names: Optional[Sequence[str]] = None,
+        spatial_prior_reference_subject_id: int = 1,
+        spatial_prior_use_artifact_data: bool = True,
         dropout: float = 0.0,
         drop_path: float = 0.1,
         use_smooth_l1: bool = False,
@@ -132,6 +165,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.fnirs_amplitude_weight = fnirs_amplitude_weight
         self.fnirs_time_weight = fnirs_time_weight
         self.coupling_weight = coupling_weight
+        self.coupling_lag_focus_weight = max(float(coupling_lag_focus_weight), 0.0)
+        self.coupling_smoothness_weight = max(float(coupling_smoothness_weight), 0.0)
+        self.coupling_smoothness_neighbors = max(int(coupling_smoothness_neighbors), 0)
+        self.source_target_weight = max(float(source_target_weight), 0.0)
+        self.eeg_source_aux_weight = max(float(eeg_source_aux_weight), 0.0)
+        self.observation_target_weight = max(float(observation_target_weight), 0.0)
         self.codebook_balance_weight = codebook_balance_weight
         self.source_balance_scale = max(float(source_balance_scale), 0.0)
         self.observation_balance_scale = max(float(observation_balance_scale), 0.0)
@@ -170,9 +209,71 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.source_branch_dropout = max(float(source_branch_dropout), 0.0)
         self.eeg_observation_branch_dropout = max(float(eeg_observation_branch_dropout), 0.0)
         self.fnirs_observation_branch_dropout = max(float(fnirs_observation_branch_dropout), 0.0)
+        self.source_branch_enabled = self._is_branch_enabled(self.source_branch_dropout)
+        self.eeg_observation_branch_enabled = self._is_branch_enabled(self.eeg_observation_branch_dropout)
+        self.fnirs_observation_branch_enabled = self._is_branch_enabled(self.fnirs_observation_branch_dropout)
         self.alignment_scale = 1.0
+        self.source_target_scale = 1.0
+        self.observation_target_scale = 1.0
         self.use_smooth_l1 = bool(use_smooth_l1)
         self.loss_fn = F.smooth_l1_loss if use_smooth_l1 else F.mse_loss
+        self.window_duration_s = max(float(window_duration_s), 1e-3)
+        self.eeg_sampling_rate_hz = float(self.eeg_seq_length) / self.window_duration_s
+        self.fnirs_sampling_rate_hz = float(self.fnirs_seq_length) / self.window_duration_s
+        self.eeg_to_fnirs_downsample_factor = (
+            self.eeg_seq_length // self.fnirs_seq_length
+            if self.eeg_seq_length % self.fnirs_seq_length == 0 else None
+        )
+        self.hrf_kernel_duration_s = max(float(hrf_kernel_duration_s), 1.0 / self.fnirs_sampling_rate_hz)
+        self.hrf_peak_delay_s = nn.Parameter(torch.tensor(float(hrf_peak_delay_s), dtype=torch.float32))
+        self.hrf_peak_dispersion_s = nn.Parameter(torch.tensor(float(hrf_peak_dispersion_s), dtype=torch.float32))
+        self.hrf_undershoot_delay_s = nn.Parameter(torch.tensor(float(hrf_undershoot_delay_s), dtype=torch.float32))
+        self.hrf_undershoot_dispersion_s = nn.Parameter(torch.tensor(float(hrf_undershoot_dispersion_s), dtype=torch.float32))
+        self.hrf_peak_scale = nn.Parameter(torch.tensor(float(hrf_peak_scale), dtype=torch.float32))
+        self.hrf_undershoot_scale = nn.Parameter(torch.tensor(float(hrf_undershoot_scale), dtype=torch.float32))
+        self.eeg_channel_names = list(eeg_channel_names) if eeg_channel_names is not None else [f'eeg_{index}' for index in range(eeg_channels)]
+        self.fnirs_channel_names = list(fnirs_channel_names) if fnirs_channel_names is not None else [f'fnirs_{index}' for index in range(fnirs_channels)]
+        self.spatial_source_prior_requested = bool(spatial_source_prior_enabled)
+        self.spatial_source_prior_enabled = bool(spatial_source_prior_enabled)
+        self.eeg_source_target_mode = str(eeg_source_target_mode)
+        self.eeg_rms_smoothing_ms = max(float(eeg_rms_smoothing_ms), 0.0)
+        self.eeg_rms_smoothing_samples = max(
+            int(round(self.eeg_sampling_rate_hz * self.eeg_rms_smoothing_ms / 1000.0)),
+            1,
+        )
+        self.shared_state_alpha = max(0.0, min(float(shared_state_alpha), 1.0))
+        self.eeg_source_target_smoothing_ms = max(float(eeg_source_target_smoothing_ms), 0.0)
+        self.eeg_source_target_smoothing_samples = max(
+            int(round(self.eeg_sampling_rate_hz * self.eeg_source_target_smoothing_ms / 1000.0)),
+            1,
+        )
+        if self.eeg_source_target_mode not in {'rms_envelope', 'signed_rms_carrier'}:
+            raise ValueError(
+                "eeg_source_target_mode must be 'rms_envelope' or 'signed_rms_carrier'"
+            )
+        self.spatial_adjacency_info: Optional[SpatialAdjacencyInfo] = None
+        self.spatial_prior_warnings: List[str] = []
+        self.spatial_prior_reference_subject_id = int(spatial_prior_reference_subject_id)
+        adjacency_buffer = torch.empty((0, 0), dtype=torch.float32)
+        if self.spatial_source_prior_enabled and dataset_id and data_root and eeg_channel_names and fnirs_channel_names:
+            try:
+                self.spatial_adjacency_info = build_channel_adjacency(
+                    dataset_id=str(dataset_id),
+                    data_root=str(data_root),
+                    eeg_channel_names=self.eeg_channel_names,
+                    fnirs_channel_names=self.fnirs_channel_names,
+                    reference_subject_id=self.spatial_prior_reference_subject_id,
+                    use_artifact_data=bool(spatial_prior_use_artifact_data),
+                )
+                adjacency_buffer = torch.as_tensor(self.spatial_adjacency_info.adjacency_matrix, dtype=torch.float32)
+                self.spatial_prior_warnings = list(self.spatial_adjacency_info.warnings)
+            except Exception as exc:
+                self.spatial_source_prior_enabled = False
+                self.spatial_prior_warnings = [f'Failed to initialize spatial prior: {exc}']
+        elif self.spatial_source_prior_enabled:
+            self.spatial_source_prior_enabled = False
+            self.spatial_prior_warnings = ['Spatial prior requested but dataset_id/data_root/channel names were incomplete.']
+        self.register_buffer('fnirs_spatial_adjacency', adjacency_buffer, persistent=False)
 
         self.eeg_patch_embed = MultiChannelPatchEmbedding(
             input_channels=eeg_channels,
@@ -276,16 +377,24 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             torch.zeros(len(self.alignment_lag_candidates), source_codebook_size, source_codebook_size)
         )
 
-        self.eeg_decode_input_proj = nn.Linear(
-            eeg_source_codebook_dim + eeg_observation_codebook_dim,
+        self.eeg_source_decode_input_proj = nn.Linear(
+            eeg_source_codebook_dim,
             eeg_decoder_embed_dim,
         )
-        self.fnirs_decode_input_proj = nn.Linear(
-            fnirs_source_codebook_dim + fnirs_observation_codebook_dim,
+        self.eeg_observation_decode_input_proj = nn.Linear(
+            eeg_observation_codebook_dim,
+            eeg_decoder_embed_dim,
+        )
+        self.fnirs_source_decode_input_proj = nn.Linear(
+            fnirs_source_codebook_dim,
+            fnirs_decoder_embed_dim,
+        )
+        self.fnirs_observation_decode_input_proj = nn.Linear(
+            fnirs_observation_codebook_dim,
             fnirs_decoder_embed_dim,
         )
 
-        self.eeg_decoder = TransformerDecoder(
+        self.eeg_source_decoder = TransformerDecoder(
             embed_dim=eeg_decoder_embed_dim,
             depth=eeg_decoder_depth,
             num_heads=eeg_decoder_num_heads,
@@ -293,7 +402,23 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             drop_path=0.0,
             max_patches=self.n_patches,
         )
-        self.fnirs_decoder = TransformerDecoder(
+        self.eeg_observation_decoder = TransformerDecoder(
+            embed_dim=eeg_decoder_embed_dim,
+            depth=eeg_decoder_depth,
+            num_heads=eeg_decoder_num_heads,
+            dropout=dropout,
+            drop_path=0.0,
+            max_patches=self.n_patches,
+        )
+        self.fnirs_source_decoder = TransformerDecoder(
+            embed_dim=fnirs_decoder_embed_dim,
+            depth=fnirs_decoder_depth,
+            num_heads=fnirs_decoder_num_heads,
+            dropout=dropout,
+            drop_path=0.0,
+            max_patches=self.n_patches,
+        )
+        self.fnirs_observation_decoder = TransformerDecoder(
             embed_dim=fnirs_decoder_embed_dim,
             depth=fnirs_decoder_depth,
             num_heads=fnirs_decoder_num_heads,
@@ -302,10 +427,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             max_patches=self.n_patches,
         )
 
-        self.eeg_amplitude_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
-        self.eeg_phase_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
-        self.fnirs_amplitude_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
-        self.fnirs_phase_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
+        self.eeg_source_amplitude_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
+        self.eeg_source_phase_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
+        self.eeg_observation_amplitude_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
+        self.eeg_observation_phase_head = nn.Linear(eeg_decoder_embed_dim, eeg_channels * self.eeg_fft_size)
+        self.fnirs_source_amplitude_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
+        self.fnirs_source_phase_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
+        self.fnirs_observation_amplitude_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
+        self.fnirs_observation_phase_head = nn.Linear(fnirs_decoder_embed_dim, fnirs_channels * self.fnirs_fft_size)
 
         self.apply(self._init_weights)
 
@@ -322,9 +451,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         loss_cfg = config.get('loss', {})
         reconstruction_cfg = loss_cfg.get('reconstruction', {})
         coupling_cfg = loss_cfg.get('coupling', {})
+        source_target_cfg = loss_cfg.get('source_target', {})
+        observation_target_cfg = loss_cfg.get('observation_target', {})
         branch_cfg = loss_cfg.get('branch', {})
         codebook_cfg = loss_cfg.get('codebook', {})
+        data_cfg = config.get('data', {})
+        window_cfg = data_cfg.get('window', {})
         validation_cfg = config.get('validation', {})
+        hrf_cfg = source_target_cfg.get('hrf', {})
+        spatial_cfg = source_target_cfg.get('spatial', {})
 
         source_codebook_size = source_cfg.get('codebook_size', 128)
         return cls(
@@ -362,7 +497,13 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             eeg_time_weight=reconstruction_cfg.get('eeg_time_weight', 0.9),
             fnirs_amplitude_weight=reconstruction_cfg.get('fnirs_amplitude_weight', 1.0),
             fnirs_time_weight=reconstruction_cfg.get('fnirs_time_weight', 1.0),
-            coupling_weight=coupling_cfg.get('weight', 0.07),
+            coupling_weight=coupling_cfg.get('weight', 0.0),
+            coupling_lag_focus_weight=coupling_cfg.get('lag_focus_weight', 1.0),
+            coupling_smoothness_weight=coupling_cfg.get('smoothness_weight', 0.2),
+            coupling_smoothness_neighbors=coupling_cfg.get('smoothness_neighbors', 5),
+            source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
+            eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
+            observation_target_weight=observation_target_cfg.get('weight', 0.0),
             codebook_balance_weight=codebook_cfg.get('balance_weight', 0.02),
             source_balance_scale=codebook_cfg.get('source_balance_scale', 1.0),
             observation_balance_scale=codebook_cfg.get('observation_balance_scale', 1.0),
@@ -382,6 +523,28 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             source_branch_dropout=branch_dropout_cfg.get('source', 0.0),
             eeg_observation_branch_dropout=branch_dropout_cfg.get('eeg_observation', 0.0),
             fnirs_observation_branch_dropout=branch_dropout_cfg.get('fnirs_observation', 0.0),
+            window_duration_s=window_cfg.get('duration_s', 10.0),
+            hrf_kernel_duration_s=hrf_cfg.get('kernel_duration_s', 24.0),
+            hrf_peak_delay_s=hrf_cfg.get('peak_delay_s', 6.0),
+            hrf_peak_dispersion_s=hrf_cfg.get('peak_dispersion_s', 1.0),
+            hrf_undershoot_delay_s=hrf_cfg.get('undershoot_delay_s', 16.0),
+            hrf_undershoot_dispersion_s=hrf_cfg.get('undershoot_dispersion_s', 1.5),
+            hrf_peak_scale=hrf_cfg.get('peak_scale', 1.0),
+            hrf_undershoot_scale=hrf_cfg.get('undershoot_scale', 0.25),
+            spatial_source_prior_enabled=spatial_cfg.get('enabled', False),
+            eeg_source_target_mode=source_target_cfg.get('eeg_target_mode', 'signed_rms_carrier'),
+            shared_state_alpha=source_target_cfg.get('shared_state_alpha', 0.90),
+            eeg_source_target_smoothing_ms=source_target_cfg.get(
+                'eeg_target_smoothing_ms',
+                spatial_cfg.get('eeg_rms_smoothing_ms', 200.0),
+            ),
+            eeg_rms_smoothing_ms=spatial_cfg.get('eeg_rms_smoothing_ms', 200.0),
+            dataset_id=data_cfg.get('dataset'),
+            data_root=data_cfg.get('data_root'),
+            eeg_channel_names=data_cfg.get('eeg_channel_names'),
+            fnirs_channel_names=data_cfg.get('fnirs_channel_names'),
+            spatial_prior_reference_subject_id=spatial_cfg.get('reference_subject_id', 1),
+            spatial_prior_use_artifact_data=data_cfg.get('use_artifact_data', True),
             dropout=model_cfg.get('dropout', 0.0),
             drop_path=model_cfg.get('drop_path', 0.1),
             use_smooth_l1=loss_cfg.get('use_smooth_l1', False),
@@ -424,6 +587,238 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         embeddings = patch_embed(patches)
         return encoder(embeddings)
 
+    def _gamma_pdf(self, time_axis: torch.Tensor, delay_s: torch.Tensor, dispersion_s: torch.Tensor) -> torch.Tensor:
+        delay = delay_s.clamp_min(1e-3)
+        dispersion = dispersion_s.clamp_min(1e-3)
+        concentration = (delay / dispersion).clamp_min(1e-3) + 1.0
+        safe_time = time_axis.clamp_min(1e-6)
+        log_pdf = (
+            (concentration - 1.0) * torch.log(safe_time) -
+            (safe_time / dispersion) -
+            torch.lgamma(concentration) -
+            concentration * torch.log(dispersion)
+        )
+        return torch.exp(log_pdf)
+
+    def _build_hrf_kernel(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        kernel_steps = max(int(round(self.hrf_kernel_duration_s * self.fnirs_sampling_rate_hz)), 1)
+        time_axis = torch.arange(kernel_steps, device=device, dtype=dtype) / self.fnirs_sampling_rate_hz
+        peak = self._gamma_pdf(time_axis, self.hrf_peak_delay_s.to(device=device, dtype=dtype), self.hrf_peak_dispersion_s.to(device=device, dtype=dtype))
+        undershoot = self._gamma_pdf(
+            time_axis,
+            self.hrf_undershoot_delay_s.to(device=device, dtype=dtype),
+            self.hrf_undershoot_dispersion_s.to(device=device, dtype=dtype),
+        )
+        peak_scale = self.hrf_peak_scale.to(device=device, dtype=dtype).clamp_min(1e-3)
+        undershoot_scale = self.hrf_undershoot_scale.to(device=device, dtype=dtype).clamp_min(0.0)
+        kernel = peak_scale * peak - undershoot_scale * undershoot
+        kernel = kernel / kernel.abs().sum().clamp_min(1e-6)
+        return kernel.view(1, 1, -1)
+
+    def _compute_eeg_power_envelope(self, eeg: torch.Tensor) -> torch.Tensor:
+        return eeg.pow(2).mean(dim=1, keepdim=True)
+
+    def _compute_shared_neural_state(self, eeg: torch.Tensor) -> torch.Tensor:
+        """Estimate shared latent neural state via AR(1)-smoothed EEG power.
+
+        Croce et al. 2017 physical model: a latent neural driver s(t) is
+        observed instantaneously by EEG (as broadband power) and with HRF delay
+        by fNIRS.  We approximate the posterior mean with a causal exponential
+        smoother:
+
+            s_k = α · s_{k-1}  +  (1 − α) · x_k
+
+        where x_k is the channel-averaged (or spatially-weighted) EEG power
+        downsampled to the fNIRS rate, and α = shared_state_alpha controls
+        temporal smoothness:
+
+        α → 1   : only sub-0.1 Hz hemodynamic fluctuations (SMC limit)
+        α ≈ 0.90: ~1 s half-life — alpha/beta-band power envelope preserved
+        α → 0   : raw EEG power, no smoothing
+
+        When spatial_source_prior is enabled, x_k is computed per fNIRS
+        channel via the adjacency matrix, yielding [B, F, T_fnirs].
+        Otherwise x_k is the global mean power → [B, 1, T_fnirs].
+
+        Returns:
+            shared_state: [B, 1_or_F, T_fnirs] slow neural driver at fNIRS rate
+        """
+        alpha = self.shared_state_alpha
+        if self.spatial_source_prior_enabled and self.fnirs_spatial_adjacency.numel() > 0:
+            # Per-fNIRS-channel spatially-weighted EEG power, then AR-smooth each
+            eeg_power = eeg.pow(2)  # [B, E, T_eeg]
+            weighted = eeg_power @ self.fnirs_spatial_adjacency.T.to(
+                device=eeg.device, dtype=eeg.dtype
+            )  # note: adjacency is [F, E], so adjacency.T is [E, F]
+            # Actually adjacency is [F, E], we need einsum:
+            # weighted[b, f, t] = sum_e adj[f, e] * eeg_power[b, e, t]
+            weighted = torch.einsum(
+                'fe,bet->bft',
+                self.fnirs_spatial_adjacency.to(device=eeg.device, dtype=eeg.dtype),
+                eeg_power,
+            )
+            driver = self._downsample_neural_driver(weighted, self.fnirs_seq_length)  # [B, F, T_fnirs]
+            if alpha <= 0.0:
+                return driver
+            smoothed = driver.clone()
+            for t in range(1, smoothed.shape[-1]):
+                smoothed[:, :, t] = alpha * smoothed[:, :, t - 1] + (1.0 - alpha) * driver[:, :, t]
+            return smoothed
+
+        # Global mode: channel-averaged power
+        eeg_power = self._compute_eeg_power_envelope(eeg)          # [B, 1, T_eeg]
+        driver = self._downsample_neural_driver(eeg_power, self.fnirs_seq_length)  # [B, 1, T_fnirs]
+        if alpha <= 0.0:
+            return driver
+        smoothed = driver.clone()
+        for t in range(1, smoothed.shape[-1]):
+            smoothed[:, :, t] = alpha * smoothed[:, :, t - 1] + (1.0 - alpha) * driver[:, :, t]
+        return smoothed
+
+    def _apply_hrf_convolution(self, driver: torch.Tensor) -> torch.Tensor:
+        hrf_kernel = self._build_hrf_kernel(device=driver.device, dtype=driver.dtype)
+        batch_size, channels, time_steps = driver.shape
+        flat_driver = driver.reshape(batch_size * channels, 1, time_steps)
+        conv = F.conv1d(flat_driver, hrf_kernel, padding=hrf_kernel.shape[-1] - 1)
+        conv = conv[..., :self.fnirs_seq_length]
+        return conv.reshape(batch_size, channels, self.fnirs_seq_length)
+
+    def _downsample_neural_driver(self, driver: torch.Tensor, target_length: int) -> torch.Tensor:
+        if driver.shape[-1] == target_length:
+            return driver
+        if self.eeg_to_fnirs_downsample_factor is not None and target_length == self.fnirs_seq_length:
+            factor = max(int(self.eeg_to_fnirs_downsample_factor), 1)
+            return F.avg_pool1d(driver, kernel_size=factor, stride=factor)
+        return F.interpolate(driver, size=target_length, mode='linear', align_corners=False)
+
+    def _match_fnirs_target_scale(self, base_target: torch.Tensor, fnirs: torch.Tensor) -> torch.Tensor:
+        centered = base_target - base_target.mean(dim=-1, keepdim=True)
+        normalized = centered / centered.std(dim=-1, keepdim=True, unbiased=False).clamp_min(1e-6)
+        channel_mean = fnirs.mean(dim=-1, keepdim=True)
+        channel_std = fnirs.std(dim=-1, keepdim=True, unbiased=False).clamp_min(1e-6)
+        return normalized * channel_std + channel_mean
+
+    def _compute_fnirs_source_target(self, shared_state: torch.Tensor, fnirs: torch.Tensor) -> torch.Tensor:
+        """fNIRS source target from shared neural state via HRF convolution.
+
+        Croce et al. physical model: fNIRS observes the HRF-convolved neural
+        state.  The shared_state is already temporally smoothed and at fNIRS
+        rate; we apply the double-gamma HRF and rescale to match per-channel
+        fNIRS statistics.  The result is time-synchronous with the original
+        fNIRS (HRF convolution absorbs the neurovascular delay).
+
+        When the spatial prior is enabled, shared_state is [B, F, T_fnirs] and
+        each fNIRS channel receives its own spatially-weighted driver.
+        Otherwise shared_state is [B, 1, T_fnirs] broadcast to all channels.
+
+        Args:
+            shared_state: [B, 1_or_F, T_fnirs] from _compute_shared_neural_state
+            fnirs: [B, F, T_fnirs] original fNIRS for scale matching
+        """
+        conv = self._apply_hrf_convolution(shared_state)
+        return self._match_fnirs_target_scale(conv, fnirs)
+
+    def _smooth_eeg_waveform(self, eeg: torch.Tensor) -> torch.Tensor:
+        kernel_size = max(int(self.eeg_source_target_smoothing_samples), 1)
+        if kernel_size <= 1:
+            return eeg
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        batch_size, channels, time_steps = eeg.shape
+        working = eeg.reshape(batch_size * channels, 1, time_steps)
+        padding = kernel_size // 2
+        padded = F.pad(working, (padding, padding), mode='reflect')
+        smoothed = F.avg_pool1d(padded, kernel_size=kernel_size, stride=1)
+        return smoothed.reshape(batch_size, channels, time_steps)
+
+    def _compute_eeg_source_target(self, eeg: torch.Tensor) -> torch.Tensor:
+        """EEG source target: temporally smoothed, signed, same physical units as EEG.
+
+        Two modes (via eeg_source_target_mode):
+        - 'signed_rms_carrier' (DEFAULT): RMS amplitude × sign(smoothed voltage)
+          → signed, μV units, additive decomposition physically meaningful
+        - 'rms_envelope': per-channel RMS envelope
+          → non-negative, μV units, preserves spatial structure
+
+        Temporal smoothing uses shared_state_alpha (AR(1) exponential) to
+        remove fast noise while preserving task-relevant power dynamics.
+        """
+        alpha = self.shared_state_alpha
+
+        if self.eeg_source_target_mode == 'signed_rms_carrier':
+            if self.spatial_source_prior_enabled:
+                amplitude = compute_per_channel_rms_envelope(
+                    eeg,
+                    smoothing_samples=self.eeg_rms_smoothing_samples,
+                )
+                # Apply temporal smoothing per channel
+                if alpha > 0.0:
+                    smoothed_amp = amplitude.clone()
+                    for t in range(1, smoothed_amp.shape[-1]):
+                        smoothed_amp[:, :, t] = (
+                            alpha * smoothed_amp[:, :, t - 1]
+                            + (1.0 - alpha) * amplitude[:, :, t]
+                        )
+                    amplitude = smoothed_amp
+            else:
+                # Global amplitude from channel-averaged power, smoothed, sqrt → μV
+                power = self._compute_eeg_power_envelope(eeg).expand(-1, eeg.shape[1], -1)
+                if alpha > 0.0:
+                    smoothed_power = power.clone()
+                    for t in range(1, smoothed_power.shape[-1]):
+                        smoothed_power[:, :, t] = (
+                            alpha * smoothed_power[:, :, t - 1]
+                            + (1.0 - alpha) * power[:, :, t]
+                        )
+                    power = smoothed_power
+                amplitude = torch.sqrt(power.clamp_min(1e-8))
+
+            signed_carrier = self._smooth_eeg_waveform(eeg)
+            carrier_std = signed_carrier.std(dim=-1, keepdim=True, unbiased=False).clamp_min(1e-6)
+            return amplitude * torch.tanh(signed_carrier / carrier_std)
+
+        if self.spatial_source_prior_enabled:
+            amplitude = compute_per_channel_rms_envelope(
+                eeg,
+                smoothing_samples=self.eeg_rms_smoothing_samples,
+            )
+            if alpha > 0.0:
+                smoothed_amp = amplitude.clone()
+                for t in range(1, smoothed_amp.shape[-1]):
+                    smoothed_amp[:, :, t] = (
+                        alpha * smoothed_amp[:, :, t - 1]
+                        + (1.0 - alpha) * amplitude[:, :, t]
+                    )
+                amplitude = smoothed_amp
+            return amplitude
+
+        # Global RMS envelope: channel-averaged power → sqrt for voltage units → broadcast
+        power = self._compute_eeg_power_envelope(eeg).expand(-1, eeg.shape[1], -1)
+        if alpha > 0.0:
+            smoothed_power = power.clone()
+            for t in range(1, smoothed_power.shape[-1]):
+                smoothed_power[:, :, t] = (
+                    alpha * smoothed_power[:, :, t - 1]
+                    + (1.0 - alpha) * power[:, :, t]
+                )
+            power = smoothed_power
+        return torch.sqrt(power.clamp_min(1e-8))
+
+    def _compute_observation_target(self, original: torch.Tensor, source_target: torch.Tensor) -> torch.Tensor:
+        return original - source_target
+
+    def _compute_source_target_random_baseline(
+        self,
+        prediction: torch.Tensor,
+        target: torch.Tensor,
+    ) -> torch.Tensor:
+        if target.shape[0] > 1:
+            randomized_target = target.roll(shifts=1, dims=0)
+        else:
+            shift = max(target.shape[-1] // 3, 1)
+            randomized_target = target.roll(shifts=shift, dims=-1)
+        return self.loss_fn(prediction.detach(), randomized_target)
+
     def _decode_modality(
         self,
         z_q: torch.Tensor,
@@ -440,11 +835,47 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         phase = phase_head(decoded).view(z_q.shape[0], self.n_patches, channels, fft_size)
         return amplitude, phase
 
+    def _decode_branch_reconstruction(
+        self,
+        z_q: torch.Tensor,
+        decode_input_proj: nn.Module,
+        decoder: nn.Module,
+        amplitude_head: nn.Module,
+        phase_head: nn.Module,
+        channels: int,
+        fft_size: int,
+        patch_size: int,
+    ) -> torch.Tensor:
+        amplitude, phase = self._decode_modality(
+            z_q,
+            decode_input_proj,
+            decoder,
+            amplitude_head,
+            phase_head,
+            channels,
+            fft_size,
+        )
+        return self._reconstruct_time(amplitude, phase, patch_size)
+
+    def _zeros_like_reconstruction(
+        self,
+        latent: torch.Tensor,
+        channels: int,
+        seq_length: int,
+    ) -> torch.Tensor:
+        return latent.new_zeros((latent.shape[0], channels, seq_length))
+
     def _assignment_logits(self, z: torch.Tensor, codebook_weight: torch.Tensor) -> torch.Tensor:
         normalized_z = l2norm(z)
         return torch.einsum('bnd,kd->bnk', normalized_z, codebook_weight)
 
+    @staticmethod
+    def _is_branch_enabled(dropout: float) -> bool:
+        return float(dropout) < (1.0 - 1e-6)
+
     def _branch_dropout(self, z: torch.Tensor, p: float) -> torch.Tensor:
+        if not self._is_branch_enabled(p):
+            return torch.zeros_like(z)
         if (not self.training) or p <= 0.0:
             return z
         keep_prob = 1.0 - p
@@ -458,7 +889,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         overlap = len(left_codes & right_codes) / union_size
         return torch.tensor(overlap, device=left_indices.device, dtype=torch.float32)
 
-    def _compute_source_coupling_loss(
+    def _compute_source_alignment_state(
         self,
         eeg_source_logits: torch.Tensor,
         fnirs_source_logits: torch.Tensor,
@@ -467,57 +898,36 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_source_probs = F.softmax(eeg_source_logits / temperature, dim=-1)
         fnirs_source_probs = F.softmax(fnirs_source_logits / temperature, dim=-1)
 
+        lag_focus_loss = coupling_lag_focus_loss(self.coupling_logits)
+        smoothness_loss = coupling_eeg_neighbor_smoothness_loss(
+            self.coupling_logits,
+            self.eeg_source_quantizer.get_codebook_weight(),
+            n_neighbors=self.coupling_smoothness_neighbors,
+        )
+        source_coupling_loss = (
+            self.coupling_lag_focus_weight * lag_focus_loss +
+            self.coupling_smoothness_weight * smoothness_loss
+        )
+
+        coupling_joint_probs = coupling_joint_probabilities(self.coupling_logits).detach()
+        lag_mass = coupling_joint_probs.sum(dim=-1)
+        lag_profile = lag_mass.mean(dim=0) if lag_mass.numel() > 0 else eeg_source_logits.new_zeros((1,))
+        selected_lag_index = int(torch.argmax(lag_profile).item()) if lag_profile.numel() > 0 else 0
+        selected_lag = int(self.alignment_lag_candidates[selected_lag_index]) if self.alignment_lag_candidates else 0
         target_length = self.fixed_alignment_compare_length if self.alignment_compare_mode == 'fixed_min' else None
-        coupling_losses = []
-        valid_lags = []
-        usable_lengths = []
-
-        for lag_index, lag in enumerate(self.alignment_lag_candidates):
-            aligned_eeg_probs, aligned_fnirs_probs = align_pair(
-                eeg_source_probs,
-                fnirs_source_probs,
-                lag,
-                target_length=target_length,
-            )
-            if aligned_eeg_probs.shape[1] == 0:
-                continue
-
-            transition = F.softmax(self.coupling_logits[lag_index], dim=-1)
-            pred_fnirs_probs = torch.einsum('bnk,kl->bnl', aligned_eeg_probs, transition)
-            coupling_loss = coupling_kl_loss(pred_fnirs_probs, aligned_fnirs_probs)
-            if self.coupling_bidirectional:
-                reverse_transition = F.softmax(self.coupling_logits[lag_index].transpose(0, 1), dim=-1)
-                pred_eeg_probs = torch.einsum('bnk,kl->bnl', aligned_fnirs_probs, reverse_transition)
-                coupling_loss = 0.5 * (coupling_loss + coupling_kl_loss(pred_eeg_probs, aligned_eeg_probs))
-
-            coupling_losses.append(coupling_loss)
-            valid_lags.append(lag)
-            usable_lengths.append(aligned_eeg_probs.shape[1])
-
-        zero = eeg_source_logits.new_tensor(0.0)
-        if not coupling_losses:
-            return {
-                'source_coupling_loss': zero,
-                'selected_source_lag': zero,
-                'selected_alignment_lag': zero,
-                'source_alignment_usable_tokens': zero,
-                'alignment_usable_tokens': zero,
-                'eeg_source_probs': eeg_source_probs,
-                'fnirs_source_probs': fnirs_source_probs,
-            }
-
-        if self.alignment_selection == 'mean':
-            source_coupling_loss = torch.stack(coupling_losses).mean()
-            selected_source_lag = eeg_source_logits.new_tensor(float(sum(valid_lags) / len(valid_lags)))
-            source_alignment_usable_tokens = eeg_source_logits.new_tensor(float(sum(usable_lengths) / len(usable_lengths)))
-        else:
-            best_index = int(torch.argmin(torch.stack(coupling_losses)).item())
-            source_coupling_loss = coupling_losses[best_index]
-            selected_source_lag = eeg_source_logits.new_tensor(float(valid_lags[best_index]))
-            source_alignment_usable_tokens = eeg_source_logits.new_tensor(float(usable_lengths[best_index]))
+        aligned_eeg_probs, _ = align_pair(
+            eeg_source_probs,
+            fnirs_source_probs,
+            selected_lag,
+            target_length=target_length,
+        )
+        selected_source_lag = eeg_source_logits.new_tensor(float(selected_lag))
+        source_alignment_usable_tokens = eeg_source_logits.new_tensor(float(aligned_eeg_probs.shape[1]))
 
         return {
             'source_coupling_loss': source_coupling_loss,
+            'source_coupling_lag_focus_loss': lag_focus_loss,
+            'source_coupling_smoothness_loss': smoothness_loss,
             'selected_source_lag': selected_source_lag,
             'selected_alignment_lag': selected_source_lag,
             'source_alignment_usable_tokens': source_alignment_usable_tokens,
@@ -532,31 +942,89 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         eeg_observation_q: torch.Tensor,
         fnirs_source_q: torch.Tensor,
         fnirs_observation_q: torch.Tensor,
+        decode_source: bool = True,
+        decode_observation: bool = True,
     ) -> Dict[str, torch.Tensor]:
-        eeg_decoder_latent = torch.cat([eeg_source_q, eeg_observation_q], dim=-1)
-        fnirs_decoder_latent = torch.cat([fnirs_source_q, fnirs_observation_q], dim=-1)
+        decode_source_branch = decode_source and self.source_branch_enabled
+        decode_eeg_observation_branch = decode_observation and self.eeg_observation_branch_enabled
+        decode_fnirs_observation_branch = decode_observation and self.fnirs_observation_branch_enabled
 
-        eeg_pred_amp, eeg_pred_phase = self._decode_modality(
-            eeg_decoder_latent,
-            self.eeg_decode_input_proj,
-            self.eeg_decoder,
-            self.eeg_amplitude_head,
-            self.eeg_phase_head,
-            self.eeg_channels,
-            self.eeg_fft_size,
-        )
-        fnirs_pred_amp, fnirs_pred_phase = self._decode_modality(
-            fnirs_decoder_latent,
-            self.fnirs_decode_input_proj,
-            self.fnirs_decoder,
-            self.fnirs_amplitude_head,
-            self.fnirs_phase_head,
-            self.fnirs_channels,
-            self.fnirs_fft_size,
-        )
+        if decode_source_branch:
+            eeg_source_reconstructed = self._decode_branch_reconstruction(
+                eeg_source_q,
+                self.eeg_source_decode_input_proj,
+                self.eeg_source_decoder,
+                self.eeg_source_amplitude_head,
+                self.eeg_source_phase_head,
+                self.eeg_channels,
+                self.eeg_fft_size,
+                self.eeg_patch_size,
+            )
+            fnirs_source_reconstructed = self._decode_branch_reconstruction(
+                fnirs_source_q,
+                self.fnirs_source_decode_input_proj,
+                self.fnirs_source_decoder,
+                self.fnirs_source_amplitude_head,
+                self.fnirs_source_phase_head,
+                self.fnirs_channels,
+                self.fnirs_fft_size,
+                self.fnirs_patch_size,
+            )
+        else:
+            eeg_source_reconstructed = self._zeros_like_reconstruction(
+                eeg_source_q,
+                self.eeg_channels,
+                self.eeg_seq_length,
+            )
+            fnirs_source_reconstructed = self._zeros_like_reconstruction(
+                fnirs_source_q,
+                self.fnirs_channels,
+                self.fnirs_seq_length,
+            )
+
+        if decode_eeg_observation_branch:
+            eeg_observation_reconstructed = self._decode_branch_reconstruction(
+                eeg_observation_q,
+                self.eeg_observation_decode_input_proj,
+                self.eeg_observation_decoder,
+                self.eeg_observation_amplitude_head,
+                self.eeg_observation_phase_head,
+                self.eeg_channels,
+                self.eeg_fft_size,
+                self.eeg_patch_size,
+            )
+        else:
+            eeg_observation_reconstructed = self._zeros_like_reconstruction(
+                eeg_observation_q,
+                self.eeg_channels,
+                self.eeg_seq_length,
+            )
+
+        if decode_fnirs_observation_branch:
+            fnirs_observation_reconstructed = self._decode_branch_reconstruction(
+                fnirs_observation_q,
+                self.fnirs_observation_decode_input_proj,
+                self.fnirs_observation_decoder,
+                self.fnirs_observation_amplitude_head,
+                self.fnirs_observation_phase_head,
+                self.fnirs_channels,
+                self.fnirs_fft_size,
+                self.fnirs_patch_size,
+            )
+        else:
+            fnirs_observation_reconstructed = self._zeros_like_reconstruction(
+                fnirs_observation_q,
+                self.fnirs_channels,
+                self.fnirs_seq_length,
+            )
+
         return {
-            'eeg_reconstructed': self._reconstruct_time(eeg_pred_amp, eeg_pred_phase, self.eeg_patch_size),
-            'fnirs_reconstructed': self._reconstruct_time(fnirs_pred_amp, fnirs_pred_phase, self.fnirs_patch_size),
+            'eeg_source_reconstructed': eeg_source_reconstructed,
+            'fnirs_source_reconstructed': fnirs_source_reconstructed,
+            'eeg_observation_reconstructed': eeg_observation_reconstructed,
+            'fnirs_observation_reconstructed': fnirs_observation_reconstructed,
+            'eeg_reconstructed': eeg_source_reconstructed + eeg_observation_reconstructed,
+            'fnirs_reconstructed': fnirs_source_reconstructed + fnirs_observation_reconstructed,
         }
 
     @torch.no_grad()
@@ -590,6 +1058,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             eeg_observation_q,
             fnirs_source_q,
             fnirs_observation_q,
+            decode_source=use_source,
+            decode_observation=use_observation,
         )
         reconstructions.update({
             'eeg_source_q': eeg_source_q,
@@ -673,12 +1143,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.fnirs_observation_quantizer.get_codebook_weight(),
         )
 
-        source_coupling = self._compute_source_coupling_loss(eeg_source_logits, fnirs_source_logits)
-        source_coupling_loss = source_coupling['source_coupling_loss']
-        selected_source_lag = source_coupling['selected_source_lag']
-        alignment_usable_tokens = source_coupling['alignment_usable_tokens']
-        eeg_source_probs = source_coupling['eeg_source_probs']
-        fnirs_source_probs = source_coupling['fnirs_source_probs']
+        source_alignment = self._compute_source_alignment_state(eeg_source_logits, fnirs_source_logits)
+        source_coupling_loss = source_alignment['source_coupling_loss']
+        source_coupling_lag_focus_loss = source_alignment['source_coupling_lag_focus_loss']
+        source_coupling_smoothness_loss = source_alignment['source_coupling_smoothness_loss']
+        selected_source_lag = source_alignment['selected_source_lag']
+        alignment_usable_tokens = source_alignment['alignment_usable_tokens']
+        eeg_source_probs = source_alignment['eeg_source_probs']
+        fnirs_source_probs = source_alignment['fnirs_source_probs']
 
         source_balance_temperature = max(float(self.source_balance_temperature), 1e-3)
         observation_balance_temperature = max(float(self.observation_balance_temperature), 1e-3)
@@ -693,13 +1165,22 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             observation_balance_temperature,
         )
 
-        source_balance_loss = 0.5 * (
-            batch_usage_entropy_loss(eeg_source_balance_probs) +
-            batch_usage_entropy_loss(fnirs_source_balance_probs)
-        )
-        observation_balance_loss = 0.5 * (
-            batch_usage_entropy_loss(eeg_observation_balance_probs) +
-            batch_usage_entropy_loss(fnirs_observation_balance_probs)
+        zero_scalar = eeg_source_q.new_zeros(())
+        source_balance_terms = []
+        if self.source_branch_enabled:
+            source_balance_terms.extend([
+                batch_usage_entropy_loss(eeg_source_balance_probs),
+                batch_usage_entropy_loss(fnirs_source_balance_probs),
+            ])
+        source_balance_loss = sum(source_balance_terms) / len(source_balance_terms) if source_balance_terms else zero_scalar
+        observation_balance_terms = []
+        if self.eeg_observation_branch_enabled:
+            observation_balance_terms.append(batch_usage_entropy_loss(eeg_observation_balance_probs))
+        if self.fnirs_observation_branch_enabled:
+            observation_balance_terms.append(batch_usage_entropy_loss(fnirs_observation_balance_probs))
+        observation_balance_loss = (
+            sum(observation_balance_terms) / len(observation_balance_terms)
+            if observation_balance_terms else zero_scalar
         )
         codebook_balance_loss = 0.5 * (
             self.source_balance_scale * source_balance_loss +
@@ -733,37 +1214,64 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.fnirs_time_weight * fnirs_time_loss
         )
 
-        zero_eeg_observation_q = torch.zeros_like(eeg_observation_q)
-        zero_fnirs_observation_q = torch.zeros_like(fnirs_observation_q)
-        source_only_reconstructions = self.decode_from_components(
-            eeg_source_q,
-            zero_eeg_observation_q,
-            fnirs_source_q,
-            zero_fnirs_observation_q,
-        )
-        zero_eeg_source_q = torch.zeros_like(eeg_source_q)
-        zero_fnirs_source_q = torch.zeros_like(fnirs_source_q)
-        observation_only_reconstructions = self.decode_from_components(
-            zero_eeg_source_q,
-            eeg_observation_q,
-            zero_fnirs_source_q,
-            fnirs_observation_q,
-        )
+        shared_state = self._compute_shared_neural_state(eeg)
+        fnirs_source_target = self._compute_fnirs_source_target(shared_state, fnirs)
+        eeg_source_aux_target = self._compute_eeg_source_target(eeg)
+        eeg_observation_target = self._compute_observation_target(eeg, eeg_source_aux_target)
+        fnirs_observation_target = self._compute_observation_target(fnirs, fnirs_source_target)
 
-        branch_orthogonality_loss = (
-            orthogonality_loss(eeg_source, eeg_observation) +
-            orthogonality_loss(fnirs_source, fnirs_observation)
-        )
+        eeg_source_reconstructed = reconstructions['eeg_source_reconstructed']
+        fnirs_source_reconstructed = reconstructions['fnirs_source_reconstructed']
+        eeg_observation_reconstructed = reconstructions['eeg_observation_reconstructed']
+        fnirs_observation_reconstructed = reconstructions['fnirs_observation_reconstructed']
 
-        vq_source_loss = eeg_source_info['vq_loss'] + fnirs_source_info['vq_loss']
-        vq_observation_loss = eeg_observation_info['vq_loss'] + fnirs_observation_info['vq_loss']
+        source_target_loss = (
+            self.loss_fn(fnirs_source_reconstructed, fnirs_source_target)
+            if self.source_branch_enabled else zero_scalar
+        )
+        source_target_random_baseline = self._compute_source_target_random_baseline(
+            fnirs_source_reconstructed,
+            fnirs_source_target,
+        )
+        eeg_source_aux_loss = (
+            self.loss_fn(eeg_source_reconstructed, eeg_source_aux_target)
+            if self.source_branch_enabled else zero_scalar
+        )
+        eeg_observation_loss = (
+            self.loss_fn(eeg_observation_reconstructed, eeg_observation_target)
+            if self.eeg_observation_branch_enabled else zero_scalar
+        )
+        fnirs_observation_loss = (
+            self.loss_fn(fnirs_observation_reconstructed, fnirs_observation_target)
+            if self.fnirs_observation_branch_enabled else zero_scalar
+        )
+        observation_loss = eeg_observation_loss + fnirs_observation_loss
+
+        branch_orthogonality_loss = zero_scalar
+        if self.eeg_observation_branch_enabled:
+            branch_orthogonality_loss = branch_orthogonality_loss + orthogonality_loss(eeg_source, eeg_observation)
+        if self.fnirs_observation_branch_enabled:
+            branch_orthogonality_loss = branch_orthogonality_loss + orthogonality_loss(fnirs_source, fnirs_observation)
+
+        vq_source_loss = (
+            eeg_source_info['vq_loss'] + fnirs_source_info['vq_loss']
+            if self.source_branch_enabled else zero_scalar
+        )
+        vq_observation_loss = zero_scalar
+        if self.eeg_observation_branch_enabled:
+            vq_observation_loss = vq_observation_loss + eeg_observation_info['vq_loss']
+        if self.fnirs_observation_branch_enabled:
+            vq_observation_loss = vq_observation_loss + fnirs_observation_info['vq_loss']
         vq_loss = vq_source_loss + vq_observation_loss
 
         total_loss = (
             eeg_rec_loss +
             fnirs_rec_loss +
             vq_loss +
-            (self.coupling_weight * self.alignment_scale) * source_coupling_loss +
+            (self.source_target_weight * self.source_target_scale) * source_target_loss +
+            (self.source_target_weight * self.eeg_source_aux_weight * self.source_target_scale) * eeg_source_aux_loss +
+            (self.observation_target_weight * self.observation_target_scale) * observation_loss +
+            self.coupling_weight * source_coupling_loss +
             self.codebook_balance_weight * codebook_balance_loss +
             self.orthogonality_weight * branch_orthogonality_loss
         )
@@ -783,7 +1291,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'vq_loss': vq_loss,
             'vq_source_loss': vq_source_loss,
             'vq_observation_loss': vq_observation_loss,
+            'source_target_loss': source_target_loss,
+            'source_target_random_baseline': source_target_random_baseline,
+            'eeg_source_aux_loss': eeg_source_aux_loss,
+            'eeg_observation_loss': eeg_observation_loss,
+            'fnirs_observation_loss': fnirs_observation_loss,
+            'observation_loss': observation_loss,
             'source_coupling_loss': source_coupling_loss,
+            'source_coupling_lag_focus_loss': source_coupling_lag_focus_loss,
+            'source_coupling_smoothness_loss': source_coupling_smoothness_loss,
             'codebook_balance_loss': codebook_balance_loss,
             'source_balance_loss': source_balance_loss,
             'observation_balance_loss': observation_balance_loss,
@@ -793,6 +1309,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_alignment_usable_tokens': alignment_usable_tokens,
             'alignment_usable_tokens': alignment_usable_tokens,
             'alignment_scale': torch.tensor(self.alignment_scale, device=eeg.device, dtype=torch.float32),
+            'source_target_scale': torch.tensor(self.source_target_scale, device=eeg.device, dtype=torch.float32),
+            'observation_target_scale': torch.tensor(self.observation_target_scale, device=eeg.device, dtype=torch.float32),
             'source_code_overlap': source_overlap,
             'perplexity': overall_perplexity,
             'utilization': overall_utilization,
@@ -806,10 +1324,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'fnirs_observation_utilization': fnirs_observation_info['utilization'],
             'eeg_reconstructed': eeg_rec,
             'fnirs_reconstructed': fnirs_rec,
-            'eeg_source_only_reconstructed': source_only_reconstructions['eeg_reconstructed'],
-            'fnirs_source_only_reconstructed': source_only_reconstructions['fnirs_reconstructed'],
-            'eeg_observation_only_reconstructed': observation_only_reconstructions['eeg_reconstructed'],
-            'fnirs_observation_only_reconstructed': observation_only_reconstructions['fnirs_reconstructed'],
+            'eeg_source_reconstructed': eeg_source_reconstructed,
+            'fnirs_source_reconstructed': fnirs_source_reconstructed,
+            'eeg_observation_reconstructed': eeg_observation_reconstructed,
+            'fnirs_observation_reconstructed': fnirs_observation_reconstructed,
+            'eeg_source_only_reconstructed': eeg_source_reconstructed,
+            'fnirs_source_only_reconstructed': fnirs_source_reconstructed,
+            'eeg_observation_only_reconstructed': eeg_observation_reconstructed,
+            'fnirs_observation_only_reconstructed': fnirs_observation_reconstructed,
             'eeg_source_indices': eeg_source_indices,
             'fnirs_source_indices': fnirs_source_indices,
             'eeg_observation_indices': eeg_observation_indices,
@@ -822,6 +1344,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'fnirs_source_z_q': fnirs_source_q,
             'eeg_observation_z_q': eeg_observation_q,
             'fnirs_observation_z_q': fnirs_observation_q,
+            'fnirs_source_target': fnirs_source_target,
+            'eeg_source_aux_target': eeg_source_aux_target,
+            'eeg_observation_target': eeg_observation_target,
+            'fnirs_observation_target': fnirs_observation_target,
+            'spatial_source_prior_enabled': torch.tensor(
+                1.0 if self.spatial_source_prior_enabled else 0.0,
+                device=eeg.device,
+                dtype=torch.float32,
+            ),
             'eeg_indices': eeg_source_indices,
             'fnirs_indices': fnirs_source_indices,
             'eeg_z': eeg_source,
@@ -836,11 +1367,35 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
     def get_embedding(self, indices: torch.Tensor) -> torch.Tensor:
         return self.eeg_source_quantizer.get_codebook_entry(indices)
 
+    def has_spatial_source_prior(self) -> bool:
+        return bool(self.spatial_source_prior_enabled and self.fnirs_spatial_adjacency.numel() > 0)
+
+    def get_spatial_prior_info(self) -> Optional[Dict[str, Any]]:
+        if self.spatial_adjacency_info is None:
+            return None
+        payload = self.spatial_adjacency_info.to_serializable()
+        payload['enabled'] = self.has_spatial_source_prior()
+        payload['eeg_rms_smoothing_ms'] = float(self.eeg_rms_smoothing_ms)
+        payload['warning_count'] = len(self.spatial_prior_warnings)
+        return payload
+
     def set_alignment_scale(self, scale: float):
         self.alignment_scale = max(float(scale), 0.0)
 
     def get_alignment_scale(self) -> float:
         return float(self.alignment_scale)
+
+    def set_source_target_scale(self, scale: float):
+        self.source_target_scale = max(float(scale), 0.0)
+
+    def get_source_target_scale(self) -> float:
+        return float(self.source_target_scale)
+
+    def set_observation_target_scale(self, scale: float):
+        self.observation_target_scale = max(float(scale), 0.0)
+
+    def get_observation_target_scale(self) -> float:
+        return float(self.observation_target_scale)
 
     def set_balance_scales(
         self,
@@ -874,11 +1429,15 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
     def get_gradient_component_weights(self) -> Dict[str, float]:
         alignment_scale = float(self.get_alignment_scale())
+        source_target_scale = float(self.get_source_target_scale())
         return {
             'eeg_rec_loss': 1.0,
             'fnirs_rec_loss': 1.0,
             'vq_loss': 1.0,
-            'source_coupling_loss': self.coupling_weight * alignment_scale,
+            'source_target_loss': self.source_target_weight * source_target_scale,
+            'eeg_source_aux_loss': self.source_target_weight * self.eeg_source_aux_weight * source_target_scale,
+            'observation_loss': self.observation_target_weight * float(self.get_observation_target_scale()),
+            'source_coupling_loss': self.coupling_weight,
             'codebook_balance_loss': self.codebook_balance_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }
@@ -898,14 +1457,23 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             {'name': 'eeg_observation_quantizer', 'label': 'EEG Obs Quant', 'prefixes': ('eeg_observation_quantizer.',)},
             {'name': 'fnirs_observation_quantizer', 'label': 'fNIRS Obs Quant', 'prefixes': ('fnirs_observation_quantizer.',)},
             {'name': 'coupling_logits', 'label': 'Coupling', 'prefixes': ('coupling_logits',)},
-            {'name': 'eeg_decode_input_proj', 'label': 'EEG Decode In', 'prefixes': ('eeg_decode_input_proj.',)},
-            {'name': 'fnirs_decode_input_proj', 'label': 'fNIRS Decode In', 'prefixes': ('fnirs_decode_input_proj.',)},
-            {'name': 'eeg_decoder', 'label': 'EEG Decoder', 'prefixes': ('eeg_decoder.',)},
-            {'name': 'fnirs_decoder', 'label': 'fNIRS Decoder', 'prefixes': ('fnirs_decoder.',)},
-            {'name': 'eeg_amplitude_head', 'label': 'EEG Amp Head', 'prefixes': ('eeg_amplitude_head.',)},
-            {'name': 'eeg_phase_head', 'label': 'EEG Phase Head', 'prefixes': ('eeg_phase_head.',)},
-            {'name': 'fnirs_amplitude_head', 'label': 'fNIRS Amp Head', 'prefixes': ('fnirs_amplitude_head.',)},
-            {'name': 'fnirs_phase_head', 'label': 'fNIRS Phase Head', 'prefixes': ('fnirs_phase_head.',)},
+            {'name': 'hrf_parameters', 'label': 'HRF Params', 'prefixes': ('hrf_',)},
+            {'name': 'eeg_source_decode_input_proj', 'label': 'EEG Source In', 'prefixes': ('eeg_source_decode_input_proj.',)},
+            {'name': 'eeg_observation_decode_input_proj', 'label': 'EEG Obs In', 'prefixes': ('eeg_observation_decode_input_proj.',)},
+            {'name': 'fnirs_source_decode_input_proj', 'label': 'fNIRS Source In', 'prefixes': ('fnirs_source_decode_input_proj.',)},
+            {'name': 'fnirs_observation_decode_input_proj', 'label': 'fNIRS Obs In', 'prefixes': ('fnirs_observation_decode_input_proj.',)},
+            {'name': 'eeg_source_decoder', 'label': 'EEG Source Decoder', 'prefixes': ('eeg_source_decoder.',)},
+            {'name': 'eeg_observation_decoder', 'label': 'EEG Obs Decoder', 'prefixes': ('eeg_observation_decoder.',)},
+            {'name': 'fnirs_source_decoder', 'label': 'fNIRS Source Decoder', 'prefixes': ('fnirs_source_decoder.',)},
+            {'name': 'fnirs_observation_decoder', 'label': 'fNIRS Obs Decoder', 'prefixes': ('fnirs_observation_decoder.',)},
+            {'name': 'eeg_source_amplitude_head', 'label': 'EEG Source Amp', 'prefixes': ('eeg_source_amplitude_head.',)},
+            {'name': 'eeg_source_phase_head', 'label': 'EEG Source Phase', 'prefixes': ('eeg_source_phase_head.',)},
+            {'name': 'eeg_observation_amplitude_head', 'label': 'EEG Obs Amp', 'prefixes': ('eeg_observation_amplitude_head.',)},
+            {'name': 'eeg_observation_phase_head', 'label': 'EEG Obs Phase', 'prefixes': ('eeg_observation_phase_head.',)},
+            {'name': 'fnirs_source_amplitude_head', 'label': 'fNIRS Source Amp', 'prefixes': ('fnirs_source_amplitude_head.',)},
+            {'name': 'fnirs_source_phase_head', 'label': 'fNIRS Source Phase', 'prefixes': ('fnirs_source_phase_head.',)},
+            {'name': 'fnirs_observation_amplitude_head', 'label': 'fNIRS Obs Amp', 'prefixes': ('fnirs_observation_amplitude_head.',)},
+            {'name': 'fnirs_observation_phase_head', 'label': 'fNIRS Obs Phase', 'prefixes': ('fnirs_observation_phase_head.',)},
         ]
 
 

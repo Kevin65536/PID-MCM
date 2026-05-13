@@ -54,6 +54,34 @@ def create_multimodal_dataloaders(config: dict):
     return create_configured_multimodal_dataloaders(config)
 
 
+def inject_channel_names_into_config(config: Dict[str, Any], dataloaders: Dict[str, Any]) -> None:
+    reference_dataset = None
+    for split_name in ('train', 'val', 'test'):
+        loader = dataloaders.get(split_name)
+        if loader is None:
+            continue
+        dataset = getattr(loader, 'dataset', None)
+        if dataset is None:
+            continue
+        if hasattr(dataset, 'get_eeg_channel_names') and hasattr(dataset, 'get_fnirs_channel_names'):
+            reference_dataset = dataset
+            break
+    if reference_dataset is None:
+        return
+
+    data_cfg = config.setdefault('data', {})
+    eeg_channel_names = list(reference_dataset.get_eeg_channel_names())
+    fnirs_channel_names = list(reference_dataset.get_fnirs_channel_names())
+    data_cfg['eeg_channel_names'] = eeg_channel_names
+    data_cfg['fnirs_channel_names'] = fnirs_channel_names
+
+    model_cfg = config.setdefault('model', {})
+    eeg_cfg = model_cfg.setdefault('eeg', {})
+    fnirs_cfg = model_cfg.setdefault('fnirs', {})
+    eeg_cfg['channels'] = len(eeg_channel_names)
+    fnirs_cfg['channels'] = len(fnirs_channel_names)
+
+
 def tensor_to_float(value: Any) -> float:
     if isinstance(value, (float, int)):
         return float(value)
@@ -100,6 +128,8 @@ def build_tensorboard_hparams(config: Dict[str, Any]) -> Dict[str, Any]:
         'source_codebook_size': model_cfg.get('source', {}).get('codebook_size'),
         'eeg_observation_codebook_size': model_cfg.get('eeg_observation', {}).get('codebook_size'),
         'fnirs_observation_codebook_size': model_cfg.get('fnirs_observation', {}).get('codebook_size'),
+        'source_target_weight': loss_cfg.get('source_target', {}).get('weight', 0.0),
+        'observation_target_weight': loss_cfg.get('observation_target', {}).get('weight', 0.0),
         'coupling_weight': loss_cfg.get('coupling', {}).get('weight'),
         'codebook_balance_weight': loss_cfg.get('codebook', {}).get('balance_weight'),
         'spectral_weight': loss_cfg.get('spectral', {}).get('weight', 0.0),
@@ -549,6 +579,10 @@ def snapshot_model_schedule_state(model) -> Dict[str, float]:
     state: Dict[str, float] = {}
     if hasattr(model, 'get_alignment_scale'):
         state['alignment_scale'] = float(model.get_alignment_scale())
+    if hasattr(model, 'get_source_target_scale'):
+        state['source_target_scale'] = float(model.get_source_target_scale())
+    if hasattr(model, 'get_observation_target_scale'):
+        state['observation_target_scale'] = float(model.get_observation_target_scale())
     if hasattr(model, 'get_balance_scales'):
         state.update(getattr(model, 'get_balance_scales')())
     if hasattr(model, 'get_quantization_strength'):
@@ -561,6 +595,10 @@ def apply_model_schedule_state(model, schedule_state: Dict[str, Any]) -> None:
         return
     if 'alignment_scale' in schedule_state and hasattr(model, 'set_alignment_scale'):
         model.set_alignment_scale(float(schedule_state['alignment_scale']))
+    if 'source_target_scale' in schedule_state and hasattr(model, 'set_source_target_scale'):
+        model.set_source_target_scale(float(schedule_state['source_target_scale']))
+    if 'observation_target_scale' in schedule_state and hasattr(model, 'set_observation_target_scale'):
+        model.set_observation_target_scale(float(schedule_state['observation_target_scale']))
     if hasattr(model, 'set_balance_scales'):
         getattr(model, 'set_balance_scales')(
             source_scale=schedule_state.get('source_balance_scale'),
@@ -577,6 +615,42 @@ def apply_epoch_schedules(model, epoch: int, config: dict) -> Dict[str, float]:
     schedule_metrics['alignment_scale'] = alignment_scale
     if hasattr(model, 'set_alignment_scale'):
         model.set_alignment_scale(alignment_scale)
+
+    source_target_cfg = config.get('loss', {}).get('source_target', {})
+    source_target_warmup_cfg = config.get('training', {}).get('source_target_warmup')
+    if source_target_warmup_cfg is None:
+        legacy_warmup_epochs = int(
+            source_target_cfg.get('warmup_epochs', source_target_cfg.get('source_target_warmup_epochs', 0))
+        )
+        source_target_warmup_cfg = {
+            'enabled': legacy_warmup_epochs > 0,
+            'start_epoch': 1,
+            'ramp_epochs': max(legacy_warmup_epochs, 1),
+            'start_scale': 0.0,
+            'end_scale': 1.0,
+        }
+    source_target_scale = compute_schedule_value(epoch, source_target_warmup_cfg, 1.0)
+    schedule_metrics['source_target_scale'] = source_target_scale
+    if hasattr(model, 'set_source_target_scale'):
+        model.set_source_target_scale(source_target_scale)
+
+    observation_target_cfg = config.get('loss', {}).get('observation_target', {})
+    observation_target_warmup_cfg = config.get('training', {}).get('observation_target_warmup')
+    if observation_target_warmup_cfg is None:
+        legacy_observation_warmup_epochs = int(
+            observation_target_cfg.get('warmup_epochs', observation_target_cfg.get('observation_target_warmup_epochs', 0))
+        )
+        observation_target_warmup_cfg = {
+            'enabled': legacy_observation_warmup_epochs > 0,
+            'start_epoch': 1,
+            'ramp_epochs': max(legacy_observation_warmup_epochs, 1),
+            'start_scale': 0.0,
+            'end_scale': 1.0,
+        }
+    observation_target_scale = compute_schedule_value(epoch, observation_target_warmup_cfg, 1.0)
+    schedule_metrics['observation_target_scale'] = observation_target_scale
+    if hasattr(model, 'set_observation_target_scale'):
+        model.set_observation_target_scale(observation_target_scale)
 
     balance_warmup_cfg = config.get('training', {}).get('balance_warmup', {})
     source_default = float(getattr(model, 'default_source_balance_scale', 1.0))
@@ -886,6 +960,7 @@ def main():
         print(f"Test trials: {len(test_loader.dataset)}")
         print(f"EEG channels: {train_loader.dataset.get_num_eeg_channels()}")
         print(f"fNIRS channels: {train_loader.dataset.get_num_fnirs_channels()}")
+        inject_channel_names_into_config(config, dataloaders)
         if hasattr(train_loader.dataset, 'describe_sources'):
             print('Train source mix:')
             for source in train_loader.dataset.describe_sources():
@@ -936,6 +1011,7 @@ def main():
         patience = int(es_cfg.get('patience', 40))
         monitor_metric = es_cfg.get('metric', 'val_loss')
         monitor_mode = es_cfg.get('mode', 'min')
+        early_stopping_start_epoch = max(int(es_cfg.get('start_epoch', 1)), 1)
         best_monitor = float('inf') if monitor_mode == 'min' else float('-inf')
         if resume_best_monitor is not None:
             best_monitor = float(resume_best_monitor)
@@ -950,6 +1026,10 @@ def main():
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
         interrupted = False
         stop_epoch = start_epoch
+        if es_cfg.get('enabled', True) and early_stopping_start_epoch > 1:
+            print(
+                f"Early stopping monitor '{monitor_metric}' activates at epoch {early_stopping_start_epoch}"
+            )
         try:
             for epoch in range(start_epoch + 1, total_epochs + 1):
                 stop_epoch = epoch
@@ -1027,13 +1107,19 @@ def main():
                 if monitor_value is None:
                     raise ValueError(f"Monitor metric '{monitor_metric}' not found in validation metrics")
 
-                improved = monitor_value < best_monitor if monitor_mode == 'min' else monitor_value > best_monitor
-                if improved:
-                    best_monitor = float(monitor_value)
-                    best_epoch = epoch
-                    epochs_without_improvement = 0
-                else:
-                    epochs_without_improvement += 1
+                monitor_active = epoch >= early_stopping_start_epoch
+                improved = False
+                if monitor_active:
+                    improved = (
+                        monitor_value < best_monitor if monitor_mode == 'min'
+                        else monitor_value > best_monitor
+                    )
+                    if improved:
+                        best_monitor = float(monitor_value)
+                        best_epoch = epoch
+                        epochs_without_improvement = 0
+                    else:
+                        epochs_without_improvement += 1
 
                 checkpoint_payload = build_checkpoint_payload(
                     epoch=epoch,
@@ -1067,7 +1153,7 @@ def main():
                         f"training boundary {max(lag_candidates)}"
                     )
 
-                if es_cfg.get('enabled', True) and epochs_without_improvement >= patience:
+                if es_cfg.get('enabled', True) and monitor_active and epochs_without_improvement >= patience:
                     print(f"Early stopping at epoch {epoch} (best epoch: {best_epoch})")
                     break
         except KeyboardInterrupt:

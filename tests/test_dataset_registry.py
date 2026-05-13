@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
+from src.data.factory import create_configured_multimodal_dataloaders
 from src.data.registry import load_experiment_config, normalize_data_config
 from src.data.simultaneous_eeg_nirs_dataset import classify_alignment_pattern, detect_offset_blocks
 from src.data.validation import build_dataset_validation_plan
@@ -21,6 +23,45 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertEqual(config['data']['dataset'], 'eeg_fnirs_single_trial')
         self.assertEqual(config['data']['data_root'], 'data/EEG+NIRS Single-Trial')
         self.assertIn('dataset_registry', config['data'])
+
+    def test_load_experiment_config_exposes_modality_specific_preprocessing(self):
+        config = load_experiment_config('source_observation/phase1/default.yaml')
+        self.assertEqual(config['data']['eeg_preprocessing']['bandpass'], [0.5, 45])
+        self.assertEqual(config['data']['fnirs_preprocessing']['lowpass'], 0.1)
+
+    def test_multimodal_factory_projects_legacy_preprocessing_by_modality(self):
+        config = {
+            'data': {
+                'dataset': 'eeg_fnirs_single_trial',
+                'data_root': 'data/EEG+NIRS Single-Trial',
+                'task': 'motor_imagery',
+                'window': {'duration_s': 10.0, 'offset_ms': 0.0},
+                'split': {
+                    'train_subjects': [1],
+                    'val_subjects': [2],
+                    'test_subjects': [3],
+                },
+                'preprocessing': {
+                    'bandpass': [0.5, 45],
+                    'lowpass': 0.1,
+                    'resample_rate': 200,
+                },
+                'exclude_eog': True,
+                'hbo_only': True,
+                'hbr_only': False,
+                'num_workers': 0,
+            },
+            'training': {'batch_size': 2},
+        }
+
+        with patch('src.data.factory.create_single_trial_dataloaders', return_value={'train': None, 'val': None, 'test': None}) as mocked:
+            create_configured_multimodal_dataloaders(config)
+
+        kwargs = mocked.call_args.kwargs
+        self.assertEqual(kwargs['eeg_preprocessing']['bandpass'], [0.5, 45])
+        self.assertEqual(kwargs['fnirs_preprocessing']['lowpass'], 0.1)
+        self.assertEqual(kwargs['fnirs_preprocessing']['resample_rate'], 200)
+        self.assertNotIn('bandpass', kwargs['fnirs_preprocessing'])
 
     def test_load_experiment_config_resolves_downstream_base(self):
         config = load_experiment_config('downstream/mi_multimodal_token.yaml')

@@ -25,29 +25,6 @@ def align_pair(
     return tensor_a[:, :usable], tensor_b[:, lag:lag + usable]
 
 
-def symmetric_kl_from_logits(
-    logits_a: torch.Tensor,
-    logits_b: torch.Tensor,
-    temperature: float,
-) -> torch.Tensor:
-    scale = max(float(temperature), 1e-3)
-    log_probs_a = F.log_softmax(logits_a / scale, dim=-1)
-    log_probs_b = F.log_softmax(logits_b / scale, dim=-1)
-    probs_a = log_probs_a.exp()
-    probs_b = log_probs_b.exp()
-    kl_ab = F.kl_div(log_probs_a, probs_b, reduction='batchmean')
-    kl_ba = F.kl_div(log_probs_b, probs_a, reduction='batchmean')
-    return 0.5 * (kl_ab + kl_ba)
-
-
-def coupling_kl_loss(pred_probs: torch.Tensor, target_probs: torch.Tensor) -> torch.Tensor:
-    pred_probs = pred_probs.clamp_min(1e-8)
-    pred_probs = pred_probs / pred_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
-    target_probs = target_probs.clamp_min(1e-8)
-    target_probs = target_probs / target_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
-    return F.kl_div(pred_probs.log(), target_probs, reduction='batchmean')
-
-
 def batch_usage_entropy_loss(probs: torch.Tensor) -> torch.Tensor:
     if probs.numel() == 0:
         return probs.new_tensor(0.0)
@@ -77,11 +54,66 @@ def orthogonality_loss(source_z: torch.Tensor, observation_z: torch.Tensor) -> t
     return torch.mean(cross.pow(2))
 
 
+def coupling_joint_probabilities(coupling_logits: torch.Tensor) -> torch.Tensor:
+    if coupling_logits.ndim != 3:
+        raise ValueError(
+            'coupling_logits must have shape [n_lags, n_eeg_tokens, n_fnirs_tokens], '
+            f'got {tuple(coupling_logits.shape)}'
+        )
+    n_lags, n_eeg_tokens, n_fnirs_tokens = coupling_logits.shape
+    joint_logits = coupling_logits.permute(1, 0, 2).reshape(n_eeg_tokens, n_lags * n_fnirs_tokens)
+    joint_probs = F.softmax(joint_logits, dim=-1)
+    return joint_probs.reshape(n_eeg_tokens, n_lags, n_fnirs_tokens)
+
+
+def coupling_lag_focus_loss(coupling_logits: torch.Tensor) -> torch.Tensor:
+    joint_probs = coupling_joint_probabilities(coupling_logits)
+    lag_probs = joint_probs.sum(dim=-1)
+    if lag_probs.shape[-1] <= 1:
+        return lag_probs.new_tensor(0.0)
+    lag_probs = lag_probs.clamp_min(1e-8)
+    entropy = -(lag_probs * lag_probs.log()).sum(dim=-1)
+    max_entropy = math.log(float(lag_probs.shape[-1]))
+    return entropy.mean() / max(max_entropy, 1e-8)
+
+
+def _pairwise_js_divergence(anchor: torch.Tensor, neighbor: torch.Tensor) -> torch.Tensor:
+    anchor = anchor.clamp_min(1e-8)
+    neighbor = neighbor.clamp_min(1e-8)
+    midpoint = 0.5 * (anchor + neighbor)
+    anchor_kl = (anchor * (anchor.log() - midpoint.log())).sum(dim=-1)
+    neighbor_kl = (neighbor * (neighbor.log() - midpoint.log())).sum(dim=-1)
+    return 0.5 * (anchor_kl + neighbor_kl)
+
+
+def coupling_eeg_neighbor_smoothness_loss(
+    coupling_logits: torch.Tensor,
+    eeg_codebook_weight: torch.Tensor,
+    n_neighbors: int = 5,
+) -> torch.Tensor:
+    joint_probs = coupling_joint_probabilities(coupling_logits)
+    n_eeg_tokens = joint_probs.shape[0]
+    if n_eeg_tokens <= 1 or n_neighbors <= 0:
+        return joint_probs.new_tensor(0.0)
+
+    flat_joint = joint_probs.reshape(n_eeg_tokens, -1)
+    normalized_codebook = F.normalize(eeg_codebook_weight.detach(), dim=-1)
+    similarity = normalized_codebook @ normalized_codebook.t()
+    neighbor_count = min(int(n_neighbors), n_eeg_tokens - 1)
+    _, neighbor_indices = similarity.topk(neighbor_count + 1, dim=-1)
+    neighbor_indices = neighbor_indices[:, 1:]
+
+    anchor = flat_joint.unsqueeze(1)
+    neighbor = flat_joint[neighbor_indices]
+    return _pairwise_js_divergence(anchor, neighbor).mean()
+
+
 __all__ = [
     'align_pair',
     'batch_usage_entropy_loss',
-    'coupling_kl_loss',
+    'coupling_eeg_neighbor_smoothness_loss',
+    'coupling_joint_probabilities',
+    'coupling_lag_focus_loss',
     'orthogonality_loss',
     'straight_through_assignment_probs',
-    'symmetric_kl_from_logits',
 ]

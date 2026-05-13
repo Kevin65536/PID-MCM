@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from experiments.scripts.train_source_observation_tokenizer import compute_gradient_attribution
+from experiments.scripts.train_source_observation_tokenizer import apply_epoch_schedules, compute_gradient_attribution
 from src.tokenizers.factorized_labram_vqnsp import SourceObservationLaBraMVQNSP
 from src.tokenizers.labram_vqnsp import NormEMAVectorQuantizer
 from src.visualization.gradient_diagnostics import (
@@ -67,7 +67,8 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertIn('group_component_shares', artifacts)
         self.assertIn('coupling_logits', artifacts['group_names'])
         self.assertIn('eeg_encoder', artifacts['group_names'])
-        self.assertIn('fnirs_decoder', artifacts['group_names'])
+        self.assertIn('fnirs_source_decoder', artifacts['group_names'])
+        self.assertIn('fnirs_observation_decoder', artifacts['group_names'])
 
         component_group_shares = np.asarray(artifacts['component_group_shares'], dtype=np.float32)
         group_component_shares = np.asarray(artifacts['group_component_shares'], dtype=np.float32)
@@ -180,6 +181,150 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertNotIn('fnirs_phase_loss', outputs)
         self.assertIn('eeg_amp_loss', outputs)
         self.assertIn('fnirs_time_loss', outputs)
+
+    def test_forward_outputs_include_phase2a_branch_target_metrics(self):
+        model = self._build_tiny_model(source_target_weight=0.15, observation_target_weight=0.15)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+
+        outputs = model(eeg, fnirs)
+
+        self.assertIn('source_target_loss', outputs)
+        self.assertIn('source_target_random_baseline', outputs)
+        self.assertIn('eeg_source_aux_loss', outputs)
+        self.assertIn('fnirs_source_target', outputs)
+        self.assertIn('eeg_source_aux_target', outputs)
+        self.assertIn('observation_loss', outputs)
+        self.assertIn('eeg_observation_loss', outputs)
+        self.assertIn('fnirs_observation_loss', outputs)
+        self.assertIn('eeg_observation_target', outputs)
+        self.assertIn('fnirs_observation_target', outputs)
+        self.assertIn('eeg_source_reconstructed', outputs)
+        self.assertIn('fnirs_observation_reconstructed', outputs)
+        self.assertEqual(outputs['fnirs_source_target'].shape, fnirs.shape)
+        self.assertEqual(outputs['eeg_source_aux_target'].shape, eeg.shape)
+        self.assertEqual(outputs['eeg_observation_target'].shape, eeg.shape)
+        self.assertEqual(outputs['fnirs_observation_target'].shape, fnirs.shape)
+        self.assertGreaterEqual(float(outputs['source_target_random_baseline'].item()), 0.0)
+
+        self.assertTrue(
+            torch.allclose(
+                outputs['eeg_reconstructed'],
+                outputs['eeg_source_reconstructed'] + outputs['eeg_observation_reconstructed'],
+                atol=1e-5,
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                outputs['fnirs_reconstructed'],
+                outputs['fnirs_source_reconstructed'] + outputs['fnirs_observation_reconstructed'],
+                atol=1e-5,
+            )
+        )
+
+    def test_coupling_weight_changes_total_loss_when_enabled(self):
+        torch.manual_seed(29)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        base_model = self._build_tiny_model(coupling_weight=0.0, alignment_lag_candidates=[0, 1, 2])
+        comparison_model = self._build_tiny_model(coupling_weight=0.7, alignment_lag_candidates=[0, 1, 2])
+        comparison_model.load_state_dict(base_model.state_dict())
+        base_model.eval()
+        comparison_model.eval()
+
+        with torch.no_grad():
+            base_outputs = base_model(eeg, fnirs)
+            comparison_outputs = comparison_model(eeg, fnirs)
+
+        self.assertGreater(float(base_outputs['source_coupling_loss'].item()), 0.0)
+        self.assertTrue(
+            torch.allclose(
+                base_outputs['source_coupling_loss'],
+                comparison_outputs['source_coupling_loss'],
+                atol=1e-6,
+            )
+        )
+        self.assertFalse(torch.allclose(base_outputs['loss'], comparison_outputs['loss'], atol=1e-6))
+        self.assertTrue(
+            torch.allclose(
+                comparison_outputs['loss'] - base_outputs['loss'],
+                0.7 * comparison_outputs['source_coupling_loss'],
+                atol=1e-6,
+            )
+        )
+        self.assertAlmostEqual(
+            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
+            0.7,
+            places=6,
+        )
+
+    def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
+        torch.manual_seed(23)
+        model = self._build_tiny_model(
+            source_target_weight=0.15,
+            observation_target_weight=0.15,
+            fnirs_observation_branch_dropout=1.0,
+        )
+        model.eval()
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+
+        with torch.no_grad():
+            outputs = model(eeg, fnirs)
+
+        self.assertTrue(torch.allclose(
+            outputs['fnirs_observation_reconstructed'],
+            torch.zeros_like(outputs['fnirs_observation_reconstructed']),
+            atol=1e-6,
+        ))
+        self.assertAlmostEqual(float(outputs['fnirs_observation_loss'].item()), 0.0, places=6)
+        self.assertTrue(torch.allclose(
+            outputs['fnirs_reconstructed'],
+            outputs['fnirs_source_reconstructed'],
+            atol=1e-6,
+        ))
+        self.assertAlmostEqual(
+            float(outputs['observation_loss'].item()),
+            float(outputs['eeg_observation_loss'].item()),
+            places=6,
+        )
+
+    def test_signed_rms_carrier_eeg_source_target_preserves_polarity(self):
+        model = self._build_tiny_model(
+            eeg_source_target_mode='signed_rms_carrier',
+            eeg_source_target_smoothing_ms=50.0,
+        )
+        time = torch.linspace(0.0, 2.0 * torch.pi, steps=40)
+        waveform = torch.sin(time)
+        eeg = torch.stack([waveform, -waveform, 0.5 * waveform], dim=0).unsqueeze(0)
+
+        target = model._compute_eeg_source_target(eeg)
+
+        self.assertLess(float(target.min().item()), 0.0)
+        self.assertGreater(float(target.max().item()), 0.0)
+        self.assertEqual(target.shape, eeg.shape)
+
+    def test_apply_epoch_schedules_updates_branch_target_scales(self):
+        model = self._build_tiny_model(source_target_weight=0.15, observation_target_weight=0.15)
+        config = {
+            'loss': {
+                'source_target': {'weight': 0.15, 'warmup_epochs': 5},
+                'observation_target': {'weight': 0.15, 'warmup_epochs': 3},
+            },
+            'training': {},
+        }
+
+        early_metrics = apply_epoch_schedules(model, 1, config)
+        middle_metrics = apply_epoch_schedules(model, 3, config)
+        final_metrics = apply_epoch_schedules(model, 5, config)
+
+        self.assertAlmostEqual(float(early_metrics['source_target_scale']), 0.0, places=6)
+        self.assertAlmostEqual(float(early_metrics['observation_target_scale']), 0.0, places=6)
+        self.assertAlmostEqual(float(middle_metrics['observation_target_scale']), 1.0, places=6)
+        self.assertAlmostEqual(float(final_metrics['source_target_scale']), 1.0, places=6)
+        self.assertAlmostEqual(float(final_metrics['observation_target_scale']), 1.0, places=6)
+        self.assertAlmostEqual(float(model.get_source_target_scale()), 1.0, places=6)
+        self.assertAlmostEqual(float(model.get_observation_target_scale()), 1.0, places=6)
 
     def test_gradient_influence_dashboard_plot_smoke(self):
         component_names = ['eeg_rec_loss', 'fnirs_rec_loss', 'vq_loss']

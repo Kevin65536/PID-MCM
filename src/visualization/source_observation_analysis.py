@@ -54,6 +54,15 @@ def _mse(prediction: torch.Tensor, target: torch.Tensor) -> float:
     return float(torch.mean((prediction - target) ** 2).detach().item())
 
 
+def _mismatched_target_mse(prediction: torch.Tensor, target: torch.Tensor) -> float:
+    if target.shape[0] > 1:
+        randomized_target = target.roll(shifts=1, dims=0)
+    else:
+        shift = max(target.shape[-1] // 3, 1)
+        randomized_target = target.roll(shifts=shift, dims=-1)
+    return _mse(prediction, randomized_target)
+
+
 def _maybe_batch_vector(batch: Dict[str, object], keys: Iterable[str]) -> Optional[np.ndarray]:
     for key in keys:
         if key not in batch:
@@ -427,6 +436,41 @@ def _plot_metric_panel(axis, epochs: List[int], metrics_payload: Dict[str, objec
         axis.text(0.5, 0.5, 'No tracked series', ha='center', va='center', transform=axis.transAxes, color='#95A5A6')
 
 
+def _resolve_gate_branch_policy(config: Dict[str, object]) -> Dict[str, object]:
+    analysis_cfg = config.get('analysis', {})
+    gates_cfg = analysis_cfg.get('gates', {})
+    ignored_cfg = gates_cfg.get('ignore_branches', {})
+    model_cfg = config.get('model', {})
+    branch_dropout_cfg = model_cfg.get('branch_dropout', {})
+
+    def _branch_enabled(branch_name: str) -> bool:
+        if bool(ignored_cfg.get(branch_name, False)):
+            return False
+        dropout_value = float(branch_dropout_cfg.get(branch_name, 0.0))
+        return dropout_value < (1.0 - 1e-6)
+
+    branch_enabled = {
+        'eeg_source': True,
+        'fnirs_source': True,
+        'eeg_observation': _branch_enabled('eeg_observation'),
+        'fnirs_observation': _branch_enabled('fnirs_observation'),
+    }
+    return {
+        'active_codebooks': [name for name, enabled in branch_enabled.items() if enabled],
+        'ignored_branches': [name for name, enabled in branch_enabled.items() if not enabled],
+        'active_observation_modalities': [
+            name.split('_', maxsplit=1)[0]
+            for name in ('eeg_observation', 'fnirs_observation')
+            if branch_enabled[name]
+        ],
+        'ignored_observation_modalities': [
+            name.split('_', maxsplit=1)[0]
+            for name in ('eeg_observation', 'fnirs_observation')
+            if not branch_enabled[name]
+        ],
+    }
+
+
 def _plot_training_gate_metrics(metrics_payload: Dict[str, object], output_path: Path) -> Optional[str]:
     if not HAS_MATPLOTLIB:
         return None
@@ -444,20 +488,34 @@ def _plot_training_gate_metrics(metrics_payload: Dict[str, object], output_path:
         flat_axes[2],
         epochs,
         metrics_payload,
-        [('val_source_coupling_loss', 'Source coupling'), ('val_orthogonality_loss', 'Orthogonality'), ('val_codebook_balance_loss', 'Codebook balance')],
-        'Regularization',
+        [('val_source_target_loss', 'fNIRS source target'), ('val_eeg_source_aux_loss', 'EEG source target'), ('val_observation_loss', 'Observation target')],
+        'Gate 2 Branch Targets',
         'Loss',
     )
     _plot_metric_panel(
         flat_axes[3],
         epochs,
         metrics_payload,
+        [('val_source_coupling_loss', 'Source coupling'), ('val_orthogonality_loss', 'Orthogonality'), ('val_codebook_balance_loss', 'Codebook balance')],
+        'Regularization',
+        'Loss',
+    )
+    _plot_metric_panel(
+        flat_axes[4],
+        epochs,
+        metrics_payload,
         [('val_eeg_source_perplexity', 'EEG source'), ('val_fnirs_source_perplexity', 'fNIRS source'), ('val_eeg_observation_perplexity', 'EEG observation'), ('val_fnirs_observation_perplexity', 'fNIRS observation')],
         'Codebook Perplexity',
         'Perplexity',
     )
-    _plot_metric_panel(flat_axes[4], epochs, metrics_payload, [('val_utilization', 'Utilization'), ('val_source_code_overlap', 'Source overlap')], 'Usage and Overlap', 'Score')
-    _plot_metric_panel(flat_axes[5], epochs, metrics_payload, [('alignment_scale', 'Alignment scale'), ('val_selected_source_lag', 'Selected lag')], 'Gate 2/3 Control Signals', 'Value')
+    _plot_metric_panel(
+        flat_axes[5],
+        epochs,
+        metrics_payload,
+        [('alignment_scale', 'Alignment scale'), ('source_target_scale', 'Source target scale'), ('observation_target_scale', 'Observation target scale'), ('val_selected_source_lag', 'Selected lag')],
+        'Gate 2/3 Control Signals',
+        'Value',
+    )
 
     figure.suptitle('Training Gate Metrics', fontsize=14, fontweight='bold')
     figure.tight_layout(rect=(0.0, 0.0, 1.0, 0.98))
@@ -562,17 +620,61 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
     gate2 = gates.get('gate2', {})
     predictability = gate2.get('metrics', {}).get('cross_modal_token_predictability', {})
     observation_gap = gate2.get('metrics', {}).get('observation_contribution_gap', {})
+    source_target_mse = gate2.get('metrics', {}).get('source_target_mse')
+    source_target_random_baseline = gate2.get('metrics', {}).get('source_target_random_baseline')
+    eeg_source_target_mse = gate2.get('metrics', {}).get('eeg_source_target_mse')
+    eeg_source_target_random_baseline = gate2.get('metrics', {}).get('eeg_source_target_random_baseline')
+    observation_loss = gate2.get('metrics', {}).get('observation_loss')
+
+    labels: List[str] = []
+    values: List[float] = []
+    colors: List[str] = []
+    if source_target_mse is not None and source_target_random_baseline is not None:
+        labels.append('fNIRS src gain')
+        values.append(float(source_target_random_baseline) - float(source_target_mse))
+        colors.append('#2ECC71')
+    if eeg_source_target_mse is not None and eeg_source_target_random_baseline is not None:
+        labels.append('EEG src gain')
+        values.append(float(eeg_source_target_random_baseline) - float(eeg_source_target_mse))
+        colors.append('#27AE60')
+    if 'eeg' in observation_gap:
+        labels.append('EEG obs gap')
+        values.append(float(observation_gap.get('eeg', 0.0)))
+        colors.append('#A23B72')
+    if 'fnirs' in observation_gap:
+        labels.append('fNIRS obs gap')
+        values.append(float(observation_gap.get('fnirs', 0.0)))
+        colors.append('#F18F01')
     if predictability.get('available', False):
-        values = [float(predictability.get('accuracy', 0.0)), float(predictability.get('chance_accuracy', 0.0)), float(observation_gap.get('eeg', 0.0)), float(observation_gap.get('fnirs', 0.0))]
-        labels = ['Predictability', 'Chance', 'EEG obs gap', 'fNIRS obs gap']
-        colors = ['#2ECC71', '#95A5A6', '#A23B72', '#F18F01']
+        labels.append('Predict. lift')
+        values.append(float(predictability.get('accuracy', 0.0)) - float(predictability.get('chance_accuracy', 0.0)))
+        colors.append('#2E86AB')
+
+    if values:
         flat_axes[1].bar(np.arange(len(values)), values, color=colors, alpha=0.8)
+        flat_axes[1].axhline(0.0, color='#95A5A6', linewidth=1.2)
         flat_axes[1].set_xticks(np.arange(len(values)))
         flat_axes[1].set_xticklabels(labels, rotation=20, ha='right')
         flat_axes[1].set_title(f"Gate 2 Semantics ({gate2.get('status', 'pending')})")
         flat_axes[1].grid(True, alpha=0.25, axis='y')
+        metrics_text = []
+        if observation_loss is not None:
+            metrics_text.append(f'obs_loss={float(observation_loss):.4f}')
+        if predictability.get('available', False):
+            metrics_text.append(f"predict={float(predictability.get('accuracy', 0.0)):.3f}")
+            metrics_text.append(f"chance={float(predictability.get('chance_accuracy', 0.0)):.3f}")
+        if metrics_text:
+            flat_axes[1].text(
+                0.02,
+                0.98,
+                '\n'.join(metrics_text),
+                transform=flat_axes[1].transAxes,
+                verticalalignment='top',
+                fontsize=9,
+                bbox={'boxstyle': 'round', 'facecolor': 'white', 'alpha': 0.8},
+            )
     else:
-        flat_axes[1].text(0.5, 0.5, 'Cross-modal predictability unavailable', ha='center', va='center', transform=flat_axes[1].transAxes)
+        flat_axes[1].text(0.5, 0.5, 'Gate 2 branch metrics unavailable', ha='center', va='center', transform=flat_axes[1].transAxes)
         flat_axes[1].set_title(f"Gate 2 Semantics ({gate2.get('status', 'pending')})")
 
     gate3 = gates.get('gate3', {})
@@ -856,12 +958,15 @@ def _prepare_time_domain_view(
     return indices.astype(np.float64) / safe_sample_rate, view
 
 
+def _resolve_source_target_label(modality: str) -> str:
+    return 'HRF target' if modality == 'fnirs' else 'Power envelope target'
+
+
 def _plot_reconstruction_domain_grid(
     *,
     split_name: str,
     modality: str,
-    original: object,
-    branches: Dict[str, object],
+    comparisons: Dict[str, Dict[str, object]],
     output_path: Path,
     domain: str,
     sample_rate: float,
@@ -874,31 +979,54 @@ def _plot_reconstruction_domain_grid(
     if not HAS_MATPLOTLIB:
         return None
 
-    original_series = _select_channel_series(original, channel_index)
-    if original_series.shape[0] == 0:
+    comparison_order = [
+        ('full', 'Full vs original'),
+        ('source_target', f'{_resolve_source_target_label(modality)} vs original'),
+        ('source_only', f'Source branch vs {_resolve_source_target_label(modality)}'),
+        ('observation_only', 'Observation branch vs residual'),
+    ]
+    available_comparisons = [
+        (comparison_key, comparison_title)
+        for comparison_key, comparison_title in comparison_order
+        if comparison_key in comparisons
+    ]
+    if not available_comparisons:
         return None
 
-    branch_order = (
-        ('full', 'Full'),
-        ('source_only', 'Source only'),
-        ('observation_only', 'Observation only'),
-    )
-    branch_series = {
-        branch_key: _select_channel_series(branches[branch_key], channel_index)
-        for branch_key, _ in branch_order
-    }
+    reference_series = {}
+    estimate_series = {}
+    for comparison_key, _ in available_comparisons:
+        comparison = comparisons[comparison_key]
+        reference = comparison.get('reference')
+        estimate = comparison.get('estimate')
+        if reference is None or estimate is None:
+            continue
+        reference_series[comparison_key] = _select_channel_series(reference, channel_index)
+        estimate_series[comparison_key] = _select_channel_series(estimate, channel_index)
 
-    n_samples = int(original_series.shape[0])
+    available_comparisons = [
+        (comparison_key, comparison_title)
+        for comparison_key, comparison_title in available_comparisons
+        if comparison_key in reference_series and comparison_key in estimate_series
+    ]
+    if not available_comparisons:
+        return None
+
+    first_key = available_comparisons[0][0]
+    n_samples = int(reference_series[first_key].shape[0])
+    if n_samples == 0:
+        return None
+
     figure, axes = plt.subplots(
         n_samples,
-        len(branch_order),
-        figsize=(5.2 * len(branch_order), 2.9 * n_samples),
+        len(available_comparisons),
+        figsize=(5.2 * len(available_comparisons), 2.9 * n_samples),
         squeeze=False,
     )
 
     domain_titles = {
-        'time': 'Time-domain reconstruction',
-        'frequency': 'Loss-aligned spectral reconstruction',
+        'time': 'Time-domain target-aware reconstruction',
+        'frequency': 'Loss-aligned target-aware spectral reconstruction',
     }
     ylabels = {
         'time': 'Amplitude',
@@ -906,62 +1034,70 @@ def _plot_reconstruction_domain_grid(
     }
 
     for sample_index in range(n_samples):
-        original_signal = original_series[sample_index]
-        for branch_column, (branch_key, branch_label) in enumerate(branch_order):
+        for branch_column, (comparison_key, comparison_title) in enumerate(available_comparisons):
             axis = axes[sample_index, branch_column]
-            reconstructed_signal = branch_series[branch_key][sample_index]
+            comparison = comparisons[comparison_key]
+            reference_signal = reference_series[comparison_key][sample_index]
+            estimate_signal = estimate_series[comparison_key][sample_index]
 
             if domain == 'time':
-                x_axis, original_view = _prepare_time_domain_view(
-                    original_signal,
+                x_axis, reference_view = _prepare_time_domain_view(
+                    reference_signal,
                     sample_rate,
                     time_window_s,
                     max_time_points,
                 )
-                _, reconstructed_view = _prepare_time_domain_view(
-                    reconstructed_signal,
+                _, estimate_view = _prepare_time_domain_view(
+                    estimate_signal,
                     sample_rate,
                     time_window_s,
                     max_time_points,
                 )
-                metric_value = float(np.mean((original_view - reconstructed_view) ** 2))
+                metric_value = float(np.mean((reference_view - estimate_view) ** 2))
                 metric_label = f'Window MSE={metric_value:.4f}'
                 axis.set_xlabel('Time (s)')
             else:
-                x_axis, original_view, original_patch_spectra = _compute_loss_aligned_frequency_spectrum(
-                    original_signal,
+                x_axis, reference_view, reference_patch_spectra = _compute_loss_aligned_frequency_spectrum(
+                    reference_signal,
                     sample_rate,
                     patch_size,
                     frequency_range,
                 )
-                _, reconstructed_view, reconstructed_patch_spectra = _compute_loss_aligned_frequency_spectrum(
-                    reconstructed_signal,
+                _, estimate_view, estimate_patch_spectra = _compute_loss_aligned_frequency_spectrum(
+                    estimate_signal,
                     sample_rate,
                     patch_size,
                     frequency_range,
                 )
 
                 if domain == 'frequency':
-                    metric_value = float(np.mean((original_patch_spectra - reconstructed_patch_spectra) ** 2))
+                    metric_value = float(np.mean((reference_patch_spectra - estimate_patch_spectra) ** 2))
                     metric_label = f'Patch MSE={metric_value:.4f}'
                     axis.set_xlabel('Frequency (Hz)')
                 else:
                     raise ValueError(f'Unsupported reconstruction domain: {domain}')
 
-            axis.plot(x_axis, original_view, color='#2E86AB', linewidth=1.4, alpha=0.9, label='Original')
             axis.plot(
                 x_axis,
-                reconstructed_view,
+                reference_view,
+                color='#2E86AB',
+                linewidth=1.4,
+                alpha=0.9,
+                label=str(comparison.get('reference_label', 'Reference')),
+            )
+            axis.plot(
+                x_axis,
+                estimate_view,
                 color='#A23B72',
                 linewidth=1.4,
                 alpha=0.9,
                 linestyle='--',
-                label='Reconstructed',
+                label=str(comparison.get('estimate_label', 'Estimate')),
             )
             axis.grid(True, alpha=0.25)
             axis.set_ylabel(ylabels[domain])
             if sample_index == 0:
-                axis.set_title(branch_label)
+                axis.set_title(comparison_title)
             axis.text(
                 0.02,
                 0.98,
@@ -971,7 +1107,7 @@ def _plot_reconstruction_domain_grid(
                 fontsize=9,
                 bbox={'boxstyle': 'round', 'facecolor': 'white', 'alpha': 0.8},
             )
-            if sample_index == 0 and branch_column == 0:
+            if sample_index == 0:
                 axis.legend(loc='upper right')
 
     figure.suptitle(
@@ -1000,6 +1136,7 @@ def _generate_reconstruction_visualizations(
     output_root = analysis_root / str(reconstruction_viz_cfg.get('subdir', 'reconstruction_visualizations'))
     original_payload = sample_payload.get('original', {})
     branch_payload = sample_payload.get('branches', {})
+    target_payload = sample_payload.get('targets', {})
     sample_rates = sample_payload.get('sample_rates', {})
     patch_sizes = sample_payload.get('patch_sizes', {})
     artifacts: Dict[str, object] = {}
@@ -1017,6 +1154,42 @@ def _generate_reconstruction_visualizations(
         if any(value is None for value in modality_branches.values()):
             continue
 
+        source_target = target_payload.get('source', {}).get(modality)
+        residual_target = target_payload.get('residual', {}).get(modality)
+        if source_target is None:
+            source_target = original
+            residual_target = original if residual_target is None else residual_target
+        elif residual_target is None:
+            residual_target = original - source_target
+
+        source_target_label = _resolve_source_target_label(modality)
+        modality_comparisons = {
+            'full': {
+                'reference': original,
+                'reference_label': 'Original',
+                'estimate': modality_branches['full'],
+                'estimate_label': 'Full reconstruction',
+            },
+            'source_target': {
+                'reference': original,
+                'reference_label': 'Original',
+                'estimate': source_target,
+                'estimate_label': source_target_label,
+            },
+            'source_only': {
+                'reference': source_target,
+                'reference_label': source_target_label,
+                'estimate': modality_branches['source_only'],
+                'estimate_label': 'Source reconstruction',
+            },
+            'observation_only': {
+                'reference': residual_target,
+                'reference_label': 'Residual target',
+                'estimate': modality_branches['observation_only'],
+                'estimate_label': 'Observation reconstruction',
+            },
+        }
+
         modality_artifacts: Dict[str, Optional[str]] = {}
         sample_rate = float(sample_rates.get(modality, 1.0))
         patch_size = int(patch_sizes.get(modality, 1))
@@ -1030,8 +1203,7 @@ def _generate_reconstruction_visualizations(
             modality_artifacts[f'{domain}_path'] = _plot_reconstruction_domain_grid(
                 split_name=split_name,
                 modality=modality,
-                original=original,
-                branches=modality_branches,
+                comparisons=modality_comparisons,
                 output_path=output_path,
                 domain=domain,
                 sample_rate=sample_rate,
@@ -1318,6 +1490,15 @@ def _collect_split_statistics(
         'eeg_observation_only_mse': 0.0,
         'fnirs_observation_only_mse': 0.0,
     }
+    target_recon_totals = {
+        'eeg_source_target_mse': 0.0,
+        'fnirs_source_target_mse': 0.0,
+        'eeg_observation_target_mse': 0.0,
+        'fnirs_observation_target_mse': 0.0,
+        'eeg_source_target_random_baseline': 0.0,
+        'fnirs_source_target_random_baseline': 0.0,
+    }
+    target_recon_counts = {key: 0 for key in target_recon_totals}
     source_feature_chunks: List[np.ndarray] = []
     observation_feature_chunks: List[np.ndarray] = []
     subject_id_chunks: List[np.ndarray] = []
@@ -1330,6 +1511,10 @@ def _collect_split_statistics(
     if reconstruction_limit > 0:
         reconstruction_bank = {
             'original': {'eeg': [], 'fnirs': []},
+            'targets': {
+                'source': {'eeg': [], 'fnirs': []},
+                'residual': {'eeg': [], 'fnirs': []},
+            },
             'branches': {
                 'full': {'eeg': [], 'fnirs': []},
                 'source_only': {'eeg': [], 'fnirs': []},
@@ -1387,6 +1572,41 @@ def _collect_split_statistics(
                 recon_totals['eeg_observation_only_mse'] += _mse(outputs['eeg_observation_only_reconstructed'], eeg)
                 recon_totals['fnirs_observation_only_mse'] += _mse(outputs['fnirs_observation_only_reconstructed'], fnirs)
 
+                eeg_source_reconstructed = outputs.get('eeg_source_reconstructed', outputs.get('eeg_source_only_reconstructed'))
+                fnirs_source_reconstructed = outputs.get('fnirs_source_reconstructed', outputs.get('fnirs_source_only_reconstructed'))
+                eeg_observation_reconstructed = outputs.get('eeg_observation_reconstructed', outputs.get('eeg_observation_only_reconstructed'))
+                fnirs_observation_reconstructed = outputs.get('fnirs_observation_reconstructed', outputs.get('fnirs_observation_only_reconstructed'))
+
+                eeg_source_target = outputs.get('eeg_source_aux_target')
+                if isinstance(eeg_source_reconstructed, torch.Tensor) and isinstance(eeg_source_target, torch.Tensor):
+                    target_recon_totals['eeg_source_target_mse'] += _mse(eeg_source_reconstructed, eeg_source_target)
+                    target_recon_totals['eeg_source_target_random_baseline'] += _mismatched_target_mse(
+                        eeg_source_reconstructed,
+                        eeg_source_target,
+                    )
+                    target_recon_counts['eeg_source_target_mse'] += 1
+                    target_recon_counts['eeg_source_target_random_baseline'] += 1
+
+                fnirs_source_target = outputs.get('fnirs_source_target')
+                if isinstance(fnirs_source_reconstructed, torch.Tensor) and isinstance(fnirs_source_target, torch.Tensor):
+                    target_recon_totals['fnirs_source_target_mse'] += _mse(fnirs_source_reconstructed, fnirs_source_target)
+                    target_recon_totals['fnirs_source_target_random_baseline'] += _mismatched_target_mse(
+                        fnirs_source_reconstructed,
+                        fnirs_source_target,
+                    )
+                    target_recon_counts['fnirs_source_target_mse'] += 1
+                    target_recon_counts['fnirs_source_target_random_baseline'] += 1
+
+                eeg_observation_target = outputs.get('eeg_observation_target')
+                if isinstance(eeg_observation_reconstructed, torch.Tensor) and isinstance(eeg_observation_target, torch.Tensor):
+                    target_recon_totals['eeg_observation_target_mse'] += _mse(eeg_observation_reconstructed, eeg_observation_target)
+                    target_recon_counts['eeg_observation_target_mse'] += 1
+
+                fnirs_observation_target = outputs.get('fnirs_observation_target')
+                if isinstance(fnirs_observation_reconstructed, torch.Tensor) and isinstance(fnirs_observation_target, torch.Tensor):
+                    target_recon_totals['fnirs_observation_target_mse'] += _mse(fnirs_observation_reconstructed, fnirs_observation_target)
+                    target_recon_counts['fnirs_observation_target_mse'] += 1
+
                 source_feature_chunks.append(_source_hist_features(eeg_source_tokens, fnirs_source_tokens, source_codebook_size))
                 observation_feature_chunks.append(
                     _observation_hist_features(
@@ -1404,8 +1624,30 @@ def _collect_split_statistics(
 
                 if reconstruction_bank is not None and reconstruction_capture_count < reconstruction_limit:
                     capture_take = min(reconstruction_limit - reconstruction_capture_count, int(eeg.shape[0]))
+                    eeg_source_target = outputs.get('eeg_source_aux_target')
+                    if not isinstance(eeg_source_target, torch.Tensor):
+                        eeg_source_target = eeg
+                    fnirs_source_target = outputs.get('fnirs_source_target')
+                    if not isinstance(fnirs_source_target, torch.Tensor):
+                        fnirs_source_target = fnirs
+                    eeg_observation_target = outputs.get('eeg_observation_target')
+                    if not isinstance(eeg_observation_target, torch.Tensor):
+                        eeg_observation_target = eeg[:capture_take] - eeg_source_target[:capture_take]
+                    fnirs_observation_target = outputs.get('fnirs_observation_target')
+                    if not isinstance(fnirs_observation_target, torch.Tensor):
+                        fnirs_observation_target = fnirs[:capture_take] - fnirs_source_target[:capture_take]
+
+                    eeg_source_target = eeg_source_target[:capture_take]
+                    fnirs_source_target = fnirs_source_target[:capture_take]
+                    eeg_residual_target = eeg_observation_target[:capture_take]
+                    fnirs_residual_target = fnirs_observation_target[:capture_take]
+
                     reconstruction_bank['original']['eeg'].append(eeg[:capture_take].detach().cpu())
                     reconstruction_bank['original']['fnirs'].append(fnirs[:capture_take].detach().cpu())
+                    reconstruction_bank['targets']['source']['eeg'].append(eeg_source_target.detach().cpu())
+                    reconstruction_bank['targets']['source']['fnirs'].append(fnirs_source_target.detach().cpu())
+                    reconstruction_bank['targets']['residual']['eeg'].append(eeg_residual_target.detach().cpu())
+                    reconstruction_bank['targets']['residual']['fnirs'].append(fnirs_residual_target.detach().cpu())
                     reconstruction_bank['branches']['full']['eeg'].append(outputs['eeg_reconstructed'][:capture_take].detach().cpu())
                     reconstruction_bank['branches']['full']['fnirs'].append(outputs['fnirs_reconstructed'][:capture_take].detach().cpu())
                     reconstruction_bank['branches']['source_only']['eeg'].append(
@@ -1444,12 +1686,21 @@ def _collect_split_statistics(
 
     mean_scalars = {key: value / batch_count for key, value in scalar_totals.items()}
     mean_recon = {key: value / batch_count for key, value in recon_totals.items()}
+    mean_target_recon = {
+        key: (target_recon_totals[key] / target_recon_counts[key]) if target_recon_counts[key] > 0 else None
+        for key in target_recon_totals
+    }
     branch_reconstruction = {
         **mean_recon,
-        'eeg_source_gap': mean_recon['eeg_source_only_mse'] - mean_recon['eeg_full_mse'],
-        'fnirs_source_gap': mean_recon['fnirs_source_only_mse'] - mean_recon['fnirs_full_mse'],
-        'eeg_observation_gap': mean_recon['eeg_observation_only_mse'] - mean_recon['eeg_full_mse'],
-        'fnirs_observation_gap': mean_recon['fnirs_observation_only_mse'] - mean_recon['fnirs_full_mse'],
+        **{key: value for key, value in mean_target_recon.items() if value is not None},
+        'eeg_source_gap': mean_recon['eeg_observation_only_mse'] - mean_recon['eeg_full_mse'],
+        'fnirs_source_gap': mean_recon['fnirs_observation_only_mse'] - mean_recon['fnirs_full_mse'],
+        'eeg_observation_gap': mean_recon['eeg_source_only_mse'] - mean_recon['eeg_full_mse'],
+        'fnirs_observation_gap': mean_recon['fnirs_source_only_mse'] - mean_recon['fnirs_full_mse'],
+        'eeg_source_contribution_gap': mean_recon['eeg_observation_only_mse'] - mean_recon['eeg_full_mse'],
+        'fnirs_source_contribution_gap': mean_recon['fnirs_observation_only_mse'] - mean_recon['fnirs_full_mse'],
+        'eeg_observation_contribution_gap': mean_recon['eeg_source_only_mse'] - mean_recon['eeg_full_mse'],
+        'fnirs_observation_contribution_gap': mean_recon['fnirs_source_only_mse'] - mean_recon['fnirs_full_mse'],
     }
 
     result = {
@@ -1484,6 +1735,14 @@ def _collect_split_statistics(
                 modality: torch.cat(chunks, dim=0)
                 for modality, chunks in reconstruction_bank['original'].items()
                 if chunks
+            },
+            'targets': {
+                target_name: {
+                    modality: torch.cat(chunks, dim=0)
+                    for modality, chunks in target_payload.items()
+                    if chunks
+                }
+                for target_name, target_payload in reconstruction_bank['targets'].items()
             },
             'branches': {
                 branch_name: {
@@ -1550,9 +1809,19 @@ def _collect_split_statistics(
     return result
 
 
-def _build_gate_1(split_stats: Dict[str, object], metrics_payload: Dict[str, object]) -> Dict[str, object]:
-    codebooks = split_stats['codebooks']
-    codebook_pass = all(summary['passes_thresholds'] for summary in codebooks.values())
+def _build_gate_1(
+    split_stats: Dict[str, object],
+    metrics_payload: Dict[str, object],
+    branch_policy: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
+    all_codebooks = split_stats['codebooks']
+    active_codebook_names = list((branch_policy or {}).get('active_codebooks', all_codebooks.keys()))
+    codebooks = {
+        name: summary
+        for name, summary in all_codebooks.items()
+        if name in active_codebook_names
+    }
+    codebook_pass = all(summary['passes_thresholds'] for summary in codebooks.values()) if codebooks else True
     eeg_convergence = _convergence_summary(metrics_payload, 'val_eeg_rec_loss')
     fnirs_convergence = _convergence_summary(metrics_payload, 'val_fnirs_rec_loss')
 
@@ -1566,6 +1835,9 @@ def _build_gate_1(split_stats: Dict[str, object], metrics_payload: Dict[str, obj
     notes: List[str] = []
     if reconstruction_converged is None:
         notes.append('Reconstruction convergence trend is unavailable from metrics.json.')
+    ignored_branches = list((branch_policy or {}).get('ignored_branches', []))
+    if ignored_branches:
+        notes.append(f"Ignored branches for gate review: {', '.join(ignored_branches)}.")
 
     if codebook_pass and reconstruction_converged is True:
         status = 'pass'
@@ -1578,6 +1850,7 @@ def _build_gate_1(split_stats: Dict[str, object], metrics_payload: Dict[str, obj
         'status': status,
         'metrics': {
             'codebooks': codebooks,
+            'ignored_branches': ignored_branches,
             'reconstruction': split_stats['branch_reconstruction'],
             'convergence': {
                 'eeg': eeg_convergence,
@@ -1591,7 +1864,12 @@ def _build_gate_1(split_stats: Dict[str, object], metrics_payload: Dict[str, obj
     }
 
 
-def _build_gate_2(split_stats: Dict[str, object], best_lag: int, coupling: Dict[str, object]) -> Dict[str, object]:
+def _build_gate_2(
+    split_stats: Dict[str, object],
+    best_lag: int,
+    coupling: Dict[str, object],
+    branch_policy: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     predictability = _compute_cross_modal_predictability(
         split_stats['eeg_source_tokens'],
         split_stats['fnirs_source_tokens'],
@@ -1600,22 +1878,49 @@ def _build_gate_2(split_stats: Dict[str, object], best_lag: int, coupling: Dict[
     ) if coupling.get('available', False) else {'available': False, 'reason': 'missing_coupling'}
 
     mean_scalars = split_stats['mean_scalars']
-    source_target_mse = mean_scalars.get('source_target_loss')
-    source_target_random_baseline = mean_scalars.get('source_target_random_baseline')
-    observation_gap_ok = (
-        split_stats['branch_reconstruction']['eeg_observation_gap'] > 0.0
-        and split_stats['branch_reconstruction']['fnirs_observation_gap'] > 0.0
+    branch_metrics = split_stats['branch_reconstruction']
+    source_target_mse = mean_scalars.get('source_target_loss', branch_metrics.get('fnirs_source_target_mse'))
+    source_target_random_baseline = mean_scalars.get(
+        'source_target_random_baseline',
+        branch_metrics.get('fnirs_source_target_random_baseline'),
     )
+    eeg_source_target_mse = mean_scalars.get('eeg_source_aux_loss', branch_metrics.get('eeg_source_target_mse'))
+    eeg_source_target_random_baseline = branch_metrics.get('eeg_source_target_random_baseline')
+    observation_loss = mean_scalars.get('observation_loss')
+    active_observation_modalities = list((branch_policy or {}).get('active_observation_modalities', ['eeg', 'fnirs']))
+    ignored_observation_modalities = list((branch_policy or {}).get('ignored_observation_modalities', []))
+    observation_gap = {
+        modality: branch_metrics.get(
+            f'{modality}_observation_contribution_gap',
+            branch_metrics.get(f'{modality}_observation_gap', 0.0),
+        )
+        for modality in active_observation_modalities
+    }
+    observation_gap_ok = all(float(value) > 0.0 for value in observation_gap.values()) if observation_gap else True
     predictability_ok = predictability.get('available', False) and predictability['accuracy'] > predictability['chance_accuracy']
     source_util_gap = abs(
         split_stats['codebooks']['eeg_source']['active_code_ratio'] -
         split_stats['codebooks']['fnirs_source']['active_code_ratio']
     )
     source_independence_ok = source_util_gap < 0.3
-    source_target_ready = (
+    fnirs_source_target_ready = (
         source_target_mse is not None
         and source_target_random_baseline is not None
         and float(source_target_mse) < float(source_target_random_baseline)
+    )
+    eeg_source_target_ready = (
+        eeg_source_target_mse is not None
+        and eeg_source_target_random_baseline is not None
+        and float(eeg_source_target_mse) < float(eeg_source_target_random_baseline)
+    )
+    source_target_ready = fnirs_source_target_ready and eeg_source_target_ready
+    observation_target_mse = {
+        'eeg': branch_metrics.get('eeg_observation_target_mse'),
+        'fnirs': branch_metrics.get('fnirs_observation_target_mse'),
+    }
+    observation_target_ready = observation_loss is not None and all(
+        observation_target_mse.get(modality) is not None
+        for modality in active_observation_modalities
     )
 
     notes: List[str] = []
@@ -1623,10 +1928,32 @@ def _build_gate_2(split_stats: Dict[str, object], best_lag: int, coupling: Dict[
         notes.append('HRF source target metrics are not available in this run.')
     elif source_target_random_baseline is None:
         notes.append('HRF source target random baseline is missing, so Gate 2 cannot fully pass.')
+    if eeg_source_target_mse is None:
+        notes.append('EEG source target metrics are not available in this run.')
+    elif eeg_source_target_random_baseline is None:
+        notes.append('EEG source target random baseline is missing, so Gate 2 cannot fully pass.')
+    if observation_loss is None:
+        notes.append('Observation target metrics are not available in this run.')
+    missing_observation_target_modalities = [
+        modality for modality in active_observation_modalities
+        if observation_target_mse.get(modality) is None
+    ]
+    if missing_observation_target_modalities:
+        notes.append(
+            'Observation target MSE is missing for active modalities: '
+            + ', '.join(missing_observation_target_modalities)
+            + '.'
+        )
+    if ignored_observation_modalities:
+        notes.append(
+            'Ignored observation modalities for gate review: '
+            + ', '.join(ignored_observation_modalities)
+            + '.'
+        )
 
     if not observation_gap_ok or not predictability_ok or not source_independence_ok:
         status = 'fail'
-    elif source_target_ready:
+    elif source_target_ready and observation_target_ready:
         status = 'pass'
     else:
         status = 'pending'
@@ -1636,9 +1963,13 @@ def _build_gate_2(split_stats: Dict[str, object], best_lag: int, coupling: Dict[
         'metrics': {
             'source_target_mse': source_target_mse,
             'source_target_random_baseline': source_target_random_baseline,
+            'eeg_source_target_mse': eeg_source_target_mse,
+            'eeg_source_target_random_baseline': eeg_source_target_random_baseline,
+            'observation_loss': observation_loss,
+            'observation_target_mse': observation_target_mse,
             'observation_contribution_gap': {
-                'eeg': split_stats['branch_reconstruction']['eeg_observation_gap'],
-                'fnirs': split_stats['branch_reconstruction']['fnirs_observation_gap'],
+                'eeg': branch_metrics.get('eeg_observation_contribution_gap', branch_metrics.get('eeg_observation_gap')),
+                'fnirs': branch_metrics.get('fnirs_observation_contribution_gap', branch_metrics.get('fnirs_observation_gap')),
             },
             'cross_modal_token_predictability': predictability,
             'source_codebook_independence': {
@@ -1646,6 +1977,8 @@ def _build_gate_2(split_stats: Dict[str, object], best_lag: int, coupling: Dict[
                 'eeg_source_active_ratio': split_stats['codebooks']['eeg_source']['active_code_ratio'],
                 'fnirs_source_active_ratio': split_stats['codebooks']['fnirs_source']['active_code_ratio'],
             },
+            'active_observation_modalities': active_observation_modalities,
+            'ignored_observation_modalities': ignored_observation_modalities,
         },
         'notes': notes,
     }
@@ -1728,6 +2061,7 @@ def _build_split_gate_summary(
     split_name: str,
     split_stats: Dict[str, object],
     metrics_payload: Dict[str, object],
+    config: Dict[str, object],
     analysis_root: Path,
     reconstruction_viz_cfg: Dict[str, object],
     token_pattern_viz_cfg: Dict[str, object],
@@ -1736,8 +2070,9 @@ def _build_split_gate_summary(
     coupling = _compute_coupling_structure(model=split_stats['model_ref'], lag=best_lag)
     figure_path = _plot_coupling_heatmap(coupling, analysis_root / f"{split_name}_coupling_heatmap.png")
     structure_profile_path = _plot_coupling_structure_profile(coupling, analysis_root / f"{split_name}_coupling_structure.png")
-    gate_1 = _build_gate_1(split_stats, metrics_payload)
-    gate_2 = _build_gate_2(split_stats, best_lag=best_lag, coupling=coupling)
+    branch_policy = _resolve_gate_branch_policy(config)
+    gate_1 = _build_gate_1(split_stats, metrics_payload, branch_policy=branch_policy)
+    gate_2 = _build_gate_2(split_stats, best_lag=best_lag, coupling=coupling, branch_policy=branch_policy)
     gate_3 = _build_gate_3(coupling, figure_path=figure_path, structure_profile_path=structure_profile_path)
     gate_4 = _build_gate_4(split_stats)
     codebook_usage_paths: Dict[str, Optional[str]] = {}
@@ -1872,6 +2207,7 @@ def generate_source_observation_scorecard(
             split_name,
             split_stats,
             metrics_payload,
+            config,
             analysis_root,
             reconstruction_viz_cfg,
             token_pattern_viz_cfg,

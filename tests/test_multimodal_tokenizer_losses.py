@@ -2,7 +2,12 @@ import unittest
 
 import torch
 
-from src.losses.multimodal_tokenizer import batch_usage_entropy_loss, straight_through_assignment_probs
+from src.losses.multimodal_tokenizer import (
+    batch_usage_entropy_loss,
+    coupling_eeg_neighbor_smoothness_loss,
+    coupling_lag_focus_loss,
+    straight_through_assignment_probs,
+)
 
 
 class MultimodalTokenizerLossTests(unittest.TestCase):
@@ -41,6 +46,49 @@ class MultimodalTokenizerLossTests(unittest.TestCase):
 
         self.assertGreater(float(collapsed_loss.item()), float(balanced_loss.item()))
         self.assertGreater(float(collapsed_loss.item()), 0.9)
+
+    def test_coupling_lag_focus_loss_penalizes_diffuse_delay_usage(self):
+        diffuse_logits = torch.zeros(3, 2, 2)
+        focused_logits = torch.zeros(3, 2, 2)
+        focused_logits[1] = 4.0
+
+        diffuse_loss = coupling_lag_focus_loss(diffuse_logits)
+        focused_loss = coupling_lag_focus_loss(focused_logits)
+
+        self.assertGreater(float(diffuse_loss.item()), float(focused_loss.item()))
+        self.assertGreater(float(diffuse_loss.item()), 0.9)
+
+    def test_coupling_neighbor_smoothness_uses_eeg_codebook_geometry(self):
+        eeg_codebook = torch.tensor(
+            [
+                [1.0, 0.0],
+                [0.98, 0.02],
+                [-1.0, 0.0],
+            ],
+            dtype=torch.float32,
+        )
+        consistent_logits = torch.tensor(
+            [
+                [[4.0, 0.0], [4.0, 0.0], [0.0, 4.0]],
+                [[0.0, 4.0], [0.0, 4.0], [4.0, 0.0]],
+            ],
+            dtype=torch.float32,
+        )
+        inconsistent_logits = consistent_logits.clone()
+        inconsistent_logits[:, 1] = torch.tensor([[0.0, 4.0], [4.0, 0.0]], dtype=torch.float32)
+
+        consistent_loss = coupling_eeg_neighbor_smoothness_loss(
+            consistent_logits,
+            eeg_codebook,
+            n_neighbors=1,
+        )
+        inconsistent_loss = coupling_eeg_neighbor_smoothness_loss(
+            inconsistent_logits,
+            eeg_codebook,
+            n_neighbors=1,
+        )
+
+        self.assertGreater(float(inconsistent_loss.item()), float(consistent_loss.item()))
 
 
 if __name__ == '__main__':
