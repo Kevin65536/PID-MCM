@@ -44,7 +44,7 @@ graph TB
 
     subgraph Coupling["Cross-Modal Coupling"]
         COUP_LOGITS[coupling_logits<br/>Parameter: n_lags x K_src x K_src]
-        COUP_LOSS[source_coupling_loss<br/>+ concentration_loss<br/>+ smoothness_loss]
+        COUP_LOSS[concentration_loss<br/>+ smoothness_loss]
     end
 
     subgraph SourceDecoders["Source Decoders (2×)"]
@@ -145,7 +145,7 @@ sequenceDiagram
     Proj->>Quant: 4 quantizers (straight-through)
 
     Quant-->>Coup: eeg_source_probs, fnirs_source_probs
-    Coup->>Loss: coupling_kl_loss + concentration_loss + smoothness_loss
+    Coup->>Loss: concentration_loss + smoothness_loss
 
     Quant->>DecS: source_q → source decoder → source_recon
     Quant->>DecO: obs_q → observation decoder → obs_recon
@@ -185,7 +185,6 @@ graph LR
     VQ --> VQ_S[vq_source_loss<br/>eeg + fnirs]
     VQ --> VQ_O[vq_observation_loss<br/>eeg + fnirs]
 
-    COUP --> COUP_KL[source_coupling_loss<br/>KL div, bidirectional]
     COUP --> COUP_CONC[concentration_loss<br/>row entropy penalty]
     COUP --> COUP_SMTH[smoothness_loss<br/>neighbor JS divergence]
 
@@ -207,23 +206,19 @@ graph LR
 | `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → original - source_target |
 | `observation_loss` (EEG) | 0.15 | EEG observation decoder → original - source_target |
 | `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers) |
-| `source_coupling_loss` | 0.07 | KL divergence on coupling matrix (bidirectional) |
 | `concentration_loss` | 0.01 | Row entropy penalty on coupling matrix **(Phase 2B)** |
 | `smoothness_loss` | 0.002 | Neighbor JS divergence on coupling matrix **(Phase 2B)** |
 | `codebook_balance_loss` | 0.08 | Entropy-based dead-code prevention |
 | `orthogonality_loss` | 0.05 | Cosine similarity penalty: source ⊥ observation |
 
-### Coupling Loss Triplet Monitoring
+### Coupling Structure Monitoring
 
-Three losses act on the same `coupling_logits` matrix. Their interaction must be monitored:
+Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupling monitoring therefore focuses on structural priors and matrix geometry:
 
 | Loss | Role | Healthy range | Danger signal |
 |------|------|--------------|---------------|
-| `source_coupling_loss` | Data-driven anchor | 0.3–0.7 | Rising after priors enabled → priors overpowering data |
 | `concentration_loss` | Per-row entropy penalty | 1.5–3.0 (below log K) | Approaching 0 → rows collapsing to one-hot |
 | `smoothness_loss` | Neighbor similarity | Decreasing, then stable | Increasing → conflict with concentration |
-
-**constraint_balance_ratio** (CBR) = `concentration_loss / (coupling_kl_loss + 1e-8)`. Healthy: 0.1–2.0. CBR > 5.0 means concentration is overpowering data.
 
 ## 4. Component Catalog
 
@@ -240,7 +235,7 @@ Three losses act on the same `coupling_logits` matrix. Their interaction must be
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `coupling_kl_loss`, `coupling_concentration_loss`, `coupling_smoothness_loss`, `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair` |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Analysis & Visualization
@@ -277,15 +272,14 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 
 **Forward pass** (for each lag):
 1. Align EEG and fNIRS source token distributions with lag offset
-2. `EEG_probs → [coupling_logits[lag]] → predicted_fNIRS_probs`
-3. KL divergence between predicted and actual fNIRS token distributions
-4. When bidirectional: also compute `fNIRS → predicted_EEG` and average
+2. Maintain `coupling_logits[lag]` as the lag-indexed EEG→fNIRS mapping scaffold
+3. Current implementation does not optimize a direct KL-based EEG-fNIRS matching loss
 
 **Structural priors** (Phase 2B):
 - **Concentration** (row entropy penalty): each EEG source token should map deterministically to fNIRS tokens
 - **Smoothness** (neighbor JS divergence): nearby EEG tokens in codebook space should have similar coupling distributions
 
-**Selection**: Choose lag with minimum coupling loss (`alignment_selection='min'`).
+**Selection**: Without a direct coupling loss, lag selection is not data-driven in the current implementation; diagnostics fall back to the first configured lag.
 
 **Current lags**: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]`
 
