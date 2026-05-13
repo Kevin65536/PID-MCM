@@ -362,40 +362,55 @@ self.coupling_logits = nn.Parameter(torch.zeros(n_lags, K, K))
 
 新 coupling 保持参数化形式，但增加一个**核心生理约束**。
 
-#### 2.6.2 The One Constraint: Concentration Prior
+#### 2.6.2 The Primary Constraint: Lag-Focused Coupling Prior
 
-**生理依据**：神经血管耦合在宏观尺度上是**确定性**的——给定某种神经活动状态，血流动力学响应应当是特异的、集中的，而不是均匀分布的。如果一个 EEG source token 等概率地映射到所有 fNIRS source token，说明学到的 coupling 没有任何信息量。
+**生理依据**：神经血管耦合的关键不只是“给定 EEG 状态，fNIRS token 分布应有结构”，而是“给定 EEG 状态，血流响应应偏好少数几个相近的延迟”。与此同时，对于固定的 lag，同一个 EEG token 可以对应多个 fNIRS token；因此不应再要求整个 token-lag 空间只保留少数几个点。
 
 **数学形式**：
 
-设 coupling 矩阵（经 softmax 归一化后）为 $T_{lag} \in \mathbb{R}^{K \times K}$，其中 $T_{ij} = P(\text{fNIRS token}=j \mid \text{EEG token}=i, \text{lag})$。
+保留原始参数化 `coupling_logits[lag, i, j]`，但对每个 EEG token $i$ 在 lag 和 fNIRS token 两个维度上做联合 softmax，得到
 
-Concentration loss 定义为行熵的负值（即鼓励每行低熵）：
+$$
+Q_i(\tau, j) = P(\tau, z_{fnirs}=j \mid z_{eeg}=i)
+$$
 
-$$\mathcal{L}_{conc}(T) = \frac{1}{K} \sum_{i=1}^{K} H(T_{i,:}) = -\frac{1}{K} \sum_{i=1}^{K} \sum_{j=1}^{K} T_{ij} \log T_{ij}$$
+其 lag 边际分布为
 
-对所有 lag 取平均：
+$$
+p_i(\tau) = \sum_j Q_i(\tau, j)
+$$
 
-$$\mathcal{L}_{conc} = \frac{1}{n_{lags}} \sum_{l=1}^{n_{lags}} \mathcal{L}_{conc}(T_l)$$
+新的 concentration 不再压低每个 lag 切片内的 row entropy，而是压低 delay 边际的熵：
 
-**为什么选择行熵而不是列熵？**
-- 行（EEG→fNIRS）：沿生理因果方向，每行应集中
-- 列（fNIRS→EEG）：反向映射可以更分散（生理上合理，因为不同的 EEG 状态可能产生相似的 fNIRS 响应）
+$$
+\mathcal{L}_{lag-focus} = \frac{1}{K} \sum_{i=1}^{K} H\big(p_i(\tau)\big)
+$$
 
-**为什么选择 concentration 而不是 smoothness 或 asymmetry？**
+实践中使用对 $\log(n_{lags})$ 的归一化版本，使其可直接与均匀基线比较。
+
+**为什么这样改？**
+
+- 它直接表达“每个 EEG 状态偏好少数几个 delay”；
+- 它不强迫整个 token-lag 空间稀疏，因此保留“每个 lag 下允许多个 fNIRS token”的自由度；
+- 它把 delay 结构单独拉出来建模，更贴近神经血管耦合的物理直觉。
+
+**当前 coupling prior 的优先级**：
 
 | 约束 | 优先级 | 理由 |
 |------|--------|------|
-| **Concentration** | P0 — 本次实现 | 最基础的生理先验——耦合的确定性。没有 concentration，coupling 可能退化为均匀分布（非信息性），后续所有分析都无意义。数学简单（单标量），实现干净。 |
-| Smoothness (A) | P1 — 独立实验 | 连续性假设合理但需要在 concentration baseline 稳定后验证。依赖 codebook 邻居关系有生理意义。文档要求不与 C 同时启用。 |
-| Asymmetry (C) | P1 — 独立实验 | 因果不对称性有生理依据，但需要 concentration baseline 先通过。文档要求不与 A 同时启用。 |
+| **Lag focus** | P0 — 当前主线 | 最基础的 delay-aware 生理先验。没有它，模型容易在所有候选 lag 上近乎均匀。 |
+| **Joint smoothness** | P1 — 当前主线 | 约束相近 EEG 状态拥有相近的联合 delay-response 分布，但不直接在 token 编号轴上做平滑。 |
+| Asymmetry (C) | P1 — 独立实验 | 因果不对称性仍单独验证，不与当前 baseline 联合实现。 |
 
-**浓度先验的可调参数**：
+**可调参数**：
 
 ```yaml
 loss:
   coupling:
-    concentration_weight: 0.005    # 从小系数开始 sweep: [0.001, 0.005, 0.01]
+    weight: 0.01
+    lag_focus_weight: 1.0
+    smoothness_weight: 0.2
+    smoothness_neighbors: 5
 ```
 
 #### 2.6.3 What Is Deliberately Omitted
@@ -428,9 +443,10 @@ total_loss = (
     alpha_orth * orthogonality_loss +              # source ⊥ observation
     
     # === Gate 3 (Structure): Coupling with Physiological Prior ===
-    alpha_coupling * coupling_kl_loss +            # basic coupling training
-    alpha_conc * concentration_loss +              # row entropy penalty (P0)
-    alpha_smooth * smoothness_loss +               # neighbor JS divergence (P1, moved from Phase 4)
+    alpha_coupling * (
+      lag_focus_loss +                           # delay marginal entropy (P0)
+      alpha_smooth * joint_smoothness_loss       # neighbor JS on Q_i(tau, token) (P1)
+    ) +
     
     # === Codebook Health ===
     alpha_balance * codebook_balance_loss          # utilization / perplexity
@@ -448,9 +464,8 @@ total_loss = (
 | `eeg_source_aux_loss` | EEG source target | Phase 2A-spatial 重定义 | EEG source decoder → per-channel RMS envelope (电压单位) |
 | `observation_loss` | Observation residual target | Phase 2A-spatial 重定义 | observation decoder → (original - source_target), source_target 使用 RMS 单位 |
 | `orthogonality_loss` | Source ⊥ Observation | V6 保留 | cross-correlation penalty |
-| `coupling_kl_loss` | Coupling KL | V6 保留 | P(fNIRS token \| EEG token) vs actual |
-| `concentration_loss` | Coupling row entropy | Phase 2B 新增 (P0) | encourages sparse/concentrated coupling |
-| `smoothness_loss` | Coupling neighbor JS | Phase 2B 新增 (P1) | encourages local smoothness in coupling rows |
+| `lag_focus_loss` | Delay marginal entropy | Phase 2B 主线 | encourages each EEG token to prefer a few lags |
+| `joint_smoothness_loss` | EEG-neighbor JS on joint coupling | Phase 2B 主线 | encourages nearby EEG tokens to share similar delay-response distributions |
 | `codebook_balance_loss` | Codebook utilization | V6 保留 | entropy-based balance |
 
 **Removed from V6**:
@@ -491,11 +506,10 @@ loss:
     warmup_epochs: 30
   
   coupling:
-    weight: 0.07                     # coupling_kl_loss (retained)
-    concentration_weight: 0.01       # Phase 2B: sweep [0.005, 0.01, 0.02]
-    smoothness_weight: 0.002         # Phase 2B: sweep [0.001, 0.002, 0.005]
+    weight: 0.01                     # overall source_coupling_loss scale
+    lag_focus_weight: 1.0            # delay marginal entropy term
+    smoothness_weight: 0.2           # internal multiplier on joint smoothness
     smoothness_neighbors: 5
-    smoothness_warmup_epochs: 30     # enable after concentration stabilizes
     bidirectional: true
   
   branch:
@@ -513,25 +527,22 @@ loss:
 
 | Loss | 推向 | 极端后果 |
 |------|------|---------|
-| `coupling_kl_loss` | 匹配数据中的 token 共现统计 | 均匀分布（如当前 Phase 2 结果） |
-| `concentration_loss` | 每行低熵 | 每行坍缩为 one-hot |
-| `smoothness_loss` | 相邻行相似 | 所有行坍缩为同一分布 |
+| `lag_focus_loss` | 每个 EEG token 偏好少数几个 delay | 所有 token 坍缩到单一 lag |
+| `joint_smoothness_loss` | EEG 邻居共享相近的联合分布 | 所有邻居坍缩到同一 delay-response 模板 |
 
 **冲突场景：**
-- concentration 强 + smoothness 弱 → 每行 one-hot 但相邻行可能指向不同 token（失去平滑结构）
-- smoothness 强 + concentration 弱 → 所有行坍缩到同一分布（失去区分度）
-- 两者都强 → 所有行坍缩到同一个 one-hot（coupling 彻底退化）
-- coupling_kl_loss 过弱 → 数据信号被先验覆盖，学不到真实跨模态结构
+- lag focus 强 + smoothness 弱 → delay 偏好过窄，但 lag 内 token 分布仍可能碎裂
+- smoothness 强 + lag focus 弱 → 所有邻居共享近乎相同的 delay-response 分布（失去区分度）
+- 两者都强 → 少数 delay 模板主导整个 coupling tensor
 
 **必须监控的指标（训练时实时输出到 TensorBoard/log）：**
 
-1. `concentration_loss` 时间序列 — 应下降后稳定，不应持续下降至零
-2. `smoothness_loss` 时间序列 — 应下降后稳定
-3. `source_coupling_loss` 时间序列 — **不应显著上升**（如上升说明先验压倒数据）
-4. Per-row entropy 分布直方图 — 应集中在 [0.5×logK, 0.8×logK]，不应坍缩到接近零或接近 logK
+1. `lag_focus_loss` 时间序列 — 应下降后稳定，不应持续下降至零
+2. `joint_smoothness_loss` 时间序列 — 应下降后稳定
+3. `source_coupling_loss` 时间序列 — 不应压倒 reconstruction 与 source-target 主任务
+4. Delay entropy 直方图 — 应明显低于均匀基线，但不应坍缩到接近零
 5. Neighbor JS divergence vs random pair JS divergence — 前者应显著低于后者
-6. **constraint_balance_ratio (CBR)** = `concentration_loss / (coupling_kl_loss + 1e-8)` — 健康范围 0.1–2.0；CBR > 5.0 表示 concentration 过强
-7. Coupling heatmap — 应呈现可辨识的集中结构
+6. Coupling tensor visualization — 应呈现平滑的 delay-aware ridge，而不是大面积均匀灰图
 
 详见 [IMPLEMENTATION_PLAN.md §6.5](../../IMPLEMENTATION_PLAN.md) 中"耦合三项 Loss 的潜在冲突与监控要求"。
 
@@ -633,28 +644,34 @@ Phase 4 (延后): Structural Assumption Audit
 
 ---
 
-## 3. Mechanism A: Token-Space Coupling Smoothness
+## 3. Mechanism A: EEG-Neighbor Joint Coupling Smoothness
 
-> **Status update (2026-05-11)**：本机制已从独立 Phase 4 提前至 Phase 2B，与 concentration prior 在同一阶段实现。以下数学规范和实现细节保留不变，作为 Phase 2B 中 smoothness 部分的技术参考。smoothness_weight 从 0.002 开始 sweep，显著小于 concentration_weight (0.01)。
+> **Status update (2026-05-13)**：主线实现已改为在 EEG 邻居之间平滑联合分布 $Q_i(\tau, j)$，而不是逐个 lag 切片比较单独的 row distribution。smoothness 仍保持小系数，只作为 lag focus 的邻域正则。
 
 ### 3.1 Physiological basis
 
 神经血管耦合的基本性质：**相近的神经活动状态引起相近的血流动力学响应**。
 
-如果两个 EEG token 在 source codebook 空间中代表相似的神经状态，它们经由 coupling 矩阵映射到的 fNIRS token 分布也应该是相似的。当前自由参数化的 coupling 矩阵不保证这一性质——两个 codebook 向量几乎相同的 token 可能学到完全不同的耦合分布。
+如果两个 EEG token 在 source codebook 空间中代表相似的神经状态，它们不仅应映射到相近的 fNIRS token 分布，还应表现出相近的 delay 偏好。当前自由参数化的 coupling 矩阵不保证这一性质——两个 codebook 向量几乎相同的 token 可能学到完全不同的联合 delay-response 分布。
 
 ### 3.2 Mathematical formulation
 
 设 shared codebook 的归一化权重为 $C \in \mathbb{R}^{K \times D}$。对每个 token $i$，找到其在 codebook 空间中的 $M$ 个最近邻 $\mathcal{N}(i)$（基于余弦相似度）。
 
-对于给定的 lag，coupling 矩阵 $T = \text{softmax}(\text{coupling\_logits}[lag]) \in \mathbb{R}^{K \times K}$（行随机矩阵），定义平滑性损失：
+定义 EEG 条件下的联合分布：
 
-$$\mathcal{L}_{smooth}(T) = \frac{1}{K \cdot M} \sum_{i=1}^{K} \sum_{j \in \mathcal{N}(i)} D_{JS}\big(T_{i,:} \,\|\, T_{j,:}\big)$$
+$$
+Q_i(\tau, j) = P(\tau, z_{fnirs}=j \mid z_{eeg}=i)
+$$
+
+对每个 token $i$ 的 $M$ 个 EEG codebook 邻居 $i' \in \mathcal{N}(i)$，定义平滑性损失：
+
+$$\mathcal{L}_{smooth} = \frac{1}{K \cdot M} \sum_{i=1}^{K} \sum_{i' \in \mathcal{N}(i)} D_{JS}\big(Q_i(\tau, j) \,\|\, Q_{i'}(\tau, j)\big)$$
 
 其中 $D_{JS}(P \| Q) = \frac{1}{2} D_{KL}(P \| M) + \frac{1}{2} D_{KL}(Q \| M)$，$M = (P + Q) / 2$。
 
 **选择 JS 散度而非 L2 的理由**：
-- $T_{i,:}$ 是概率分布，JS 散度有界且对称
+- $Q_i(\tau, j)$ 是概率分布，JS 散度有界且对称
 - JS 散度对低概率区域的微小波动不敏感，避免被噪声 token 主导
 
 **选择局部邻居而非全局平滑的理由**：
@@ -669,33 +686,22 @@ $$\mathcal{L}_{smooth}(T) = \frac{1}{K \cdot M} \sum_{i=1}^{K} \sum_{j \in \math
 **`src/losses/multimodal_tokenizer.py`** — 新增函数：
 
 ```python
-def coupling_smoothness_loss(
-    coupling_logits: torch.Tensor,       # [n_lags, K, K]
-    codebook_weight: torch.Tensor,       # [K, D]
-    n_neighbors: int = 5,
+def coupling_eeg_neighbor_smoothness_loss(
+  coupling_logits: torch.Tensor,       # [n_lags, K, K]
+  codebook_weight: torch.Tensor,       # [K, D]
+  n_neighbors: int = 5,
 ) -> torch.Tensor:
-    """Encourage tokens with similar codebook vectors to have similar coupling profiles."""
-    n_lags, K, _ = coupling_logits.shape
-    
-    # Find local neighbors in codebook space
-    normed = F.normalize(codebook_weight, dim=-1)
-    sim = normed @ normed.t()
-    _, neighbors = sim.topk(n_neighbors + 1, dim=-1)
-    neighbors = neighbors[:, 1:]  # [K, n_neighbors], exclude self
-    
-    total_loss = normed.new_tensor(0.0)
-    for lag_idx in range(n_lags):
-        T = F.softmax(coupling_logits[lag_idx], dim=-1)        # [K, K]
-        T_neighbors = T[neighbors]                              # [K, M, K]
-        T_i = T.unsqueeze(1)                                    # [K, 1, K]
-        M = 0.5 * (T_i + T_neighbors)                           # [K, M, K]
-        js = 0.5 * (
-            F.kl_div((T_i + 1e-8).log(), M, reduction='none').sum(dim=-1) +
-            F.kl_div((T_neighbors + 1e-8).log(), M, reduction='none').sum(dim=-1)
-        )
-        total_loss = total_loss + js.mean()
-    
-    return total_loss / n_lags
+  joint_probs = coupling_joint_probabilities(coupling_logits)   # [K, n_lags, K]
+  flat_joint = joint_probs.reshape(joint_probs.shape[0], -1)    # [K, n_lags * K]
+
+  normed = F.normalize(codebook_weight.detach(), dim=-1)
+  sim = normed @ normed.t()
+  _, neighbors = sim.topk(n_neighbors + 1, dim=-1)
+  neighbors = neighbors[:, 1:]
+
+  anchor = flat_joint.unsqueeze(1)
+  neighbor = flat_joint[neighbors]
+  return pairwise_js(anchor, neighbor).mean()
 ```
 
 **`src/tokenizers/factorized_labram_vqnsp.py`** — 新增参数：

@@ -194,6 +194,31 @@ Tokenization 完成后，离散 token 可用于多种下游任务：
 - shared state 到 delayed opposite-modality target 的预测；
 - 仅把 same-time overlap 作为补充诊断，而不是主目标。
 
+当前主线实现把这种 lag-aware correspondence 明确写成 EEG 条件下的联合分布：
+
+$$
+Q_i(\tau, j) = P(\tau, z_{fnirs}=j \mid z_{eeg}=i)
+$$
+
+其中 $i$ 是 EEG source token，$\tau$ 是候选时延，$j$ 是 fNIRS source token。这个定义的关键点是：
+
+- 模型不再要求一个 EEG token 只对应少数几个 token-lag 组合；
+- 对于固定的 lag，允许同一个 EEG token 对应多个 fNIRS token；
+- 真正被鼓励集中的是 lag 边际分布
+
+$$
+p_i(\tau) = \sum_j Q_i(\tau, j)
+$$
+
+也就是“给定 EEG 状态，更偏好哪些时延”，而不是“整个 token-lag 空间只能保留少数几个点”。
+
+因此，当前结构先验分成两层：
+
+1. **lag focus**：压低 $p_i(\tau)$ 的熵，让每个 EEG 状态偏好少数几个生理延迟；
+2. **joint smoothness**：如果两个 EEG token 在 EEG source codebook 的嵌入空间里彼此接近，那么它们的 $Q_i(\tau, j)$ 也应相近。
+
+这个设计比旧的“每个 lag 切片内做行熵最小化”更贴近神经血管耦合假设，因为它把“延迟结构”单独建模了出来，同时保留了“每个延迟下可对应多个 fNIRS 状态”的自由度。
+
 ### 5.3 可解释性分析
 
 - Token 频率分析：哪些 token 在特定任务/状态下更常出现

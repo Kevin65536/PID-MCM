@@ -14,70 +14,71 @@
 ```mermaid
 graph TB
     subgraph Inputs
-        EEG[EEG Signal<br/>B x 30ch x 2000]
-        FNIRS[fNIRS Signal<br/>B x 36ch x 100]
+        EEG["EEG Signal<br/>B x 30ch x 2000"]
+        FNIRS["fNIRS Signal<br/>B x 36ch x 100"]
     end
 
     subgraph PatchEmbedding
-        E_PE[MultiChannelPatchEmbedding<br/>patch=400 → 5 patches]
-        F_PE[MultiChannelPatchEmbedding<br/>patch=20 → 5 patches]
+        E_PE["MultiChannelPatchEmbedding<br/>patch=400 → 5 patches"]
+        F_PE["MultiChannelPatchEmbedding<br/>patch=20 → 5 patches"]
     end
 
     subgraph Encoders
-        E_ENC[TransformerEncoder<br/>d=256 depth=8 heads=8]
-        F_ENC[TransformerEncoder<br/>d=160 depth=6 heads=4]
+        E_ENC["TransformerEncoder<br/>d=256 depth=8 heads=8"]
+        F_ENC["TransformerEncoder<br/>d=160 depth=6 heads=4"]
     end
 
     subgraph Projection["Projection Heads (4×)"]
-        E_SP[eeg_source_proj<br/>256→48]
-        E_OP[eeg_observation_proj<br/>256→64]
-        F_SP[fnirs_source_proj<br/>160→48]
-        F_OP[fnirs_observation_proj<br/>160→48]
+        E_SP["eeg_source_proj<br/>256→48"]
+        E_OP["eeg_observation_proj<br/>256→64"]
+        F_SP["fnirs_source_proj<br/>160→48"]
+        F_OP["fnirs_observation_proj<br/>160→48"]
     end
 
     subgraph Quantizers["Quantizers (4× NormEMAVectorQuantizer)"]
-        E_SQ[eeg_source_quantizer<br/>K=32 D=48]
-        F_SQ[fnirs_source_quantizer<br/>K=32 D=48]
-        E_OQ[eeg_observation_quantizer<br/>K=64 D=64]
-        F_OQ[fnirs_observation_quantizer<br/>K=64 D=48]
+        E_SQ["eeg_source_quantizer<br/>K=32 D=48"]
+        F_SQ["fnirs_source_quantizer<br/>K=32 D=48"]
+        E_OQ["eeg_observation_quantizer<br/>K=64 D=64"]
+        F_OQ["fnirs_observation_quantizer<br/>K=64 D=48"]
     end
 
     subgraph Coupling["Cross-Modal Coupling"]
-        COUP_LOGITS[coupling_logits<br/>Parameter: n_lags x K_src x K_src]
-        COUP_LOSS[concentration_loss<br/>+ smoothness_loss]
+        COUP_LOGITS["coupling_logits<br/>Parameter: n_lags x K_src x K_src"]
+        COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss"]
     end
 
     subgraph SourceDecoders["Source Decoders (2×)"]
-        E_SD[eeg_source_decoder<br/>d=256 depth=3 heads=8]
-        F_SD[fnirs_source_decoder<br/>d=160 depth=2 heads=4]
+        E_SD["eeg_source_decoder<br/>d=256 depth=4 heads=8"]
+        F_SD["fnirs_source_decoder<br/>d=160 depth=3 heads=4"]
     end
 
     subgraph ObsDecoders["Observation Decoders (2×)"]
-        E_OD[eeg_observation_decoder<br/>d=256 depth=3 heads=8]
-        F_OD[fnirs_observation_decoder<br/>d=160 depth=2 heads=4]
+        E_OD["eeg_observation_decoder<br/>d=256 depth=4 heads=8"]
+        F_OD["fnirs_observation_decoder<br/>d=160 depth=3 heads=4"]
     end
 
     subgraph OutputHeads["Output Heads (8×)"]
-        E_SA[eeg_src_amp_head<br/>256→30x201]
-        E_SPH[eeg_src_phase_head<br/>256→30x201]
-        E_OA[eeg_obs_amp_head<br/>256→30x201]
-        E_OPH[eeg_obs_phase_head<br/>256→30x201]
-        F_SA[fnirs_src_amp_head<br/>160→36x11]
-        F_SPH[fnirs_src_phase_head<br/>160→36x11]
-        F_OA[fnirs_obs_amp_head<br/>160→36x11]
-        F_OPH[fnirs_obs_phase_head<br/>160→36x11]
+        E_SA["eeg_src_amp_head<br/>256→30x201"]
+        E_SPH["eeg_src_phase_head<br/>256→30x201"]
+        E_OA["eeg_obs_amp_head<br/>256→30x201"]
+        E_OPH["eeg_obs_phase_head<br/>256→30x201"]
+        F_SA["fnirs_src_amp_head<br/>160→36x11"]
+        F_SPH["fnirs_src_phase_head<br/>160→36x11"]
+        F_OA["fnirs_obs_amp_head<br/>160→36x11"]
+        F_OPH["fnirs_obs_phase_head<br/>160→36x11"]
     end
 
     subgraph Reconstruction
-        E_SUM[Σ source + observation<br/>= eeg_full_recon]
-        F_SUM[Σ source + observation<br/>= fnirs_full_recon]
+        E_SUM["Σ source + observation<br/>= eeg_full_recon"]
+        F_SUM["Σ source + observation<br/>= fnirs_full_recon"]
     end
 
-    subgraph Targets[Target Construction]
-        E_ST[EEG source target<br/>power envelope @ 200Hz]
-        F_ST[fNIRS source target<br/>HRF(power envelope)]
-        E_OT[EEG obs target<br/>= original - source_target]
-        F_OT[fNIRS obs target<br/>= original - source_target]
+    subgraph Targets["Target Construction (Croce 2017 physical model)"]
+        SS["shared neural state<br/>AR-smoothed EEG power @ fNIRS rate"]
+        E_ST["EEG source target<br/>signed RMS carrier @ 200Hz"]
+        F_ST["fNIRS source target<br/>HRF(shared_state)"]
+        E_OT["EEG obs target<br/>= original - source_target"]
+        F_OT["fNIRS obs target<br/>= original - source_target"]
     end
 
     EEG --> E_PE --> E_ENC
@@ -118,6 +119,7 @@ graph TB
     style Targets fill:#fff9c4
 ```
 
+
 **Key architectural change from Phase 1/2**: Single shared decoder per modality → dual independent decoders (source + observation). Full reconstruction = source_recon + observation_recon (additive in signal space).
 
 ## 2. Data Flow (Forward Pass)
@@ -145,7 +147,7 @@ sequenceDiagram
     Proj->>Quant: 4 quantizers (straight-through)
 
     Quant-->>Coup: eeg_source_probs, fnirs_source_probs
-    Coup->>Loss: concentration_loss + smoothness_loss
+    Coup->>Loss: lag_focus_loss + joint_smoothness_loss
 
     Quant->>DecS: source_q → source decoder → source_recon
     Quant->>DecO: obs_q → observation decoder → obs_recon
@@ -185,8 +187,8 @@ graph LR
     VQ --> VQ_S[vq_source_loss<br/>eeg + fnirs]
     VQ --> VQ_O[vq_observation_loss<br/>eeg + fnirs]
 
-    COUP --> COUP_CONC[concentration_loss<br/>row entropy penalty]
-    COUP --> COUP_SMTH[smoothness_loss<br/>neighbor JS divergence]
+    COUP --> COUP_CONC[lag_focus_loss<br/>lag marginal entropy]
+    COUP --> COUP_SMTH[joint_smoothness_loss<br/>neighbor JS on lag x token]
 
     BAL --> BAL_S[source_balance_loss]
     BAL --> BAL_O[observation_balance_loss]
@@ -195,19 +197,20 @@ graph LR
     ORTHO --> O_F[orthogonality_loss<br/>fnirs_source ⊥ fnirs_obs]
 ```
 
-### Current Target Loss Weights (Phase 2A)
+### Current Target Loss Weights (Phase 2B — Physical Model)
 
 | Loss Term | Weight | Purpose |
 |-----------|--------|---------|
 | `eeg_rec_loss` | 1.0 (amp 1.0 + time 0.9) | EEG full reconstruction via source + observation sum |
 | `fnirs_rec_loss` | 1.0 (amp 1.0 + time 1.0) | fNIRS full reconstruction via source + observation sum |
-| `source_target_loss` (fNIRS) | 0.3 | fNIRS source decoder → HRF(EEG_power_envelope) |
-| `eeg_source_aux_loss` | 0.3 (weight × aux_weight) | EEG source decoder → power envelope at full resolution |
-| `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → original - source_target |
-| `observation_loss` (EEG) | 0.15 | EEG observation decoder → original - source_target |
+| `source_target_loss` (fNIRS) | 0.3 | fNIRS source decoder → HRF(shared_state) via Croce model |
+| `eeg_source_aux_loss` | 0.3 (weight × aux_weight) | EEG source decoder → signed-RMS-carrier, temporally smoothed |
+| `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → original − HRF(shared_state) |
+| `observation_loss` (EEG) | 0.15 | EEG observation decoder → original − signed-RMS-carrier |
 | `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers) |
-| `concentration_loss` | 0.01 | Row entropy penalty on coupling matrix **(Phase 2B)** |
-| `smoothness_loss` | 0.002 | Neighbor JS divergence on coupling matrix **(Phase 2B)** |
+| `source_coupling_loss` | `coupling.weight` | `lag_focus_loss + 0.2 * joint_smoothness_loss` when coupling prior is enabled |
+| `lag_focus_loss` | internal 1.0 | Normalized entropy of the lag marginal $P(\tau \mid z_{eeg})$ |
+| `joint_smoothness_loss` | internal 0.2 | Neighbor JS divergence on $Q(\tau, z_{fnirs} \mid z_{eeg})$ |
 | `codebook_balance_loss` | 0.08 | Entropy-based dead-code prevention |
 | `orthogonality_loss` | 0.05 | Cosine similarity penalty: source ⊥ observation |
 
@@ -217,8 +220,8 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | Loss | Role | Healthy range | Danger signal |
 |------|------|--------------|---------------|
-| `concentration_loss` | Per-row entropy penalty | 1.5–3.0 (below log K) | Approaching 0 → rows collapsing to one-hot |
-| `smoothness_loss` | Neighbor similarity | Decreasing, then stable | Increasing → conflict with concentration |
+| `lag_focus_loss` | Delay preference concentration | Below the uniform baseline, but not collapsing to 0 | Near 1.0 → lag structure remains uninformative |
+| `joint_smoothness_loss` | EEG-neighbor consistency in joint delay-response space | Decreasing, then stable | Increasing while lag focus drops → over-constrained or noisy neighborhoods |
 
 ## 4. Component Catalog
 
@@ -235,8 +238,15 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair`, `coupling_lag_focus_loss`, `coupling_eeg_neighbor_smoothness_loss` |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
+
+### Spatial & Physiological Priors
+
+| File | Role |
+|------|------|
+| [src/data/channel_adjacency.py](../src/data/channel_adjacency.py) | 10-10 EEG neighbor table, fNIRS channel name parsing, `mnt.mat` 3D coordinate validation, spatial adjacency matrix construction, per-channel RMS envelope and spatially-weighted fNIRS neural driver |
+| [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py) | Sequential Monte Carlo filter for neurovascular state-space model (shared neural state + modality-specific forward models)
 
 ### Analysis & Visualization
 
@@ -275,39 +285,66 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 2. Maintain `coupling_logits[lag]` as the lag-indexed EEG→fNIRS mapping scaffold
 3. Current implementation does not optimize a direct KL-based EEG-fNIRS matching loss
 
-**Structural priors** (Phase 2B):
-- **Concentration** (row entropy penalty): each EEG source token should map deterministically to fNIRS tokens
-- **Smoothness** (neighbor JS divergence): nearby EEG tokens in codebook space should have similar coupling distributions
+**Structural priors** (current active design):
+- **Lag focus**: for each EEG source token, the lag marginal of the joint distribution
+    $$Q_i(\tau, j) = P(\tau, z_{fnirs}=j \mid z_{eeg}=i)$$
+    should prefer a few delays. This sharpens delay structure without forcing only a few token-lag pairs overall.
+- **Joint smoothness**: nearby EEG tokens in codebook space should have similar joint delay-response distributions $Q_i(\tau, j)$.
+    Neighborhoods are computed from detached EEG source codebook geometry rather than raw token indices.
 
-**Selection**: Without a direct coupling loss, lag selection is not data-driven in the current implementation; diagnostics fall back to the first configured lag.
+**Selection**: Diagnostics now use the dominant lag under the average lag marginal of $Q_i(\tau, j)$; this is still a structural summary, not a batch-level best-lag search.
 
 **Current lags**: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]`
 
-## 7. Source Target Construction
+## 7. Source Target Construction (Croce et al. 2017 Physical Model)
 
-### Neural Driver Definition
+### Design Motivation
 
-D(t) = EEG broadband power envelope (channel-averaged squared amplitude).
+Prior Phase 2A design used `EEG_power_envelope` (μV², non-negative) as the EEG
+source target. This broke the additive decomposition `original = source + observation`
+because power units differ from voltage, and the envelope's non-negativity forced
+the observation branch to carry the DC offset and zero-crossing structure.
 
-### fNIRS Source Target
+The revised design adopts Croce et al. 2017's joint EEG-fNIRS state-space model:
+a shared latent neural state `s(t)` drives both modalities — EEG observes it
+instantaneously, fNIRS observes it through hemodynamic convolution.
 
-```
-EEG [B,30,2000] → power² → mean(channels) → avg_pool → [B,1,100]
-                                                           ↓
-                                               HRF convolution (learnable double-gamma)
-                                                           ↓
-                                               per-channel mean/std rescale → [B,36,100]
-```
-
-### EEG Source Target
+### Shared Neural State
 
 ```
-EEG [B,30,2000] → power² → mean(channels) → [B,1,2000]
-                                              ↓
-                                    expand to 30 channels → [B,30,2000]
+s_k = α · s_{k-1} + (1 − α) · x_k
+
+where  x_k = channel-averaged EEG power, downsampled to fNIRS rate (10 Hz)
+       α   = shared_state_alpha (default 0.90)
 ```
 
-Both targets derive from the same D(t), ensuring semantic consistency. The EEG source target is at full EEG temporal resolution (200Hz, not downsampled to fNIRS rate).
+- α → 1.00: only sub-0.1 Hz hemodynamic fluctuations survive (SMC limit)
+- α ≈ 0.90: ~1 s half-life — alpha/beta-band power envelope preserved
+- α → 0.00: raw EEG power, no smoothing
+
+### fNIRS Source Target (Croce forward model)
+
+```
+s(t) [B,1,100] → HRF convolution (learnable double-gamma) → rescale → [B,36,100]
+```
+The HRF convolution absorbs the 4–6 s neurovascular delay. The output is
+time-synchronous with the original fNIRS (zero-phase alignment).
+
+### EEG Source Target (Croce forward model)
+
+Mode: `signed_rms_carrier` (default in Phase 2B)
+
+```
+EEG [B,30,2000] → per-channel RMS envelope (Hann-smoothed, μV units)
+                → temporal smoothing with shared α
+                → multiply by sign(smoothed voltage waveform)
+                → signed, μV units, same physical meaning as raw EEG
+```
+
+Key properties:
+- Same physical units as EEG (μV, signed)
+- Additive decomposition `original = source + observation` is physically meaningful
+- Temporal smoothing via shared α removes fast noise while preserving task dynamics
 
 ### Observation Target
 
@@ -333,7 +370,8 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 |-------|------|--------|-----------------|
 | Phase 1 | Structural Migration | ✅ Complete | Source/Observation tokenizer, shared/private removed |
 | Phase 2 | HRF Source Target | ✅ Implemented | Double-gamma HRF kernel; Gate 2-4 fail, needs Phase 2A |
-| Phase 2A | Branch Target Redesign + Dual Decoder | 🔜 **Active** | Dual decoder, unified source target, explicit observation target |
+| Phase 2A | Branch Target Redesign + Dual Decoder | ✅ Complete | Dual decoder, unified source target, explicit observation target |
+| Phase 2B | Croce 2017 Physical Model Targets | 🔜 **Active** | Shared-state AR-smoothed neural driver, signed-RMS EEG target, HRF fNIRS target |
 | Phase 2B | Coupling Structure Priors | 📋 Planned | Concentration + Smoothness on coupling matrix |
 | Phase 2C | Cross-Modal Source + Coupling-Aware Q | 📋 Deferred | fNIRS→EEG predictor, coupling-guided quantization |
 | Mechanism C | Causal Asymmetry | 📋 Planned | Independent fwd/rev coupling parameterization |
