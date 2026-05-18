@@ -1,8 +1,8 @@
 # Tokenizer Evaluation Gates
 
-> Last Updated: 2026-04-30
-> Status: Simplified for S2 source/observation architecture — replaces pre-S2 five-layer scorecard
-> Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md Section 2](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
+> Last Updated: 2026-05-14
+> Status: Active — covers Phase 2B source/observation architecture with Croce 2017 physical model targets
+> Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
 > Supersedes: pre-S2 five-layer scorecard (Layer A-E) — archived by this rewrite
 
 ---
@@ -130,21 +130,15 @@ Phase 1: Structural Migration
       ├── ✅ PASS → proceed to Phase 2
       └── ❌ FAIL → fix VQ/encoder; do NOT proceed
 
-Phase 2: Source Target Introduction
+Phase 2A: Branch Target Redesign + Dual Decoder
   └── Gate 2: Branch Semantics
-      ├── ✅ PASS → proceed to Phase 3
+      ├── ✅ PASS → proceed to Phase 2B
       └── ❌ FAIL → fix HRF target or branch training; do NOT proceed
 
-Phase 3: Concentration Prior
+Phase 2B: Croce 2017 Physical Model + Coupling Structure Priors
   └── Gate 3: Coupling Structure
-      ├── ✅ PASS → S2 baseline established; proceed to Phase 4
-      └── ❌ FAIL → sweep concentration weight; do NOT proceed
-
-Phase 4: Independent Mechanism Validation (A or C)
-  └── Gate 2 + Gate 3 (re-check)
-      ├── ✅ PASS → mechanism validated
-      ├── ⚠️ INCONCLUSIVE → mechanism is neutral, not harmful
-      └── ❌ FAIL → mechanism degrades S2 baseline; archive experiment
+      ├── ✅ PASS → architecture validated; proceed to downstream evaluation (Gate 4)
+      └── ❌ FAIL → sweep coupling prior weights; inspect lag focus + joint smoothness balance
 ```
 
 ### Cross-phase comparison rule

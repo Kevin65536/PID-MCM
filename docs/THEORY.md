@@ -6,12 +6,13 @@
 
 ---
 
-## Update Notice (2026-04-30)
+## Update Notice (2026-05-14)
 
 For the current active development direction, see:
 
-- [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — Active: physiological coupling constraints plan
-- [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) — Archived: tokenizer reset design foundations
+- [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — Active: physiological coupling constraints design
+- [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) — Current: implementation status and roadmap
+- [docs/ARCHITECTURE.md](ARCHITECTURE.md) — Current: architecture specification
 - [docs/notes/2026.3.4_current_problem_of_physiological_foundation_model.md](notes/2026.3.4_current_problem_of_physiological_foundation_model.md) — Background: EEG foundation model challenges
 
 ---

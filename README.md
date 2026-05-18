@@ -14,31 +14,38 @@ This project aims to learn **discrete token representations** (codebooks) for EE
 
 ```
 src/
-  tokenizers/         # FSQ and VQ-VAE tokenizer implementations
+  tokenizers/         # VQ-VAE, FSQ, NeuroRVQ, LaBraM, Source/Observation tokenizers
   metrics/            # Codebook health and reconstruction metrics
-  data/               # Dataset loading (placeholder + real data)
+  data/               # Dataset loading, channel adjacency, factory
   models/             # (archived) ELP encoder
-  losses/             # Training losses
-  utils/              # Logging and utilities
+  losses/             # Training losses (reconstruction, coupling priors)
+  utils/              # Logging, checkpointing, launcher utilities
   visualization/      # Standardized training/post-training visualization
+  inference/          # Neurovascular SMC filter (Croce 2017)
+  classifiers/        # Downstream classifiers
+  foundation/         # Foundation model interface
 
 experiments/
   configs/
     base.yaml         # Base configuration
-    phase0/           # Phase 0 experiments (real data tokenization)
-    archive/          # Old PID experiment configs
+    source_observation/  # Source/Observation configs (phase1, phase2, phase2a)
+    phase0plus/       # Advanced single-modality tokenizer configs
+    archive/          # Old experiment configs
   scripts/
     launch_training_nohup.sh  # Canonical training launcher
     train_*.py             # Task-specific training entrypoints
-    analyze_alignment.py   # Standardized manual analysis rerun
+    compare_run_metrics.py # Batch run comparison tool
     probe/                 # Exploratory, non-standardized probe experiments only
     archive/            # Old experiment scripts
   runs/               # Experiment outputs
   results/            # Comparison results
 
 docs/
+  ARCHITECTURE.md     # Current architecture specification
+  PHYSIOLOGICAL_COUPLING_PLAN.md  # Physiological coupling constraints design
+  SEMANTIC_TOKEN_SCORECARD.md     # 4-Gate evaluation framework
+  EXPERIMENT_LOG.md   # Formal experiment conclusions
   THEORY.md           # Theoretical background
-  THEORY_v1_ELP.md    # Archived ELP/PID theory
 ```
 
 ## Quick Start
@@ -119,11 +126,12 @@ You can still pass `--output-csv`, `--output-json`, or `--output-md` if you want
 
 ## Current Status
 
-**Phase 0: Real Data Tokenization** (Active)
-- [ ] Data loading for real EEG/fNIRS
-- [ ] FSQ tokenizer validation
-- [ ] VQ-VAE comparison
-- [ ] Cross-subject generalization
+**Phase 2B: Croce 2017 Physical Model + Coupling Priors** (Current)
+- [x] Source/Observation dual-decoder tokenizer
+- [x] HRF convolution source target
+- [x] Lag focus + joint smoothness coupling priors
+- [ ] Gate 3 (Structure) validation
+- [ ] Downstream utility evaluation
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap.
 

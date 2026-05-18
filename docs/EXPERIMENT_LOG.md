@@ -4,7 +4,7 @@
 
 ## ⚠️ Lessons Learned from Pre-Experiments
 
-**Archived Results:** Previous experiment runs and logs have been archived to `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md` and `experiments/runs/archive/pre_experiments`.
+**Archived Results:** Previous experiment runs and logs have been archived to `experiments/runs/archive/pre_experiments` and `docs/archive/logs/`. Historical shared/private stage experiments are available via git history.
 
 **Key Bottleneck:**
 The downstream Motor Imagery (MI) classification task suffered from a severe lack of cross-subject generalization (hovering around ~50% accuracy, essentially chance level for binary classification), despite performing reasonably well on within-subject tests. 
@@ -26,6 +26,7 @@ The downstream Motor Imagery (MI) classification task suffered from a severe lac
 | Date | ID | Phase | Description | Status |
 |------|----|-------|-------------|--------|
 | 2026-05-11 | EXP-P1-GATE1-LOCK | Phase 1 | Source/observation Gate1 stabilization, best-baseline lock, and archive handoff | Completed |
+| 2026-05-14 | EXP-P2B-ARCH-STABLE | Phase 2B | Architecture stabilized: Croce 2017 physical model + coupling structure priors implemented and merged | Completed |
 
 ---
 
@@ -68,6 +69,35 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 ### Conclusion
 
 Phase 1 now has a formal best baseline and a formal archive bundle. Future source/observation work should start from [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml), and any new mainline claim must be compared against this locked handoff artifact.
+
+---
+
+## EXP-P2B-ARCH-STABLE: Phase 2B Architecture Stabilization (2026-05-14)
+
+### Objective
+
+Complete the Croce 2017 physical model source target implementation, integrate coupling structure priors (lag focus + joint smoothness), and declare architecture stable. Mechanism C abandoned; Phase 2C mechanisms deferred to long-term.
+
+### Configuration
+
+- Mainline: `SourceObservationLaBraMVQNSP` in [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
+- Losses: lag_focus_loss + joint_smoothness_loss in [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py)
+- SMC validation: [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py)
+- Spatial priors: [src/data/channel_adjacency.py](../src/data/channel_adjacency.py)
+- Architecture changelog: [docs/architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md](architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md)
+
+### Key Architecture Decisions
+
+1. Shared neural state s(t) via AR(1) smoothing (α=0.90) drives both modalities
+2. EEG source target: signed RMS carrier (μV) — same physical units as raw EEG
+3. fNIRS source target: HRF(s(t)) — neurovascular delay absorbed by convolution
+4. Coupling priors directly constrain matrix shape without KL data matching
+5. 4 independent decoders (source + observation per modality), additive reconstruction
+6. Mechanism C (causal asymmetry) abandoned — Croce model provides sufficient directional structure
+
+### Conclusion
+
+Architecture is now stabilized. No further major architectural exploration planned. Current focus: Gate 3 (Structure) validation, diagnostic refinement, and downstream evaluation.
 
 ---
 

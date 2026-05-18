@@ -1,15 +1,14 @@
-# Current Architecture: Source/Observation Tokenizer (Dual Decoder)
+# Current Architecture: Source/Observation Tokenizer (Dual Decoder + Croce 2017 Physical Model)
 
-> **Semantics version**: `s2_source_observation_v2_phase2a_planned`
-> **Last updated**: 2026-05-11 (Phase 2A plan ratified)
-> **Current phase**: Phase 2 (HRF Source Target) — Implemented but Gate 2-4 failed; Phase 2A revision planned
-> **Active phase**: Phase 2A (Branch Target Redesign + Dual Decoder) — Next implementation target
+> **Semantics version**: `s2_source_observation_v2_phase2b`
+> **Last updated**: 2026-05-14
+> **Current phase**: Phase 2B (Croce 2017 Physical Model + Coupling Structure Priors) — Architecture stabilized
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
 ---
 
-## 1. Component Architecture (Phase 2A Target)
+## 1. Component Architecture (Current — Phase 2B Stabilized)
 
 ```mermaid
 graph TB
@@ -259,11 +258,9 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | Directory | Purpose |
 |-----------|---------|
-| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 configs, including locked Gate1 baseline |
-| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs |
-| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Phase 2A Branch Target Redesign + Dual Decoder (**active**) |
-| [experiments/configs/source_observation/phase2b/](../experiments/configs/source_observation/phase2b/) | Phase 2B Coupling Structure Priors |
-| [experiments/configs/source_observation/mechanism_c/](../experiments/configs/source_observation/mechanism_c/) | Mechanism C Causal Asymmetry |
+| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
+| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs (historical reference) |
+| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Phase 2A Dual Decoder + spatial source target configs (**active**) |
 
 ## 5. Quantizer Summary
 
@@ -369,12 +366,10 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Phase | Name | Status | Key Deliverable |
 |-------|------|--------|-----------------|
 | Phase 1 | Structural Migration | ✅ Complete | Source/Observation tokenizer, shared/private removed |
-| Phase 2 | HRF Source Target | ✅ Implemented | Double-gamma HRF kernel; Gate 2-4 fail, needs Phase 2A |
+| Phase 2 | HRF Source Target | ✅ Complete | Double-gamma HRF kernel; Gate 2-4 fail, needed Phase 2A redesign |
 | Phase 2A | Branch Target Redesign + Dual Decoder | ✅ Complete | Dual decoder, unified source target, explicit observation target |
-| Phase 2B | Croce 2017 Physical Model Targets | 🔜 **Active** | Shared-state AR-smoothed neural driver, signed-RMS EEG target, HRF fNIRS target |
-| Phase 2B | Coupling Structure Priors | 📋 Planned | Concentration + Smoothness on coupling matrix |
-| Phase 2C | Cross-Modal Source + Coupling-Aware Q | 📋 Deferred | fNIRS→EEG predictor, coupling-guided quantization |
-| Mechanism C | Causal Asymmetry | 📋 Planned | Independent fwd/rev coupling parameterization |
+| Phase 2B | Croce 2017 Physical Model + Coupling Structure Priors | ✅ **Current** | Shared-state AR-smoothed neural driver, signed-RMS EEG target, HRF fNIRS target, lag focus + joint smoothness |
+| Mechanism C | Causal Asymmetry | ❌ Abandoned | See IMPLEMENTATION_PLAN.md §11 |
 
 ### Locked Phase1 Handoff
 

@@ -1,10 +1,8 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
-> Created: 2026-04-30 | Last revised: 2026-05-12
-> Status: Active development plan — Phase 1 complete, Gate1 stable, Phase 2A-spatial source-target implementation is the current blocker
-> Supersedes: [archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md) (archived as historical reference)
+> Created: 2026-04-30 | Last revised: 2026-05-14
+> Status: Active design document — Phase 2B (Croce 2017 Physical Model + Coupling Priors) implemented, architecture stabilized
 > Reference implementation: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
-> New design specification: Section 2.4 (Spatially-Informed HRF Convolution Model) — replaced global-mean power envelope with per-channel RMS + spatial adjacency
 
 ---
 
@@ -12,7 +10,7 @@
 
 ### 1.1 Problem statement
 
-当前 V6 mainline（codebook-focused factorized tokenizer）已经建立了健康的 shared/private factorization，并通过 lag-aware coupling 矩阵提供 EEG 与 fNIRS token 分布之间的条件概率。但 coupling 矩阵本身是**完全自由的参数化**——一个 `[n_lags, K, K]` 的 `nn.Parameter`，初始化为零，没有任何生理先验指导它应该呈现什么结构。
+当前 mainline（`SourceObservationLaBraMVQNSP`）已经建立了健康的 source/observation factorization，并通过 lag-aware coupling 矩阵提供 EEG 与 fNIRS token 分布之间的条件概率。但 coupling 矩阵本身是**完全自由的参数化**——一个 `[n_lags, K, K]` 的 `nn.Parameter`，初始化为零，没有任何生理先验指导它应该呈现什么结构。
 
 这导致了创新声明上的薄弱："通过离散化提供 EEG 与 fNIRS 生理模式之间的条件概率"本质上只是一个**被动观察**——我们发现了一个统计量，而不是我们设计了一个机制。在神经信号处理领域，仅仅提供"分析能力"不足以作为核心创新点。
 

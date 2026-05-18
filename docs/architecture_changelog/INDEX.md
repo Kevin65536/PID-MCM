@@ -21,13 +21,9 @@ gantt
     section Phase 2: Source Target
         HRF Convolution Target            :done, 2026-05-11, 2026-05-11
     section Phase 2A: Redesign
-        Branch Target + Dual Decoder     :active, 2026-05-11, 2026-05-18
-    section Phase 2B: Coupling Priors
-        Concentration + Smoothness       :      2026-05-18, 2026-05-25
-    section Phase 2C: Cross-Modal + CoupQ
-        fNIRS→EEG Predictor + CoupQ     :      2026-05-25, 2026-06-05
-    section Mechanism C
-        Causal Asymmetry                  :      2026-06-05, 2026-06-15
+        Branch Target + Dual Decoder      :done, 2026-05-11, 2026-05-12
+    section Phase 2B: Physical Model
+        Croce 2017 + Coupling Priors      :done, 2026-05-13, 2026-05-14
 ```
 
 ## Change Records
@@ -39,6 +35,7 @@ gantt
 | 3 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Baseline Lock and Archive](2026-05-11_phase1_gate1_baseline_lock.md) | `phase1 configs`, `ARCHITECTURE.md`, `EXPERIMENT_LOG.md`, `IMPLEMENTATION_PLAN.md` | Merged |
 | 4 | 2026-05-11 | Phase 2A | [Branch Target Redesign + Dual Decoder Architecture](2026-05-11_phase2a_branch_target_redesign_dual_decoder.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `IMPLEMENTATION_PLAN.md` | Merged |
 | 5 | 2026-05-13 | Phase 2B | [Croce 2017 Physical Model Targets](2026-05-13_phase2b_croce2017_physical_model_targets.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` | Merged |
+| 6 | 2026-05-14 | Phase 2B | Architecture Stabilization & Document Alignment | `IMPLEMENTATION_PLAN.md`, `ARCHITECTURE.md`, `README.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `SEMANTIC_TOKEN_SCORECARD.md`, `THEORY.md`, `EXPERIMENT_LOG.md`, `INDEX.md` | Merged |
 
 ## How to Add a New Entry
 
