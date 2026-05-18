@@ -41,3 +41,6 @@ __pycache__
 
 # reference paper
 /docs/paper_pdf
+
+# physical model validation
+/croce_validation
