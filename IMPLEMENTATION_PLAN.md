@@ -109,6 +109,7 @@
 | 活跃机制设计 | `docs/PHYSIOLOGICAL_COUPLING_PLAN.md` | 生理耦合约束的动机、公式、实验设计 |
 | 活跃理论背景 | `docs/THEORY.md` | 总体理论框架与长期背景 |
 | 活跃评价标准 | `docs/SEMANTIC_TOKEN_SCORECARD.md` | 4-gate 评价框架（Health / Semantics / Structure / Utility） |
+| 物理模型真实数据验证 | `docs/CROCE2017_REAL_DATA_VALIDATION_PLAN.md` | Croce 2017 物理模型在 EEG+NIRS Single-Trial 上的前向近似、逆问题稳定性与 go/no-go 决策框架 |
 | 活跃实验记录 | `docs/EXPERIMENT_LOG.md` | 项目级实验结论 |
 | 活跃架构文档 | `docs/ARCHITECTURE.md` | 当前架构的 Mermaid 图、组件目录、数据流（始终反映主线最新状态） |
 | 架构修改日志 | `docs/architecture_changelog/INDEX.md` | 每次架构变更的独立记录（含 before/after 图、组件变更表、设计决策） |

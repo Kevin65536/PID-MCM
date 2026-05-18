@@ -391,6 +391,7 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Document | Role |
 |----------|------|
 | [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) | Implementation order, file migration scope, validation gates |
+| [CROCE2017_REAL_DATA_VALIDATION_PLAN.md](CROCE2017_REAL_DATA_VALIDATION_PLAN.md) | Real-data validation plan for Croce-style forward approximations, inverse stability, and tokenizer integration |
 | [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
 | [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |

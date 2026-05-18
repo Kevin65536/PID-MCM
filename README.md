@@ -46,6 +46,11 @@ docs/
   SEMANTIC_TOKEN_SCORECARD.md     # 4-Gate evaluation framework
   EXPERIMENT_LOG.md   # Formal experiment conclusions
   THEORY.md           # Theoretical background
+
+croce_validation/
+  README.md           # Independent workspace for Croce real-data validation on Single-Trial motor imagery
+  scripts/            # Standardized validation runners and utilities
+  results/            # Validation outputs, manifests, and figures
 ```
 
 ## Quick Start
