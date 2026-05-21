@@ -44,3 +44,7 @@ __pycache__
 
 # physical model validation
 /croce_validation
+
+# Claude Code — personal overrides and auto-generated cache 
+.claude
+CLAUDE.md
