@@ -1,5 +1,7 @@
 # Phase 2B: Croce et al. 2017 Physical Model Targets
 
+> Historical note (2026-05-22): this changelog records a candidate Croce proxy-target implementation. Shared-state AR smoothing, signed-RMS EEG targets, and HRF-rescaled fNIRS targets are historical approximations, not the current branch-target contract.
+
 **Date**: 2026-05-13
 **Status**: Active
 

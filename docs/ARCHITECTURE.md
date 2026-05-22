@@ -1,14 +1,38 @@
-# Current Architecture: Source/Observation Tokenizer (Dual Decoder + Croce 2017 Physical Model)
+# Current Architecture: Source/Observation Tokenizer
 
-> **Semantics version**: `s2_source_observation_v2_phase2b`
-> **Last updated**: 2026-05-14
-> **Current phase**: Phase 2B (Croce 2017 Physical Model + Coupling Structure Priors) — Architecture stabilized
+> **Semantics version**: `s2_source_observation_v3_branch_target_reset`
+> **Last updated**: 2026-05-22
+> **Current phase**: Source/observation architecture stabilized; branch-target physical model under revalidation
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
+> **Active note**: repository code still contains legacy proxy target implementations. They are candidate baselines only. They do **not** define the current branch-target contract.
+
 ---
 
-## 1. Component Architecture (Current — Phase 2B Stabilized)
+## 1. Architecture Contract
+
+当前主线只把下列语义当作 branch target 合同：
+
+1. source branch 监督对象是两个模态各自的**干净生理观测成分**，而不是单向 proxy 或只在 latent 空间自洽的隐藏变量；
+2. clean EEG 与 clean fNIRS 必须由同一个共享生理模型联合约束，二者地位对称；
+3. observation target 必须保持逐模态线性残差定义：
+
+   $$
+   y^{obs}_{EEG} = y^{raw}_{EEG} - y^{src}_{EEG}, \qquad
+   y^{obs}_{fNIRS} = y^{raw}_{fNIRS} - y^{src}_{fNIRS}
+   $$
+
+4. source branch 尽量承载真实生理活动，observation branch 尽量承载被试差异、导联接触、仪器噪声和其他观测污染。
+
+下列表述不再属于当前主线语义：
+
+1. 任何把单模态代理量直接当作 source 定义的做法；
+2. 任何把 clean EEG 与 clean fNIRS 置于不对等地位的做法；
+3. 任何单向构造另一模态 clean target 的做法；
+4. 任何只在 latent 中自洽、却不给出测量空间 clean source 的做法。
+
+## 2. Component Architecture
 
 ```mermaid
 graph TB
@@ -72,12 +96,12 @@ graph TB
         F_SUM["Σ source + observation<br/>= fnirs_full_recon"]
     end
 
-    subgraph Targets["Target Construction (Croce 2017 physical model)"]
-        SS["shared neural state<br/>AR-smoothed EEG power @ fNIRS rate"]
-        E_ST["EEG source target<br/>signed RMS carrier @ 200Hz"]
-        F_ST["fNIRS source target<br/>HRF(shared_state)"]
-        E_OT["EEG obs target<br/>= original - source_target"]
-        F_OT["fNIRS obs target<br/>= original - source_target"]
+    subgraph Targets["Branch Target Contract"]
+        LAT["shared physiological model<br/>jointly constrained by EEG + fNIRS"]
+        E_ST["EEG source target<br/>clean EEG component in measurement space"]
+        F_ST["fNIRS source target<br/>clean fNIRS component in measurement space"]
+        E_OT["EEG obs target<br/>raw EEG - clean EEG"]
+        F_OT["fNIRS obs target<br/>raw fNIRS - clean fNIRS"]
     end
 
     EEG --> E_PE --> E_ENC
@@ -105,10 +129,12 @@ graph TB
     F_SA & F_SPH --> F_SUM
     F_OA & F_OPH --> F_SUM
 
-    EEG --> E_ST
+    EEG --> LAT
+    FNIRS --> LAT
+    LAT --> E_ST
+    LAT --> F_ST
     EEG --> E_OT
     FNIRS --> F_OT
-    E_ST --> F_ST
 
     style Coupling fill:#e1f5fe
     style Quantizers fill:#fff3e0
@@ -119,9 +145,9 @@ graph TB
 ```
 
 
-**Key architectural change from Phase 1/2**: Single shared decoder per modality → dual independent decoders (source + observation). Full reconstruction = source_recon + observation_recon (additive in signal space).
+**Key architectural invariant**: source/observation 仍然是加法分解架构。唯一被重置的是“source target 究竟如何定义”。
 
-## 2. Data Flow (Forward Pass)
+## 3. Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -136,9 +162,10 @@ sequenceDiagram
     participant Target as Target Construction
     participant Loss as Loss Computation
 
-    EEG->>Target: compute source target (power envelope @ full res)
-    fNIRS->>Target: compute source target (HRF of power envelope)
-    Target->>Target: obs_target = original - source_target
+    EEG->>Target: provide raw EEG observation
+    fNIRS->>Target: provide raw fNIRS observation
+    Target->>Target: jointly infer clean EEG + clean fNIRS source targets
+    Target->>Target: obs_target = raw - source_target (per modality)
 
     EEG->>Enc: EEG encoder
     fNIRS->>Enc: fNIRS encoder
@@ -151,7 +178,7 @@ sequenceDiagram
     Quant->>DecS: source_q → source decoder → source_recon
     Quant->>DecO: obs_q → observation decoder → obs_recon
 
-    DecS->>Loss: source_target_loss (source_recon vs source_target)
+    DecS->>Loss: source_target_loss (source_recon vs clean source target)
     DecO->>Loss: observation_loss (obs_recon vs obs_target)
     DecS->>Loss: full_recon_loss ((source_recon + obs_recon) vs original)
     DecO->>Loss: (same, additive)
@@ -162,7 +189,7 @@ sequenceDiagram
     Loss->>Loss: total = rec + source_target + obs_target + vq + coupling + balance + ortho
 ```
 
-## 3. Loss Composition (Phase 2A Target)
+## 4. Loss Contract
 
 ```mermaid
 graph LR
@@ -177,8 +204,8 @@ graph LR
     REC --> E_REC[eeg_full: source + obs vs original]
     REC --> F_REC[fnirs_full: source + obs vs original]
 
-    ST --> ST_F[fnirs_source_target_loss<br/>source_recon vs HRF target]
-    ST --> ST_E[eeg_source_aux_loss<br/>source_recon vs power envelope]
+    ST --> ST_F[fnirs_source_target_loss<br/>source_recon vs clean fNIRS source]
+    ST --> ST_E[eeg_source_aux_loss<br/>source_recon vs clean EEG source]
 
     OT --> OT_F[fnirs_obs_loss<br/>obs_recon vs obs_target]
     OT --> OT_E[eeg_obs_loss<br/>obs_recon vs obs_target]
@@ -196,22 +223,24 @@ graph LR
     ORTHO --> O_F[orthogonality_loss<br/>fnirs_source ⊥ fnirs_obs]
 ```
 
-### Current Target Loss Weights (Phase 2B — Physical Model)
+### Current Loss Meaning
 
 | Loss Term | Weight | Purpose |
 |-----------|--------|---------|
 | `eeg_rec_loss` | 1.0 (amp 1.0 + time 0.9) | EEG full reconstruction via source + observation sum |
 | `fnirs_rec_loss` | 1.0 (amp 1.0 + time 1.0) | fNIRS full reconstruction via source + observation sum |
-| `source_target_loss` (fNIRS) | 0.3 | fNIRS source decoder → HRF(shared_state) via Croce model |
-| `eeg_source_aux_loss` | 0.3 (weight × aux_weight) | EEG source decoder → signed-RMS-carrier, temporally smoothed |
-| `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → original − HRF(shared_state) |
-| `observation_loss` (EEG) | 0.15 | EEG observation decoder → original − signed-RMS-carrier |
+| `source_target_loss` (fNIRS) | 0.3 | fNIRS source decoder → clean fNIRS component in measurement space |
+| `eeg_source_aux_loss` | 0.3 (weight × aux_weight) | EEG source decoder → clean EEG component in measurement space |
+| `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → raw fNIRS − clean fNIRS |
+| `observation_loss` (EEG) | 0.15 | EEG observation decoder → raw EEG − clean EEG |
 | `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers) |
 | `source_coupling_loss` | `coupling.weight` | `lag_focus_loss + 0.2 * joint_smoothness_loss` when coupling prior is enabled |
 | `lag_focus_loss` | internal 1.0 | Normalized entropy of the lag marginal $P(\tau \mid z_{eeg})$ |
 | `joint_smoothness_loss` | internal 0.2 | Neighbor JS divergence on $Q(\tau, z_{fnirs} \mid z_{eeg})$ |
 | `codebook_balance_loss` | 0.08 | Entropy-based dead-code prevention |
 | `orthogonality_loss` | 0.05 | Cosine similarity penalty: source ⊥ observation |
+
+当前活动文档只定义这些 loss 的**语义角色**。如果代码里某个 loss 仍通过 legacy proxy 路径来近似实现，应视为待替换的旧求解路径，而不是当前合同。
 
 ### Coupling Structure Monitoring
 
@@ -222,7 +251,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | `lag_focus_loss` | Delay preference concentration | Below the uniform baseline, but not collapsing to 0 | Near 1.0 → lag structure remains uninformative |
 | `joint_smoothness_loss` | EEG-neighbor consistency in joint delay-response space | Decreasing, then stable | Increasing while lag focus drops → over-constrained or noisy neighborhoods |
 
-## 4. Component Catalog
+## 5. Component Catalog
 
 ### Core Tokenizer
 
@@ -245,7 +274,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | File | Role |
 |------|------|
 | [src/data/channel_adjacency.py](../src/data/channel_adjacency.py) | 10-10 EEG neighbor table, fNIRS channel name parsing, `mnt.mat` 3D coordinate validation, spatial adjacency matrix construction, per-channel RMS envelope and spatially-weighted fNIRS neural driver |
-| [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py) | Sequential Monte Carlo filter for neurovascular state-space model (shared neural state + modality-specific forward models)
+| [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py) | Candidate physical-model inference utilities for joint EEG-fNIRS source estimation; current implementations include legacy Croce-style proxy paths under review |
 
 ### Analysis & Visualization
 
@@ -259,8 +288,8 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | Directory | Purpose |
 |-----------|---------|
 | [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
-| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Phase 2 HRF Source Target configs (historical reference) |
-| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Phase 2A Dual Decoder + spatial source target configs (**active**) |
+| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
+| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
 
 ## 5. Quantizer Summary
 
@@ -279,7 +308,7 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 
 **Forward pass** (for each lag):
 1. Align EEG and fNIRS source token distributions with lag offset
-2. Maintain `coupling_logits[lag]` as the lag-indexed EEG→fNIRS mapping scaffold
+2. Maintain `coupling_logits[lag]` as the lag-indexed source-state correspondence scaffold
 3. Current implementation does not optimize a direct KL-based EEG-fNIRS matching loss
 
 **Structural priors** (current active design):
@@ -293,61 +322,39 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
 
 **Current lags**: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]`
 
-## 7. Source Target Construction (Croce et al. 2017 Physical Model)
+## 7. Branch Target Contract
 
-### Design Motivation
+### Required Outputs
 
-Prior Phase 2A design used `EEG_power_envelope` (μV², non-negative) as the EEG
-source target. This broke the additive decomposition `original = source + observation`
-because power units differ from voltage, and the envelope's non-negativity forced
-the observation branch to carry the DC offset and zero-crossing structure.
+当前 branch target 只接受如下输出对：
 
-The revised design adopts Croce et al. 2017's joint EEG-fNIRS state-space model:
-a shared latent neural state `s(t)` drives both modalities — EEG observes it
-instantaneously, fNIRS observes it through hemodynamic convolution.
+$$
+(\hat y^{src}_{EEG}(t), \hat y^{src}_{fNIRS}(t))
+$$
 
-### Shared Neural State
+它们必须同时满足：
 
-```
-s_k = α · s_{k-1} + (1 − α) · x_k
+1. 由同一个共享生理模型联合约束；
+2. 分别位于 EEG 与 fNIRS 的测量空间；
+3. 保持与原始测量足够同步，使 observation target 可线性定义；
+4. 不把被试差异、接触问题和仪器噪声误写成 source semantics。
 
-where  x_k = channel-averaged EEG power, downsampled to fNIRS rate (10 Hz)
-       α   = shared_state_alpha (default 0.90)
-```
+### What Is No Longer Accepted As Mainline Semantics
 
-- α → 1.00: only sub-0.1 Hz hemodynamic fluctuations survive (SMC limit)
-- α ≈ 0.90: ~1 s half-life — alpha/beta-band power envelope preserved
-- α → 0.00: raw EEG power, no smoothing
+以下内容可以作为候选 baseline 保留在代码中，但不再被活动文档当作 branch target 定义：
 
-### fNIRS Source Target (Croce forward model)
+1. 任何单模态幅值代理直接充当 clean EEG source；
+2. 任何单向构造直接充当 clean fNIRS source；
+3. 用目标模态自身统计量“制造” clean source；
+4. 只凭 coupling 可预测性来替代 clean target 的显式构造。
 
-```
-s(t) [B,1,100] → HRF convolution (learnable double-gamma) → rescale → [B,36,100]
-```
-The HRF convolution absorbs the 4–6 s neurovascular delay. The output is
-time-synchronous with the original fNIRS (zero-phase alignment).
+### Candidate Physical Models
 
-### EEG Source Target (Croce forward model)
+当前允许进入主线评审的物理模型家族包括：
 
-Mode: `signed_rms_carrier` (default in Phase 2B)
-
-```
-EEG [B,30,2000] → per-channel RMS envelope (Hann-smoothed, μV units)
-                → temporal smoothing with shared α
-                → multiply by sign(smoothed voltage waveform)
-                → signed, μV units, same physical meaning as raw EEG
-```
-
-Key properties:
-- Same physical units as EEG (μV, signed)
-- Additive decomposition `original = source + observation` is physically meaningful
-- Temporal smoothing via shared α removes fast noise while preserving task dynamics
-
-### Observation Target
-
-```
-obs_target = original - source_target  (computed independently per modality)
-```
+1. **Croce-style joint state-space model**：但必须升级为真正的 joint inference，并输出对称的 clean EEG / clean fNIRS 成分；
+2. **Nuisance-augmented local state-space model**：在共享生理状态之外显式建模 contact / device / subject drift；
+3. **Simpler dynamic-factor baseline**：如果它能更稳定地满足 clean-source + linear-residual 合同，也允许作为 branch-target baseline。
 
 ## 8. Decoder Modes
 
@@ -366,9 +373,10 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Phase | Name | Status | Key Deliverable |
 |-------|------|--------|-----------------|
 | Phase 1 | Structural Migration | ✅ Complete | Source/Observation tokenizer, shared/private removed |
-| Phase 2 | HRF Source Target | ✅ Complete | Double-gamma HRF kernel; Gate 2-4 fail, needed Phase 2A redesign |
-| Phase 2A | Branch Target Redesign + Dual Decoder | ✅ Complete | Dual decoder, unified source target, explicit observation target |
-| Phase 2B | Croce 2017 Physical Model + Coupling Structure Priors | ✅ **Current** | Shared-state AR-smoothed neural driver, signed-RMS EEG target, HRF fNIRS target, lag focus + joint smoothness |
+| Phase 2 | Historical Proxy-Target Stages | ⚠️ Historical | Legacy proxy-target experiments, retained only for comparison |
+| Phase 2A | Decoder Structure Redesign | ✅ Complete | Dual decoder, explicit observation target, additive reconstruction |
+| Phase 2B | Croce Candidate Model Audit | ⚠️ Historical Candidate | Joint state-space tooling and proxy-target baselines introduced |
+| Current | Branch-Target Revalidation | ✅ **Active** | Select or refine a physical model that outputs symmetric clean EEG/fNIRS source targets with linear observation residuals |
 | Mechanism C | Causal Asymmetry | ❌ Abandoned | See IMPLEMENTATION_PLAN.md §11 |
 
 ### Locked Phase1 Handoff

@@ -43,7 +43,9 @@ __pycache__
 /docs/paper_pdf
 
 # physical model validation
-/croce_validation
+/croce_validation/cache/
+/croce_validation/results/*
+!/croce_validation/results/README.md
 
 # Claude Code — personal overrides and auto-generated cache 
 .claude
