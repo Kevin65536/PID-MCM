@@ -36,6 +36,12 @@ except Exception:  # pragma: no cover - optional dependency at runtime
     torch = None
 
 try:
+    from threadpoolctl import threadpool_info, threadpool_limits
+except Exception:  # pragma: no cover - optional dependency at runtime
+    threadpool_info = None
+    threadpool_limits = None
+
+try:
     import numba as nb
 except Exception:  # pragma: no cover - optional dependency at runtime
     nb = None
@@ -47,6 +53,8 @@ AUDIT_SCRIPT = PROJECT_ROOT / 'croce_validation' / 'scripts' / 'run_local_neighb
 AUDIT_MODULE_NAME = 'croce_solver_audit_benchmark_target'
 
 _PARALLEL_CONTEXT: Dict[str, Any] = {}
+_WORKER_DIAGNOSTICS: Dict[str, Any] = {}
+_THREADPOOL_LIMITER: Any = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,6 +85,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--time-shift-null-s', type=float, default=8.0)
 
     parser.add_argument('--parallel-workers', type=int, default=3)
+    parser.add_argument('--parallel-worker-threads', type=int, default=2)
+    parser.add_argument('--parallel-torch-interop-threads', type=int, default=1)
+    parser.add_argument('--parallel-start-method', choices=('fork', 'spawn', 'forkserver'), default='fork')
     parser.add_argument('--kernel-seed', type=int, default=20260527)
     parser.add_argument('--kernel-eeg-steps', type=int, default=0, help='0 means use the whole segment')
     parser.add_argument('--torch-device', choices=('auto', 'cpu', 'cuda'), default='auto')
@@ -119,6 +130,62 @@ def parse_versions() -> Dict[str, str]:
     if nb is not None:
         versions['numba'] = getattr(nb, '__version__', 'unknown')
     return versions
+
+
+def _set_worker_thread_env(worker_threads: int) -> None:
+    thread_text = str(int(max(worker_threads, 1)))
+    for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        os.environ[key] = thread_text
+
+
+def _max_blas_threads() -> Optional[int]:
+    if threadpool_info is None:
+        return None
+    info = threadpool_info()
+    if not info:
+        return None
+    return int(max(int(item.get('num_threads', 0)) for item in info))
+
+
+def _current_worker_diagnostics() -> Dict[str, Any]:
+    diagnostics: Dict[str, Any] = {
+        'pid': int(os.getpid()),
+        'omp_num_threads_env': os.environ.get('OMP_NUM_THREADS'),
+        'mkl_num_threads_env': os.environ.get('MKL_NUM_THREADS'),
+        'openblas_num_threads_env': os.environ.get('OPENBLAS_NUM_THREADS'),
+        'numexpr_num_threads_env': os.environ.get('NUMEXPR_NUM_THREADS'),
+        'blas_num_threads': _max_blas_threads(),
+    }
+    if torch is not None:
+        diagnostics.update(
+            {
+                'torch_num_threads': int(torch.get_num_threads()),
+                'torch_num_interop_threads': int(torch.get_num_interop_threads()),
+            }
+        )
+    return diagnostics
+
+
+def _parallel_pool_initializer(worker_threads: int, torch_interop_threads: int) -> None:
+    global _WORKER_DIAGNOSTICS, _THREADPOOL_LIMITER
+
+    worker_threads = int(max(worker_threads, 1))
+    torch_interop_threads = int(max(torch_interop_threads, 1))
+    _set_worker_thread_env(worker_threads)
+
+    if threadpool_limits is not None:
+        _THREADPOOL_LIMITER = threadpool_limits(limits=worker_threads)
+
+    if torch is not None:
+        torch.set_num_threads(worker_threads)
+        try:
+            torch.set_num_interop_threads(torch_interop_threads)
+        except RuntimeError:
+            # Inter-op threads can only be configured before torch parallel work starts.
+            # In fork mode this may already be fixed by inherited parent state.
+            pass
+
+    _WORKER_DIAGNOSTICS = _current_worker_diagnostics()
 
 
 def select_torch_device(requested: str) -> Optional[str]:
@@ -423,15 +490,30 @@ def _parallel_worker(task: Tuple[str, int]) -> Dict[str, float]:
     else:
         raise ValueError(f'Unsupported task {task_name!r}')
     result = audit.run_particle_filter(bundle, filter_config, params, seed=seed)
+    worker_diagnostics = _WORKER_DIAGNOSTICS or _current_worker_diagnostics()
     return {
         'task': task_name,
         'seed': float(seed),
         'log_likelihood': float(result['log_likelihood']),
         'ess_mean': float(np.mean(result['ess_trace'])),
+        'worker_pid': int(worker_diagnostics['pid']),
+        'worker_blas_threads': worker_diagnostics.get('blas_num_threads'),
+        'worker_torch_threads': worker_diagnostics.get('torch_num_threads'),
+        'worker_torch_interop_threads': worker_diagnostics.get('torch_num_interop_threads'),
     }
 
 
-def benchmark_exact_parallelization(audit: Any, bundle: Any, null_bundle: Any, filter_config: Any, params: Any, workers: int) -> Dict[str, Any]:
+def benchmark_exact_parallelization(
+    audit: Any,
+    bundle: Any,
+    null_bundle: Any,
+    filter_config: Any,
+    params: Any,
+    workers: int,
+    worker_threads: int,
+    torch_interop_threads: int,
+    start_method: str,
+) -> Dict[str, Any]:
     tasks: List[Tuple[str, int]] = [('baseline', int(seed)) for seed in filter_config.seed_list]
     tasks.append(('time_shift_null', int(filter_config.seed_list[0])))
 
@@ -450,10 +532,15 @@ def benchmark_exact_parallelization(audit: Any, bundle: Any, null_bundle: Any, f
 
     parallel_results = sequential_results
     parallel_wall_s = sequential_wall_s
+    effective_workers = int(min(max(workers, 1), len(tasks)))
     if len(tasks) > 1 and workers > 1:
-        ctx = mp.get_context('fork')
+        ctx = mp.get_context(str(start_method))
         parallel_start = time.perf_counter()
-        with ctx.Pool(processes=min(workers, len(tasks))) as pool:
+        with ctx.Pool(
+            processes=effective_workers,
+            initializer=_parallel_pool_initializer,
+            initargs=(int(worker_threads), int(torch_interop_threads)),
+        ) as pool:
             parallel_results = pool.map(_parallel_worker, tasks)
         parallel_wall_s = time.perf_counter() - parallel_start
 
@@ -463,13 +550,25 @@ def benchmark_exact_parallelization(audit: Any, bundle: Any, null_bundle: Any, f
         abs(sequential_keyed[key]['log_likelihood'] - parallel_keyed[key]['log_likelihood'])
         for key in sequential_keyed
     )
+    worker_pids = sorted({int(item['worker_pid']) for item in parallel_results})
+    worker_blas_threads = sorted({int(item['worker_blas_threads']) for item in parallel_results if item.get('worker_blas_threads') is not None})
+    worker_torch_threads = sorted({int(item['worker_torch_threads']) for item in parallel_results if item.get('worker_torch_threads') is not None})
+    worker_torch_interop_threads = sorted({int(item['worker_torch_interop_threads']) for item in parallel_results if item.get('worker_torch_interop_threads') is not None})
     return {
         'task_count': len(tasks),
-        'workers': int(min(workers, len(tasks))),
+        'requested_workers': int(max(workers, 1)),
+        'workers': effective_workers,
+        'worker_threads': int(max(worker_threads, 1)),
+        'torch_interop_threads': int(max(torch_interop_threads, 1)),
+        'start_method': str(start_method),
         'sequential_wall_s': float(sequential_wall_s),
         'parallel_wall_s': float(parallel_wall_s),
         'speedup': float(sequential_wall_s / max(parallel_wall_s, 1e-12)),
         'max_log_likelihood_delta': float(max_log_like_delta),
+        'parallel_worker_pids': worker_pids,
+        'parallel_worker_blas_threads': worker_blas_threads,
+        'parallel_worker_torch_threads': worker_torch_threads,
+        'parallel_worker_torch_interop_threads': worker_torch_interop_threads,
         'sequential_results': sequential_results,
         'parallel_results': parallel_results,
     }
@@ -552,6 +651,14 @@ def build_summary_text(args: argparse.Namespace, bundle: Any, filter_config: Any
         f'- Parallel wall time: {parallel_results["parallel_wall_s"]:.4f} s',
         f'- Speedup: {parallel_results["speedup"]:.4f}x',
         f'- Task count: {parallel_results["task_count"]}',
+        f'- Requested / effective workers: {parallel_results["requested_workers"]} / {parallel_results["workers"]}',
+        f'- Worker thread cap (BLAS / Torch): {parallel_results["worker_threads"]}',
+        f'- Torch inter-op threads: {parallel_results["torch_interop_threads"]}',
+        f'- Multiprocessing start method: {parallel_results["start_method"]}',
+        f'- Worker BLAS thread observations: {parallel_results["parallel_worker_blas_threads"] or ["unavailable"]}',
+        f'- Worker Torch thread observations: {parallel_results["parallel_worker_torch_threads"] or ["unavailable"]}',
+        f'- Worker Torch inter-op observations: {parallel_results["parallel_worker_torch_interop_threads"] or ["unavailable"]}',
+        f'- Worker PIDs observed: {parallel_results["parallel_worker_pids"]}',
         f'- Max log-likelihood delta between sequential and parallel: {parallel_results["max_log_likelihood_delta"]:.8f}',
         '',
         '## Kernel Candidates',
@@ -591,6 +698,9 @@ def main() -> None:
         filter_config,
         params,
         workers=int(args.parallel_workers),
+        worker_threads=int(args.parallel_worker_threads),
+        torch_interop_threads=int(args.parallel_torch_interop_threads),
+        start_method=str(args.parallel_start_method),
     )
     kernel_results = benchmark_kernel_candidates(audit, filter_config, params, fixture, torch_device)
 
@@ -623,6 +733,10 @@ def main() -> None:
             'versions': versions,
             'torch_device': torch_device,
             'cpu_count': os.cpu_count(),
+            'parallel_workers': int(args.parallel_workers),
+            'parallel_worker_threads': int(args.parallel_worker_threads),
+            'parallel_torch_interop_threads': int(args.parallel_torch_interop_threads),
+            'parallel_start_method': str(args.parallel_start_method),
         },
     }
     results = {

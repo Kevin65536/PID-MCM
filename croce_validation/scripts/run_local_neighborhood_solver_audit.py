@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -215,6 +216,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--eeg-unit', default='uV', help='Raw EEG unit label written to the manifest')
     parser.add_argument('--fnirs-primary-unit', default='a.u.', help='Raw unit label for the first fNIRS observation family')
     parser.add_argument('--fnirs-secondary-unit', default='a.u.', help='Raw unit label for the second fNIRS observation family')
+    parser.add_argument('--torch-threads', type=int, default=2,
+                        help='Number of threads for torch intra-op parallelism. '
+                             'Set to 1-2 for small matrices (6x6) to avoid oversubscription '
+                             'when using multiprocessing. The old default of 52 threads causes '
+                             'severe slowdown (30x+) with fork-based parallel workers.')
     return parser.parse_args()
 
 
@@ -2003,8 +2009,27 @@ def write_summary(
     path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
+def configure_torch_threads(n_threads: int) -> None:
+    """Set torch/OpenMP thread counts to avoid oversubscription with fork workers.
+
+    Must be called before any torch parallel operation. With fork-based
+    multiprocessing, child processes inherit these settings.
+    """
+    os.environ["OMP_NUM_THREADS"] = str(n_threads)
+    os.environ["MKL_NUM_THREADS"] = str(n_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(n_threads)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(n_threads)
+    if torch is not None:
+        torch.set_num_threads(n_threads)
+        try:
+            torch.set_num_interop_threads(n_threads)
+        except RuntimeError:
+            pass
+
+
 def main() -> None:
     args = parse_args()
+    configure_torch_threads(int(args.torch_threads))
     spatial_config = SpatialConfig(
         eeg_neighbors=int(args.eeg_neighbors),
         fnirs_neighbors=int(args.fnirs_neighbors),
