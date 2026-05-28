@@ -46,7 +46,12 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 import numpy as np
 from scipy.linalg import expm
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, sosfiltfilt, welch
+
+try:
+    import torch
+except ImportError:  # pragma: no cover - keep a safe fallback for environments without torch.
+    torch = None
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -72,7 +77,6 @@ class ModelParams:
     tau0: float = 2.0
     alpha: float = 0.32
     e0: float = 0.34
-    lambda_r: float = 0.10
 
 
 @dataclass(frozen=True)
@@ -94,9 +98,13 @@ class FilterConfig:
     resample_fraction: float
     prior_std: np.ndarray
     state_noise_std: np.ndarray
+    sigma_prop: float
+    sigma_nirs: float
     seed_list: Tuple[int, ...]
     time_shift_null_s: float
     run_spatial_null: bool
+    solver_backend: str = 'torch_exact'
+    torch_device: str = 'cpu'
 
 
 @dataclass(frozen=True)
@@ -104,9 +112,13 @@ class ObservationBundle:
     mode: str
     pair_mode: str
     time_s: np.ndarray
+    eeg_time_s: np.ndarray
     eeg_obs: np.ndarray
     fnirs_primary_obs: np.ndarray
     fnirs_secondary_obs: np.ndarray
+    eeg_fs_hz: float
+    fnirs_fs_hz: float
+    eeg_substeps_per_fnirs: int
     eeg_positions_mm: np.ndarray
     fnirs_positions_mm: np.ndarray
     anchor_position_mm: np.ndarray
@@ -115,6 +127,7 @@ class ObservationBundle:
     lead_field: np.ndarray
     jac_primary: np.ndarray
     jac_secondary: np.ndarray
+    r_eeg_projection: np.ndarray
     normalization: Mapping[str, Any]
     units: Mapping[str, str]
     pair_labels: Tuple[str, str]
@@ -126,6 +139,7 @@ class ObservationBundle:
     fnirs_secondary_channel_names: Tuple[str, ...] = ()
     metadata: Optional[Mapping[str, Any]] = None
     true_states: Optional[np.ndarray] = None
+    true_r_eeg: Optional[np.ndarray] = None
     true_lead_field: Optional[np.ndarray] = None
     true_jac_primary: Optional[np.ndarray] = None
     true_jac_secondary: Optional[np.ndarray] = None
@@ -148,8 +162,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--use-artifact-eeg', action='store_true', help='Prefer the EEG recordings stored under the ocular-artifact folder in dataset mode')
 
     parser.add_argument('--duration-s', type=float, default=60.0, help='Synthetic duration in seconds')
-    parser.add_argument('--observation-fs', type=float, default=10.0, help='Synthetic observation sampling rate in Hz')
-    parser.add_argument('--integration-dt', type=float, default=0.05, help='Transition integration step in seconds')
+    parser.add_argument('--observation-fs', type=float, default=10.0, help='Synthetic fNIRS sampling rate in Hz')
+    parser.add_argument('--eeg-fs', type=float, default=200.0, help='Synthetic EEG sampling rate in Hz')
+    parser.add_argument('--integration-dt', type=float, default=0.005, help='Transition integration step in seconds')
     parser.add_argument('--snr-db', type=float, default=0.0, help='Synthetic SNR in dB')
     parser.add_argument('--synthetic-eeg-channels', type=int, default=12, help='Synthetic local EEG channel count')
     parser.add_argument('--synthetic-fnirs-channels', type=int, default=8, help='Synthetic local fNIRS channel count per observation family')
@@ -171,13 +186,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--resample-fraction', type=float, default=0.5, help='Resample when ESS < fraction * N')
     parser.add_argument(
         '--prior-std',
-        default='0.05,0.05,0.05,0.05,0.05',
+        default='0.05,0.05,0.05,0.05,0.0',
         help='Comma-separated prior std for s,delta_f,delta_hbo,delta_hb,r',
     )
     parser.add_argument(
         '--state-noise-std',
-        default='0.02,0.015,0.015,0.015,0.03',
+        default='0.02,0.015,0.015,0.015,0.0',
         help='Comma-separated transition-noise std for s,delta_f,delta_hbo,delta_hb,r',
+    )
+    parser.add_argument('--sigma-prop', type=float, default=0.35, help='Proposal std for r(t) around EEG pseudoinverse projection')
+    parser.add_argument('--sigma-nirs', type=float, default=1.0, help='fNIRS likelihood noise scale in observation units')
+    parser.add_argument(
+        '--solver-backend',
+        choices=('auto', 'python_exact', 'torch_exact'),
+        default='torch_exact',
+        help='Particle-filter backend. Default uses the optimized exact torch implementation.',
+    )
+    parser.add_argument(
+        '--torch-device',
+        choices=('cpu', 'cuda', 'auto'),
+        default='cpu',
+        help='Torch device used by the optimized backend. Current benchmark summaries favor cpu in this workspace.',
     )
     parser.add_argument('--seed-list', default='11,23,37,47,59', help='Comma-separated random seeds for reproducibility audit')
     parser.add_argument('--time-shift-null-s', type=float, default=8.0, help='Shift used for the timing null in seconds')
@@ -241,7 +270,7 @@ def state_drift(x: np.ndarray, params: ModelParams) -> np.ndarray:
     d_delta_f = float(s)
     d_delta_hbo = (f - np.power(hbo, 1.0 / alpha)) / float(params.tau0)
     d_delta_hb = (f * extraction - hb * np.power(hbo, (1.0 / alpha) - 1.0)) / float(params.tau0)
-    dr = -float(params.lambda_r) * float(r)
+    dr = 0.0
     return np.asarray([ds, d_delta_f, d_delta_hbo, d_delta_hb, dr], dtype=np.float64)
 
 
@@ -270,7 +299,6 @@ def state_jacobian(x: np.ndarray, params: ModelParams) -> np.ndarray:
     jac[3, 1] = d_flow_extraction_df / tau0
     jac[3, 2] = -hb * ((1.0 / alpha) - 1.0) * np.power(hbo, (1.0 / alpha) - 2.0) / tau0
     jac[3, 3] = -np.power(hbo, (1.0 / alpha) - 1.0) / tau0
-    jac[4, 4] = -float(params.lambda_r)
     return jac
 
 
@@ -334,6 +362,77 @@ def lowpass_signal(signal: np.ndarray, fs_hz: float, cutoff_hz: float) -> np.nda
     cutoff_hz = min(max(cutoff_hz, 1e-4), max_cutoff)
     sos = butter(4, cutoff_hz / (0.5 * fs_hz), btype='lowpass', output='sos')
     return sosfiltfilt(sos, signal, axis=0)
+
+
+def bandpass_signal(signal: np.ndarray, fs_hz: float, low_hz: float, high_hz: float) -> np.ndarray:
+    signal = np.asarray(signal, dtype=np.float64)
+    if signal.shape[0] < 16:
+        return signal.copy()
+    nyquist = 0.5 * fs_hz
+    low_hz = max(float(low_hz), 1e-4)
+    high_hz = min(float(high_hz), 0.99 * nyquist)
+    if low_hz >= high_hz:
+        return signal.copy()
+    sos = butter(4, [low_hz / nyquist, high_hz / nyquist], btype='bandpass', output='sos')
+    return sosfiltfilt(sos, signal, axis=0)
+
+
+def project_scalar_source(observations: np.ndarray, lead_field: np.ndarray) -> np.ndarray:
+    observations = np.asarray(observations, dtype=np.float64)
+    lead = np.asarray(lead_field, dtype=np.float64).ravel()
+    denominator = float(np.dot(lead, lead))
+    if denominator < 1e-12:
+        return np.zeros(observations.shape[0], dtype=np.float64)
+    return observations @ lead / denominator
+
+
+def block_average_signal(signal: np.ndarray, block_size: int, *, block_count: Optional[int] = None) -> np.ndarray:
+    values = np.asarray(signal, dtype=np.float64)
+    if block_size <= 1:
+        if block_count is None:
+            return values.copy()
+        return values[:block_count].copy()
+    if block_count is None:
+        block_count = values.shape[0] // block_size
+    usable = max(int(block_count), 0) * int(block_size)
+    trimmed = values[:usable]
+    if trimmed.size == 0:
+        return np.zeros(0, dtype=np.float64)
+    if values.ndim == 1:
+        return trimmed.reshape(block_count, block_size).mean(axis=1)
+    return trimmed.reshape(block_count, block_size, values.shape[1]).mean(axis=1)
+
+
+def relative_l2_difference(a: np.ndarray, b: np.ndarray) -> float:
+    a = np.asarray(a, dtype=np.float64).ravel()
+    b = np.asarray(b, dtype=np.float64).ravel()
+    denominator = float(np.linalg.norm(b))
+    if denominator < 1e-12:
+        return 0.0
+    return float(np.linalg.norm(a - b) / denominator)
+
+
+def spectral_band_power(signal: np.ndarray, fs_hz: float, low_hz: float, high_hz: float) -> float:
+    values = np.asarray(signal, dtype=np.float64).ravel()
+    if values.size < 8 or float(np.std(values)) < 1e-8:
+        return 0.0
+    nperseg = min(256, values.size)
+    freqs, power = welch(values, fs=fs_hz, nperseg=nperseg, scaling='density')
+    band_mask = (freqs >= low_hz) & (freqs < high_hz)
+    if not np.any(band_mask):
+        return 0.0
+    if int(np.count_nonzero(band_mask)) == 1:
+        return float(power[band_mask][0])
+    return float(np.trapezoid(power[band_mask], freqs[band_mask]))
+
+
+def compute_power_spectrum(signal: np.ndarray, fs_hz: float) -> Tuple[np.ndarray, np.ndarray]:
+    values = np.asarray(signal, dtype=np.float64).ravel()
+    if values.size < 8 or float(np.std(values)) < 1e-8:
+        return np.zeros(0, dtype=np.float64), np.zeros(0, dtype=np.float64)
+    nperseg = min(256, values.size)
+    freqs, power = welch(values, fs=fs_hz, nperseg=nperseg, scaling='density')
+    return np.asarray(freqs, dtype=np.float64), np.asarray(power, dtype=np.float64)
 
 
 def downsample_signed_channels(channels: np.ndarray, source_fs_hz: float, target_fs_hz: float) -> np.ndarray:
@@ -523,6 +622,17 @@ def systematic_resample(weights: np.ndarray, rng: np.random.Generator) -> np.nda
     return indices
 
 
+def torch_systematic_resample(weights: Any, rng: np.random.Generator) -> Any:
+    if torch is None:
+        raise RuntimeError('PyTorch systematic resampling requires torch to be available')
+
+    n = int(weights.shape[0])
+    positions = (torch.arange(n, device=weights.device, dtype=weights.dtype) + float(rng.random())) / float(n)
+    cumulative = torch.cumsum(weights, dim=0)
+    cumulative[-1] = 1.0
+    return torch.searchsorted(cumulative, positions, right=False)
+
+
 def predict_observations(
     particles: np.ndarray,
     lead_field: np.ndarray,
@@ -535,12 +645,102 @@ def predict_observations(
         pred_primary = particles[:, 2:3] * jac_primary.reshape(1, -1)
         pred_secondary = particles[:, 3:4] * jac_secondary.reshape(1, -1)
     else:
-        pred_primary = (0.35 * particles[:, 2:3] + 1.00 * particles[:, 3:4]) * jac_primary.reshape(1, -1)
-        pred_secondary = (1.00 * particles[:, 2:3] + 0.25 * particles[:, 3:4]) * jac_secondary.reshape(1, -1)
+        pred_primary = (1.00 * particles[:, 2:3] + 0.25 * particles[:, 3:4]) * jac_primary.reshape(1, -1)
+        pred_secondary = (0.35 * particles[:, 2:3] + 1.00 * particles[:, 3:4]) * jac_secondary.reshape(1, -1)
     return pred_eeg, pred_primary, pred_secondary
 
 
-def run_particle_filter(
+def select_torch_device(requested: str) -> Optional[str]:
+    if torch is None:
+        return None
+    if requested == 'cpu':
+        return 'cpu'
+    if requested == 'cuda':
+        if not torch.cuda.is_available():
+            raise RuntimeError('CUDA was requested but torch.cuda.is_available() is false')
+        return 'cuda'
+    return 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+def torch_safe_extraction_fraction(flow: torch.Tensor, e0: float) -> torch.Tensor:
+    base = torch.tensor(1.0 - e0, dtype=flow.dtype, device=flow.device)
+    return 1.0 - torch.pow(base, 1.0 / torch.clamp(flow, min=1e-4))
+
+
+def torch_local_linearized_step_batch(particles: torch.Tensor, dt: float, params: ModelParams) -> torch.Tensor:
+    s = particles[:, 0]
+    delta_f = particles[:, 1]
+    delta_hbo = particles[:, 2]
+    delta_hb = particles[:, 3]
+    r = particles[:, 4]
+
+    f = torch.clamp(1.0 + delta_f, min=1e-4)
+    hbo = torch.clamp(1.0 + delta_hbo, min=1e-4)
+    hb = torch.clamp(1.0 + delta_hb, min=1e-4)
+
+    alpha = float(params.alpha)
+    tau0 = float(params.tau0)
+    e0 = float(params.e0)
+    epsilon = float(params.epsilon)
+    kas = float(params.kas)
+    kaf = float(params.kaf)
+
+    extraction = torch_safe_extraction_fraction(f, e0) / max(e0, 1e-8)
+    drift = torch.stack(
+        [
+            epsilon * r - kas * s - kaf * (f - 1.0),
+            s,
+            (f - torch.pow(hbo, 1.0 / alpha)) / tau0,
+            (f * extraction - hb * torch.pow(hbo, (1.0 / alpha) - 1.0)) / tau0,
+            torch.zeros_like(r),
+        ],
+        dim=1,
+    )
+
+    one_minus_e0 = max(1.0 - e0, 1e-8)
+    power_term = torch.pow(torch.tensor(one_minus_e0, dtype=particles.dtype, device=particles.device), 1.0 / f)
+    d_extraction_df = power_term * np.log(one_minus_e0) / (f * f)
+    d_flow_extraction_df = (torch_safe_extraction_fraction(f, e0) + f * d_extraction_df) / max(e0, 1e-8)
+
+    count = particles.shape[0]
+    jac = torch.zeros((count, 5, 5), dtype=particles.dtype, device=particles.device)
+    jac[:, 0, 0] = -kas
+    jac[:, 0, 1] = -kaf
+    jac[:, 0, 4] = epsilon
+    jac[:, 1, 0] = 1.0
+    jac[:, 2, 1] = 1.0 / tau0
+    jac[:, 2, 2] = -(1.0 / alpha) * torch.pow(hbo, (1.0 / alpha) - 1.0) / tau0
+    jac[:, 3, 1] = d_flow_extraction_df / tau0
+    jac[:, 3, 2] = -hb * ((1.0 / alpha) - 1.0) * torch.pow(hbo, (1.0 / alpha) - 2.0) / tau0
+    jac[:, 3, 3] = -torch.pow(hbo, (1.0 / alpha) - 1.0) / tau0
+
+    augmented = torch.zeros((count, 6, 6), dtype=particles.dtype, device=particles.device)
+    augmented[:, :5, :5] = jac
+    augmented[:, :5, 5] = drift
+    delta = torch.linalg.matrix_exp(augmented * dt)[:, :5, 5]
+    next_state = particles + delta
+    next_state[:, 1:4] = torch.clamp(next_state[:, 1:4], min=-0.95)
+    return next_state
+
+
+def torch_predict_observations(
+    particles: torch.Tensor,
+    lead_field: torch.Tensor,
+    jac_primary: torch.Tensor,
+    jac_secondary: torch.Tensor,
+    pair_mode: str,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    pred_eeg = particles[:, 4:5] * lead_field.reshape(1, -1)
+    if pair_mode == 'chromophore':
+        pred_primary = particles[:, 2:3] * jac_primary.reshape(1, -1)
+        pred_secondary = particles[:, 3:4] * jac_secondary.reshape(1, -1)
+    else:
+        pred_primary = (1.00 * particles[:, 2:3] + 0.25 * particles[:, 3:4]) * jac_primary.reshape(1, -1)
+        pred_secondary = (0.35 * particles[:, 2:3] + 1.00 * particles[:, 3:4]) * jac_secondary.reshape(1, -1)
+    return pred_eeg, pred_primary, pred_secondary
+
+
+def run_particle_filter_python_exact(
     bundle: ObservationBundle,
     filter_config: FilterConfig,
     params: ModelParams,
@@ -548,7 +748,6 @@ def run_particle_filter(
 ) -> Dict[str, Any]:
     rng = np.random.default_rng(seed)
     num_particles = int(filter_config.num_particles)
-    obs_dt = 1.0 / float(filter_config.observation_fs_hz)
 
     particles = rng.normal(
         loc=np.zeros(5, dtype=np.float64).reshape(1, 5),
@@ -556,39 +755,46 @@ def run_particle_filter(
         size=(num_particles, 5),
     )
     particles[:, 1:4] = np.clip(particles[:, 1:4], -0.95, None)
+    particles[:, 4] = 0.0
     weights = np.full(num_particles, 1.0 / float(num_particles), dtype=np.float64)
 
-    estimates = np.zeros((bundle.time_s.shape[0], 5), dtype=np.float64)
-    state_std = np.zeros((bundle.time_s.shape[0], 5), dtype=np.float64)
-    ess_trace = np.zeros(bundle.time_s.shape[0], dtype=np.float64)
+    num_fnirs_steps = int(bundle.time_s.shape[0])
+    num_eeg_steps = int(bundle.eeg_time_s.shape[0])
+    if num_fnirs_steps * int(bundle.eeg_substeps_per_fnirs) != num_eeg_steps:
+        raise ValueError('EEG / fNIRS alignment mismatch: eeg_time_s must equal fnirs_time_s * eeg_substeps_per_fnirs')
+
+    estimates = np.zeros((num_fnirs_steps, 5), dtype=np.float64)
+    state_std = np.zeros((num_fnirs_steps, 5), dtype=np.float64)
+    ess_trace = np.zeros(num_fnirs_steps, dtype=np.float64)
+    r_estimates_eeg = np.zeros(num_eeg_steps, dtype=np.float64)
+    r_std_eeg = np.zeros(num_eeg_steps, dtype=np.float64)
     log_likelihood_total = 0.0
 
     integration_dt = float(filter_config.integration_dt_s)
-    stride = int(round(obs_dt / integration_dt)) if integration_dt > 0.0 else 1
-    use_stride = stride >= 1 and np.isclose(stride * integration_dt, obs_dt, atol=1e-9)
+    hemo_noise_std = np.asarray(filter_config.state_noise_std[:4], dtype=np.float64)
+    sigma_nirs_sq = max(float(filter_config.sigma_nirs), 1e-8) ** 2
 
-    for step in range(bundle.time_s.shape[0]):
-        if use_stride:
-            for _ in range(stride):
-                for idx in range(num_particles):
-                    particles[idx] = local_linearized_step(particles[idx], integration_dt, params)
-                particles += rng.normal(
-                    loc=0.0,
-                    scale=filter_config.state_noise_std.reshape(1, 5) * np.sqrt(integration_dt),
-                    size=particles.shape,
-                )
-                particles[:, 1:4] = np.clip(particles[:, 1:4], -0.95, None)
-        else:
+    for step in range(num_fnirs_steps):
+        eeg_start = step * int(bundle.eeg_substeps_per_fnirs)
+        eeg_stop = eeg_start + int(bundle.eeg_substeps_per_fnirs)
+
+        for eeg_idx in range(eeg_start, eeg_stop):
+            proposal_center = float(bundle.r_eeg_projection[eeg_idx])
+            particles[:, 4] = proposal_center + float(filter_config.sigma_prop) * rng.normal(size=num_particles)
             for idx in range(num_particles):
-                particles[idx] = local_linearized_step(particles[idx], obs_dt, params)
-            particles += rng.normal(
+                particles[idx] = local_linearized_step(particles[idx], integration_dt, params)
+            particles[:, 0:4] += rng.normal(
                 loc=0.0,
-                scale=filter_config.state_noise_std.reshape(1, 5) * np.sqrt(obs_dt),
-                size=particles.shape,
+                scale=hemo_noise_std.reshape(1, 4) * np.sqrt(integration_dt),
+                size=(num_particles, 4),
             )
             particles[:, 1:4] = np.clip(particles[:, 1:4], -0.95, None)
 
-        pred_eeg, pred_primary, pred_secondary = predict_observations(
+            r_estimates_eeg[eeg_idx] = float(np.sum(particles[:, 4] * weights))
+            centered_r = particles[:, 4] - r_estimates_eeg[eeg_idx]
+            r_std_eeg[eeg_idx] = float(np.sqrt(np.sum(np.square(centered_r) * weights)))
+
+        _, pred_primary, pred_secondary = predict_observations(
             particles,
             bundle.lead_field,
             bundle.jac_primary,
@@ -596,9 +802,8 @@ def run_particle_filter(
             bundle.pair_mode,
         )
         log_weights = np.log(np.clip(weights, 1e-300, None))
-        log_weights += -0.5 * np.sum(np.square(bundle.eeg_obs[step].reshape(1, -1) - pred_eeg), axis=1)
-        log_weights += -0.5 * np.sum(np.square(bundle.fnirs_primary_obs[step].reshape(1, -1) - pred_primary), axis=1)
-        log_weights += -0.5 * np.sum(np.square(bundle.fnirs_secondary_obs[step].reshape(1, -1) - pred_secondary), axis=1)
+        log_weights += -0.5 * np.sum(np.square(bundle.fnirs_primary_obs[step].reshape(1, -1) - pred_primary), axis=1) / sigma_nirs_sq
+        log_weights += -0.5 * np.sum(np.square(bundle.fnirs_secondary_obs[step].reshape(1, -1) - pred_secondary), axis=1) / sigma_nirs_sq
 
         max_log_weight = np.max(log_weights)
         stable = np.exp(log_weights - max_log_weight)
@@ -608,6 +813,8 @@ def run_particle_filter(
         estimates[step] = np.sum(particles * weights.reshape(-1, 1), axis=0)
         centered = particles - estimates[step].reshape(1, -1)
         state_std[step] = np.sqrt(np.sum(np.square(centered) * weights.reshape(-1, 1), axis=0))
+        r_estimates_eeg[eeg_stop - 1] = estimates[step, 4]
+        r_std_eeg[eeg_stop - 1] = state_std[step, 4]
         ess = 1.0 / np.sum(np.square(weights))
         ess_trace[step] = ess
         if ess < filter_config.resample_fraction * num_particles:
@@ -616,6 +823,19 @@ def run_particle_filter(
             weights.fill(1.0 / float(num_particles))
 
     pred_eeg, pred_primary, pred_secondary = predict_observations(
+        np.column_stack([
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            r_estimates_eeg,
+        ]),
+        bundle.lead_field,
+        bundle.jac_primary,
+        bundle.jac_secondary,
+        bundle.pair_mode,
+    )
+    _, pred_primary, pred_secondary = predict_observations(
         estimates,
         bundle.lead_field,
         bundle.jac_primary,
@@ -624,6 +844,7 @@ def run_particle_filter(
     )
     return {
         'seed': seed,
+        'solver_backend': 'python_exact',
         'state_estimates': estimates,
         'state_std': state_std,
         'ess_trace': ess_trace,
@@ -631,7 +852,173 @@ def run_particle_filter(
         'pred_eeg': pred_eeg,
         'pred_primary': pred_primary,
         'pred_secondary': pred_secondary,
+        'r_estimates_eeg': r_estimates_eeg,
+        'r_std_eeg': r_std_eeg,
     }
+
+
+def run_particle_filter_torch_exact(
+    bundle: ObservationBundle,
+    filter_config: FilterConfig,
+    params: ModelParams,
+    seed: int,
+    device: str,
+) -> Dict[str, Any]:
+    if torch is None:
+        raise RuntimeError('PyTorch backend was requested but torch is not available')
+
+    rng = np.random.default_rng(seed)
+    num_particles = int(filter_config.num_particles)
+    particles_np = rng.normal(
+        loc=np.zeros(5, dtype=np.float64).reshape(1, 5),
+        scale=np.asarray(filter_config.prior_std, dtype=np.float64).reshape(1, 5),
+        size=(num_particles, 5),
+    )
+    particles_np[:, 1:4] = np.clip(particles_np[:, 1:4], -0.95, None)
+    particles_np[:, 4] = 0.0
+
+    particles = torch.from_numpy(particles_np).to(device=device, dtype=torch.float64)
+    weights = torch.full((num_particles,), 1.0 / float(num_particles), dtype=torch.float64, device=device)
+
+    num_fnirs_steps = int(bundle.time_s.shape[0])
+    num_eeg_steps = int(bundle.eeg_time_s.shape[0])
+    if num_fnirs_steps * int(bundle.eeg_substeps_per_fnirs) != num_eeg_steps:
+        raise ValueError('EEG / fNIRS alignment mismatch: eeg_time_s must equal fnirs_time_s * eeg_substeps_per_fnirs')
+
+    estimates = np.zeros((num_fnirs_steps, 5), dtype=np.float64)
+    state_std = np.zeros((num_fnirs_steps, 5), dtype=np.float64)
+    ess_trace = np.zeros(num_fnirs_steps, dtype=np.float64)
+    r_estimates_eeg = np.zeros(num_eeg_steps, dtype=np.float64)
+    r_std_eeg = np.zeros(num_eeg_steps, dtype=np.float64)
+    log_likelihood_total = 0.0
+
+    dt = float(filter_config.integration_dt_s)
+    hemo_scale = np.asarray(filter_config.state_noise_std[:4], dtype=np.float64) * np.sqrt(dt)
+    sigma_nirs_sq = max(float(filter_config.sigma_nirs), 1e-8) ** 2
+    eeg_substeps_per_fnirs = int(bundle.eeg_substeps_per_fnirs)
+    proposal_scale = float(filter_config.sigma_prop)
+
+    lead_field_t = torch.from_numpy(np.asarray(bundle.lead_field, dtype=np.float64)).to(device=device, dtype=torch.float64)
+    jac_primary_t = torch.from_numpy(np.asarray(bundle.jac_primary, dtype=np.float64)).to(device=device, dtype=torch.float64)
+    jac_secondary_t = torch.from_numpy(np.asarray(bundle.jac_secondary, dtype=np.float64)).to(device=device, dtype=torch.float64)
+    fnirs_primary_t = torch.from_numpy(np.asarray(bundle.fnirs_primary_obs, dtype=np.float64)).to(device=device, dtype=torch.float64)
+    fnirs_secondary_t = torch.from_numpy(np.asarray(bundle.fnirs_secondary_obs, dtype=np.float64)).to(device=device, dtype=torch.float64)
+    hemo_scale_row_t = torch.from_numpy(hemo_scale.reshape(1, 4)).to(device=device, dtype=torch.float64)
+
+    if device == 'cuda':
+        torch.cuda.synchronize()
+    for step in range(num_fnirs_steps):
+        eeg_start = step * eeg_substeps_per_fnirs
+        eeg_stop = eeg_start + eeg_substeps_per_fnirs
+        # Keep the NumPy RNG stream identical to the original implementation while
+        # avoiding per-substep NumPy -> Torch tensor wrapping.
+        step_standard_noise_t = torch.from_numpy(
+            rng.normal(size=(eeg_substeps_per_fnirs, num_particles * 5))
+        ).to(device=device, dtype=torch.float64)
+
+        for local_idx, eeg_idx in enumerate(range(eeg_start, eeg_stop)):
+            proposal_center = float(bundle.r_eeg_projection[eeg_idx])
+            step_noise_t = step_standard_noise_t[local_idx]
+            particles[:, 4] = proposal_center + proposal_scale * step_noise_t[:num_particles]
+            particles = torch_local_linearized_step_batch(particles, dt, params)
+            particles[:, 0:4] += step_noise_t[num_particles:].reshape(num_particles, 4) * hemo_scale_row_t
+            particles[:, 1:4] = torch.clamp(particles[:, 1:4], min=-0.95)
+
+            r_mean = torch.sum(particles[:, 4] * weights)
+            centered_r = particles[:, 4] - r_mean
+            r_estimates_eeg[eeg_idx] = float(r_mean.detach().cpu().item())
+            r_std_eeg[eeg_idx] = float(torch.sqrt(torch.sum(torch.square(centered_r) * weights)).detach().cpu().item())
+
+        _, pred_primary_t, pred_secondary_t = torch_predict_observations(
+            particles,
+            lead_field_t,
+            jac_primary_t,
+            jac_secondary_t,
+            bundle.pair_mode,
+        )
+
+        log_weights = torch.log(torch.clamp(weights, min=1e-300))
+        log_weights = log_weights + (
+            -0.5 * torch.sum(torch.square(fnirs_primary_t[step].reshape(1, -1) - pred_primary_t), dim=1) / sigma_nirs_sq
+        )
+        log_weights = log_weights + (
+            -0.5 * torch.sum(torch.square(fnirs_secondary_t[step].reshape(1, -1) - pred_secondary_t), dim=1) / sigma_nirs_sq
+        )
+
+        max_log_weight = torch.max(log_weights)
+        stable = torch.exp(log_weights - max_log_weight)
+        stable_sum = torch.clamp(torch.sum(stable), min=1e-12)
+        weights = stable / stable_sum
+        log_likelihood_total += float((max_log_weight + torch.log(stable_sum)).detach().cpu().item())
+
+        estimate_t = torch.sum(particles * weights.reshape(-1, 1), dim=0)
+        centered = particles - estimate_t.reshape(1, -1)
+        std_t = torch.sqrt(torch.sum(torch.square(centered) * weights.reshape(-1, 1), dim=0))
+
+        estimates[step] = estimate_t.detach().cpu().numpy()
+        state_std[step] = std_t.detach().cpu().numpy()
+        r_estimates_eeg[eeg_stop - 1] = estimates[step, 4]
+        r_std_eeg[eeg_stop - 1] = state_std[step, 4]
+
+        ess = float((1.0 / torch.sum(torch.square(weights))).detach().cpu().item())
+        ess_trace[step] = ess
+        if ess < filter_config.resample_fraction * num_particles:
+            particles = particles[torch_systematic_resample(weights, rng)]
+            weights.fill_(1.0 / float(num_particles))
+
+    if device == 'cuda':
+        torch.cuda.synchronize()
+
+    pred_eeg, _, _ = predict_observations(
+        np.column_stack([
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            np.zeros_like(r_estimates_eeg),
+            r_estimates_eeg,
+        ]),
+        bundle.lead_field,
+        bundle.jac_primary,
+        bundle.jac_secondary,
+        bundle.pair_mode,
+    )
+    _, pred_primary, pred_secondary = predict_observations(
+        estimates,
+        bundle.lead_field,
+        bundle.jac_primary,
+        bundle.jac_secondary,
+        bundle.pair_mode,
+    )
+    return {
+        'seed': seed,
+        'solver_backend': f'torch_exact:{device}',
+        'state_estimates': estimates,
+        'state_std': state_std,
+        'ess_trace': ess_trace,
+        'log_likelihood': float(log_likelihood_total),
+        'pred_eeg': pred_eeg,
+        'pred_primary': pred_primary,
+        'pred_secondary': pred_secondary,
+        'r_estimates_eeg': r_estimates_eeg,
+        'r_std_eeg': r_std_eeg,
+    }
+
+
+def run_particle_filter(
+    bundle: ObservationBundle,
+    filter_config: FilterConfig,
+    params: ModelParams,
+    seed: int,
+) -> Dict[str, Any]:
+    backend = str(getattr(filter_config, 'solver_backend', 'python_exact'))
+    if backend == 'auto':
+        backend = 'torch_exact' if torch is not None else 'python_exact'
+    if backend == 'torch_exact':
+        device = select_torch_device(str(getattr(filter_config, 'torch_device', 'cpu')))
+        if device is None:
+            return run_particle_filter_python_exact(bundle, filter_config, params, seed)
+        return run_particle_filter_torch_exact(bundle, filter_config, params, seed, device)
+    return run_particle_filter_python_exact(bundle, filter_config, params, seed)
 
 
 def compute_fit_metrics(
@@ -643,11 +1030,20 @@ def compute_fit_metrics(
     per_primary_corr = [safe_correlation(bundle.fnirs_primary_obs[:, idx], run_result['pred_primary'][:, idx]) for idx in range(bundle.fnirs_primary_obs.shape[1])]
     per_secondary_corr = [safe_correlation(bundle.fnirs_secondary_obs[:, idx], run_result['pred_secondary'][:, idx]) for idx in range(bundle.fnirs_secondary_obs.shape[1])]
 
+    r_estimates_eeg = np.asarray(run_result['r_estimates_eeg'], dtype=np.float64)
+    r_projection = np.asarray(bundle.r_eeg_projection, dtype=np.float64)
+    r_low = lowpass_signal(r_estimates_eeg, fs_hz=bundle.eeg_fs_hz, cutoff_hz=0.3)
+    r_projection_low = lowpass_signal(r_projection, fs_hz=bundle.eeg_fs_hz, cutoff_hz=0.3)
+    r_low_fnirs = block_average_signal(r_low, int(bundle.eeg_substeps_per_fnirs), block_count=bundle.time_s.shape[0])
+    combined_fnirs = 0.5 * (bundle.fnirs_primary_obs.mean(axis=1) + bundle.fnirs_secondary_obs.mean(axis=1))
+
     lag_s, lag_corr = lag_peak_seconds(
-        run_result['state_estimates'][:, 4],
-        0.5 * (bundle.fnirs_primary_obs.mean(axis=1) + bundle.fnirs_secondary_obs.mean(axis=1)),
-        fs_hz=filter_config.observation_fs_hz,
+        r_low_fnirs,
+        combined_fnirs,
+        fs_hz=bundle.fnirs_fs_hz,
     )
+    alpha_power = spectral_band_power(r_estimates_eeg, bundle.eeg_fs_hz, 8.0, 13.0)
+    delta_power = spectral_band_power(r_estimates_eeg, bundle.eeg_fs_hz, 0.5, 4.0)
     metrics: Dict[str, Any] = {
         'eeg_corr_mean': float(np.nanmean(per_eeg_corr)),
         'eeg_rmse': rmse(bundle.eeg_obs, run_result['pred_eeg']),
@@ -655,18 +1051,30 @@ def compute_fit_metrics(
         'fnirs_primary_rmse': rmse(bundle.fnirs_primary_obs, run_result['pred_primary']),
         'fnirs_secondary_corr_mean': float(np.nanmean(per_secondary_corr)),
         'fnirs_secondary_rmse': rmse(bundle.fnirs_secondary_obs, run_result['pred_secondary']),
-        'state_to_fnirs_peak_lag_s': lag_s,
-        'state_to_fnirs_peak_corr': lag_corr,
+        'fnirs_corr_mean': float(np.nanmean([np.nanmean(per_primary_corr), np.nanmean(per_secondary_corr)])),
+        'hemo_to_fnirs_peak_lag_s': lag_s,
+        'hemo_to_fnirs_peak_corr': lag_corr,
+        'r_alpha_delta_power_ratio': float(alpha_power / max(delta_power, 1e-8)),
+        'r_low_modification_ratio': relative_l2_difference(r_low, r_projection_low),
+        'r_total_modification_ratio': relative_l2_difference(r_estimates_eeg, r_projection),
+        'r_projection_corr': safe_correlation(r_estimates_eeg, r_projection),
         'ess_ratio_mean': float(np.mean(run_result['ess_trace']) / max(filter_config.num_particles, 1)),
         'state_r_std_mean': float(np.mean(run_result['state_std'][:, 4])),
         'log_likelihood': float(run_result['log_likelihood']),
     }
-    if bundle.true_states is not None:
+    if bundle.true_r_eeg is not None:
+        true_r_eeg = np.asarray(bundle.true_r_eeg, dtype=np.float64)[: r_estimates_eeg.shape[0]]
         metrics.update(
             {
-                'rmse_r': rmse(bundle.true_states[:, 4], run_result['state_estimates'][:, 4]),
-                'rmse_delta_hbo': rmse(bundle.true_states[:, 2], run_result['state_estimates'][:, 2]),
-                'rmse_delta_hb': rmse(bundle.true_states[:, 3], run_result['state_estimates'][:, 3]),
+                'r_norm_rmse': rmse(zscore_vector(true_r_eeg), zscore_vector(r_estimates_eeg)),
+                'r_high_corr': safe_correlation(
+                    bandpass_signal(true_r_eeg, bundle.eeg_fs_hz, 1.0, 30.0),
+                    bandpass_signal(r_estimates_eeg, bundle.eeg_fs_hz, 1.0, 30.0),
+                ),
+                'r_low_corr': safe_correlation(
+                    lowpass_signal(true_r_eeg, bundle.eeg_fs_hz, 0.3),
+                    lowpass_signal(r_estimates_eeg, bundle.eeg_fs_hz, 0.3),
+                ),
             }
         )
     return metrics
@@ -676,7 +1084,7 @@ def summarise_seed_reproducibility(run_results: Sequence[Mapping[str, Any]]) -> 
     pairwise_corr: List[float] = []
     for idx in range(len(run_results)):
         for jdx in range(idx + 1, len(run_results)):
-            corr = safe_correlation(run_results[idx]['state_estimates'][:, 4], run_results[jdx]['state_estimates'][:, 4])
+            corr = safe_correlation(run_results[idx]['r_estimates_eeg'], run_results[jdx]['r_estimates_eeg'])
             if np.isfinite(corr):
                 pairwise_corr.append(corr)
     return {
@@ -695,23 +1103,38 @@ def permute_channels(matrix: np.ndarray) -> np.ndarray:
 
 
 def build_null_bundle(bundle: ObservationBundle, *, time_shift_s: float = 0.0, spatial_permutation: bool = False) -> ObservationBundle:
-    shift_samples = int(round(time_shift_s * (1.0 / (bundle.time_s[1] - bundle.time_s[0])))) if bundle.time_s.shape[0] > 1 else 0
+    shift_samples = int(round(time_shift_s * bundle.eeg_fs_hz)) if bundle.eeg_time_s.shape[0] > 1 else 0
     eeg_obs = np.asarray(bundle.eeg_obs, dtype=np.float64)
     fnirs_primary_obs = np.asarray(bundle.fnirs_primary_obs, dtype=np.float64)
     fnirs_secondary_obs = np.asarray(bundle.fnirs_secondary_obs, dtype=np.float64)
+    eeg_obs_raw = None if bundle.eeg_obs_raw is None else np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
+    fnirs_primary_obs_raw = None if bundle.fnirs_primary_obs_raw is None else np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
+    fnirs_secondary_obs_raw = None if bundle.fnirs_secondary_obs_raw is None else np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
     if shift_samples:
         eeg_obs = np.roll(eeg_obs, shift_samples, axis=0)
+        if eeg_obs_raw is not None:
+            eeg_obs_raw = np.roll(eeg_obs_raw, shift_samples, axis=0)
     if spatial_permutation:
         eeg_obs = permute_channels(eeg_obs)
         fnirs_primary_obs = permute_channels(fnirs_primary_obs)
         fnirs_secondary_obs = permute_channels(fnirs_secondary_obs)
+        if eeg_obs_raw is not None:
+            eeg_obs_raw = permute_channels(eeg_obs_raw)
+        if fnirs_primary_obs_raw is not None:
+            fnirs_primary_obs_raw = permute_channels(fnirs_primary_obs_raw)
+        if fnirs_secondary_obs_raw is not None:
+            fnirs_secondary_obs_raw = permute_channels(fnirs_secondary_obs_raw)
     return ObservationBundle(
         mode=bundle.mode,
         pair_mode=bundle.pair_mode,
         time_s=bundle.time_s,
+        eeg_time_s=bundle.eeg_time_s,
         eeg_obs=eeg_obs,
         fnirs_primary_obs=fnirs_primary_obs,
         fnirs_secondary_obs=fnirs_secondary_obs,
+        eeg_fs_hz=bundle.eeg_fs_hz,
+        fnirs_fs_hz=bundle.fnirs_fs_hz,
+        eeg_substeps_per_fnirs=bundle.eeg_substeps_per_fnirs,
         eeg_positions_mm=bundle.eeg_positions_mm,
         fnirs_positions_mm=bundle.fnirs_positions_mm,
         anchor_position_mm=bundle.anchor_position_mm,
@@ -720,17 +1143,19 @@ def build_null_bundle(bundle: ObservationBundle, *, time_shift_s: float = 0.0, s
         lead_field=bundle.lead_field,
         jac_primary=bundle.jac_primary,
         jac_secondary=bundle.jac_secondary,
+        r_eeg_projection=project_scalar_source(eeg_obs, bundle.lead_field),
         normalization=bundle.normalization,
         units=bundle.units,
         pair_labels=bundle.pair_labels,
-        eeg_obs_raw=bundle.eeg_obs_raw,
-        fnirs_primary_obs_raw=bundle.fnirs_primary_obs_raw,
-        fnirs_secondary_obs_raw=bundle.fnirs_secondary_obs_raw,
+        eeg_obs_raw=eeg_obs_raw,
+        fnirs_primary_obs_raw=fnirs_primary_obs_raw,
+        fnirs_secondary_obs_raw=fnirs_secondary_obs_raw,
         eeg_channel_names=bundle.eeg_channel_names,
         fnirs_primary_channel_names=bundle.fnirs_primary_channel_names,
         fnirs_secondary_channel_names=bundle.fnirs_secondary_channel_names,
         metadata=bundle.metadata,
         true_states=bundle.true_states,
+        true_r_eeg=bundle.true_r_eeg,
         true_lead_field=bundle.true_lead_field,
         true_jac_primary=bundle.true_jac_primary,
         true_jac_secondary=bundle.true_jac_secondary,
@@ -742,12 +1167,12 @@ def simulate_synthetic_bundle(
     spatial_config: SpatialConfig,
 ) -> ObservationBundle:
     rng = np.random.default_rng(20260521)
-    observation_fs = float(args.observation_fs)
-    observation_dt = 1.0 / observation_fs
-    integration_dt = float(args.integration_dt)
-    stride = int(round(observation_dt / integration_dt))
-    if stride < 1 or not np.isclose(stride * integration_dt, observation_dt, atol=1e-9):
-        raise ValueError('Synthetic observation-fs and integration-dt must define an integer stride')
+    eeg_fs = float(args.eeg_fs)
+    fnirs_fs = float(args.observation_fs)
+    substeps = int(round(eeg_fs / fnirs_fs))
+    if substeps < 1 or not np.isclose(substeps * fnirs_fs, eeg_fs, atol=1e-9):
+        raise ValueError('Synthetic eeg-fs must be an integer multiple of observation-fs')
+    integration_dt = 1.0 / eeg_fs
 
     n_eeg = int(args.synthetic_eeg_channels)
     n_fnirs = int(args.synthetic_fnirs_channels)
@@ -773,29 +1198,48 @@ def simulate_synthetic_bundle(
     true_jac_secondary = build_positive_weights(local_fnirs_positions, anchor, spatial_config.fnirs_sigma_mm * 1.1)
 
     params = ModelParams()
-    total_steps = int(round(float(args.duration_s) / integration_dt))
-    states = np.zeros((total_steps + 1, 5), dtype=np.float64)
-    for step in range(total_steps):
-        next_state = local_linearized_step(states[step], integration_dt, params)
-        next_state[4] += 0.03 * np.sqrt(integration_dt) * rng.normal()
-        next_state[1:4] += np.asarray([0.004, 0.004, 0.004], dtype=np.float64) * np.sqrt(integration_dt) * rng.normal(size=3)
-        next_state[1:4] = np.clip(next_state[1:4], -0.95, None)
-        states[step + 1] = next_state
+    num_eeg_steps = int(round(float(args.duration_s) * eeg_fs))
+    if num_eeg_steps < substeps:
+        raise ValueError('Synthetic duration is too short for at least one fNIRS step')
+    num_fnirs_steps = num_eeg_steps // substeps
+    num_eeg_steps = num_fnirs_steps * substeps
+    time_eeg = np.arange(num_eeg_steps, dtype=np.float64) / eeg_fs
+    time_obs = np.arange(num_fnirs_steps, dtype=np.float64) / fnirs_fs
 
-    observation_indices = np.arange(0, total_steps + 1, stride, dtype=np.int64)
-    time_obs = observation_indices.astype(np.float64) * integration_dt
+    r_true = (
+        0.90 * np.sin(2.0 * np.pi * 10.0 * time_eeg)
+        + 0.35 * np.sin(2.0 * np.pi * 0.22 * time_eeg + 0.3)
+        + 0.20 * np.sin(2.0 * np.pi * 0.05 * time_eeg + 1.1)
+    )
+    states = np.zeros((num_eeg_steps, 5), dtype=np.float64)
+    states[0, 4] = r_true[0]
+    for step in range(num_eeg_steps - 1):
+        current_state = states[step].copy()
+        current_state[4] = r_true[step]
+        next_state = local_linearized_step(current_state, integration_dt, params)
+        next_state[1:4] += np.asarray([0.003, 0.002, 0.002], dtype=np.float64) * np.sqrt(integration_dt) * rng.normal(size=3)
+        next_state[1:4] = np.clip(next_state[1:4], -0.95, None)
+        next_state[4] = r_true[step + 1]
+        states[step + 1] = next_state
+    states[:, 4] = r_true
+
+    observation_indices = (np.arange(num_fnirs_steps, dtype=np.int64) + 1) * substeps - 1
     states_obs = states[observation_indices]
 
-    eeg_clean = states_obs[:, 4:5] * true_lead.reshape(1, -1)
-    fnirs_primary_clean = (0.35 * states_obs[:, 2:3] + 1.00 * states_obs[:, 3:4]) * true_jac_primary.reshape(1, -1)
-    fnirs_secondary_clean = (1.00 * states_obs[:, 2:3] + 0.25 * states_obs[:, 3:4]) * true_jac_secondary.reshape(1, -1)
+    eeg_clean = states[:, 4:5] * true_lead.reshape(1, -1)
+    fnirs_primary_clean = (1.00 * states_obs[:, 2:3] + 0.25 * states_obs[:, 3:4]) * true_jac_primary.reshape(1, -1)
+    fnirs_secondary_clean = (0.35 * states_obs[:, 2:3] + 1.00 * states_obs[:, 3:4]) * true_jac_secondary.reshape(1, -1)
 
     eeg_noisy, _ = add_awgn(eeg_clean, float(args.snr_db), rng)
     fnirs_primary_noisy, _ = add_awgn(fnirs_primary_clean, float(args.snr_db), rng)
     fnirs_secondary_noisy, _ = add_awgn(fnirs_secondary_clean, float(args.snr_db), rng)
 
+    eeg_norm, eeg_stats = standardize_matrix(eeg_noisy)
+    fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_noisy)
+    fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_noisy)
+
     approx_lead = build_signed_eeg_weights(
-        eeg_obs=eeg_noisy,
+        eeg_obs=eeg_norm,
         eeg_positions_mm=local_eeg_positions,
         anchor_position_mm=anchor,
         sigma_mm=spatial_config.eeg_sigma_mm,
@@ -808,9 +1252,13 @@ def simulate_synthetic_bundle(
         mode='synthetic',
         pair_mode='wavelength',
         time_s=time_obs,
-        eeg_obs=eeg_noisy,
-        fnirs_primary_obs=fnirs_primary_noisy,
-        fnirs_secondary_obs=fnirs_secondary_noisy,
+        eeg_time_s=time_eeg,
+        eeg_obs=eeg_norm,
+        fnirs_primary_obs=fnirs_primary_norm,
+        fnirs_secondary_obs=fnirs_secondary_norm,
+        eeg_fs_hz=eeg_fs,
+        fnirs_fs_hz=fnirs_fs,
+        eeg_substeps_per_fnirs=substeps,
         eeg_positions_mm=local_eeg_positions,
         fnirs_positions_mm=local_fnirs_positions,
         anchor_position_mm=anchor,
@@ -819,21 +1267,28 @@ def simulate_synthetic_bundle(
         lead_field=approx_lead,
         jac_primary=approx_jac_primary,
         jac_secondary=approx_jac_secondary,
-        normalization={'mode': 'raw_observation_units'},
+        r_eeg_projection=project_scalar_source(eeg_norm, approx_lead),
+        normalization={
+            'mode': 'per_channel_zscore_after_local_selection',
+            'eeg': eeg_stats,
+            'fnirs_primary': fnirs_primary_stats,
+            'fnirs_secondary': fnirs_secondary_stats,
+        },
         units={
             'eeg': args.eeg_unit,
             'fnirs_primary': args.fnirs_primary_unit,
             'fnirs_secondary': args.fnirs_secondary_unit,
         },
-        pair_labels=('690_like', '830_like'),
+        pair_labels=('highWL_like', 'lowWL_like'),
         eeg_obs_raw=eeg_noisy,
         fnirs_primary_obs_raw=fnirs_primary_noisy,
         fnirs_secondary_obs_raw=fnirs_secondary_noisy,
         eeg_channel_names=tuple(f'EEG_{index}' for index in eeg_indices.tolist()),
-        fnirs_primary_channel_names=tuple(f'690_like_{index}' for index in fnirs_indices.tolist()),
-        fnirs_secondary_channel_names=tuple(f'830_like_{index}' for index in fnirs_indices.tolist()),
+        fnirs_primary_channel_names=tuple(f'highWL_like_{index}' for index in fnirs_indices.tolist()),
+        fnirs_secondary_channel_names=tuple(f'lowWL_like_{index}' for index in fnirs_indices.tolist()),
         metadata={'signal_source': 'synthetic_local_source'},
         true_states=states_obs,
+        true_r_eeg=r_true,
         true_lead_field=true_lead,
         true_jac_primary=true_jac_primary,
         true_jac_secondary=true_jac_secondary,
@@ -884,18 +1339,21 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
     local_fnirs_positions = fnirs_positions[fnirs_indices]
 
     eeg_local = np.asarray(eeg[:, eeg_indices], dtype=np.float64)
-    eeg_local_ds = downsample_signed_channels(eeg_local, source_fs_hz=eeg_fs_hz, target_fs_hz=fnirs_fs_hz)
     fnirs_primary_local = np.asarray(fnirs_primary[:, fnirs_indices], dtype=np.float64)
     fnirs_secondary_local = np.asarray(fnirs_secondary[:, fnirs_indices], dtype=np.float64)
 
-    length = min(eeg_local_ds.shape[0], fnirs_primary_local.shape[0], fnirs_secondary_local.shape[0])
-    eeg_local_ds = eeg_local_ds[:length]
+    eeg_substeps_per_fnirs = int(round(eeg_fs_hz / fnirs_fs_hz))
+    if eeg_substeps_per_fnirs < 1 or not np.isclose(eeg_substeps_per_fnirs * fnirs_fs_hz, eeg_fs_hz, atol=1e-9):
+        raise ValueError('NPZ bundle requires EEG fs to be an integer multiple of fNIRS fs')
+    length = min(eeg_local.shape[0] // eeg_substeps_per_fnirs, fnirs_primary_local.shape[0], fnirs_secondary_local.shape[0])
+    eeg_local = eeg_local[: length * eeg_substeps_per_fnirs]
     fnirs_primary_local = fnirs_primary_local[:length]
     fnirs_secondary_local = fnirs_secondary_local[:length]
     time_s = np.arange(length, dtype=np.float64) / fnirs_fs_hz
+    eeg_time_s = np.arange(eeg_local.shape[0], dtype=np.float64) / eeg_fs_hz
 
     lead_field = build_signed_eeg_weights(
-        eeg_obs=eeg_local_ds,
+        eeg_obs=eeg_local,
         eeg_positions_mm=local_eeg_positions,
         anchor_position_mm=anchor,
         sigma_mm=spatial_config.eeg_sigma_mm,
@@ -904,7 +1362,7 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
     jac_primary = build_positive_weights(local_fnirs_positions, anchor, spatial_config.fnirs_sigma_mm)
     jac_secondary = build_positive_weights(local_fnirs_positions, anchor, spatial_config.fnirs_sigma_mm)
 
-    eeg_norm, eeg_stats = standardize_matrix(eeg_local_ds)
+    eeg_norm, eeg_stats = standardize_matrix(eeg_local)
     fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_local)
     fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_local)
 
@@ -912,9 +1370,13 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         mode='npz',
         pair_mode=pair_mode,
         time_s=time_s,
+        eeg_time_s=eeg_time_s,
         eeg_obs=eeg_norm,
         fnirs_primary_obs=fnirs_primary_norm,
         fnirs_secondary_obs=fnirs_secondary_norm,
+        eeg_fs_hz=eeg_fs_hz,
+        fnirs_fs_hz=fnirs_fs_hz,
+        eeg_substeps_per_fnirs=eeg_substeps_per_fnirs,
         eeg_positions_mm=local_eeg_positions,
         fnirs_positions_mm=local_fnirs_positions,
         anchor_position_mm=anchor,
@@ -923,6 +1385,7 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         lead_field=lead_field,
         jac_primary=jac_primary,
         jac_secondary=jac_secondary,
+        r_eeg_projection=project_scalar_source(eeg_norm, lead_field),
         normalization={
             'mode': 'per_channel_zscore_after_local_selection',
             'eeg': eeg_stats,
@@ -936,9 +1399,12 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
             'fnirs_secondary': args.fnirs_secondary_unit,
         },
         pair_labels=pair_labels,
-        eeg_obs_raw=eeg_local_ds,
+        eeg_obs_raw=eeg_local,
         fnirs_primary_obs_raw=fnirs_primary_local,
         fnirs_secondary_obs_raw=fnirs_secondary_local,
+        eeg_channel_names=tuple(f'EEG_{index}' for index in eeg_indices.tolist()),
+        fnirs_primary_channel_names=tuple(f'{pair_labels[0]}_{index}' for index in fnirs_indices.tolist()),
+        fnirs_secondary_channel_names=tuple(f'{pair_labels[1]}_{index}' for index in fnirs_indices.tolist()),
         metadata={'signal_source': 'npz_bundle'},
     )
 
@@ -1000,28 +1466,31 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     fnirs_full = np.asarray(fnirs_session_list[session_idx], dtype=np.float64)
     eeg_fs_hz = float(eeg_info['fs'])
     fnirs_fs_hz = float(fnirs_info['fs'])
+    eeg_substeps_per_fnirs = int(round(eeg_fs_hz / fnirs_fs_hz))
+    if eeg_substeps_per_fnirs < 1 or not np.isclose(eeg_substeps_per_fnirs * fnirs_fs_hz, eeg_fs_hz, atol=1e-9):
+        raise ValueError('Dataset mode requires EEG fs to be an integer multiple of fNIRS fs')
     segment_start_eeg = max(int(round(float(args.segment_start_s) * eeg_fs_hz)), 0)
-    segment_end_eeg = min(int(round((float(args.segment_start_s) + float(args.segment_duration_s)) * eeg_fs_hz)), eeg_full.shape[0])
     segment_start_fnirs = max(int(round(float(args.segment_start_s) * fnirs_fs_hz)), 0)
     segment_end_fnirs = min(int(round((float(args.segment_start_s) + float(args.segment_duration_s)) * fnirs_fs_hz)), fnirs_full.shape[0])
+    segment_end_eeg = min(segment_start_eeg + (segment_end_fnirs - segment_start_fnirs) * eeg_substeps_per_fnirs, eeg_full.shape[0])
     if segment_end_eeg - segment_start_eeg < 32 or segment_end_fnirs - segment_start_fnirs < 16:
         raise ValueError('Selected dataset segment is too short for local solver audit')
 
     eeg_local_raw = eeg_full[segment_start_eeg:segment_end_eeg, :][:, eeg_indices]
-    eeg_local_ds = downsample_signed_channels(eeg_local_raw, source_fs_hz=eeg_fs_hz, target_fs_hz=fnirs_fs_hz)
     fnirs_primary_local = fnirs_full[segment_start_fnirs:segment_end_fnirs, :][:, primary_indices]
     fnirs_secondary_local = fnirs_full[segment_start_fnirs:segment_end_fnirs, :][:, secondary_indices]
-    length = min(eeg_local_ds.shape[0], fnirs_primary_local.shape[0], fnirs_secondary_local.shape[0])
-    eeg_local_ds = eeg_local_ds[:length]
+    length = min(eeg_local_raw.shape[0] // eeg_substeps_per_fnirs, fnirs_primary_local.shape[0], fnirs_secondary_local.shape[0])
+    eeg_local_raw = eeg_local_raw[: length * eeg_substeps_per_fnirs]
     fnirs_primary_local = fnirs_primary_local[:length]
     fnirs_secondary_local = fnirs_secondary_local[:length]
     time_s = float(args.segment_start_s) + np.arange(length, dtype=np.float64) / fnirs_fs_hz
+    eeg_time_s = float(args.segment_start_s) + np.arange(eeg_local_raw.shape[0], dtype=np.float64) / eeg_fs_hz
 
     local_eeg_positions = np.asarray(adjacency.eeg_positions_2d[eeg_indices], dtype=np.float64)
     local_fnirs_positions = np.asarray(adjacency.fnirs_channel_positions_2d[primary_indices], dtype=np.float64)
     anchor_position_2d = np.asarray(adjacency.fnirs_channel_positions_2d[primary_indices[0]], dtype=np.float64)
     lead_field = build_signed_eeg_weights(
-        eeg_obs=eeg_local_ds,
+        eeg_obs=eeg_local_raw,
         eeg_positions_mm=local_eeg_positions,
         anchor_position_mm=anchor_position_2d,
         sigma_mm=spatial_config.eeg_sigma_mm,
@@ -1030,7 +1499,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     jac_primary = build_positive_weights(local_fnirs_positions, anchor_position_2d, spatial_config.fnirs_sigma_mm)
     jac_secondary = build_positive_weights(local_fnirs_positions, anchor_position_2d, spatial_config.fnirs_sigma_mm)
 
-    eeg_norm, eeg_stats = standardize_matrix(eeg_local_ds)
+    eeg_norm, eeg_stats = standardize_matrix(eeg_local_raw)
     fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_local)
     fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_local)
 
@@ -1038,9 +1507,13 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         mode='dataset',
         pair_mode='wavelength',
         time_s=time_s,
+        eeg_time_s=eeg_time_s,
         eeg_obs=eeg_norm,
         fnirs_primary_obs=fnirs_primary_norm,
         fnirs_secondary_obs=fnirs_secondary_norm,
+        eeg_fs_hz=eeg_fs_hz,
+        fnirs_fs_hz=fnirs_fs_hz,
+        eeg_substeps_per_fnirs=eeg_substeps_per_fnirs,
         eeg_positions_mm=local_eeg_positions,
         fnirs_positions_mm=local_fnirs_positions,
         anchor_position_mm=anchor_position_2d,
@@ -1049,6 +1522,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         lead_field=lead_field,
         jac_primary=jac_primary,
         jac_secondary=jac_secondary,
+        r_eeg_projection=project_scalar_source(eeg_norm, lead_field),
         normalization={
             'mode': 'per_channel_zscore_after_local_selection',
             'eeg': eeg_stats,
@@ -1062,7 +1536,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
             'fnirs_secondary': args.fnirs_secondary_unit,
         },
         pair_labels=('highWL', 'lowWL'),
-        eeg_obs_raw=eeg_local_ds,
+        eeg_obs_raw=eeg_local_raw,
         fnirs_primary_obs_raw=fnirs_primary_local,
         fnirs_secondary_obs_raw=fnirs_secondary_local,
         eeg_channel_names=tuple(str(adjacency.eeg_channel_names[index]) for index in eeg_indices.tolist()),
@@ -1182,28 +1656,29 @@ def plot_observation_reconstruction(path: Path, bundle: ObservationBundle, run_r
     fnirs_primary_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
     fnirs_secondary_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
     representative_eeg = int(np.argmax(np.abs(bundle.lead_field))) if bundle.lead_field.size else 0
+    representative_eeg_name = bundle.eeg_channel_names[representative_eeg] if bundle.eeg_channel_names else f'EEG_{representative_eeg}'
 
-    fig, axes = plt.subplots(3, 1, figsize=(13, 10), sharex=True)
-    axes[0].plot(bundle.time_s, eeg_obs_raw.mean(axis=1), color='#111111', linewidth=1.3, label='Observed EEG neighborhood mean')
-    axes[0].plot(bundle.time_s, pred_eeg_raw.mean(axis=1), color='#D62728', linewidth=1.1, label='Reconstructed EEG neighborhood mean')
-    axes[0].plot(bundle.time_s, eeg_obs_raw[:, representative_eeg], color='#7F7F7F', linewidth=0.8, alpha=0.85, label=f'Observed {bundle.eeg_channel_names[representative_eeg]}')
-    axes[0].plot(bundle.time_s, pred_eeg_raw[:, representative_eeg], color='#FF9896', linewidth=0.8, alpha=0.95, label=f'Reconstructed {bundle.eeg_channel_names[representative_eeg]}')
+    fig, axes = plt.subplots(3, 1, figsize=(13, 10))
+    axes[0].plot(bundle.eeg_time_s, eeg_obs_raw.mean(axis=1), color='#111111', linewidth=1.3, label='Observed EEG neighborhood mean')
+    axes[0].plot(bundle.eeg_time_s, pred_eeg_raw.mean(axis=1), color='#D62728', linewidth=1.1, label='Reconstructed EEG neighborhood mean')
+    axes[0].plot(bundle.eeg_time_s, eeg_obs_raw[:, representative_eeg], color='#7F7F7F', linewidth=0.8, alpha=0.85, label=f'Observed {representative_eeg_name}')
+    axes[0].plot(bundle.eeg_time_s, pred_eeg_raw[:, representative_eeg], color='#FF9896', linewidth=0.8, alpha=0.95, label=f'Reconstructed {representative_eeg_name}')
     axes[0].set_ylabel(bundle.units['eeg'])
-    axes[0].set_title('Real local EEG neighborhood: actual vs reconstructed')
+    axes[0].set_title('EEG source target reconstruction')
     axes[0].legend(loc='upper right', ncol=2)
     axes[0].grid(alpha=0.25)
 
     axes[1].plot(bundle.time_s, fnirs_primary_raw.mean(axis=1), color='#1F77B4', linewidth=1.3, label=f'Observed {bundle.pair_labels[0]} mean')
     axes[1].plot(bundle.time_s, pred_primary_raw.mean(axis=1), color='#17BECF', linewidth=1.1, label=f'Reconstructed {bundle.pair_labels[0]} mean')
     axes[1].set_ylabel(bundle.units['fnirs_primary'])
-    axes[1].set_title(f'Local {bundle.pair_labels[0]} neighborhood: actual vs reconstructed')
+    axes[1].set_title(f'{bundle.pair_labels[0]} source target reconstruction')
     axes[1].legend(loc='upper right')
     axes[1].grid(alpha=0.25)
 
     axes[2].plot(bundle.time_s, fnirs_secondary_raw.mean(axis=1), color='#D62728', linewidth=1.3, label=f'Observed {bundle.pair_labels[1]} mean')
     axes[2].plot(bundle.time_s, pred_secondary_raw.mean(axis=1), color='#FF9896', linewidth=1.1, label=f'Reconstructed {bundle.pair_labels[1]} mean')
     axes[2].set_ylabel(bundle.units['fnirs_secondary'])
-    axes[2].set_title(f'Local {bundle.pair_labels[1]} neighborhood: actual vs reconstructed')
+    axes[2].set_title(f'{bundle.pair_labels[1]} source target reconstruction')
     axes[2].legend(loc='upper right')
     axes[2].grid(alpha=0.25)
     axes[2].set_xlabel('Time (s)')
@@ -1213,27 +1688,213 @@ def plot_observation_reconstruction(path: Path, bundle: ObservationBundle, run_r
     plt.close(fig)
 
 
+def plot_target_time_frequency_diagnostics(path: Path, bundle: ObservationBundle, run_result: Mapping[str, Any]) -> None:
+    if bundle.eeg_obs_raw is None or bundle.fnirs_primary_obs_raw is None or bundle.fnirs_secondary_obs_raw is None:
+        return
+    if bundle.normalization.get('mode') == 'per_channel_zscore_after_local_selection':
+        pred_eeg_raw = destandardize_matrix(run_result['pred_eeg'], bundle.normalization['eeg'])
+        pred_primary_raw = destandardize_matrix(run_result['pred_primary'], bundle.normalization['fnirs_primary'])
+        pred_secondary_raw = destandardize_matrix(run_result['pred_secondary'], bundle.normalization['fnirs_secondary'])
+    else:
+        pred_eeg_raw = np.asarray(run_result['pred_eeg'], dtype=np.float64)
+        pred_primary_raw = np.asarray(run_result['pred_primary'], dtype=np.float64)
+        pred_secondary_raw = np.asarray(run_result['pred_secondary'], dtype=np.float64)
+
+    eeg_obs_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
+    fnirs_primary_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
+    fnirs_secondary_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
+    representative_eeg = int(np.argmax(np.abs(bundle.lead_field))) if bundle.lead_field.size else 0
+    representative_eeg_name = bundle.eeg_channel_names[representative_eeg] if bundle.eeg_channel_names else f'EEG_{representative_eeg}'
+
+    traces = [
+        {
+            'label': f'EEG {representative_eeg_name}',
+            'time_s': bundle.eeg_time_s,
+            'raw': eeg_obs_raw[:, representative_eeg],
+            'source_target': pred_eeg_raw[:, representative_eeg],
+            'fs_hz': bundle.eeg_fs_hz,
+            'unit': bundle.units['eeg'],
+            'freq_max_hz': min(40.0, 0.5 * bundle.eeg_fs_hz),
+            'source_color': '#D62728',
+            'obs_color': '#1F77B4',
+        },
+        {
+            'label': str(bundle.pair_labels[0]),
+            'time_s': bundle.time_s,
+            'raw': fnirs_primary_raw.mean(axis=1),
+            'source_target': pred_primary_raw.mean(axis=1),
+            'fs_hz': bundle.fnirs_fs_hz,
+            'unit': bundle.units['fnirs_primary'],
+            'freq_max_hz': min(0.5, 0.5 * bundle.fnirs_fs_hz),
+            'source_color': '#17BECF',
+            'obs_color': '#1F77B4',
+        },
+        {
+            'label': str(bundle.pair_labels[1]),
+            'time_s': bundle.time_s,
+            'raw': fnirs_secondary_raw.mean(axis=1),
+            'source_target': pred_secondary_raw.mean(axis=1),
+            'fs_hz': bundle.fnirs_fs_hz,
+            'unit': bundle.units['fnirs_secondary'],
+            'freq_max_hz': min(0.5, 0.5 * bundle.fnirs_fs_hz),
+            'source_color': '#FF9896',
+            'obs_color': '#9467BD',
+        },
+    ]
+
+    # EEG and fNIRS use different frequency ranges, so sharing x by column
+    # would collapse the EEG PSD panels onto the fNIRS 0-0.5 Hz range.
+    fig, axes = plt.subplots(len(traces), 4, figsize=(22, 11), sharex=False)
+    for row_idx, trace in enumerate(traces):
+        source_target = np.asarray(trace['source_target'], dtype=np.float64)
+        obs_target = np.asarray(trace['raw'], dtype=np.float64) - source_target
+        source_freqs, source_power = compute_power_spectrum(source_target, float(trace['fs_hz']))
+        obs_freqs, obs_power = compute_power_spectrum(obs_target, float(trace['fs_hz']))
+
+        raw_label = 'raw representative channel' if row_idx == 0 else 'raw mean'
+        axes[row_idx, 0].plot(trace['time_s'], trace['raw'], color='#BDBDBD', linewidth=1.0, alpha=0.9, label=raw_label)
+        axes[row_idx, 0].plot(trace['time_s'], source_target, color=trace['source_color'], linewidth=1.2, label='source target')
+        axes[row_idx, 0].set_title(f'{trace["label"]} source target: time')
+        axes[row_idx, 0].set_ylabel(trace['unit'])
+        axes[row_idx, 0].grid(alpha=0.25)
+        axes[row_idx, 0].legend(loc='upper right')
+
+        if source_freqs.size:
+            axes[row_idx, 1].plot(source_freqs, source_power, color=trace['source_color'], linewidth=1.2)
+            axes[row_idx, 1].set_xlim(0.0, trace['freq_max_hz'])
+        axes[row_idx, 1].set_title(f'{trace["label"]} source target: PSD')
+        axes[row_idx, 1].set_ylabel('PSD')
+        axes[row_idx, 1].grid(alpha=0.25)
+
+        axes[row_idx, 2].plot(trace['time_s'], obs_target, color=trace['obs_color'], linewidth=1.2)
+        axes[row_idx, 2].axhline(0.0, color='#BDBDBD', linewidth=0.8, linestyle='--')
+        axes[row_idx, 2].set_title(f'{trace["label"]} observation target: time')
+        axes[row_idx, 2].set_ylabel(trace['unit'])
+        axes[row_idx, 2].grid(alpha=0.25)
+
+        if obs_freqs.size:
+            axes[row_idx, 3].plot(obs_freqs, obs_power, color=trace['obs_color'], linewidth=1.2)
+            axes[row_idx, 3].set_xlim(0.0, trace['freq_max_hz'])
+        axes[row_idx, 3].set_title(f'{trace["label"]} observation target: PSD')
+        axes[row_idx, 3].set_ylabel('PSD')
+        axes[row_idx, 3].grid(alpha=0.25)
+
+    for col_idx in range(4):
+        axes[-1, col_idx].set_xlabel('Time (s)' if col_idx in (0, 2) else 'Frequency (Hz)')
+    fig.suptitle('Tokenizer target diagnostics: clean source targets and linear observation residuals', y=1.01)
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches='tight')
+    plt.close(fig)
+
+
+def plot_target_psd_comparison(path: Path, bundle: ObservationBundle, run_result: Mapping[str, Any]) -> None:
+    if bundle.eeg_obs_raw is None or bundle.fnirs_primary_obs_raw is None or bundle.fnirs_secondary_obs_raw is None:
+        return
+    if bundle.normalization.get('mode') == 'per_channel_zscore_after_local_selection':
+        pred_eeg_raw = destandardize_matrix(run_result['pred_eeg'], bundle.normalization['eeg'])
+        pred_primary_raw = destandardize_matrix(run_result['pred_primary'], bundle.normalization['fnirs_primary'])
+        pred_secondary_raw = destandardize_matrix(run_result['pred_secondary'], bundle.normalization['fnirs_secondary'])
+    else:
+        pred_eeg_raw = np.asarray(run_result['pred_eeg'], dtype=np.float64)
+        pred_primary_raw = np.asarray(run_result['pred_primary'], dtype=np.float64)
+        pred_secondary_raw = np.asarray(run_result['pred_secondary'], dtype=np.float64)
+
+    eeg_obs_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
+    fnirs_primary_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
+    fnirs_secondary_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
+    representative_eeg = int(np.argmax(np.abs(bundle.lead_field))) if bundle.lead_field.size else 0
+    representative_eeg_name = bundle.eeg_channel_names[representative_eeg] if bundle.eeg_channel_names else f'EEG_{representative_eeg}'
+
+    traces = [
+        {
+            'label': f'EEG {representative_eeg_name}',
+            'raw': eeg_obs_raw[:, representative_eeg],
+            'source': pred_eeg_raw[:, representative_eeg],
+            'fs_hz': bundle.eeg_fs_hz,
+            'freq_max_hz': min(40.0, 0.5 * bundle.eeg_fs_hz),
+            'raw_color': '#7F7F7F',
+            'source_color': '#D62728',
+            'obs_color': '#1F77B4',
+        },
+        {
+            'label': str(bundle.pair_labels[0]),
+            'raw': fnirs_primary_raw.mean(axis=1),
+            'source': pred_primary_raw.mean(axis=1),
+            'fs_hz': bundle.fnirs_fs_hz,
+            'freq_max_hz': min(0.5, 0.5 * bundle.fnirs_fs_hz),
+            'raw_color': '#7F7F7F',
+            'source_color': '#17BECF',
+            'obs_color': '#1F77B4',
+        },
+        {
+            'label': str(bundle.pair_labels[1]),
+            'raw': fnirs_secondary_raw.mean(axis=1),
+            'source': pred_secondary_raw.mean(axis=1),
+            'fs_hz': bundle.fnirs_fs_hz,
+            'freq_max_hz': min(0.5, 0.5 * bundle.fnirs_fs_hz),
+            'raw_color': '#7F7F7F',
+            'source_color': '#FF9896',
+            'obs_color': '#9467BD',
+        },
+    ]
+
+    fig, axes = plt.subplots(len(traces), 1, figsize=(13, 11), sharex=False)
+    if len(traces) == 1:
+        axes = [axes]
+
+    epsilon = 1e-18
+    for axis, trace in zip(axes, traces):
+        source = np.asarray(trace['source'], dtype=np.float64)
+        raw = np.asarray(trace['raw'], dtype=np.float64)
+        obs = raw - source
+
+        raw_freqs, raw_power = compute_power_spectrum(raw, float(trace['fs_hz']))
+        source_freqs, source_power = compute_power_spectrum(source, float(trace['fs_hz']))
+        obs_freqs, obs_power = compute_power_spectrum(obs, float(trace['fs_hz']))
+
+        if raw_freqs.size:
+            axis.semilogy(raw_freqs, np.maximum(raw_power, epsilon), color=trace['raw_color'], linewidth=1.3, label='raw')
+        if source_freqs.size:
+            axis.semilogy(source_freqs, np.maximum(source_power, epsilon), color=trace['source_color'], linewidth=1.2, label='source target')
+        if obs_freqs.size:
+            axis.semilogy(obs_freqs, np.maximum(obs_power, epsilon), color=trace['obs_color'], linewidth=1.1, label='observation target')
+        axis.set_xlim(0.0, trace['freq_max_hz'])
+        axis.set_title(f'{trace["label"]}: raw vs source target vs observation target PSD')
+        axis.set_ylabel('PSD')
+        axis.grid(alpha=0.25)
+        axis.legend(loc='upper right', ncol=3)
+
+    axes[-1].set_xlabel('Frequency (Hz)')
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches='tight')
+    plt.close(fig)
+
+
 def plot_r_vs_neighboring_eeg(path: Path, bundle: ObservationBundle, run_result: Mapping[str, Any]) -> None:
     if bundle.eeg_obs_raw is None or not bundle.eeg_channel_names:
         return
     eeg_obs_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
-    r_signal = zscore_vector(np.asarray(run_result['state_estimates'][:, 4], dtype=np.float64))
+    r_signal = zscore_vector(np.asarray(run_result['r_estimates_eeg'], dtype=np.float64))
+    r_projection = zscore_vector(np.asarray(bundle.r_eeg_projection, dtype=np.float64))
     order = np.argsort(np.abs(bundle.lead_field))[::-1]
     spacing = 3.0
-    offsets = spacing * np.arange(len(order) + 1, 0, -1, dtype=np.float64)
+    offsets = spacing * np.arange(len(order) + 2, 0, -1, dtype=np.float64)
     fig, axis = plt.subplots(figsize=(13, 8))
-    axis.plot(bundle.time_s, r_signal + offsets[0], color='#111111', linewidth=1.6)
+    axis.plot(bundle.eeg_time_s, r_signal + offsets[0], color='#111111', linewidth=1.6)
+    axis.plot(bundle.eeg_time_s, r_projection + offsets[1], color='#1f77b4', linewidth=1.1)
     yticks = [offsets[0]]
-    ylabels = ['r(t)']
+    ylabels = ['r_hat(t)']
+    yticks.append(offsets[1])
+    ylabels.append('L^+ y_eeg(t)')
     palette = plt.cm.tab10(np.linspace(0.0, 1.0, max(len(order), 2)))
-    for plot_idx, channel_index in enumerate(order.tolist(), start=1):
+    for plot_idx, channel_index in enumerate(order.tolist(), start=2):
         channel_trace = zscore_vector(eeg_obs_raw[:, channel_index])
-        axis.plot(bundle.time_s, channel_trace + offsets[plot_idx], color=palette[(plot_idx - 1) % len(palette)], linewidth=1.0)
+        axis.plot(bundle.eeg_time_s, channel_trace + offsets[plot_idx], color=palette[(plot_idx - 2) % len(palette)], linewidth=1.0)
         yticks.append(offsets[plot_idx])
         ylabels.append(f'{bundle.eeg_channel_names[channel_index]} ({float(bundle.lead_field[channel_index]):+.2f})')
     axis.set_yticks(yticks)
     axis.set_yticklabels(ylabels)
-    axis.set_title('Inferred local r(t) vs neighboring EEG channels\n(z-scored and vertically offset for shape comparison)')
+    axis.set_title('Inferred r(t), EEG pseudoinverse proposal, and neighboring EEG channels\n(z-scored and vertically offset for shape comparison)')
     axis.set_xlabel('Time (s)')
     axis.grid(alpha=0.25, axis='x')
     fig.tight_layout()
@@ -1261,7 +1922,8 @@ def write_summary(
         '',
         '- r(t) is treated as a signed local neural driver, not as a global whole-head variable.',
         '- Only spatially neighboring EEG and fNIRS channels enter one local anchor audit.',
-        '- The dynamic core remains Croce\'s five-state model.',
+        '- r(t) has zero endogenous drift; each EEG sample proposes a fresh local r(t).',
+        '- fNIRS likelihood is the only particle weighting term.',
         '- Real-data mode uses deviation coordinates around baseline so signs remain explicit and zero-centering is valid.',
         '',
         '## Observation Setup',
@@ -1269,6 +1931,9 @@ def write_summary(
         f'- Mode: {bundle.mode}',
         f'- Pair mode: {bundle.pair_mode}',
         f'- Pair labels: {bundle.pair_labels[0]} / {bundle.pair_labels[1]}',
+        f'- EEG fs (Hz): {bundle.eeg_fs_hz:.3f}',
+        f'- fNIRS fs (Hz): {bundle.fnirs_fs_hz:.3f}',
+        f'- EEG substeps per fNIRS step: {bundle.eeg_substeps_per_fnirs}',
         f'- EEG channels used: {bundle.eeg_indices.tolist()}',
         f'- fNIRS channels used: {bundle.fnirs_indices.tolist()}',
         f'- EEG sign mode: {spatial_config.eeg_sign_mode}',
@@ -1292,10 +1957,15 @@ def write_summary(
             '',
             '## Baseline Audit',
             '',
-            f'- Mean EEG correlation: {baseline_metrics["eeg_corr_mean"]:.4f}',
-            f'- Mean {bundle.pair_labels[0]} correlation: {baseline_metrics["fnirs_primary_corr_mean"]:.4f}',
-            f'- Mean {bundle.pair_labels[1]} correlation: {baseline_metrics["fnirs_secondary_corr_mean"]:.4f}',
-            f'- State to fNIRS peak lag (s): {baseline_metrics["state_to_fnirs_peak_lag_s"]:.4f}',
+            f'- Mean EEG source-target correlation: {baseline_metrics["eeg_corr_mean"]:.4f}',
+            f'- Mean {bundle.pair_labels[0]} source-target correlation: {baseline_metrics["fnirs_primary_corr_mean"]:.4f}',
+            f'- Mean {bundle.pair_labels[1]} source-target correlation: {baseline_metrics["fnirs_secondary_corr_mean"]:.4f}',
+            f'- Mean fNIRS source-target correlation: {baseline_metrics["fnirs_corr_mean"]:.4f}',
+            f'- r(t) alpha/delta power ratio: {baseline_metrics["r_alpha_delta_power_ratio"]:.4f}',
+            f'- Low-frequency modification ratio ||r_low - r_eeg_low|| / ||r_eeg_low||: {baseline_metrics["r_low_modification_ratio"]:.4f}',
+            f'- Full-band modification ratio ||r - r_eeg|| / ||r_eeg||: {baseline_metrics["r_total_modification_ratio"]:.4f}',
+            f'- Correlation between r_hat and EEG pseudoinverse proposal: {baseline_metrics["r_projection_corr"]:.4f}',
+            f'- Hemodynamic lag to fNIRS (s): {baseline_metrics["hemo_to_fnirs_peak_lag_s"]:.4f}',
             f'- Mean ESS ratio: {baseline_metrics["ess_ratio_mean"]:.4f}',
             f'- Mean r-state posterior std: {baseline_metrics["state_r_std_mean"]:.4f}',
             f'- Log-likelihood: {baseline_metrics["log_likelihood"]:.4f}',
@@ -1309,25 +1979,25 @@ def write_summary(
             '## Null Audit',
             '',
             f'- Time-shift null log-likelihood delta (baseline - null): {null_metrics["time_shift_log_likelihood_delta"]:.4f}',
-            f'- Time-shift null r-correlation delta (baseline - null): {null_metrics["time_shift_r_corr_delta"]:.4f}',
+            f'- Time-shift null mean fNIRS correlation delta (baseline - null): {null_metrics["time_shift_fnirs_corr_delta"]:.4f}',
         ]
     )
     if 'spatial_null_log_likelihood_delta' in null_metrics:
         lines.extend(
             [
                 f'- Spatial-null log-likelihood delta (baseline - null): {null_metrics["spatial_null_log_likelihood_delta"]:.4f}',
-                f'- Spatial-null r-correlation delta (baseline - null): {null_metrics["spatial_null_r_corr_delta"]:.4f}',
+                f'- Spatial-null mean fNIRS correlation delta (baseline - null): {null_metrics["spatial_null_fnirs_corr_delta"]:.4f}',
             ]
         )
-    if bundle.true_states is not None:
+    if bundle.true_r_eeg is not None:
         lines.extend(
             [
                 '',
                 '## Synthetic Recovery',
                 '',
-                f'- RMSE r(t): {baseline_metrics["rmse_r"]:.6f}',
-                f'- RMSE delta_HbO(t): {baseline_metrics["rmse_delta_hbo"]:.6f}',
-                f'- RMSE delta_Hb(t): {baseline_metrics["rmse_delta_hb"]:.6f}',
+                f'- Normalized RMSE r(t): {baseline_metrics["r_norm_rmse"]:.6f}',
+                f'- High-frequency correlation r_hat vs r_true: {baseline_metrics["r_high_corr"]:.4f}',
+                f'- Low-frequency correlation r_hat vs r_true: {baseline_metrics["r_low_corr"]:.4f}',
             ]
         )
     path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
@@ -1351,40 +2021,40 @@ def main() -> None:
         resample_fraction=float(args.resample_fraction),
         prior_std=parse_vector(args.prior_std, name='prior-std'),
         state_noise_std=parse_vector(args.state_noise_std, name='state-noise-std'),
+        sigma_prop=float(args.sigma_prop),
+        sigma_nirs=float(args.sigma_nirs),
         seed_list=parse_seed_list(args.seed_list),
         time_shift_null_s=float(args.time_shift_null_s),
         run_spatial_null=bool(args.run_spatial_null),
+        solver_backend=str(args.solver_backend),
+        torch_device=str(args.torch_device),
     )
+    filter_config.prior_std[4] = 0.0
+    filter_config.state_noise_std[4] = 0.0
     output_dir = resolve_output_dir(args.output_dir, args.mode)
 
     if args.mode == 'synthetic':
         bundle = simulate_synthetic_bundle(args, spatial_config)
     elif args.mode == 'dataset':
         bundle = load_dataset_bundle(args, spatial_config)
-        filter_config = FilterConfig(
-            integration_dt_s=filter_config.integration_dt_s,
-            observation_fs_hz=float(1.0 / (bundle.time_s[1] - bundle.time_s[0])) if bundle.time_s.shape[0] > 1 else float(args.observation_fs),
-            num_particles=filter_config.num_particles,
-            resample_fraction=filter_config.resample_fraction,
-            prior_std=filter_config.prior_std,
-            state_noise_std=filter_config.state_noise_std,
-            seed_list=filter_config.seed_list,
-            time_shift_null_s=filter_config.time_shift_null_s,
-            run_spatial_null=filter_config.run_spatial_null,
-        )
     else:
         bundle = load_real_bundle(args, spatial_config)
-        filter_config = FilterConfig(
-            integration_dt_s=filter_config.integration_dt_s,
-            observation_fs_hz=float(1.0 / (bundle.time_s[1] - bundle.time_s[0])) if bundle.time_s.shape[0] > 1 else float(args.observation_fs),
-            num_particles=filter_config.num_particles,
-            resample_fraction=filter_config.resample_fraction,
-            prior_std=filter_config.prior_std,
-            state_noise_std=filter_config.state_noise_std,
-            seed_list=filter_config.seed_list,
-            time_shift_null_s=filter_config.time_shift_null_s,
-            run_spatial_null=filter_config.run_spatial_null,
-        )
+
+    filter_config = FilterConfig(
+        integration_dt_s=float(1.0 / bundle.eeg_fs_hz),
+        observation_fs_hz=bundle.fnirs_fs_hz,
+        num_particles=filter_config.num_particles,
+        resample_fraction=filter_config.resample_fraction,
+        prior_std=filter_config.prior_std,
+        state_noise_std=filter_config.state_noise_std,
+        sigma_prop=filter_config.sigma_prop,
+        sigma_nirs=filter_config.sigma_nirs,
+        seed_list=filter_config.seed_list,
+        time_shift_null_s=filter_config.time_shift_null_s,
+        run_spatial_null=filter_config.run_spatial_null,
+        solver_backend=filter_config.solver_backend,
+        torch_device=filter_config.torch_device,
+    )
 
     params = ModelParams()
     run_results = [run_particle_filter(bundle, filter_config, params, seed=seed) for seed in filter_config.seed_list]
@@ -1397,7 +2067,7 @@ def main() -> None:
     time_shift_metrics = compute_fit_metrics(time_shift_bundle, time_shift_result, filter_config)
     null_metrics: Dict[str, Any] = {
         'time_shift_log_likelihood_delta': float(baseline_metrics['log_likelihood'] - time_shift_metrics['log_likelihood']),
-        'time_shift_r_corr_delta': float(baseline_metrics['state_to_fnirs_peak_corr'] - time_shift_metrics['state_to_fnirs_peak_corr']),
+        'time_shift_fnirs_corr_delta': float(baseline_metrics['fnirs_corr_mean'] - time_shift_metrics['fnirs_corr_mean']),
     }
 
     if filter_config.run_spatial_null:
@@ -1407,7 +2077,7 @@ def main() -> None:
         null_metrics.update(
             {
                 'spatial_null_log_likelihood_delta': float(baseline_metrics['log_likelihood'] - spatial_metrics['log_likelihood']),
-                'spatial_null_r_corr_delta': float(baseline_metrics['state_to_fnirs_peak_corr'] - spatial_metrics['state_to_fnirs_peak_corr']),
+                'spatial_null_fnirs_corr_delta': float(baseline_metrics['fnirs_corr_mean'] - spatial_metrics['fnirs_corr_mean']),
             }
         )
 
@@ -1422,6 +2092,10 @@ def main() -> None:
             'resample_fraction': filter_config.resample_fraction,
             'prior_std': filter_config.prior_std.tolist(),
             'state_noise_std': filter_config.state_noise_std.tolist(),
+            'sigma_prop': filter_config.sigma_prop,
+            'sigma_nirs': filter_config.sigma_nirs,
+            'solver_backend': filter_config.solver_backend,
+            'torch_device': filter_config.torch_device,
             'seed_list': list(filter_config.seed_list),
             'time_shift_null_s': filter_config.time_shift_null_s,
             'run_spatial_null': filter_config.run_spatial_null,
@@ -1434,6 +2108,11 @@ def main() -> None:
         'selected_channels': {
             'eeg_indices': bundle.eeg_indices.tolist(),
             'fnirs_indices': bundle.fnirs_indices.tolist(),
+        },
+        'sampling': {
+            'eeg_fs_hz': bundle.eeg_fs_hz,
+            'fnirs_fs_hz': bundle.fnirs_fs_hz,
+            'eeg_substeps_per_fnirs': bundle.eeg_substeps_per_fnirs,
         },
         'channel_names': {
             'eeg': list(bundle.eeg_channel_names),
@@ -1464,6 +2143,8 @@ def main() -> None:
     plot_state_timecourses(output_dir / 'state_timecourses.png', bundle, baseline_result)
     plot_time_colored_state_space(output_dir / 'state_space_time_colored.png', bundle, baseline_result)
     plot_observation_reconstruction(output_dir / 'observation_reconstruction.png', bundle, baseline_result)
+    plot_target_time_frequency_diagnostics(output_dir / 'target_time_frequency_diagnostics.png', bundle, baseline_result)
+    plot_target_psd_comparison(output_dir / 'target_psd_comparison.png', bundle, baseline_result)
     plot_r_vs_neighboring_eeg(output_dir / 'r_vs_neighboring_eeg.png', bundle, baseline_result)
 
     print(f'Results saved to {output_dir}')

@@ -2,7 +2,7 @@
 
 > Rebased: 2026-05-26
 > Status: redesigned — r(t) has no endogenous dynamics; EEG proposes, fNIRS selects
-> Canonical design: [FAST_SLOW_DESIGN.md](FAST_SLOW_DESIGN.md)
+> Canonical design: [DESIGN.md](DESIGN.md)
 
 ---
 
@@ -13,8 +13,8 @@ EEG-fNIRS data. The core modification: r(t) has no OU dynamics. It is proposed
 from EEG at each PF substep and weighted by fNIRS likelihood only.
 
 Committed baseline:
-1. [FAST_SLOW_DESIGN.md](FAST_SLOW_DESIGN.md) — canonical design
-2. [scripts/run_local_neighborhood_solver_audit.py](scripts/run_local_neighborhood_solver_audit.py) — real-data solver (needs modification per FAST_SLOW_DESIGN.md Section 6)
+1. [DESIGN.md](DESIGN.md) — canonical design
+2. [scripts/run_local_neighborhood_solver_audit.py](scripts/run_local_neighborhood_solver_audit.py) — real-data solver implementing the redesigned PF and audit metrics
 
 ---
 
@@ -89,7 +89,7 @@ If these fail, the current approximation must be further redesigned.
 | Component | Status |
 |-----------|--------|
 | `run_croce2017_paper_simulation.py` | Done (paper-faithful reference) |
-| `run_local_neighborhood_solver_audit.py` | Needs modification per FAST_SLOW_DESIGN.md §6 |
+| `run_local_neighborhood_solver_audit.py` | Done — dual-rate EEG proposal + fNIRS-only weighting audit path |
 | Synthetic Phase 1 validation | Not started |
 | Real-data Phase 2 audit | Not started |
 
@@ -97,4 +97,4 @@ If these fail, the current approximation must be further redesigned.
 
 ## 8. Reference
 
-- [FAST_SLOW_DESIGN.md](FAST_SLOW_DESIGN.md) — complete mathematical specification, PF algorithm, and experimental plan
+- [DESIGN.md](DESIGN.md) — complete mathematical specification, PF algorithm, and experimental plan

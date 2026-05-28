@@ -28,7 +28,7 @@ This workspace is not for:
 
 | Document | Purpose |
 |----------|---------|
-| [DESIGN.md](FAST_SLOW_DESIGN.md) | **Canonical design** — full mathematical specification |
+| [DESIGN.md](DESIGN.md) | **Canonical design** — full mathematical specification |
 | [CROCE2017_REAL_DATA_VALIDATION_PLAN.md](CROCE2017_REAL_DATA_VALIDATION_PLAN.md) | Validation plan, metrics, decision rules |
 
 ## Layout
@@ -36,7 +36,7 @@ This workspace is not for:
 ```text
 croce_validation/
   README.md
-  FAST_SLOW_DESIGN.md              # canonical design
+  DESIGN.md                        # canonical design
   CROCE2017_REAL_DATA_VALIDATION_PLAN.md
   scripts/
     run_local_neighborhood_solver_audit.py  # real-data solver (modified design)
