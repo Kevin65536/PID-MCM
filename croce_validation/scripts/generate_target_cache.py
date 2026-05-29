@@ -325,8 +325,8 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
         "total_s": round(load_s + pf_s + post_s, 4),
         "num_fnirs_steps": num_fnirs,
         "num_eeg_steps": num_eeg,
-        "n_eeg_channels": int(bundle.eeg_obs.shape[1]),
-        "n_fnirs_channels": int(bundle.fnirs_primary_obs.shape[1]),
+        "n_eeg_channels": int(bundle.eeg_obs_raw_full.shape[1]) if getattr(bundle, "eeg_obs_raw_full", None) is not None else int(bundle.eeg_obs.shape[1]),
+        "n_fnirs_channels": int(bundle.fnirs_primary_obs_raw_full.shape[1]) if getattr(bundle, "fnirs_primary_obs_raw_full", None) is not None else int(bundle.fnirs_primary_obs.shape[1]),
         "eeg_fs_hz": float(bundle.eeg_fs_hz),
         "fnirs_fs_hz": float(bundle.fnirs_fs_hz),
         "pair_mode": str(bundle.pair_mode),
@@ -355,53 +355,69 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
 
 
 def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Dict[str, np.ndarray]:
-    """Compute source/observation targets in raw measurement space."""
+    """Compute source/observation targets in raw measurement space.
+
+    When the bundle provides ``lead_field_full`` and full-channel raw
+    observations, targets are produced at the full channel dimensionality
+    (30 EEG channels, 36 fNIRS spatial positions per optical channel).
+    Otherwise falls back to the local-neighbourhood dimensionality used by
+    the particle filter.
+    """
     r_estimates_eeg = np.asarray(pf_result["r_estimates_eeg"], dtype=np.float64)
     estimates = np.asarray(pf_result["state_estimates"], dtype=np.float64)
 
-    # Source targets stay in the same raw measurement space as the loaded data.
-    if bundle.normalization.get("mode") == "per_channel_zscore_after_local_selection":
-        pred_eeg_norm, pred_primary_norm, pred_secondary_norm = audit.predict_observations(
-            np.column_stack([
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                r_estimates_eeg,
-            ]),
-            bundle.lead_field, bundle.jac_primary, bundle.jac_secondary, bundle.pair_mode,
-        )
-        _, pred_primary_norm, pred_secondary_norm = audit.predict_observations(
-            estimates,
-            bundle.lead_field, bundle.jac_primary, bundle.jac_secondary, bundle.pair_mode,
-        )
-        pred_eeg_raw = audit.destandardize_matrix(pred_eeg_norm, bundle.normalization["eeg"])
-        pred_primary_raw = audit.destandardize_matrix(pred_primary_norm, bundle.normalization["fnirs_primary"])
-        pred_secondary_raw = audit.destandardize_matrix(pred_secondary_norm, bundle.normalization["fnirs_secondary"])
+    has_full = (
+        getattr(bundle, "lead_field_full", None) is not None
+        and getattr(bundle, "eeg_obs_raw_full", None) is not None
+    )
+
+    if has_full:
+        lead_eeg = np.asarray(bundle.lead_field_full, dtype=np.float64)
+        jac_p = np.asarray(bundle.jac_primary_full, dtype=np.float64)
+        jac_s = np.asarray(bundle.jac_secondary_full, dtype=np.float64)
+        eeg_stats = bundle.normalization.get("eeg_full", bundle.normalization["eeg"])
+        fnirs_p_stats = bundle.normalization.get("fnirs_primary_full", bundle.normalization["fnirs_primary"])
+        fnirs_s_stats = bundle.normalization.get("fnirs_secondary_full", bundle.normalization["fnirs_secondary"])
+        eeg_raw = np.asarray(bundle.eeg_obs_raw_full, dtype=np.float64)
+        fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw_full, dtype=np.float64)
+        fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw_full, dtype=np.float64)
     else:
-        pred_eeg_raw, pred_primary_raw, pred_secondary_raw = audit.predict_observations(
-            np.column_stack([
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                np.zeros_like(r_estimates_eeg),
-                r_estimates_eeg,
-            ]),
-            bundle.lead_field, bundle.jac_primary, bundle.jac_secondary, bundle.pair_mode,
-        )
-        _, pred_primary_raw, pred_secondary_raw = audit.predict_observations(
-            estimates,
-            bundle.lead_field, bundle.jac_primary, bundle.jac_secondary, bundle.pair_mode,
-        )
+        lead_eeg = np.asarray(bundle.lead_field, dtype=np.float64)
+        jac_p = np.asarray(bundle.jac_primary, dtype=np.float64)
+        jac_s = np.asarray(bundle.jac_secondary, dtype=np.float64)
+        eeg_stats = bundle.normalization["eeg"]
+        fnirs_p_stats = bundle.normalization["fnirs_primary"]
+        fnirs_s_stats = bundle.normalization["fnirs_secondary"]
+        eeg_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
+        fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
+        fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
 
-    # Observation targets are additive residuals in the same raw measurement space.
-    eeg_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
-    fnirs_primary_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
-    fnirs_secondary_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
+    # Source predictions in normalized space, then destandardize to raw.
+    eeg_substeps = eeg_raw.shape[0] // estimates.shape[0]
+    _lead = lead_eeg.reshape(1, -1)
 
+    # EEG source: r_eeg interpolated to EEG rate × lead_field
+    r_eeg_fnirs = estimates[:, 4]
+    if eeg_substeps > 1:
+        r_eeg_eeg = np.repeat(r_eeg_fnirs, eeg_substeps)[: eeg_raw.shape[0]]
+    else:
+        r_eeg_eeg = r_estimates_eeg
+    pred_eeg_raw = r_eeg_eeg.reshape(-1, 1) * _lead
+
+    # fNIRS source: state[:, 2] * jac_primary, state[:, 3] * jac_secondary
+    pred_primary_raw = estimates[:, 2:3] * jac_p.reshape(1, -1)
+    pred_secondary_raw = estimates[:, 3:4] * jac_s.reshape(1, -1)
+
+    # Destandardize if the bundle was z-scored
+    if bundle.normalization.get("mode") == "per_channel_zscore_after_local_selection":
+        pred_eeg_raw = audit.destandardize_matrix(pred_eeg_raw, eeg_stats)
+        pred_primary_raw = audit.destandardize_matrix(pred_primary_raw, fnirs_p_stats)
+        pred_secondary_raw = audit.destandardize_matrix(pred_secondary_raw, fnirs_s_stats)
+
+    # Observation residuals in raw measurement space
     obs_eeg = eeg_raw - pred_eeg_raw
-    obs_primary = fnirs_primary_raw - pred_primary_raw
-    obs_secondary = fnirs_secondary_raw - pred_secondary_raw
+    obs_primary = fnirs_p_raw - pred_primary_raw
+    obs_secondary = fnirs_s_raw - pred_secondary_raw
 
     return {
         "source_eeg": pred_eeg_raw.astype(np.float32),
@@ -447,13 +463,14 @@ def run_sequential(
 def run_parallel(
     payloads: List[Tuple[argparse.Namespace, Any, Any, int]],
     n_workers: int,
+    n_threads: int,
 ) -> List[Dict[str, Any]]:
     """Process jobs in parallel using a fork-based multiprocessing pool."""
     effective_workers = max(1, min(int(n_workers), len(payloads)))
 
     ctx = mp.get_context("fork")
     t0 = time.perf_counter()
-    with ctx.Pool(processes=effective_workers) as pool:
+    with ctx.Pool(processes=effective_workers, initializer=_init_worker, initargs=(n_threads,)) as pool:
         all_results = pool.map(_process_anchor, payloads)
     wall_s = time.perf_counter() - t0
 
@@ -597,9 +614,9 @@ def main() -> None:
     t_total_start = time.perf_counter()
 
     if args.parallel_workers > 1:
-        results = run_parallel(payloads, effective_workers)
+        results = run_parallel(payloads, effective_workers, int(args.threads))
     else:
-        results = run_sequential(payloads, args.threads)
+        results = run_sequential(payloads, int(args.threads))
 
     total_wall = time.perf_counter() - t_total_start
 

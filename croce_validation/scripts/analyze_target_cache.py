@@ -178,27 +178,39 @@ def find_cache_files(cache_dir: Path) -> Dict[int, Path]:
 
 
 def load_cache(cache_path: Path, max_anchors: int) -> Dict[str, np.ndarray]:
-    """Load a cache file and aggregate across anchors into flat arrays per modality."""
-    with np.load(cache_path, allow_pickle=False) as data:
-        anchor_groups: Dict[str, List[str]] = {}
-        for key in data.keys():
-            parts = key.split("/", 1)
-            if len(parts) == 2:
-                anchor_groups.setdefault(parts[0], []).append(parts[1])
+    """Load a cache file and aggregate across anchors (and events) into flat arrays per modality.
 
-        anchors = sorted(anchor_groups.keys())
+    Supports both legacy ``anchor/field`` keys and the current
+    ``anchor/event_XXX/field`` event-window layout.
+    """
+    with np.load(cache_path, allow_pickle=False) as data:
+        data_keys = list(data.keys())
+        # Normalise key structure to (anchor, field, optional event_part)
+        key_triples: List[Tuple[str, str, Optional[str]]] = []
+        for key in data_keys:
+            parts = key.split("/")
+            if len(parts) == 2:
+                key_triples.append((parts[0], parts[1], None))
+            elif len(parts) == 3:
+                key_triples.append((parts[0], parts[2], parts[1]))
+
+        anchors = sorted({t[0] for t in key_triples})
         if max_anchors > 0:
             anchors = anchors[:max_anchors]
 
-        # Aggregate across anchors
+        # Aggregate across anchors and events
         aggregated: Dict[str, List[np.ndarray]] = {}
         for anchor in anchors:
             for field in CANONICAL_FIELDS:
                 for alias in FIELD_ALIASES[field]:
-                    key = f"{anchor}/{alias}"
-                    if key in data:
-                        aggregated.setdefault(field, []).append(np.asarray(data[key]))
+                    for anchor_name, field_name, event_part in key_triples:
+                        if anchor_name != anchor or field_name != alias:
+                            continue
+                        aggregated.setdefault(field, []).append(np.asarray(data[f"{anchor}/{event_part}/{alias}" if event_part else f"{anchor}/{alias}"]))
                         break
+                    else:
+                        continue
+                    break
 
     result: Dict[str, np.ndarray] = {}
     for field, arrays in aggregated.items():
@@ -207,13 +219,13 @@ def load_cache(cache_path: Path, max_anchors: int) -> Dict[str, np.ndarray]:
     return result
 
 
-def build_time_axis(num_samples: int, duration_s: Optional[float]) -> np.ndarray:
+def build_time_axis(num_samples: int, duration_s: Optional[float], start_s: float = 0.0) -> np.ndarray:
     if num_samples <= 0:
         raise ValueError("num_samples must be positive")
     if duration_s is None or duration_s <= 0.0:
-        return np.arange(num_samples, dtype=np.float64)
+        return start_s + np.arange(num_samples, dtype=np.float64)
     dt_s = float(duration_s) / float(num_samples)
-    return np.arange(num_samples, dtype=np.float64) * dt_s
+    return start_s + np.arange(num_samples, dtype=np.float64) * dt_s
 
 
 def pair_mode_uses_concentration_space(pair_mode: Optional[str]) -> bool:
@@ -319,6 +331,7 @@ def plot_target_timecourses(
     manifest = load_manifest(cache_path)
     config = manifest.get("config", {}) if isinstance(manifest, dict) else {}
     segment_duration_s = config.get("segment_duration_s")
+    segment_start_s = float(config.get("segment_start_s", 0.0) or 0.0)
     pair_mode = config.get("pair_mode")
     pair_labels = config.get("pair_labels")
     primary_label, secondary_label = infer_fnirs_channel_labels(pair_mode, pair_labels)
@@ -334,6 +347,15 @@ def plot_target_timecourses(
 
         def _get_series(field_name: str) -> Optional[np.ndarray]:
             for alias in FIELD_ALIASES[field_name]:
+                # Event-window layout (current): {anchor}/event_000/{field}
+                for key in data.keys():
+                    if not key.startswith(anchor_key + "/"):
+                        continue
+                    rest = key[len(anchor_key) + 1:]
+                    if "/" in rest and rest.split("/")[-1] == alias:
+                        arr = np.asarray(data[key])
+                        return arr[:, 0] if arr.ndim > 1 else arr
+                # Legacy layout: {anchor}/{field}
                 key = f"{anchor_key}/{alias}"
                 if key in data:
                     arr = np.asarray(data[key])
@@ -354,53 +376,74 @@ def plot_target_timecourses(
     fnirs_primary_len = len(fnirs_primary_src) if fnirs_primary_src is not None else len(fnirs_primary_obs) if fnirs_primary_obs is not None else 0
     fnirs_secondary_len = len(fnirs_secondary_src) if fnirs_secondary_src is not None else len(fnirs_secondary_obs) if fnirs_secondary_obs is not None else 0
 
-    eeg_time = build_time_axis(eeg_len, float(segment_duration_s) if use_seconds_axis and eeg_len > 0 else None) if eeg_len > 0 else None
-    fnirs_primary_time = build_time_axis(fnirs_primary_len, float(segment_duration_s) if use_seconds_axis and fnirs_primary_len > 0 else None) if fnirs_primary_len > 0 else None
-    fnirs_secondary_time = build_time_axis(fnirs_secondary_len, float(segment_duration_s) if use_seconds_axis and fnirs_secondary_len > 0 else None) if fnirs_secondary_len > 0 else None
+    eeg_time = build_time_axis(eeg_len, float(segment_duration_s) if use_seconds_axis and eeg_len > 0 else None, segment_start_s) if eeg_len > 0 else None
+    fnirs_primary_time = build_time_axis(fnirs_primary_len, float(segment_duration_s) if use_seconds_axis and fnirs_primary_len > 0 else None, segment_start_s) if fnirs_primary_len > 0 else None
+    fnirs_secondary_time = build_time_axis(fnirs_secondary_len, float(segment_duration_s) if use_seconds_axis and fnirs_secondary_len > 0 else None, segment_start_s) if fnirs_secondary_len > 0 else None
 
     # Row 0: EEG
     ax = axes[0]
+    ax_src = ax
+    ax_obs = ax.twinx()
     if eeg_src is not None and eeg_time is not None:
-        ax.plot(eeg_time, eeg_src, color="#D62728", linewidth=1.2, label="Source (physiological)")
+        ax_src.plot(eeg_time, eeg_src, color="#D62728", linewidth=1.2, label="Source (physiological)")
     if eeg_obs is not None and eeg_time is not None:
-        ax.plot(eeg_time, eeg_obs, color="#1F77B4", linewidth=1.1, label="Observation (residual)")
-    ax.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
-    ax.set_ylabel("EEG (μV)")
-    ax.set_title(f"EEG Targets — {anchor_name}")
-    ax.legend(loc="upper right", fontsize=8)
-    ax.grid(alpha=0.25)
+        ax_obs.plot(eeg_time, eeg_obs, color="#1F77B4", linewidth=1.1, label="Observation (residual)")
+    ax_src.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
+    ax_src.set_ylabel("EEG (μV)  —  source", color="#D62728")
+    ax_obs.set_ylabel("EEG (μV)  —  obs", color="#1F77B4")
+    ax_src.tick_params(axis="y", colors="#D62728")
+    ax_obs.tick_params(axis="y", colors="#1F77B4")
+    lines_src, labels_src = ax_src.get_legend_handles_labels()
+    lines_obs, labels_obs = ax_obs.get_legend_handles_labels()
+    ax_src.legend(lines_src + lines_obs, labels_src + labels_obs, loc="upper right", fontsize=8)
+    ax_src.set_title(f"EEG Targets — {anchor_name}")
+    ax_src.grid(alpha=0.25)
 
     # Row 1: fNIRS Primary
     ax = axes[1]
+    ax_src = ax
+    ax_obs = ax.twinx()
     if fnirs_primary_src is not None and fnirs_primary_time is not None:
-        ax.plot(fnirs_primary_time, fnirs_primary_src,
+        ax_src.plot(fnirs_primary_time, fnirs_primary_src,
                 color="#17BECF", linewidth=1.2, label="Source (physiological)")
     if fnirs_primary_obs is not None and fnirs_primary_time is not None:
-        ax.plot(fnirs_primary_time, fnirs_primary_obs,
+        ax_obs.plot(fnirs_primary_time, fnirs_primary_obs,
                 color="#1F77B4", linewidth=1.1, label="Observation (residual)")
-    ax.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
-    ax.set_ylabel(f"fNIRS {primary_label} (a.u.)")
-    ax.set_title(f"{primary_title} — {anchor_name}")
-    ax.legend(loc="upper right", fontsize=8)
-    ax.grid(alpha=0.25)
+    ax_src.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
+    ax_src.set_ylabel(f"fNIRS {primary_label}  —  source", color="#17BECF")
+    ax_obs.set_ylabel(f"fNIRS {primary_label}  —  obs", color="#1F77B4")
+    ax_src.tick_params(axis="y", colors="#17BECF")
+    ax_obs.tick_params(axis="y", colors="#1F77B4")
+    lines_src, labels_src = ax_src.get_legend_handles_labels()
+    lines_obs, labels_obs = ax_obs.get_legend_handles_labels()
+    ax_src.legend(lines_src + lines_obs, labels_src + labels_obs, loc="upper right", fontsize=8)
+    ax_src.set_title(f"{primary_title} — {anchor_name}")
+    ax_src.grid(alpha=0.25)
 
     # Row 2: fNIRS Secondary
     ax = axes[2]
+    ax_src = ax
+    ax_obs = ax.twinx()
     if fnirs_secondary_src is not None and fnirs_secondary_time is not None:
-        ax.plot(fnirs_secondary_time, fnirs_secondary_src,
+        ax_src.plot(fnirs_secondary_time, fnirs_secondary_src,
                 color="#FF9896", linewidth=1.2, label="Source (physiological)")
     if fnirs_secondary_obs is not None and fnirs_secondary_time is not None:
-        ax.plot(fnirs_secondary_time, fnirs_secondary_obs,
+        ax_obs.plot(fnirs_secondary_time, fnirs_secondary_obs,
                 color="#9467BD", linewidth=1.1, label="Observation (residual)")
-    ax.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
-    ax.set_ylabel(f"fNIRS {secondary_label} (a.u.)")
-    ax.set_xlabel("Time (s)" if use_seconds_axis else "Time (samples)")
-    ax.set_title(f"{secondary_title} — {anchor_name}")
-    ax.legend(loc="upper right", fontsize=8)
-    ax.grid(alpha=0.25)
+    ax_src.axhline(0.0, color="#BDBDBD", linewidth=0.8, linestyle="--")
+    ax_src.set_ylabel(f"fNIRS {secondary_label}  —  source", color="#FF9896")
+    ax_obs.set_ylabel(f"fNIRS {secondary_label}  —  obs", color="#9467BD")
+    ax_src.tick_params(axis="y", colors="#FF9896")
+    ax_obs.tick_params(axis="y", colors="#9467BD")
+    lines_src, labels_src = ax_src.get_legend_handles_labels()
+    lines_obs, labels_obs = ax_obs.get_legend_handles_labels()
+    ax_src.legend(lines_src + lines_obs, labels_src + labels_obs, loc="upper right", fontsize=8)
+    ax_src.set_xlabel("Time (s)" if use_seconds_axis else "Time (samples)")
+    ax_src.set_title(f"{secondary_title} — {anchor_name}")
+    ax_src.grid(alpha=0.25)
 
     if use_seconds_axis:
-        axes[-1].set_xlim(0.0, float(segment_duration_s))
+        axes[-1].set_xlim(segment_start_s, segment_start_s + float(segment_duration_s))
         fig.text(0.5, 0.012, fnirs_note, ha="center", fontsize=9)
 
     fig.suptitle("Source/Observation Target Timecourses (Exact PF Solver)",

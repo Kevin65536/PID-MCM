@@ -138,6 +138,16 @@ class ObservationBundle:
     eeg_channel_names: Tuple[str, ...] = ()
     fnirs_primary_channel_names: Tuple[str, ...] = ()
     fnirs_secondary_channel_names: Tuple[str, ...] = ()
+    # Full-channel data for producing full-dimensional targets
+    eeg_obs_raw_full: Optional[np.ndarray] = None
+    fnirs_primary_obs_raw_full: Optional[np.ndarray] = None
+    fnirs_secondary_obs_raw_full: Optional[np.ndarray] = None
+    lead_field_full: Optional[np.ndarray] = None
+    jac_primary_full: Optional[np.ndarray] = None
+    jac_secondary_full: Optional[np.ndarray] = None
+    eeg_channel_names_full: Tuple[str, ...] = ()
+    fnirs_primary_channel_names_full: Tuple[str, ...] = ()
+    fnirs_secondary_channel_names_full: Tuple[str, ...] = ()
     metadata: Optional[Mapping[str, Any]] = None
     true_states: Optional[np.ndarray] = None
     true_r_eeg: Optional[np.ndarray] = None
@@ -1717,6 +1727,38 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
 
     # The EEG+NIRS Single-Trial recordings store paired raw optical channels
     # (`highWL` / `lowWL`) rather than HbO / HbR concentration traces.
+
+    # ---- Full-channel data for full-dimensional targets ----
+    eeg_full_window = eeg_full[segment_start_eeg:segment_end_eeg, :]
+    eeg_full_window = eeg_full_window[: length * eeg_substeps_per_fnirs]
+    eeg_full_norm, eeg_full_stats = standardize_matrix(eeg_full_window)
+
+    all_ordered_primary = np.asarray([primary_by_base[canonicalize_channel_label(b)] for b in paired_bases], dtype=np.int64)
+    all_ordered_secondary = np.asarray([secondary_by_base[canonicalize_channel_label(b)] for b in paired_bases], dtype=np.int64)
+    fnirs_primary_full = fnirs_full[segment_start_fnirs:segment_end_fnirs, :][:, all_ordered_primary]
+    fnirs_secondary_full = fnirs_full[segment_start_fnirs:segment_end_fnirs, :][:, all_ordered_secondary]
+    fnirs_primary_full = fnirs_primary_full[:length]
+    fnirs_secondary_full = fnirs_secondary_full[:length]
+    fnirs_primary_full_norm, fnirs_primary_full_stats = standardize_matrix(fnirs_primary_full)
+    fnirs_secondary_full_norm, fnirs_secondary_full_stats = standardize_matrix(fnirs_secondary_full)
+
+    all_eeg_positions = np.asarray(adjacency.eeg_positions_2d, dtype=np.float64)
+    lead_field_full = build_signed_eeg_weights(
+        eeg_obs=eeg_full_norm,
+        eeg_positions_mm=all_eeg_positions,
+        anchor_position_mm=anchor_position_2d,
+        sigma_mm=spatial_config.eeg_sigma_mm,
+        sign_mode=spatial_config.eeg_sign_mode,
+    )
+
+    all_fnirs_positions = np.asarray(adjacency.fnirs_channel_positions_2d[all_ordered_primary], dtype=np.float64)
+    jac_primary_full = build_positive_weights(all_fnirs_positions, anchor_position_2d, spatial_config.fnirs_sigma_mm)
+    jac_secondary_full = build_positive_weights(all_fnirs_positions, anchor_position_2d, spatial_config.fnirs_sigma_mm)
+
+    eeg_names_full = tuple(str(adjacency.eeg_channel_names[i]) for i in range(len(adjacency.eeg_channel_names)))
+    fnirs_primary_names_full = tuple(str(adjacency.fnirs_channel_names[i]) for i in all_ordered_primary.tolist())
+    fnirs_secondary_names_full = tuple(str(adjacency.fnirs_channel_names[i]) for i in all_ordered_secondary.tolist())
+
     return ObservationBundle(
         mode='dataset',
         pair_mode='wavelength',
@@ -1742,6 +1784,9 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
             'eeg': eeg_stats,
             'fnirs_primary': fnirs_primary_stats,
             'fnirs_secondary': fnirs_secondary_stats,
+            'eeg_full': eeg_full_stats,
+            'fnirs_primary_full': fnirs_primary_full_stats,
+            'fnirs_secondary_full': fnirs_secondary_full_stats,
             'coordinate_system': 'deviation_coordinates_about_baseline',
         },
         units={
@@ -1756,6 +1801,15 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         eeg_channel_names=tuple(str(adjacency.eeg_channel_names[index]) for index in eeg_indices.tolist()),
         fnirs_primary_channel_names=tuple(str(adjacency.fnirs_channel_names[index]) for index in primary_indices.tolist()),
         fnirs_secondary_channel_names=tuple(str(adjacency.fnirs_channel_names[index]) for index in secondary_indices.tolist()),
+        eeg_obs_raw_full=eeg_full_window,
+        fnirs_primary_obs_raw_full=fnirs_primary_full,
+        fnirs_secondary_obs_raw_full=fnirs_secondary_full,
+        lead_field_full=lead_field_full,
+        jac_primary_full=jac_primary_full,
+        jac_secondary_full=jac_secondary_full,
+        eeg_channel_names_full=eeg_names_full,
+        fnirs_primary_channel_names_full=fnirs_primary_names_full,
+        fnirs_secondary_channel_names_full=fnirs_secondary_names_full,
         metadata=metadata,
     )
 
