@@ -6,7 +6,7 @@ its 36 anchors).
 
 Usage:
     python croce_validation/scripts/batch_generate_all_subjects.py \
-        --parallel-workers 18 --threads 2 --solver-kernel rk4
+        --parallel-workers 36 --threads 1
 """
 
 from __future__ import annotations
@@ -29,19 +29,23 @@ def parse_args() -> argparse.Namespace:
         description="Batch generate target cache for all 29 subjects."
     )
     p.add_argument("--data-root", default=str(PROJECT_ROOT / "data" / "EEG+NIRS Single-Trial"))
-    p.add_argument("--segment-start-s", type=float, default=60.0)
-    p.add_argument("--segment-duration-s", type=float, default=120.0)
+    p.add_argument("--segment-mode", choices=("continuous", "event_windows"), default="event_windows")
+    p.add_argument("--segment-start-s", type=float, default=0.0)
+    p.add_argument("--segment-duration-s", type=float, default=0.0,
+                    help="<= 0 means use the full selected session")
+    p.add_argument("--event-window-pre-s", type=float, default=10.0)
+    p.add_argument("--event-window-post-s", type=float, default=40.0)
+    p.add_argument("--event-indices", default="")
+    p.add_argument("--max-events", type=int, default=0)
     p.add_argument("--use-artifact-eeg", action="store_true", default=True)
     p.add_argument("--num-particles", type=int, default=224)
     p.add_argument("--sigma-prop", type=float, default=5.0)
     p.add_argument("--sigma-nirs", type=float, default=0.15)
     p.add_argument("--seed", type=int, default=11)
-    p.add_argument("--threads", type=int, default=2)
-    p.add_argument("--parallel-workers", type=int, default=18)
-    p.add_argument("--solver-kernel", default="rk4",
-                    choices=["expm", "euler", "heun", "rk4"])
+    p.add_argument("--threads", type=int, default=1)
+    p.add_argument("--parallel-workers", type=int, default=36)
     p.add_argument("--torch-device", default="cpu")
-    p.add_argument("--output-dir", default=str(PROJECT_ROOT / "croce_validation" / "cache"))
+    p.add_argument("--output-dir", default=str(PROJECT_ROOT / "croce_validation" / "cache" / "pf_full"))
     p.add_argument("--start-subject", type=int, default=1)
     p.add_argument("--end-subject", type=int, default=29)
     p.add_argument("--resume", action="store_true",
@@ -50,8 +54,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def subject_cache_exists(output_dir: Path, subject_id: int) -> bool:
-    cache_file = output_dir / f"subject{subject_id}_cache.npz"
-    manifest_file = output_dir / f"subject{subject_id}_manifest.json"
+    subject_output_dir = output_dir / f"subject_{subject_id}"
+    cache_file = subject_output_dir / f"subject{subject_id}_cache.npz"
+    manifest_file = subject_output_dir / "cache_manifest.json"
     return cache_file.exists() and manifest_file.exists()
 
 
@@ -64,18 +69,24 @@ def run_subject(args: argparse.Namespace, subject_id: int, output_dir: Path) -> 
         sys.executable, str(CACHE_SCRIPT),
         "--data-root", args.data_root,
         "--subject-id", str(subject_id),
+        "--segment-mode", str(args.segment_mode),
         "--segment-start-s", str(args.segment_start_s),
         "--segment-duration-s", str(args.segment_duration_s),
+        "--event-window-pre-s", str(args.event_window_pre_s),
+        "--event-window-post-s", str(args.event_window_post_s),
         "--num-particles", str(args.num_particles),
         "--sigma-prop", str(args.sigma_prop),
         "--sigma-nirs", str(args.sigma_nirs),
         "--seed", str(args.seed),
         "--threads", str(args.threads),
         "--parallel-workers", str(args.parallel_workers),
-        "--solver-kernel", args.solver_kernel,
         "--torch-device", args.torch_device,
         "--output-dir", str(subject_output_dir),
     ]
+    if args.event_indices:
+        cmd.extend(["--event-indices", str(args.event_indices)])
+    if int(args.max_events) > 0:
+        cmd.extend(["--max-events", str(args.max_events)])
     if args.use_artifact_eeg:
         cmd.append("--use-artifact-eeg")
 
@@ -103,12 +114,6 @@ def run_subject(args: argparse.Namespace, subject_id: int, output_dir: Path) -> 
                 info["avg_pf_per_anchor"] = manifest.get("timing", {}).get("avg_pf_per_anchor_s", 0)
             except (json.JSONDecodeError, KeyError):
                 pass
-        # Copy cache and manifest to top-level output dir
-        for fname in subject_output_dir.iterdir():
-            if fname.suffix in (".npz", ".json"):
-                target = output_dir / fname.name
-                if not target.exists():
-                    target.write_bytes(fname.read_bytes())
     else:
         info["stderr_tail"] = result.stderr[-500:] if result.stderr else ""
 
@@ -138,8 +143,18 @@ def main() -> None:
     print(f"{'='*72}")
     print(f"Subjects: {args.start_subject}–{args.end_subject} ({len(subjects)} to process)")
     print(f"Config: sp={args.sigma_prop}, sn={args.sigma_nirs}, N={args.num_particles}")
-    print(f"Solver: {args.solver_kernel}, Workers: {args.parallel_workers}, Threads: {args.threads}")
-    print(f"Segment: {args.segment_start_s}s–{args.segment_start_s + args.segment_duration_s}s")
+    print(f"PF solver: exact matrix exponential, Workers: {args.parallel_workers}, Threads: {args.threads}")
+    if str(args.segment_mode) == "event_windows":
+        print(f"Segmentation: event windows ({args.event_window_pre_s}s pre + {args.event_window_post_s}s post)")
+        if args.event_indices:
+            print(f"Requested event indices: {args.event_indices}")
+        if int(args.max_events) > 0:
+            print(f"Max events per subject: {args.max_events}")
+    else:
+        if float(args.segment_duration_s) <= 0.0:
+            print("Segment: full selected session")
+        else:
+            print(f"Segment: {args.segment_start_s}s–{args.segment_start_s + args.segment_duration_s}s")
     print(f"Output: {output_dir}")
     print()
 
@@ -170,7 +185,9 @@ def main() -> None:
     batch_manifest = {
         "generated_at": datetime.now().isoformat(),
         "config": {
-            "solver_kernel": args.solver_kernel,
+            "solver_backend": "torch_exact",
+            "state_propagation": "matrix_exponential_exact",
+            "segment_mode": args.segment_mode,
             "parallel_workers": args.parallel_workers,
             "threads": args.threads,
             "num_particles": args.num_particles,
@@ -178,6 +195,10 @@ def main() -> None:
             "sigma_nirs": args.sigma_nirs,
             "segment_start_s": args.segment_start_s,
             "segment_duration_s": args.segment_duration_s,
+            "event_window_pre_s": args.event_window_pre_s,
+            "event_window_post_s": args.event_window_post_s,
+            "event_indices": args.event_indices,
+            "max_events": args.max_events,
             "subjects_start": args.start_subject,
             "subjects_end": args.end_subject,
         },

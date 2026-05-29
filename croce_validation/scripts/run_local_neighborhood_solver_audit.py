@@ -158,8 +158,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--subject-id', type=int, default=1, help='Subject id used in dataset mode')
     parser.add_argument('--session-idx', type=int, default=0, help='Continuous session index used in dataset mode')
     parser.add_argument('--anchor-fnirs-channel', default='', help='Optional fNIRS base name or channel label used as the local anchor in dataset mode')
+    parser.add_argument('--segment-mode', choices=('continuous', 'event_windows'), default='continuous', help='How dataset mode chooses time support for the local bundle')
     parser.add_argument('--segment-start-s', type=float, default=60.0, help='Continuous segment start in seconds for dataset mode')
     parser.add_argument('--segment-duration-s', type=float, default=120.0, help='Continuous segment duration in seconds for dataset mode')
+    parser.add_argument('--event-window-pre-s', type=float, default=10.0, help='Seconds kept before the event when --segment-mode=event_windows')
+    parser.add_argument('--event-window-post-s', type=float, default=40.0, help='Seconds kept after the event when --segment-mode=event_windows')
+    parser.add_argument('--event-idx', type=int, default=-1, help='Event index used when --segment-mode=event_windows')
     parser.add_argument('--use-artifact-eeg', action='store_true', help='Prefer the EEG recordings stored under the ocular-artifact folder in dataset mode')
 
     parser.add_argument('--duration-s', type=float, default=60.0, help='Synthetic duration in seconds')
@@ -639,6 +643,10 @@ def torch_systematic_resample(weights: Any, rng: np.random.Generator) -> Any:
     return torch.searchsorted(cumulative, positions, right=False)
 
 
+def pair_mode_uses_concentration_space(pair_mode: str) -> bool:
+    return str(pair_mode).strip().lower() in {'concentration', 'chromophore'}
+
+
 def predict_observations(
     particles: np.ndarray,
     lead_field: np.ndarray,
@@ -647,7 +655,7 @@ def predict_observations(
     pair_mode: str,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     pred_eeg = particles[:, 4:5] * lead_field.reshape(1, -1)
-    if pair_mode == 'chromophore':
+    if pair_mode_uses_concentration_space(pair_mode):
         pred_primary = particles[:, 2:3] * jac_primary.reshape(1, -1)
         pred_secondary = particles[:, 3:4] * jac_secondary.reshape(1, -1)
     else:
@@ -737,7 +745,7 @@ def torch_predict_observations(
     pair_mode: str,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     pred_eeg = particles[:, 4:5] * lead_field.reshape(1, -1)
-    if pair_mode == 'chromophore':
+    if pair_mode_uses_concentration_space(pair_mode):
         pred_primary = particles[:, 2:3] * jac_primary.reshape(1, -1)
         pred_secondary = particles[:, 3:4] * jac_secondary.reshape(1, -1)
     else:
@@ -1329,13 +1337,13 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         elif 'fnirs_hbo' in bundle_npz and 'fnirs_hb' in bundle_npz:
             fnirs_primary = np.asarray(bundle_npz['fnirs_hbo'], dtype=np.float64)
             fnirs_secondary = np.asarray(bundle_npz['fnirs_hb'], dtype=np.float64)
-            pair_mode = 'chromophore'
+            pair_mode = 'concentration'
             pair_labels = ('HbO', 'Hb')
         elif 'fnirs_primary' in bundle_npz and 'fnirs_secondary' in bundle_npz:
             fnirs_primary = np.asarray(bundle_npz['fnirs_primary'], dtype=np.float64)
             fnirs_secondary = np.asarray(bundle_npz['fnirs_secondary'], dtype=np.float64)
             pair_mode = 'wavelength'
-            pair_labels = ('primary', 'secondary')
+            pair_labels = ('optical_0', 'optical_1')
         else:
             raise ValueError('NPZ bundle must provide one of {fnirs_690, fnirs_830}, {fnirs_hbo, fnirs_hb}, or {fnirs_primary, fnirs_secondary}')
 
@@ -1415,6 +1423,97 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
     )
 
 
+def extract_marker_event_info(markers: Mapping[str, Any]) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    event_times_s = np.asarray(markers['time'], dtype=np.float64) / 1000.0
+    labels = np.argmax(np.asarray(markers['y']), axis=0).astype(int)
+    class_names_raw = markers.get('className')
+    class_names = [str(name) for name in class_names_raw] if class_names_raw is not None else []
+    return event_times_s, labels, class_names
+
+
+def label_name_for_index(label: int, class_names: Sequence[str]) -> str:
+    if 0 <= int(label) < len(class_names):
+        return str(class_names[int(label)])
+    return str(int(label))
+
+
+def resolve_dataset_event_windows(
+    args: argparse.Namespace,
+    dataset: Optional[MultiModalEEGfNIRSDataset] = None,
+) -> List[Dict[str, Any]]:
+    dataset = dataset or MultiModalEEGfNIRSDataset(
+        data_root=args.data_root,
+        subject_ids=[int(args.subject_id)],
+        task='motor_imagery',
+        window_duration_s=2.5,
+        normalize=False,
+        normalization_mode='none',
+        eeg_preprocessing={'bandpass': [0.5, 45.0]},
+        fnirs_preprocessing={'lowpass': 0.2},
+        use_artifact_data=bool(args.use_artifact_eeg),
+        exclude_eog=True,
+        hbo_only=False,
+        hbr_only=False,
+    )
+
+    eeg_session_list, eeg_marker_list, eeg_info = dataset._get_eeg_data(int(args.subject_id), processed=True)
+    fnirs_session_list, fnirs_marker_list, fnirs_info = dataset._get_nirs_data(int(args.subject_id), processed=True)
+    session_idx = int(args.session_idx)
+    if session_idx < 0 or session_idx >= min(len(eeg_session_list), len(fnirs_session_list)):
+        raise ValueError(f'session-idx {session_idx} is out of range')
+
+    eeg_duration_s = float(np.asarray(eeg_session_list[session_idx]).shape[0]) / float(eeg_info['fs'])
+    fnirs_duration_s = float(np.asarray(fnirs_session_list[session_idx]).shape[0]) / float(fnirs_info['fs'])
+    eeg_event_times_s, eeg_labels, eeg_class_names = extract_marker_event_info(eeg_marker_list[session_idx])
+    fnirs_event_times_s, fnirs_labels, fnirs_class_names = extract_marker_event_info(fnirs_marker_list[session_idx])
+
+    common_events = int(min(len(eeg_event_times_s), len(fnirs_event_times_s)))
+    pre_s = float(getattr(args, 'event_window_pre_s', 10.0))
+    post_s = float(getattr(args, 'event_window_post_s', 40.0))
+    descriptors: List[Dict[str, Any]] = []
+    for event_idx in range(common_events):
+        eeg_onset_s = float(eeg_event_times_s[event_idx])
+        fnirs_onset_s = float(fnirs_event_times_s[event_idx])
+        eeg_start_s = eeg_onset_s - pre_s
+        eeg_end_s = eeg_onset_s + post_s
+        fnirs_start_s = fnirs_onset_s - pre_s
+        fnirs_end_s = fnirs_onset_s + post_s
+        invalid_reasons: List[str] = []
+        if eeg_start_s < 0.0:
+            invalid_reasons.append('eeg_pre_exceeds_record_start')
+        if fnirs_start_s < 0.0:
+            invalid_reasons.append('fnirs_pre_exceeds_record_start')
+        if eeg_end_s > eeg_duration_s + 1e-9:
+            invalid_reasons.append('eeg_post_exceeds_record_end')
+        if fnirs_end_s > fnirs_duration_s + 1e-9:
+            invalid_reasons.append('fnirs_post_exceeds_record_end')
+
+        eeg_label = int(eeg_labels[event_idx])
+        fnirs_label = int(fnirs_labels[event_idx])
+        descriptors.append({
+            'event_idx': event_idx,
+            'eeg_onset_s': eeg_onset_s,
+            'fnirs_onset_s': fnirs_onset_s,
+            'eeg_start_s': eeg_start_s,
+            'eeg_end_s': eeg_end_s,
+            'fnirs_start_s': fnirs_start_s,
+            'fnirs_end_s': fnirs_end_s,
+            'aligned_window_start_s': -pre_s,
+            'aligned_window_end_s': post_s,
+            'event_window_pre_s': pre_s,
+            'event_window_post_s': post_s,
+            'eeg_label': eeg_label,
+            'fnirs_label': fnirs_label,
+            'eeg_label_name': label_name_for_index(eeg_label, eeg_class_names),
+            'fnirs_label_name': label_name_for_index(fnirs_label, fnirs_class_names),
+            'label_index_match': bool(eeg_label == fnirs_label),
+            'raw_event_offset_s': fnirs_onset_s - eeg_onset_s,
+            'is_valid': len(invalid_reasons) == 0,
+            'invalid_reasons': invalid_reasons,
+        })
+    return descriptors
+
+
 def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) -> ObservationBundle:
     dataset = MultiModalEEGfNIRSDataset(
         data_root=args.data_root,
@@ -1475,10 +1574,71 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     eeg_substeps_per_fnirs = int(round(eeg_fs_hz / fnirs_fs_hz))
     if eeg_substeps_per_fnirs < 1 or not np.isclose(eeg_substeps_per_fnirs * fnirs_fs_hz, eeg_fs_hz, atol=1e-9):
         raise ValueError('Dataset mode requires EEG fs to be an integer multiple of fNIRS fs')
-    segment_start_eeg = max(int(round(float(args.segment_start_s) * eeg_fs_hz)), 0)
-    segment_start_fnirs = max(int(round(float(args.segment_start_s) * fnirs_fs_hz)), 0)
-    segment_end_fnirs = min(int(round((float(args.segment_start_s) + float(args.segment_duration_s)) * fnirs_fs_hz)), fnirs_full.shape[0])
-    segment_end_eeg = min(segment_start_eeg + (segment_end_fnirs - segment_start_fnirs) * eeg_substeps_per_fnirs, eeg_full.shape[0])
+    segment_mode = str(getattr(args, 'segment_mode', 'continuous')).strip().lower()
+    event_window: Optional[Dict[str, Any]] = None
+    nominal_event_duration_s: Optional[float] = None
+    if segment_mode == 'event_windows':
+        event_idx = int(getattr(args, 'event_idx', -1))
+        if event_idx < 0:
+            raise ValueError('event_idx must be set when segment_mode=event_windows')
+        if all(hasattr(args, attr) for attr in (
+            'eeg_segment_start_s_raw',
+            'eeg_segment_end_s_raw',
+            'fnirs_segment_start_s_raw',
+            'fnirs_segment_end_s_raw',
+            'eeg_event_onset_s',
+            'fnirs_event_onset_s',
+        )):
+            event_window = {
+                'event_idx': event_idx,
+                'eeg_start_s': float(args.eeg_segment_start_s_raw),
+                'eeg_end_s': float(args.eeg_segment_end_s_raw),
+                'fnirs_start_s': float(args.fnirs_segment_start_s_raw),
+                'fnirs_end_s': float(args.fnirs_segment_end_s_raw),
+                'aligned_window_start_s': float(getattr(args, 'aligned_window_start_s', -float(getattr(args, 'event_window_pre_s', 10.0)))),
+                'aligned_window_end_s': float(getattr(args, 'aligned_window_end_s', float(getattr(args, 'event_window_post_s', 40.0)))),
+                'event_window_pre_s': float(getattr(args, 'event_window_pre_s', 10.0)),
+                'event_window_post_s': float(getattr(args, 'event_window_post_s', 40.0)),
+                'eeg_onset_s': float(args.eeg_event_onset_s),
+                'fnirs_onset_s': float(args.fnirs_event_onset_s),
+                'eeg_label': int(getattr(args, 'event_label_index', -1)),
+                'fnirs_label': int(getattr(args, 'event_label_index', -1)),
+                'eeg_label_name': str(getattr(args, 'event_label_name_eeg', getattr(args, 'event_label_name', event_idx))),
+                'fnirs_label_name': str(getattr(args, 'event_label_name_fnirs', getattr(args, 'event_label_name', event_idx))),
+                'label_index_match': bool(getattr(args, 'event_label_index_match', True)),
+                'raw_event_offset_s': float(args.fnirs_event_onset_s) - float(args.eeg_event_onset_s),
+                'is_valid': True,
+                'invalid_reasons': [],
+            }
+        else:
+            event_windows = resolve_dataset_event_windows(args, dataset=dataset)
+            if event_idx >= len(event_windows):
+                raise ValueError(f'event_idx {event_idx} is out of range for session {session_idx}')
+            event_window = event_windows[event_idx]
+        if not bool(event_window['is_valid']):
+            raise ValueError(
+                f"event_idx {event_idx} does not have a full cross-modal window: {event_window['invalid_reasons']}"
+            )
+
+        segment_start_eeg = max(int(round(float(event_window['eeg_start_s']) * eeg_fs_hz)), 0)
+        segment_end_eeg = min(int(round(float(event_window['eeg_end_s']) * eeg_fs_hz)), eeg_full.shape[0])
+        segment_start_fnirs = max(int(round(float(event_window['fnirs_start_s']) * fnirs_fs_hz)), 0)
+        segment_end_fnirs = min(int(round(float(event_window['fnirs_end_s']) * fnirs_fs_hz)), fnirs_full.shape[0])
+        segment_start_s = float(event_window['aligned_window_start_s'])
+        nominal_event_duration_s = float(event_window['event_window_pre_s']) + float(event_window['event_window_post_s'])
+    elif float(args.segment_duration_s) <= 0.0:
+        segment_start_eeg = 0
+        segment_start_fnirs = 0
+        max_fnirs_steps = min(fnirs_full.shape[0], eeg_full.shape[0] // eeg_substeps_per_fnirs)
+        segment_end_fnirs = max_fnirs_steps
+        segment_end_eeg = max_fnirs_steps * eeg_substeps_per_fnirs
+        segment_start_s = 0.0
+    else:
+        segment_start_eeg = max(int(round(float(args.segment_start_s) * eeg_fs_hz)), 0)
+        segment_start_fnirs = max(int(round(float(args.segment_start_s) * fnirs_fs_hz)), 0)
+        segment_end_fnirs = min(int(round((float(args.segment_start_s) + float(args.segment_duration_s)) * fnirs_fs_hz)), fnirs_full.shape[0])
+        segment_end_eeg = min(segment_start_eeg + (segment_end_fnirs - segment_start_fnirs) * eeg_substeps_per_fnirs, eeg_full.shape[0])
+        segment_start_s = float(args.segment_start_s)
     if segment_end_eeg - segment_start_eeg < 32 or segment_end_fnirs - segment_start_fnirs < 16:
         raise ValueError('Selected dataset segment is too short for local solver audit')
 
@@ -1489,8 +1649,18 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     eeg_local_raw = eeg_local_raw[: length * eeg_substeps_per_fnirs]
     fnirs_primary_local = fnirs_primary_local[:length]
     fnirs_secondary_local = fnirs_secondary_local[:length]
-    time_s = float(args.segment_start_s) + np.arange(length, dtype=np.float64) / fnirs_fs_hz
-    eeg_time_s = float(args.segment_start_s) + np.arange(eeg_local_raw.shape[0], dtype=np.float64) / eeg_fs_hz
+    effective_segment_duration_s = float(length) / fnirs_fs_hz
+    if segment_mode == 'event_windows' and nominal_event_duration_s is not None:
+        expected_fnirs_steps = int(round(nominal_event_duration_s * fnirs_fs_hz))
+        expected_eeg_steps = expected_fnirs_steps * eeg_substeps_per_fnirs
+        if length != expected_fnirs_steps or eeg_local_raw.shape[0] != expected_eeg_steps:
+            raise ValueError(
+                'Event-window slicing produced an unexpected shape: '
+                f'expected fnirs={expected_fnirs_steps}, eeg={expected_eeg_steps}, '
+                f'got fnirs={length}, eeg={eeg_local_raw.shape[0]}'
+            )
+    time_s = segment_start_s + np.arange(length, dtype=np.float64) / fnirs_fs_hz
+    eeg_time_s = segment_start_s + np.arange(eeg_local_raw.shape[0], dtype=np.float64) / eeg_fs_hz
 
     local_eeg_positions = np.asarray(adjacency.eeg_positions_2d[eeg_indices], dtype=np.float64)
     local_fnirs_positions = np.asarray(adjacency.fnirs_channel_positions_2d[primary_indices], dtype=np.float64)
@@ -1509,6 +1679,44 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_local)
     fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_local)
 
+    metadata = {
+        'signal_source': 'real_optical_continuous_signal',
+        'fnirs_signal_semantics': 'paired_optical_wavelength_channels',
+        'fnirs_cache_requirement': 'keep_fNIRS_targets_in_optical_measurement_space_before_cross_dataset_caching',
+        'data_root': str(args.data_root),
+        'subject_id': int(args.subject_id),
+        'session_idx': session_idx,
+        'segment_mode': segment_mode,
+        'segment_start_s': segment_start_s,
+        'segment_duration_s': effective_segment_duration_s,
+        'full_session_used': bool(segment_mode == 'continuous' and float(args.segment_duration_s) <= 0.0),
+        'anchor_fnirs_base': str(anchor_base_name),
+        'local_fnirs_bases': list(local_base_names),
+    }
+    if event_window is not None:
+        metadata.update({
+            'event_idx': int(event_window['event_idx']),
+            'event_label_index': int(event_window['eeg_label']),
+            'event_label_name_eeg': str(event_window['eeg_label_name']),
+            'event_label_name_fnirs': str(event_window['fnirs_label_name']),
+            'event_label_index_match': bool(event_window['label_index_match']),
+            'event_window_pre_s': float(event_window['event_window_pre_s']),
+            'event_window_post_s': float(event_window['event_window_post_s']),
+            'event_window_duration_s': nominal_event_duration_s,
+            'aligned_window_start_s': float(event_window['aligned_window_start_s']),
+            'aligned_window_end_s': float(event_window['aligned_window_end_s']),
+            'eeg_event_onset_s': float(event_window['eeg_onset_s']),
+            'fnirs_event_onset_s': float(event_window['fnirs_onset_s']),
+            'event_alignment_offset_s': float(event_window['raw_event_offset_s']),
+            'eeg_segment_start_s_raw': float(event_window['eeg_start_s']),
+            'eeg_segment_end_s_raw': float(event_window['eeg_end_s']),
+            'fnirs_segment_start_s_raw': float(event_window['fnirs_start_s']),
+            'fnirs_segment_end_s_raw': float(event_window['fnirs_end_s']),
+            'valid_common_event_window': True,
+        })
+
+    # The EEG+NIRS Single-Trial recordings store paired raw optical channels
+    # (`highWL` / `lowWL`) rather than HbO / HbR concentration traces.
     return ObservationBundle(
         mode='dataset',
         pair_mode='wavelength',
@@ -1548,16 +1756,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         eeg_channel_names=tuple(str(adjacency.eeg_channel_names[index]) for index in eeg_indices.tolist()),
         fnirs_primary_channel_names=tuple(str(adjacency.fnirs_channel_names[index]) for index in primary_indices.tolist()),
         fnirs_secondary_channel_names=tuple(str(adjacency.fnirs_channel_names[index]) for index in secondary_indices.tolist()),
-        metadata={
-            'signal_source': 'real_physiological_continuous_signal',
-            'data_root': str(args.data_root),
-            'subject_id': int(args.subject_id),
-            'session_idx': session_idx,
-            'segment_start_s': float(args.segment_start_s),
-            'segment_duration_s': float(args.segment_duration_s),
-            'anchor_fnirs_base': str(anchor_base_name),
-            'local_fnirs_bases': list(local_base_names),
-        },
+        metadata=metadata,
     )
 
 

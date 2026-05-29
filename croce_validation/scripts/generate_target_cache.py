@@ -4,25 +4,27 @@ Runs the Croce SMC particle filter on all fNIRS anchors for a single subject,
 computes source targets (physiological signal) and observation targets (residual),
 and saves them as a single .npz cache file.
 
+Cache generation keeps fNIRS targets in optical measurement space. For the
+EEG+NIRS Single-Trial dataset this means the cache stores paired `highWL` /
+`lowWL` optical tracks rather than silently relabeling them as HbO / HbR.
+Datasets that already expose oxy/deoxy concentration traces must be explicitly
+projected into an optical pair before being merged into the same cache contract.
+
 Supports --threads N to control torch intra-op parallelism. The script runs
 anchors sequentially when --threads is set (for fair timing comparison across
 thread counts), or in parallel when --parallel-workers > 1.
 
 Usage:
-    # Baseline: default 52-thread torch, sequential anchors
+    # Event-window exact PF with single-thread workers
     python croce_validation/scripts/generate_target_cache.py \
         --subject-id 1 --sigma-prop 5.0 --sigma-nirs 0.15 \
-        --segment-duration-s 120.0 --threads 52 --output-dir /tmp/cache_test
+        --threads 1 --parallel-workers 36 --output-dir /tmp/cache_test
 
-    # Optimized: single-threaded torch
+    # Override to a continuous debugging segment when needed
     python croce_validation/scripts/generate_target_cache.py \
         --subject-id 1 --sigma-prop 5.0 --sigma-nirs 0.15 \
-        --segment-duration-s 120.0 --threads 1 --output-dir /tmp/cache_test
-
-    # Full parallel: 1 thread per worker, fork pool
-    python croce_validation/scripts/generate_target_cache.py \
-        --subject-id 1 --sigma-prop 5.0 --sigma-nirs 0.15 \
-        --segment-duration-s 120.0 --threads 2 --parallel-workers 18
+        --segment-mode continuous --segment-start-s 60.0 --segment-duration-s 120.0 \
+        --threads 1 --parallel-workers 36
 """
 
 from __future__ import annotations
@@ -43,37 +45,17 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_SCRIPT = PROJECT_ROOT / "croce_validation" / "scripts" / "run_local_neighborhood_solver_audit.py"
 AUDIT_MODULE_NAME = "croce_cache_gen"
-BENCH_SCRIPT = PROJECT_ROOT / "croce_validation" / "scripts" / "benchmark_numerical_integration.py"
-
-# Numerical integration kernels (lazy-loaded)
-_NUMINT_KERNELS: Optional[Dict[str, Any]] = None
-
-
-def _get_numerical_kernel(kernel_name: str) -> Any:
-    """Import and return the named numerical integration kernel (torch-batched)."""
-    global _NUMINT_KERNELS
-    if _NUMINT_KERNELS is None:
-        bench_spec = importlib.util.spec_from_file_location("numint_cache_gen", BENCH_SCRIPT)
-        if bench_spec is None or bench_spec.loader is None:
-            raise RuntimeError(f"Unable to load benchmark module from {BENCH_SCRIPT}")
-        bench_mod = importlib.util.module_from_spec(bench_spec)
-        sys.modules["numint_cache_gen"] = bench_mod
-        bench_spec.loader.exec_module(bench_mod)
-        _NUMINT_KERNELS = {
-            "euler": bench_mod._torch_euler_step_batch,
-            "heun": bench_mod._torch_heun_step_batch,
-            "rk4": bench_mod._torch_rk4_step_batch,
-        }
-    if kernel_name == "expm":
-        return None
-    if kernel_name not in _NUMINT_KERNELS:
-        raise ValueError(f"Unknown solver kernel: {kernel_name}")
-    return _NUMINT_KERNELS[kernel_name]
 
 try:
     import torch
 except ImportError:
     torch = None
+
+
+FNIRS_SOURCE_CHANNEL0_FIELD = "source_fnirs_optical_channel_0"
+FNIRS_SOURCE_CHANNEL1_FIELD = "source_fnirs_optical_channel_1"
+FNIRS_OBS_CHANNEL0_FIELD = "obs_fnirs_optical_channel_0"
+FNIRS_OBS_CHANNEL1_FIELD = "obs_fnirs_optical_channel_1"
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +69,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", default="data/EEG+NIRS Single-Trial")
     parser.add_argument("--subject-id", type=int, default=1)
     parser.add_argument("--session-idx", type=int, default=0)
-    parser.add_argument("--segment-start-s", type=float, default=60.0)
-    parser.add_argument("--segment-duration-s", type=float, default=120.0)
+    parser.add_argument("--segment-mode", choices=("continuous", "event_windows"), default="event_windows",
+                        help="Use one continuous segment or one event-aligned window per valid event")
+    parser.add_argument("--segment-start-s", type=float, default=0.0,
+                        help="Continuous segment start in seconds; ignored in event window mode")
+    parser.add_argument("--segment-duration-s", type=float, default=0.0,
+                        help="Continuous segment duration in seconds; <= 0 means use the full selected session")
+    parser.add_argument("--event-window-pre-s", type=float, default=10.0,
+                        help="Seconds kept before each event in event window mode")
+    parser.add_argument("--event-window-post-s", type=float, default=40.0,
+                        help="Seconds kept after each event in event window mode")
+    parser.add_argument("--event-indices", default="",
+                        help="Optional comma-separated event indices to keep in event window mode")
+    parser.add_argument("--max-events", type=int, default=0,
+                        help="Cap the number of valid events processed in event window mode (0=all valid)")
     parser.add_argument("--use-artifact-eeg", action="store_true")
 
     parser.add_argument("--eeg-neighbors", type=int, default=6)
@@ -107,18 +101,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sigma-nirs", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=11)
 
-    parser.add_argument("--threads", type=int, default=2,
+    parser.add_argument("--threads", type=int, default=1,
                         help="OMP/MKL threads per worker (1-2 recommended for 6x6 matrix)")
-    parser.add_argument("--parallel-workers", type=int, default=1,
-                        help="Number of parallel anchor workers (1=sequential)")
+    parser.add_argument("--parallel-workers", type=int, default=36,
+                        help="Number of parallel anchor workers (1=sequential, capped to anchor count)")
     parser.add_argument("--anchor-list", default="",
                         help="Comma-separated anchor base names (default: all 36)")
     parser.add_argument("--max-anchors", type=int, default=0,
                         help="Cap number of anchors processed (0=all)")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--torch-device", choices=("cpu", "cuda"), default="cpu")
-    parser.add_argument("--solver-kernel", choices=("expm", "euler", "heun", "rk4"), default="expm",
-                        help="State-propagation kernel (default: expm). rk4 is most accurate.")
     return parser.parse_args()
 
 
@@ -162,6 +154,105 @@ def configure_torch_threads(n_threads: int) -> None:
             pass  # may have been set already by prior torch op
 
 
+def parse_event_indices(spec: str) -> Optional[List[int]]:
+    cleaned = [item.strip() for item in str(spec).split(",") if item.strip()]
+    if not cleaned:
+        return None
+    values = sorted({int(item) for item in cleaned})
+    return values
+
+
+def to_jsonable_dict(values: Dict[str, Any]) -> Dict[str, Any]:
+    serializable: Dict[str, Any] = {}
+    for key, value in values.items():
+        if isinstance(value, (np.floating, np.integer)):
+            serializable[key] = value.item()
+        elif isinstance(value, np.ndarray):
+            serializable[key] = value.tolist()
+        else:
+            serializable[key] = value
+    return serializable
+
+
+def select_event_windows(
+    event_windows: List[Dict[str, Any]],
+    event_indices_spec: str,
+    max_events: int,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    requested_indices = parse_event_indices(event_indices_spec)
+    windows_by_idx = {int(window["event_idx"]): window for window in event_windows}
+
+    if requested_indices is None:
+        candidate_windows = list(event_windows)
+    else:
+        missing = [idx for idx in requested_indices if idx not in windows_by_idx]
+        if missing:
+            raise ValueError(f"Requested event indices are out of range: {missing}")
+        candidate_windows = [windows_by_idx[idx] for idx in requested_indices]
+
+    valid_windows: List[Dict[str, Any]] = []
+    skipped_windows: List[Dict[str, Any]] = []
+    for window in candidate_windows:
+        if bool(window.get("is_valid", False)):
+            valid_windows.append(window)
+        else:
+            skipped_windows.append(window)
+
+    if max_events > 0:
+        valid_windows = valid_windows[:max_events]
+
+    if not valid_windows:
+        raise ValueError("No valid event windows were selected for cache generation")
+    return valid_windows, skipped_windows
+
+
+def clone_namespace(values: argparse.Namespace) -> argparse.Namespace:
+    return argparse.Namespace(**vars(values))
+
+
+def build_job_label(ds_args: argparse.Namespace) -> str:
+    anchor_name = str(ds_args.anchor_fnirs_channel)
+    if str(getattr(ds_args, "segment_mode", "continuous")) == "event_windows":
+        return f"{anchor_name}/event_{int(getattr(ds_args, 'event_idx', -1)):03d}"
+    return anchor_name
+
+
+def build_job_payloads(
+    base_ds_args: argparse.Namespace,
+    anchor_names: List[str],
+    event_windows: Optional[List[Dict[str, Any]]],
+    spatial_cfg: Any,
+    filter_cfg_template: Any,
+    n_threads: int,
+) -> List[Tuple[argparse.Namespace, Any, Any, int]]:
+    payloads: List[Tuple[argparse.Namespace, Any, Any, int]] = []
+    for anchor_name in anchor_names:
+        if event_windows is None:
+            ds_args = clone_namespace(base_ds_args)
+            ds_args.anchor_fnirs_channel = anchor_name
+            payloads.append((ds_args, spatial_cfg, filter_cfg_template, n_threads))
+            continue
+
+        for window in event_windows:
+            ds_args = clone_namespace(base_ds_args)
+            ds_args.anchor_fnirs_channel = anchor_name
+            ds_args.event_idx = int(window["event_idx"])
+            ds_args.eeg_segment_start_s_raw = float(window["eeg_start_s"])
+            ds_args.eeg_segment_end_s_raw = float(window["eeg_end_s"])
+            ds_args.fnirs_segment_start_s_raw = float(window["fnirs_start_s"])
+            ds_args.fnirs_segment_end_s_raw = float(window["fnirs_end_s"])
+            ds_args.eeg_event_onset_s = float(window["eeg_onset_s"])
+            ds_args.fnirs_event_onset_s = float(window["fnirs_onset_s"])
+            ds_args.aligned_window_start_s = float(window["aligned_window_start_s"])
+            ds_args.aligned_window_end_s = float(window["aligned_window_end_s"])
+            ds_args.event_label_index = int(window["eeg_label"])
+            ds_args.event_label_name_eeg = str(window["eeg_label_name"])
+            ds_args.event_label_name_fnirs = str(window["fnirs_label_name"])
+            ds_args.event_label_index_match = bool(window["label_index_match"])
+            payloads.append((ds_args, spatial_cfg, filter_cfg_template, n_threads))
+    return payloads
+
+
 # ---------------------------------------------------------------------------
 # Single-anchor worker (runs in subprocess for parallel mode)
 # ---------------------------------------------------------------------------
@@ -177,21 +268,16 @@ def _init_worker(n_threads: int) -> None:
     _worker_audit = load_audit_module()
 
 
-def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int, str]) -> Dict[str, Any]:
-    """Run PF for one anchor and return source/observation targets.
-
-    Designed to be called via multiprocessing. Each call gets a fresh RNG seed.
-
-    payload = (anchor_name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
-    """
-    anchor_name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel = payload
+def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[str, Any]:
+    """Run PF for one anchor/job and return source/observation targets."""
+    ds_args, spatial_cfg, filter_cfg_template, n_threads = payload
+    anchor_name = str(ds_args.anchor_fnirs_channel)
     global _worker_audit
     if _worker_audit is None:
         configure_torch_threads(n_threads)
         _worker_audit = load_audit_module()
 
     audit = _worker_audit
-    ds_args.anchor_fnirs_channel = anchor_name
 
     t0 = time.perf_counter()
     bundle = audit.load_dataset_bundle(ds_args, spatial_cfg)
@@ -222,21 +308,9 @@ def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int, str])
     params = audit.ModelParams()
     seed = int(filter_cfg_template.seed_list[0])
 
-    # Patch state-propagation kernel if using numerical integration
-    kernel_fn = _get_numerical_kernel(solver_kernel)
-    original_step_fn = None
-    if kernel_fn is not None:
-        dt = float(fc.integration_dt_s)
-        original_step_fn = audit.torch_local_linearized_step_batch
-        audit.torch_local_linearized_step_batch = lambda p, _dt, _pm: kernel_fn(p, dt, params)
-
-    try:
-        t0 = time.perf_counter()
-        pf_result = audit.run_particle_filter(bundle, fc, params, seed=seed)
-        pf_s = time.perf_counter() - t0
-    finally:
-        if original_step_fn is not None:
-            audit.torch_local_linearized_step_batch = original_step_fn
+    t0 = time.perf_counter()
+    pf_result = audit.run_particle_filter(bundle, fc, params, seed=seed)
+    pf_s = time.perf_counter() - t0
 
     # Compute source/observation targets in raw space
     t0 = time.perf_counter()
@@ -245,7 +319,6 @@ def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int, str])
 
     return {
         "anchor": anchor_name,
-        "solver_kernel": solver_kernel,
         "load_s": round(load_s, 4),
         "pf_s": round(pf_s, 4),
         "post_s": round(post_s, 4),
@@ -254,17 +327,39 @@ def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int, str])
         "num_eeg_steps": num_eeg,
         "n_eeg_channels": int(bundle.eeg_obs.shape[1]),
         "n_fnirs_channels": int(bundle.fnirs_primary_obs.shape[1]),
+        "eeg_fs_hz": float(bundle.eeg_fs_hz),
+        "fnirs_fs_hz": float(bundle.fnirs_fs_hz),
+        "pair_mode": str(bundle.pair_mode),
+        "pair_labels": [str(bundle.pair_labels[0]), str(bundle.pair_labels[1])],
+        "fnirs_units": {
+            "primary": str(bundle.units.get("fnirs_primary", "a.u.")),
+            "secondary": str(bundle.units.get("fnirs_secondary", "a.u.")),
+        },
+        "fnirs_signal_semantics": str(bundle.metadata.get("fnirs_signal_semantics", "unknown")),
+        "segment_mode": str(bundle.metadata.get("segment_mode", getattr(ds_args, "segment_mode", "continuous"))),
+        "segment_start_s": float(bundle.metadata.get("segment_start_s", 0.0)),
+        "segment_duration_s": float(bundle.metadata.get("segment_duration_s", 0.0)),
+        "full_session_used": bool(bundle.metadata.get("full_session_used", False)),
+        "event_idx": int(bundle.metadata["event_idx"]) if bundle.metadata and bundle.metadata.get("event_idx") is not None else None,
+        "event_label_index": int(bundle.metadata["event_label_index"]) if bundle.metadata and bundle.metadata.get("event_label_index") is not None else None,
+        "event_label_name_eeg": str(bundle.metadata.get("event_label_name_eeg", "")) if bundle.metadata else "",
+        "event_label_name_fnirs": str(bundle.metadata.get("event_label_name_fnirs", "")) if bundle.metadata else "",
+        "event_window_pre_s": float(bundle.metadata.get("event_window_pre_s", 0.0)) if bundle.metadata else 0.0,
+        "event_window_post_s": float(bundle.metadata.get("event_window_post_s", 0.0)) if bundle.metadata else 0.0,
+        "event_window_duration_s": float(bundle.metadata.get("event_window_duration_s", 0.0)) if bundle.metadata else 0.0,
+        "eeg_event_onset_s": float(bundle.metadata.get("eeg_event_onset_s", 0.0)) if bundle.metadata else 0.0,
+        "fnirs_event_onset_s": float(bundle.metadata.get("fnirs_event_onset_s", 0.0)) if bundle.metadata else 0.0,
         "log_likelihood": float(pf_result["log_likelihood"]),
         "cache_entry": cache_entry,
     }
 
 
 def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Dict[str, np.ndarray]:
-    """Compute source/observation targets from PF result in raw measurement space."""
+    """Compute source/observation targets in raw measurement space."""
     r_estimates_eeg = np.asarray(pf_result["r_estimates_eeg"], dtype=np.float64)
     estimates = np.asarray(pf_result["state_estimates"], dtype=np.float64)
 
-    # Source targets in raw units
+    # Source targets stay in the same raw measurement space as the loaded data.
     if bundle.normalization.get("mode") == "per_channel_zscore_after_local_selection":
         pred_eeg_norm, pred_primary_norm, pred_secondary_norm = audit.predict_observations(
             np.column_stack([
@@ -299,7 +394,7 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
             bundle.lead_field, bundle.jac_primary, bundle.jac_secondary, bundle.pair_mode,
         )
 
-    # Observation targets = raw - source
+    # Observation targets are additive residuals in the same raw measurement space.
     eeg_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
     fnirs_primary_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
     fnirs_secondary_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
@@ -310,11 +405,11 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
 
     return {
         "source_eeg": pred_eeg_raw.astype(np.float32),
-        "source_fnirs_primary": pred_primary_raw.astype(np.float32),
-        "source_fnirs_secondary": pred_secondary_raw.astype(np.float32),
+        FNIRS_SOURCE_CHANNEL0_FIELD: pred_primary_raw.astype(np.float32),
+        FNIRS_SOURCE_CHANNEL1_FIELD: pred_secondary_raw.astype(np.float32),
         "obs_eeg": obs_eeg.astype(np.float32),
-        "obs_fnirs_primary": obs_primary.astype(np.float32),
-        "obs_fnirs_secondary": obs_secondary.astype(np.float32),
+        FNIRS_OBS_CHANNEL0_FIELD: obs_primary.astype(np.float32),
+        FNIRS_OBS_CHANNEL1_FIELD: obs_secondary.astype(np.float32),
         "r_estimates_eeg": r_estimates_eeg.astype(np.float32),
         "state_estimates": estimates.astype(np.float32),
     }
@@ -325,21 +420,16 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
 # ---------------------------------------------------------------------------
 
 def run_sequential(
-    audit: Any,
-    anchor_names: List[str],
-    ds_args: argparse.Namespace,
-    spatial_cfg: Any,
-    filter_cfg_template: Any,
+    payloads: List[Tuple[argparse.Namespace, Any, Any, int]],
     n_threads: int,
-    solver_kernel: str = "expm",
 ) -> List[Dict[str, Any]]:
-    """Process anchors one at a time in the current process."""
+    """Process jobs one at a time in the current process."""
     configure_torch_threads(n_threads)
     results: List[Dict[str, Any]] = []
 
-    for i, anchor in enumerate(anchor_names):
-        print(f"  [{i+1}/{len(anchor_names)}] {anchor} ...", end=" ", flush=True)
-        payload = (anchor, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
+    for i, payload in enumerate(payloads):
+        job_label = build_job_label(payload[0])
+        print(f"  [{i+1}/{len(payloads)}] {job_label} ...", end=" ", flush=True)
         result = _process_anchor(payload)
         results.append(result)
         print(
@@ -355,18 +445,11 @@ def run_sequential(
 # ---------------------------------------------------------------------------
 
 def run_parallel(
-    anchor_names: List[str],
-    ds_args: argparse.Namespace,
-    spatial_cfg: Any,
-    filter_cfg_template: Any,
+    payloads: List[Tuple[argparse.Namespace, Any, Any, int]],
     n_workers: int,
-    n_threads: int,
-    solver_kernel: str = "expm",
 ) -> List[Dict[str, Any]]:
-    """Process anchors in parallel using a fork-based multiprocessing pool."""
-    payloads = [(name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
-                for name in anchor_names]
-    effective_workers = min(n_workers, len(anchor_names))
+    """Process jobs in parallel using a fork-based multiprocessing pool."""
+    effective_workers = max(1, min(int(n_workers), len(payloads)))
 
     ctx = mp.get_context("fork")
     t0 = time.perf_counter()
@@ -392,10 +475,14 @@ def main() -> None:
     dataset_args_no_anchor = argparse.Namespace(
         data_root=args.data_root, subject_id=int(args.subject_id),
         session_idx=int(args.session_idx),
+        segment_mode=str(args.segment_mode),
         segment_start_s=float(args.segment_start_s),
         segment_duration_s=float(args.segment_duration_s),
+        event_window_pre_s=float(args.event_window_pre_s),
+        event_window_post_s=float(args.event_window_post_s),
+        event_idx=-1,
         anchor_fnirs_channel="", use_artifact_eeg=bool(args.use_artifact_eeg),
-        eeg_unit="uV", fnirs_primary_unit="a.u.", fnirs_secondary_unit="a.u.",
+        eeg_unit="uV", fnirs_primary_unit="V", fnirs_secondary_unit="V",
     )
     spatial_config = audit.SpatialConfig(
         eeg_neighbors=int(args.eeg_neighbors), fnirs_neighbors=int(args.fnirs_neighbors),
@@ -437,7 +524,16 @@ def main() -> None:
     if args.max_anchors > 0:
         anchor_names = anchor_names[:args.max_anchors]
 
-    output_dir = resolve_output_dir(str(args.output_dir))
+    selected_event_windows: Optional[List[Dict[str, Any]]] = None
+    skipped_event_windows: List[Dict[str, Any]] = []
+    all_event_windows: List[Dict[str, Any]] = []
+    if str(args.segment_mode) == "event_windows":
+        all_event_windows = audit.resolve_dataset_event_windows(dataset_args_no_anchor)
+        selected_event_windows, skipped_event_windows = select_event_windows(
+            all_event_windows,
+            args.event_indices,
+            int(args.max_events),
+        )
 
     # Build filter config template
     filter_cfg_template = audit.FilterConfig(
@@ -454,16 +550,46 @@ def main() -> None:
     filter_cfg_template.prior_std[4] = 0.0
     filter_cfg_template.state_noise_std[4] = 0.0
 
+    payloads = build_job_payloads(
+        dataset_args_no_anchor,
+        anchor_names,
+        selected_event_windows,
+        spatial_config,
+        filter_cfg_template,
+        int(args.threads),
+    )
+    effective_workers = max(1, min(int(args.parallel_workers), len(payloads)))
+
+    output_dir = resolve_output_dir(str(args.output_dir))
+
     # ---- Header ----
     print("=" * 72)
     print("Target Cache Generator")
     print("=" * 72)
     print(f"Subject: {args.subject_id}, Session: {args.session_idx}")
-    print(f"Segment: {args.segment_start_s}s + {args.segment_duration_s}s")
+    if str(args.segment_mode) == "event_windows":
+        print(
+            f"Segmentation: event windows ({args.event_window_pre_s:.1f}s pre + "
+            f"{args.event_window_post_s:.1f}s post)"
+        )
+        print(
+            f"Events: {len(selected_event_windows or [])} valid / {len(all_event_windows)} total"
+        )
+        if skipped_event_windows:
+            skipped_ids = [int(window["event_idx"]) for window in skipped_event_windows]
+            print(f"Skipped invalid events: {skipped_ids}")
+    else:
+        if float(args.segment_duration_s) <= 0.0:
+            print("Segment: full selected session")
+        else:
+            print(f"Segment: {args.segment_start_s}s + {args.segment_duration_s}s")
     print(f"Config: sp={args.sigma_prop}, sn={args.sigma_nirs}, N={args.num_particles}")
     print(f"Anchors: {len(anchor_names)} ({anchor_names[0]} ... {anchor_names[-1]})")
-    print(f"Threads/worker: {args.threads}, Parallel workers: {args.parallel_workers}")
-    print(f"Device: {args.torch_device}, Solver: {args.solver_kernel}")
+    print(f"Jobs: {len(payloads)}")
+    print(f"Threads/worker: {args.threads}, Parallel workers: {effective_workers}")
+    if effective_workers != int(args.parallel_workers):
+        print(f"Requested workers capped from {args.parallel_workers} to {effective_workers} (job count)")
+    print(f"Device: {args.torch_device}, State propagation: exact matrix exponential")
     print(f"Output: {output_dir}")
     print()
 
@@ -471,17 +597,9 @@ def main() -> None:
     t_total_start = time.perf_counter()
 
     if args.parallel_workers > 1:
-        results = run_parallel(
-            anchor_names, dataset_args_no_anchor, spatial_config,
-            filter_cfg_template, args.parallel_workers, args.threads,
-            solver_kernel=args.solver_kernel,
-        )
+        results = run_parallel(payloads, effective_workers)
     else:
-        results = run_sequential(
-            audit, anchor_names, dataset_args_no_anchor, spatial_config,
-            filter_cfg_template, args.threads,
-            solver_kernel=args.solver_kernel,
-        )
+        results = run_sequential(payloads, args.threads)
 
     total_wall = time.perf_counter() - t_total_start
 
@@ -490,8 +608,8 @@ def main() -> None:
     total_load_s = sum(r["load_s"] for r in results)
     total_eeg_steps = sum(r["num_eeg_steps"] for r in results)
     total_fnirs_steps = sum(r["num_fnirs_steps"] for r in results)
-    avg_pf_per_anchor = total_pf_s / max(len(results), 1)
-    avg_total_per_anchor = sum(r["total_s"] for r in results) / max(len(results), 1)
+    avg_pf_per_job = total_pf_s / max(len(results), 1)
+    avg_total_per_job = sum(r["total_s"] for r in results) / max(len(results), 1)
     per_substep_ms = 1000.0 * total_pf_s / max(total_eeg_steps, 1)
 
     # ---- Save cache ----
@@ -500,48 +618,93 @@ def main() -> None:
     for r in results:
         entry = r.pop("cache_entry")
         anchor_key = r["anchor"].replace(" ", "_").replace("-", "_")
+        prefix = anchor_key
+        if str(r.get("segment_mode", "continuous")) == "event_windows" and r.get("event_idx") is not None:
+            prefix = f"{anchor_key}/event_{int(r['event_idx']):03d}"
         for field_name, array in entry.items():
-            cache[f"{anchor_key}/{field_name}"] = array
+            cache[f"{prefix}/{field_name}"] = array
 
     cache_path = output_dir / f"subject{args.subject_id}_cache.npz"
     np.savez_compressed(cache_path, **cache)
     cache_size_mb = cache_path.stat().st_size / (1024 * 1024)
 
     # ---- Save manifest ----
+    selected_event_indices = [int(window["event_idx"]) for window in (selected_event_windows or [])]
     manifest = {
         "generated_at": datetime.now().isoformat(),
         "config": {
             "subject_id": int(args.subject_id),
             "session_idx": int(args.session_idx),
-            "segment_start_s": float(args.segment_start_s),
-            "segment_duration_s": float(args.segment_duration_s),
+            "segment_mode": str(args.segment_mode),
+            "segment_start_s": float(results[0]["segment_start_s"]) if results else float(args.segment_start_s),
+            "segment_duration_s": float(results[0]["segment_duration_s"]) if results else float(args.segment_duration_s),
+            "full_session_used": bool(results[0]["full_session_used"]) if results else bool(str(args.segment_mode) == "continuous" and float(args.segment_duration_s) <= 0.0),
+            "event_window_pre_s": float(args.event_window_pre_s) if str(args.segment_mode) == "event_windows" else None,
+            "event_window_post_s": float(args.event_window_post_s) if str(args.segment_mode) == "event_windows" else None,
+            "event_window_duration_s": float(args.event_window_pre_s + args.event_window_post_s) if str(args.segment_mode) == "event_windows" else None,
+            "event_selection_policy": "full_cross_modal_window_only" if str(args.segment_mode) == "event_windows" else "single_continuous_segment",
+            "event_indices_requested": parse_event_indices(args.event_indices),
+            "event_indices_selected": selected_event_indices if selected_event_indices else None,
             "sigma_prop": float(args.sigma_prop),
             "sigma_nirs": float(args.sigma_nirs),
             "num_particles": int(args.num_particles),
             "threads_per_worker": int(args.threads),
-            "parallel_workers": int(args.parallel_workers),
+            "parallel_workers": int(effective_workers),
+            "parallel_workers_requested": int(args.parallel_workers),
             "torch_device": str(args.torch_device),
-            "solver_kernel": str(args.solver_kernel),
+            "solver_backend": "torch_exact",
+            "state_propagation": "matrix_exponential_exact",
             "seed": int(args.seed),
+            "eeg_fs_hz": float(results[0]["eeg_fs_hz"]) if results else None,
+            "fnirs_fs_hz": float(results[0]["fnirs_fs_hz"]) if results else None,
+            "pair_mode": str(results[0]["pair_mode"]) if results else "unknown",
+            "pair_labels": list(results[0]["pair_labels"]) if results else [],
+            "fnirs_target_semantics": "optical_measurement_space",
+            "fnirs_target_labels": list(results[0]["pair_labels"]) if results else [],
+            "fnirs_target_field_names": [
+                FNIRS_SOURCE_CHANNEL0_FIELD,
+                FNIRS_SOURCE_CHANNEL1_FIELD,
+                FNIRS_OBS_CHANNEL0_FIELD,
+                FNIRS_OBS_CHANNEL1_FIELD,
+            ],
+            "fnirs_units": dict(results[0]["fnirs_units"]) if results else {},
+            "fnirs_signal_semantics": str(results[0]["fnirs_signal_semantics"]) if results else "unknown",
         },
-        "anchors_processed": len(results),
-        "anchor_names": [r["anchor"] for r in results],
+        "cache_layout": {
+            "result_granularity": "anchor_event_window" if str(args.segment_mode) == "event_windows" else "anchor",
+            "key_pattern": "<anchor>/event_<idx>/<field>" if str(args.segment_mode) == "event_windows" else "<anchor>/<field>",
+            "field_names": [
+                "source_eeg",
+                FNIRS_SOURCE_CHANNEL0_FIELD,
+                FNIRS_SOURCE_CHANNEL1_FIELD,
+                "obs_eeg",
+                FNIRS_OBS_CHANNEL0_FIELD,
+                FNIRS_OBS_CHANNEL1_FIELD,
+                "r_estimates_eeg",
+                "state_estimates",
+            ],
+        },
+        "anchors_processed": len(anchor_names),
+        "events_processed": len(selected_event_windows or []),
+        "jobs_processed": len(results),
+        "anchor_names": list(anchor_names),
+        "event_windows_selected": [to_jsonable_dict(window) for window in (selected_event_windows or [])],
+        "event_windows_skipped": [to_jsonable_dict(window) for window in skipped_event_windows],
         "timing": {
             "total_wall_s": round(total_wall, 2),
             "total_pf_s": round(total_pf_s, 2),
             "total_load_s": round(total_load_s, 2),
-            "avg_pf_per_anchor_s": round(avg_pf_per_anchor, 2),
-            "avg_total_per_anchor_s": round(avg_total_per_anchor, 2),
+            "avg_pf_per_job_s": round(avg_pf_per_job, 2),
+            "avg_total_per_job_s": round(avg_total_per_job, 2),
+            "avg_pf_per_anchor_s": round(avg_pf_per_job, 2),
+            "avg_total_per_anchor_s": round(avg_total_per_job, 2),
             "per_substep_ms": round(per_substep_ms, 4),
             "total_eeg_steps": total_eeg_steps,
             "total_fnirs_steps": total_fnirs_steps,
         },
         "cache_file": str(cache_path.name),
         "cache_size_mb": round(cache_size_mb, 2),
-        "per_anchor_results": [
-            {k: v for k, v in r.items()}
-            for r in results
-        ],
+        "per_job_results": [to_jsonable_dict({k: v for k, v in r.items()}) for r in results],
     }
     manifest_path = output_dir / "cache_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -551,19 +714,22 @@ def main() -> None:
     print(f"\n{'='*72}")
     print("TIMING SUMMARY")
     print(f"{'='*72}")
-    print(f"  Anchors processed:    {len(results)}")
+    print(f"  Anchors processed:    {len(anchor_names)}")
+    if str(args.segment_mode) == "event_windows":
+        print(f"  Events processed:     {len(selected_event_windows or [])}")
+        print(f"  Jobs processed:       {len(results)}")
     print(f"  Total wall time:      {total_wall:.1f}s ({total_wall/60:.1f}min)")
     print(f"  Total PF time:        {total_pf_s:.1f}s ({total_pf_s/60:.1f}min)")
     print(f"  Total data loading:   {total_load_s:.1f}s")
-    print(f"  Avg PF per anchor:    {avg_pf_per_anchor:.1f}s")
-    print(f"  Avg total per anchor: {avg_total_per_anchor:.1f}s")
+    print(f"  Avg PF per job:       {avg_pf_per_job:.1f}s")
+    print(f"  Avg total per job:    {avg_total_per_job:.1f}s")
     print(f"  Per EEG substep:      {per_substep_ms:.4f}ms")
     print(f"  Total EEG substeps:   {total_eeg_steps}")
     print(f"  Effective throughput: {total_eeg_steps / max(total_wall, 1e-12):.0f} substeps/s")
 
     # Extrapolation
-    if len(results) > 0:
-        est_full_36 = (avg_total_per_anchor * 36)
+    if len(results) > 0 and str(args.segment_mode) == "continuous":
+        est_full_36 = (avg_total_per_job * 36)
         est_6_sessions = est_full_36 * 6
         est_29_subjects = est_6_sessions * 29
         print(f"\n  Estimated full subject (36 anchors): {est_full_36:.0f}s = {est_full_36/60:.1f}min = {est_full_36/3600:.1f}h")
