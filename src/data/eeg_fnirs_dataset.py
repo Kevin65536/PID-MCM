@@ -12,8 +12,11 @@ Key findings from data exploration (2026-01-14):
 
 Channel Structure:
 - EEG: 32 channels total (30 EEG + 2 EOG: 'VEOG', 'HEOG')
-- fNIRS: 72 channels (36 HbO + 36 HbR, HbO channels end with '_O', HbR channels end with '_R')
-  - Current implementation supports filtering to use only HbO channels
+- fNIRS: 72 channels total, arranged as 36 paired optical tracks
+    - Raw channel labels in this dataset use `highWL` / `lowWL` suffixes
+    - The Single-Trial files do not convert those tracks into HbO / HbR concentration channels
+    - Some other datasets expose paired branches as `_O` / `_R`
+    - Current implementation supports filtering one branch of the pair via the legacy `hbo_only` / `hbr_only` flags
 """
 
 import os
@@ -63,18 +66,20 @@ def get_fnirs_channel_mask(
     hbr_only: bool = False
 ) -> np.ndarray:
     """
-    Get a boolean mask for fNIRS channels, filtering by chromophore type.
+    Get a boolean mask for paired fNIRS channels.
     
-    This dataset uses wavelength-based naming convention:
-    - 'highWL' suffix = high wavelength (~850nm) → sensitive to HbO (oxy-hemoglobin)
-    - 'lowWL' suffix = low wavelength (~760nm) → sensitive to HbR (deoxy-hemoglobin)
+    The Single-Trial dataset exposes raw `highWL` / `lowWL` optical tracks.
+    Other datasets in this project may instead use `_O` / `_R` suffixes for a
+    paired branch. The flag names are kept for backward compatibility with
+    existing call sites, but they should be read as branch selectors rather than
+    proof that every dataset already stores HbO / HbR concentrations.
     
     Note: Some datasets may use '_O' and '_R' suffixes instead.
     
     Args:
         channel_names: List of channel names
-        hbo_only: If True, only include HbO (oxy-hemoglobin) channels (highWL)
-        hbr_only: If True, only include HbR (deoxy-hemoglobin) channels (lowWL)
+        hbo_only: Legacy selector for the `highWL` / `_O` branch
+        hbr_only: Legacy selector for the `lowWL` / `_R` branch
         
     Returns:
         Boolean mask array where True = include channel
@@ -85,7 +90,7 @@ def get_fnirs_channel_mask(
     mask = np.ones(len(channel_names), dtype=bool)
     
     if hbo_only:
-        # Only include channels with highWL (HbO) or _O suffix
+        # Keep the `highWL` / `_O` branch.
         for i, name in enumerate(channel_names):
             if 'highWL' in name or name.endswith('_O'):
                 mask[i] = True
@@ -93,7 +98,7 @@ def get_fnirs_channel_mask(
                 mask[i] = False
             # If neither pattern matches, keep the channel (conservative)
     elif hbr_only:
-        # Only include channels with lowWL (HbR) or _R suffix
+        # Keep the `lowWL` / `_R` branch.
         for i, name in enumerate(channel_names):
             if 'lowWL' in name or name.endswith('_R'):
                 mask[i] = True
@@ -406,7 +411,7 @@ class EEGfNIRSDataset(Dataset):
     
     Channel Filtering:
     - EEG: Can exclude EOG channels (EOGv, EOGh) via exclude_eog parameter
-    - fNIRS: Can filter to HbO-only or HbR-only channels via hbo_only/hbr_only parameters
+    - fNIRS: Can filter one branch of each paired optical track via the legacy hbo_only/hbr_only parameters
     """
     
     def __init__(
@@ -423,8 +428,8 @@ class EEGfNIRSDataset(Dataset):
         use_artifact_data: bool = True,
         # Channel filtering options
         exclude_eog: bool = True,  # For EEG: exclude EOG channels
-        hbo_only: bool = True,     # For fNIRS: only use HbO channels
-        hbr_only: bool = False,    # For fNIRS: only use HbR channels
+        hbo_only: bool = True,     # Legacy fNIRS selector for the `highWL` / `_O` branch
+        hbr_only: bool = False,    # Legacy fNIRS selector for the `lowWL` / `_R` branch
     ):
         """
         Initialize the dataset.
@@ -439,8 +444,8 @@ class EEGfNIRSDataset(Dataset):
             normalize: Whether to z-score normalize each window
             use_artifact_data: If True, use 'with occular artifact' folder for EEG
             exclude_eog: If True, exclude EOG channels from EEG data (default: True)
-            hbo_only: If True, only use HbO channels for fNIRS (default: True)
-            hbr_only: If True, only use HbR channels for fNIRS (default: False)
+            hbo_only: Legacy selector for the `highWL` / `_O` fNIRS branch (default: True)
+            hbr_only: Legacy selector for the `lowWL` / `_R` fNIRS branch (default: False)
         """
         self.data_root = Path(data_root)
         self.subject_ids = subject_ids or list(range(1, 30))
@@ -747,7 +752,7 @@ class MultiModalEEGfNIRSDataset(Dataset):
     
     Channel Filtering:
     - EEG: Can exclude EOG channels (EOGv, EOGh) via exclude_eog parameter
-    - fNIRS: Can filter to HbO-only or HbR-only channels via hbo_only/hbr_only parameters
+    - fNIRS: Can filter one branch of each paired optical track via the legacy hbo_only/hbr_only parameters
     """
     
     def __init__(
@@ -764,8 +769,8 @@ class MultiModalEEGfNIRSDataset(Dataset):
         use_artifact_data: bool = True,
         # Channel filtering options
         exclude_eog: bool = True,  # For EEG: exclude EOG channels
-        hbo_only: bool = True,     # For fNIRS: only use HbO channels
-        hbr_only: bool = False,    # For fNIRS: only use HbR channels
+        hbo_only: bool = True,     # Legacy fNIRS selector for the `highWL` / `_O` branch
+        hbr_only: bool = False,    # Legacy fNIRS selector for the `lowWL` / `_R` branch
     ):
         """
         Initialize the multimodal dataset.
@@ -779,8 +784,8 @@ class MultiModalEEGfNIRSDataset(Dataset):
             normalize: Whether to z-score normalize each window
             use_artifact_data: If True, use 'with occular artifact' folder for EEG
             exclude_eog: If True, exclude EOG channels from EEG data (default: True)
-            hbo_only: If True, only use HbO channels for fNIRS (default: True)
-            hbr_only: If True, only use HbR channels for fNIRS (default: False)
+            hbo_only: Legacy selector for the `highWL` / `_O` fNIRS branch (default: True)
+            hbr_only: Legacy selector for the `lowWL` / `_R` fNIRS branch (default: False)
         """
         self.data_root = Path(data_root)
         self.subject_ids = subject_ids or list(range(1, 30))
@@ -1153,8 +1158,8 @@ def create_dataloaders(
         num_workers: DataLoader workers
         dataloader_cfg: Optional DataLoader keyword overrides
         exclude_eog: If True, exclude EOG channels from EEG data (default: True)
-        hbo_only: If True, only use HbO channels for fNIRS (default: True)
-        hbr_only: If True, only use HbR channels for fNIRS (default: False)
+        hbo_only: Legacy selector for the `highWL` / `_O` fNIRS branch (default: True)
+        hbr_only: Legacy selector for the `lowWL` / `_R` fNIRS branch (default: False)
         **kwargs: Additional arguments for dataset
         
     Returns:

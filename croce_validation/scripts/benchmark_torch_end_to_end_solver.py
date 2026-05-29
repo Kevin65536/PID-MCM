@@ -112,9 +112,13 @@ def build_dataset_args(args: argparse.Namespace) -> argparse.Namespace:
         anchor_fnirs_channel=str(args.anchor_fnirs_channel),
         use_artifact_eeg=bool(args.use_artifact_eeg),
         eeg_unit='uV',
-        fnirs_primary_unit='a.u.',
-        fnirs_secondary_unit='a.u.',
+        fnirs_primary_unit='V',
+        fnirs_secondary_unit='V',
     )
+
+
+def pair_mode_uses_concentration_space(pair_mode: str) -> bool:
+    return str(pair_mode).strip().lower() in {'concentration', 'chromophore'}
 
 
 def build_filter_config(audit: Any, bundle: Any, args: argparse.Namespace) -> Any:
@@ -216,7 +220,7 @@ def torch_predict_observations(
     pair_mode: str,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     pred_eeg = particles[:, 4:5] * lead_field.reshape(1, -1)
-    if pair_mode == 'chromophore':
+    if pair_mode_uses_concentration_space(pair_mode):
         pred_primary = particles[:, 2:3] * jac_primary.reshape(1, -1)
         pred_secondary = particles[:, 3:4] * jac_secondary.reshape(1, -1)
     else:

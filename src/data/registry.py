@@ -97,6 +97,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'BBCI toolbox cell-array structure with six sessions per subject.',
             'EEG and fNIRS triggers are delivered simultaneously through a parallel port.',
+            'fNIRS keeps direct lowWL/highWL optical measurements at 760/850 nm in the checked repository files.',
         ),
     ),
     'refed': DatasetRegistration(
@@ -127,6 +128,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'EEG and fNIRS are stored per video rather than as a shared marker stream.',
             'Dynamic valence/arousal annotations are aligned by time instead of discrete trial IDs.',
+            'fNIRS includes direct optical-domain Abs 780/805/830 channels in addition to HbO/HbR/HbT.',
         ),
     ),
     'visual_cognitive_motivation': DatasetRegistration(
@@ -161,6 +163,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'EEG is available both as raw EDF and preprocessed epoched MAT files.',
             'fNIRS is stored as per-part/per-probe Oxy/Deoxy CSV files and must be aligned with reconstructed events.',
+            'The checked CSV exports do not include direct optical-domain channels, but preserve ETG-7100 695/830 nm metadata in their headers.',
         ),
     ),
     'simultaneous_eeg_nirs': DatasetRegistration(
@@ -201,6 +204,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         notes=(
             'Task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.',
             'EEG uses BBCI-like cnt/mrk structs while fNIRS stores oxy/deoxy under nested fields.',
+            'The checked MATLAB export does not include direct optical-domain channels, and the source wavelengths are not exposed in the exported fields.',
             'Training-ready loaders now cover single-modality windows plus task-dependent multimodal segmentation for n-back and WG.',
             'DSR is deprecated in this repository and excluded from training-ready loaders until a stable alignment/use case is defined.',
         ),

@@ -222,8 +222,8 @@ def build_dataset_args(args: argparse.Namespace) -> argparse.Namespace:
         anchor_fnirs_channel=str(args.anchor_fnirs_channel),
         use_artifact_eeg=bool(args.use_artifact_eeg),
         eeg_unit='uV',
-        fnirs_primary_unit='a.u.',
-        fnirs_secondary_unit='a.u.',
+        fnirs_primary_unit='V',
+        fnirs_secondary_unit='V',
     )
 
 

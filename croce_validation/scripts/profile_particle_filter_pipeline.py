@@ -236,8 +236,8 @@ def build_configs(audit: Any, args: argparse.Namespace) -> Tuple[Any, Any, Any, 
         anchor_fnirs_channel=str(args.anchor_fnirs_channel),
         use_artifact_eeg=bool(args.use_artifact_eeg),
         eeg_unit="uV",
-        fnirs_primary_unit="a.u.",
-        fnirs_secondary_unit="a.u.",
+        fnirs_primary_unit="V",
+        fnirs_secondary_unit="V",
     )
     bundle = audit.load_dataset_bundle(dataset_args, spatial_config)
     filter_config = audit.FilterConfig(
