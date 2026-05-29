@@ -43,6 +43,32 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_SCRIPT = PROJECT_ROOT / "croce_validation" / "scripts" / "run_local_neighborhood_solver_audit.py"
 AUDIT_MODULE_NAME = "croce_cache_gen"
+BENCH_SCRIPT = PROJECT_ROOT / "croce_validation" / "scripts" / "benchmark_numerical_integration.py"
+
+# Numerical integration kernels (lazy-loaded)
+_NUMINT_KERNELS: Optional[Dict[str, Any]] = None
+
+
+def _get_numerical_kernel(kernel_name: str) -> Any:
+    """Import and return the named numerical integration kernel (torch-batched)."""
+    global _NUMINT_KERNELS
+    if _NUMINT_KERNELS is None:
+        bench_spec = importlib.util.spec_from_file_location("numint_cache_gen", BENCH_SCRIPT)
+        if bench_spec is None or bench_spec.loader is None:
+            raise RuntimeError(f"Unable to load benchmark module from {BENCH_SCRIPT}")
+        bench_mod = importlib.util.module_from_spec(bench_spec)
+        sys.modules["numint_cache_gen"] = bench_mod
+        bench_spec.loader.exec_module(bench_mod)
+        _NUMINT_KERNELS = {
+            "euler": bench_mod._torch_euler_step_batch,
+            "heun": bench_mod._torch_heun_step_batch,
+            "rk4": bench_mod._torch_rk4_step_batch,
+        }
+    if kernel_name == "expm":
+        return None
+    if kernel_name not in _NUMINT_KERNELS:
+        raise ValueError(f"Unknown solver kernel: {kernel_name}")
+    return _NUMINT_KERNELS[kernel_name]
 
 try:
     import torch
@@ -91,6 +117,8 @@ def parse_args() -> argparse.Namespace:
                         help="Cap number of anchors processed (0=all)")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--torch-device", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--solver-kernel", choices=("expm", "euler", "heun", "rk4"), default="expm",
+                        help="State-propagation kernel (default: expm). rk4 is most accurate.")
     return parser.parse_args()
 
 
@@ -149,12 +177,14 @@ def _init_worker(n_threads: int) -> None:
     _worker_audit = load_audit_module()
 
 
-def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int]) -> Dict[str, Any]:
+def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int, str]) -> Dict[str, Any]:
     """Run PF for one anchor and return source/observation targets.
 
     Designed to be called via multiprocessing. Each call gets a fresh RNG seed.
+
+    payload = (anchor_name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
     """
-    anchor_name, ds_args, spatial_cfg, filter_cfg_template, n_threads = payload
+    anchor_name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel = payload
     global _worker_audit
     if _worker_audit is None:
         configure_torch_threads(n_threads)
@@ -192,9 +222,21 @@ def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int]) -> D
     params = audit.ModelParams()
     seed = int(filter_cfg_template.seed_list[0])
 
-    t0 = time.perf_counter()
-    pf_result = audit.run_particle_filter(bundle, fc, params, seed=seed)
-    pf_s = time.perf_counter() - t0
+    # Patch state-propagation kernel if using numerical integration
+    kernel_fn = _get_numerical_kernel(solver_kernel)
+    original_step_fn = None
+    if kernel_fn is not None:
+        dt = float(fc.integration_dt_s)
+        original_step_fn = audit.torch_local_linearized_step_batch
+        audit.torch_local_linearized_step_batch = lambda p, _dt, _pm: kernel_fn(p, dt, params)
+
+    try:
+        t0 = time.perf_counter()
+        pf_result = audit.run_particle_filter(bundle, fc, params, seed=seed)
+        pf_s = time.perf_counter() - t0
+    finally:
+        if original_step_fn is not None:
+            audit.torch_local_linearized_step_batch = original_step_fn
 
     # Compute source/observation targets in raw space
     t0 = time.perf_counter()
@@ -203,6 +245,7 @@ def _process_anchor(payload: Tuple[str, argparse.Namespace, Any, Any, int]) -> D
 
     return {
         "anchor": anchor_name,
+        "solver_kernel": solver_kernel,
         "load_s": round(load_s, 4),
         "pf_s": round(pf_s, 4),
         "post_s": round(post_s, 4),
@@ -288,6 +331,7 @@ def run_sequential(
     spatial_cfg: Any,
     filter_cfg_template: Any,
     n_threads: int,
+    solver_kernel: str = "expm",
 ) -> List[Dict[str, Any]]:
     """Process anchors one at a time in the current process."""
     configure_torch_threads(n_threads)
@@ -295,7 +339,7 @@ def run_sequential(
 
     for i, anchor in enumerate(anchor_names):
         print(f"  [{i+1}/{len(anchor_names)}] {anchor} ...", end=" ", flush=True)
-        payload = (anchor, ds_args, spatial_cfg, filter_cfg_template, n_threads)
+        payload = (anchor, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
         result = _process_anchor(payload)
         results.append(result)
         print(
@@ -317,9 +361,10 @@ def run_parallel(
     filter_cfg_template: Any,
     n_workers: int,
     n_threads: int,
+    solver_kernel: str = "expm",
 ) -> List[Dict[str, Any]]:
     """Process anchors in parallel using a fork-based multiprocessing pool."""
-    payloads = [(name, ds_args, spatial_cfg, filter_cfg_template, n_threads)
+    payloads = [(name, ds_args, spatial_cfg, filter_cfg_template, n_threads, solver_kernel)
                 for name in anchor_names]
     effective_workers = min(n_workers, len(anchor_names))
 
@@ -418,7 +463,7 @@ def main() -> None:
     print(f"Config: sp={args.sigma_prop}, sn={args.sigma_nirs}, N={args.num_particles}")
     print(f"Anchors: {len(anchor_names)} ({anchor_names[0]} ... {anchor_names[-1]})")
     print(f"Threads/worker: {args.threads}, Parallel workers: {args.parallel_workers}")
-    print(f"Device: {args.torch_device}")
+    print(f"Device: {args.torch_device}, Solver: {args.solver_kernel}")
     print(f"Output: {output_dir}")
     print()
 
@@ -429,11 +474,13 @@ def main() -> None:
         results = run_parallel(
             anchor_names, dataset_args_no_anchor, spatial_config,
             filter_cfg_template, args.parallel_workers, args.threads,
+            solver_kernel=args.solver_kernel,
         )
     else:
         results = run_sequential(
             audit, anchor_names, dataset_args_no_anchor, spatial_config,
             filter_cfg_template, args.threads,
+            solver_kernel=args.solver_kernel,
         )
 
     total_wall = time.perf_counter() - t_total_start
@@ -474,6 +521,7 @@ def main() -> None:
             "threads_per_worker": int(args.threads),
             "parallel_workers": int(args.parallel_workers),
             "torch_device": str(args.torch_device),
+            "solver_kernel": str(args.solver_kernel),
             "seed": int(args.seed),
         },
         "anchors_processed": len(results),
