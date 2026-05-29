@@ -325,8 +325,8 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
         "total_s": round(load_s + pf_s + post_s, 4),
         "num_fnirs_steps": num_fnirs,
         "num_eeg_steps": num_eeg,
-        "n_eeg_channels": int(bundle.eeg_obs_raw_full.shape[1]) if getattr(bundle, "eeg_obs_raw_full", None) is not None else int(bundle.eeg_obs.shape[1]),
-        "n_fnirs_channels": int(bundle.fnirs_primary_obs_raw_full.shape[1]) if getattr(bundle, "fnirs_primary_obs_raw_full", None) is not None else int(bundle.fnirs_primary_obs.shape[1]),
+        "n_eeg_channels": int(bundle.eeg_obs.shape[1]),
+        "n_fnirs_channels": 1,
         "eeg_fs_hz": float(bundle.eeg_fs_hz),
         "fnirs_fs_hz": float(bundle.fnirs_fs_hz),
         "pair_mode": str(bundle.pair_mode),
@@ -355,69 +355,57 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
 
 
 def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Dict[str, np.ndarray]:
-    """Compute source/observation targets in raw measurement space.
+    """Compute anchor-scoped source/observation targets in raw measurement space.
 
-    When the bundle provides ``lead_field_full`` and full-channel raw
-    observations, targets are produced at the full channel dimensionality
-    (30 EEG channels, 36 fNIRS spatial positions per optical channel).
-    Otherwise falls back to the local-neighbourhood dimensionality used by
-    the particle filter.
+    Each anchor contributes:
+    - fNIRS: the anchor's own channel only (column 0 in each local neighbourhood),
+      stored as (T_fnirs, 1).  The 36 anchors collectively cover all 36 spatial
+      positions during global assembly.
+    - EEG: the local EEG neighbourhood (6 channels), stored as (T_eeg, N).
+      Overlaps between anchors are resolved by nearest-anchor rule at assembly
+      time.
     """
     r_estimates_eeg = np.asarray(pf_result["r_estimates_eeg"], dtype=np.float64)
     estimates = np.asarray(pf_result["state_estimates"], dtype=np.float64)
 
-    has_full = (
-        getattr(bundle, "lead_field_full", None) is not None
-        and getattr(bundle, "eeg_obs_raw_full", None) is not None
-    )
+    lead_eeg = np.asarray(bundle.lead_field, dtype=np.float64)
+    jac_p = np.asarray(bundle.jac_primary, dtype=np.float64)
+    jac_s = np.asarray(bundle.jac_secondary, dtype=np.float64)
+    eeg_stats = bundle.normalization["eeg"]
+    fnirs_p_stats = bundle.normalization["fnirs_primary"]
+    fnirs_s_stats = bundle.normalization["fnirs_secondary"]
+    eeg_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
+    fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
+    fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
 
-    if has_full:
-        lead_eeg = np.asarray(bundle.lead_field_full, dtype=np.float64)
-        jac_p = np.asarray(bundle.jac_primary_full, dtype=np.float64)
-        jac_s = np.asarray(bundle.jac_secondary_full, dtype=np.float64)
-        eeg_stats = bundle.normalization.get("eeg_full", bundle.normalization["eeg"])
-        fnirs_p_stats = bundle.normalization.get("fnirs_primary_full", bundle.normalization["fnirs_primary"])
-        fnirs_s_stats = bundle.normalization.get("fnirs_secondary_full", bundle.normalization["fnirs_secondary"])
-        eeg_raw = np.asarray(bundle.eeg_obs_raw_full, dtype=np.float64)
-        fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw_full, dtype=np.float64)
-        fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw_full, dtype=np.float64)
-    else:
-        lead_eeg = np.asarray(bundle.lead_field, dtype=np.float64)
-        jac_p = np.asarray(bundle.jac_primary, dtype=np.float64)
-        jac_s = np.asarray(bundle.jac_secondary, dtype=np.float64)
-        eeg_stats = bundle.normalization["eeg"]
-        fnirs_p_stats = bundle.normalization["fnirs_primary"]
-        fnirs_s_stats = bundle.normalization["fnirs_secondary"]
-        eeg_raw = np.asarray(bundle.eeg_obs_raw, dtype=np.float64)
-        fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
-        fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
-
-    # Source predictions in normalized space, then destandardize to raw.
     eeg_substeps = eeg_raw.shape[0] // estimates.shape[0]
-    _lead = lead_eeg.reshape(1, -1)
 
-    # EEG source: r_eeg interpolated to EEG rate × lead_field
+    # EEG source: r_eeg interpolated to EEG rate × lead_field  →  (T_eeg, N_eeg)
     r_eeg_fnirs = estimates[:, 4]
     if eeg_substeps > 1:
         r_eeg_eeg = np.repeat(r_eeg_fnirs, eeg_substeps)[: eeg_raw.shape[0]]
     else:
         r_eeg_eeg = r_estimates_eeg
-    pred_eeg_raw = r_eeg_eeg.reshape(-1, 1) * _lead
+    pred_eeg_norm = r_eeg_eeg.reshape(-1, 1) * lead_eeg.reshape(1, -1)
 
-    # fNIRS source: state[:, 2] * jac_primary, state[:, 3] * jac_secondary
-    pred_primary_raw = estimates[:, 2:3] * jac_p.reshape(1, -1)
-    pred_secondary_raw = estimates[:, 3:4] * jac_s.reshape(1, -1)
+    # fNIRS source: anchor's own channel only (distance=0 → index 0).
+    # State estimates → normalised prediction at anchor channel.
+    _jac_p0 = jac_p.reshape(1, -1)[:, 0:1]
+    _jac_s0 = jac_s.reshape(1, -1)[:, 0:1]
+    pred_primary_norm = estimates[:, 2:3] * _jac_p0
+    pred_secondary_norm = estimates[:, 3:4] * _jac_s0
 
-    # Destandardize if the bundle was z-scored
-    if bundle.normalization.get("mode") == "per_channel_zscore_after_local_selection":
-        pred_eeg_raw = audit.destandardize_matrix(pred_eeg_raw, eeg_stats)
-        pred_primary_raw = audit.destandardize_matrix(pred_primary_raw, fnirs_p_stats)
-        pred_secondary_raw = audit.destandardize_matrix(pred_secondary_raw, fnirs_s_stats)
+    # Destandardize to raw measurement space
+    _fnirs_p_stats0 = {"mean": [fnirs_p_stats["mean"][0]], "std": [fnirs_p_stats["std"][0]]}
+    _fnirs_s_stats0 = {"mean": [fnirs_s_stats["mean"][0]], "std": [fnirs_s_stats["std"][0]]}
+    pred_eeg_raw = audit.destandardize_matrix(pred_eeg_norm, eeg_stats)
+    pred_primary_raw = audit.destandardize_matrix(pred_primary_norm, _fnirs_p_stats0)
+    pred_secondary_raw = audit.destandardize_matrix(pred_secondary_norm, _fnirs_s_stats0)
 
-    # Observation residuals in raw measurement space
+    # Observation residuals
     obs_eeg = eeg_raw - pred_eeg_raw
-    obs_primary = fnirs_p_raw - pred_primary_raw
-    obs_secondary = fnirs_s_raw - pred_secondary_raw
+    obs_primary = fnirs_p_raw[:, 0:1] - pred_primary_raw
+    obs_secondary = fnirs_s_raw[:, 0:1] - pred_secondary_raw
 
     return {
         "source_eeg": pred_eeg_raw.astype(np.float32),
@@ -428,6 +416,10 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
         FNIRS_OBS_CHANNEL1_FIELD: obs_secondary.astype(np.float32),
         "r_estimates_eeg": r_estimates_eeg.astype(np.float32),
         "state_estimates": estimates.astype(np.float32),
+        # Assembly metadata: which channels this anchor covers
+        "anchor_primary_channel": str(bundle.fnirs_primary_channel_names[0]),
+        "anchor_secondary_channel": str(bundle.fnirs_secondary_channel_names[0]),
+        "local_eeg_channel_names": list(bundle.eeg_channel_names),
     }
 
 
@@ -632,14 +624,21 @@ def main() -> None:
     # ---- Save cache ----
     print(f"\nSaving cache to {output_dir} ...", end=" ", flush=True)
     cache: Dict[str, Any] = {}
+    STRING_META_FIELDS = {"anchor_primary_channel", "anchor_secondary_channel", "local_eeg_channel_names"}
+    assembly_meta: Dict[str, Dict[str, Any]] = {}
     for r in results:
         entry = r.pop("cache_entry")
         anchor_key = r["anchor"].replace(" ", "_").replace("-", "_")
         prefix = anchor_key
         if str(r.get("segment_mode", "continuous")) == "event_windows" and r.get("event_idx") is not None:
             prefix = f"{anchor_key}/event_{int(r['event_idx']):03d}"
-        for field_name, array in entry.items():
-            cache[f"{prefix}/{field_name}"] = array
+        assm: Dict[str, Any] = {}
+        for field_name, value in entry.items():
+            if field_name in STRING_META_FIELDS:
+                assm[field_name] = value
+            else:
+                cache[f"{prefix}/{field_name}"] = value
+        assembly_meta[prefix] = assm
 
     cache_path = output_dir / f"subject{args.subject_id}_cache.npz"
     np.savez_compressed(cache_path, **cache)
@@ -705,6 +704,7 @@ def main() -> None:
         "events_processed": len(selected_event_windows or []),
         "jobs_processed": len(results),
         "anchor_names": list(anchor_names),
+        "assembly_meta": {k: {mk: mv for mk, mv in v.items()} for k, v in assembly_meta.items()},
         "event_windows_selected": [to_jsonable_dict(window) for window in (selected_event_windows or [])],
         "event_windows_skipped": [to_jsonable_dict(window) for window in skipped_event_windows],
         "timing": {
