@@ -1,4 +1,4 @@
-"""Generate EEG/fNIRS source/observation target cache for one subject.
+"""Generate EEG/fNIRS source/observation target cache for one subject or one NPZ bundle.
 
 Runs the Croce SMC particle filter on all fNIRS anchors for a single subject,
 computes source targets (physiological signal) and observation targets (residual),
@@ -13,6 +13,10 @@ projected into an optical pair before being merged into the same cache contract.
 Supports --threads N to control torch intra-op parallelism. The script runs
 anchors sequentially when --threads is set (for fair timing comparison across
 thread counts), or in parallel when --parallel-workers > 1.
+
+In `--mode npz`, the script consumes one pre-segmented bundle that already
+contains EEG plus paired optical tracks. This is the bridge used for datasets
+such as Simultaneous EEG&NIRS after explicit oxy/deoxy -> wavelength projection.
 
 Usage:
     # Event-window exact PF with single-thread workers
@@ -66,6 +70,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate EEG/fNIRS source/observation target cache for one subject."
     )
+    parser.add_argument("--mode", choices=("dataset", "npz"), default="dataset")
+    parser.add_argument("--input-npz", default="",
+                        help="Required when --mode=npz. Pre-segmented local bundle to cache.")
     parser.add_argument("--data-root", default="data/EEG+NIRS Single-Trial")
     parser.add_argument("--subject-id", type=int, default=1)
     parser.add_argument("--session-idx", type=int, default=0)
@@ -280,7 +287,10 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
     audit = _worker_audit
 
     t0 = time.perf_counter()
-    bundle = audit.load_dataset_bundle(ds_args, spatial_cfg)
+    if str(getattr(ds_args, 'mode', 'dataset')) == 'npz':
+        bundle = audit.load_real_bundle(ds_args, spatial_cfg)
+    else:
+        bundle = audit.load_dataset_bundle(ds_args, spatial_cfg)
     load_s = time.perf_counter() - t0
 
     num_fnirs = int(bundle.time_s.shape[0])
@@ -336,6 +346,9 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
             "secondary": str(bundle.units.get("fnirs_secondary", "a.u.")),
         },
         "fnirs_signal_semantics": str(bundle.metadata.get("fnirs_signal_semantics", "unknown")),
+        "bundle_task": str(bundle.metadata.get("task", "")),
+        "bundle_segment_kind": str(bundle.metadata.get("bundle_segment_kind", "")),
+        "bundle_segment_label": str(bundle.metadata.get("segment_label_name", "")),
         "segment_mode": str(bundle.metadata.get("segment_mode", getattr(ds_args, "segment_mode", "continuous"))),
         "segment_start_s": float(bundle.metadata.get("segment_start_s", 0.0)),
         "segment_duration_s": float(bundle.metadata.get("segment_duration_s", 0.0)),
@@ -480,11 +493,22 @@ def main() -> None:
     args = parse_args()
     audit = load_audit_module()
 
+    if str(args.mode) == 'npz':
+        if not args.input_npz:
+            raise ValueError('--input-npz is required when --mode=npz')
+        input_npz = Path(args.input_npz)
+        if not input_npz.is_absolute():
+            input_npz = (PROJECT_ROOT / input_npz).resolve()
+        if not input_npz.exists():
+            raise FileNotFoundError(f'NPZ bundle not found: {input_npz}')
+        args.input_npz = str(input_npz)
+
     # Resolve anchor list
     dataset_args_no_anchor = argparse.Namespace(
+        mode=str(args.mode), input_npz=str(args.input_npz),
         data_root=args.data_root, subject_id=int(args.subject_id),
         session_idx=int(args.session_idx),
-        segment_mode=str(args.segment_mode),
+        segment_mode='continuous' if str(args.mode) == 'npz' else str(args.segment_mode),
         segment_start_s=float(args.segment_start_s),
         segment_duration_s=float(args.segment_duration_s),
         event_window_pre_s=float(args.event_window_pre_s),
@@ -500,26 +524,34 @@ def main() -> None:
         eeg_sign_mode=str(args.eeg_sign_mode),
     )
 
-    # Create a temporary dataset to get channel names, then build adjacency
-    from src.data.channel_adjacency import build_channel_adjacency
-    from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset
-    tmp_dataset = MultiModalEEGfNIRSDataset(
-        data_root=args.data_root, subject_ids=[int(args.subject_id)],
-        task="motor_imagery", window_duration_s=2.5,
-        normalize=False, normalization_mode="none",
-        eeg_preprocessing={"bandpass": [0.5, 45.0]},
-        fnirs_preprocessing={"lowpass": 0.2},
-        use_artifact_data=bool(args.use_artifact_eeg),
-        exclude_eog=True, hbo_only=False, hbr_only=False,
-    )
-    adjacency = build_channel_adjacency(
-        "eeg_fnirs_single_trial", args.data_root,
-        tmp_dataset.get_eeg_channel_names(),
-        tmp_dataset.get_fnirs_channel_names(),
-        reference_subject_id=int(args.subject_id),
-        use_artifact_data=bool(args.use_artifact_eeg),
-    )
-    paired_bases, _, _ = audit.build_fnirs_pair_maps(adjacency.fnirs_channel_names)
+    if str(args.mode) == 'npz':
+        with np.load(args.input_npz, allow_pickle=False) as bundle_npz:
+            if 'fnirs_channel_names' not in bundle_npz:
+                raise ValueError('NPZ mode requires fnirs_channel_names for anchor selection')
+            paired_bases = [
+                str(name) for name in np.asarray(bundle_npz['fnirs_channel_names']).reshape(-1).tolist()
+            ]
+    else:
+        # Create a temporary dataset to get channel names, then build adjacency
+        from src.data.channel_adjacency import build_channel_adjacency
+        from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset
+        tmp_dataset = MultiModalEEGfNIRSDataset(
+            data_root=args.data_root, subject_ids=[int(args.subject_id)],
+            task="motor_imagery", window_duration_s=2.5,
+            normalize=False, normalization_mode="none",
+            eeg_preprocessing={"bandpass": [0.5, 45.0]},
+            fnirs_preprocessing={"lowpass": 0.2},
+            use_artifact_data=bool(args.use_artifact_eeg),
+            exclude_eog=True, hbo_only=False, hbr_only=False,
+        )
+        adjacency = build_channel_adjacency(
+            "eeg_fnirs_single_trial", args.data_root,
+            tmp_dataset.get_eeg_channel_names(),
+            tmp_dataset.get_fnirs_channel_names(),
+            reference_subject_id=int(args.subject_id),
+            use_artifact_data=bool(args.use_artifact_eeg),
+        )
+        paired_bases, _, _ = audit.build_fnirs_pair_maps(adjacency.fnirs_channel_names)
 
     if args.anchor_list:
         requested = [n.strip() for n in args.anchor_list.split(",") if n.strip()]
@@ -536,7 +568,7 @@ def main() -> None:
     selected_event_windows: Optional[List[Dict[str, Any]]] = None
     skipped_event_windows: List[Dict[str, Any]] = []
     all_event_windows: List[Dict[str, Any]] = []
-    if str(args.segment_mode) == "event_windows":
+    if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows":
         all_event_windows = audit.resolve_dataset_event_windows(dataset_args_no_anchor)
         selected_event_windows, skipped_event_windows = select_event_windows(
             all_event_windows,
@@ -576,7 +608,11 @@ def main() -> None:
     print("Target Cache Generator")
     print("=" * 72)
     print(f"Subject: {args.subject_id}, Session: {args.session_idx}")
-    if str(args.segment_mode) == "event_windows":
+    processed_segments = 1 if str(args.mode) == 'npz' else len(selected_event_windows or [])
+    if str(args.mode) == 'npz':
+        print("Segmentation: pre-segmented NPZ bundle")
+        print(f"Input bundle: {args.input_npz}")
+    elif str(args.segment_mode) == "event_windows":
         print(
             f"Segmentation: event windows ({args.event_window_pre_s:.1f}s pre + "
             f"{args.event_window_post_s:.1f}s post)"
@@ -649,18 +685,23 @@ def main() -> None:
     manifest = {
         "generated_at": datetime.now().isoformat(),
         "config": {
+            "mode": str(args.mode),
+            "input_npz": str(args.input_npz) if str(args.mode) == 'npz' else None,
             "subject_id": int(args.subject_id),
             "session_idx": int(args.session_idx),
-            "segment_mode": str(args.segment_mode),
+            "segment_mode": str(results[0]["segment_mode"]) if results else ("npz_bundle" if str(args.mode) == 'npz' else str(args.segment_mode)),
             "segment_start_s": float(results[0]["segment_start_s"]) if results else float(args.segment_start_s),
             "segment_duration_s": float(results[0]["segment_duration_s"]) if results else float(args.segment_duration_s),
-            "full_session_used": bool(results[0]["full_session_used"]) if results else bool(str(args.segment_mode) == "continuous" and float(args.segment_duration_s) <= 0.0),
-            "event_window_pre_s": float(args.event_window_pre_s) if str(args.segment_mode) == "event_windows" else None,
-            "event_window_post_s": float(args.event_window_post_s) if str(args.segment_mode) == "event_windows" else None,
-            "event_window_duration_s": float(args.event_window_pre_s + args.event_window_post_s) if str(args.segment_mode) == "event_windows" else None,
-            "event_selection_policy": "full_cross_modal_window_only" if str(args.segment_mode) == "event_windows" else "single_continuous_segment",
+            "full_session_used": bool(results[0]["full_session_used"]) if results else bool(str(args.mode) != 'npz' and str(args.segment_mode) == "continuous" and float(args.segment_duration_s) <= 0.0),
+            "event_window_pre_s": float(args.event_window_pre_s) if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows" else None,
+            "event_window_post_s": float(args.event_window_post_s) if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows" else None,
+            "event_window_duration_s": float(args.event_window_pre_s + args.event_window_post_s) if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows" else None,
+            "event_selection_policy": "single_presegmented_npz_bundle" if str(args.mode) == 'npz' else ("full_cross_modal_window_only" if str(args.segment_mode) == "event_windows" else "single_continuous_segment"),
             "event_indices_requested": parse_event_indices(args.event_indices),
             "event_indices_selected": selected_event_indices if selected_event_indices else None,
+            "bundle_task": str(results[0].get("bundle_task", "")) if results else "",
+            "bundle_segment_kind": str(results[0].get("bundle_segment_kind", "")) if results else "",
+            "bundle_segment_label": str(results[0].get("bundle_segment_label", "")) if results else "",
             "sigma_prop": float(args.sigma_prop),
             "sigma_nirs": float(args.sigma_nirs),
             "num_particles": int(args.num_particles),
@@ -687,8 +728,8 @@ def main() -> None:
             "fnirs_signal_semantics": str(results[0]["fnirs_signal_semantics"]) if results else "unknown",
         },
         "cache_layout": {
-            "result_granularity": "anchor_event_window" if str(args.segment_mode) == "event_windows" else "anchor",
-            "key_pattern": "<anchor>/event_<idx>/<field>" if str(args.segment_mode) == "event_windows" else "<anchor>/<field>",
+            "result_granularity": "anchor_event_window" if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows" else "anchor",
+            "key_pattern": "<anchor>/event_<idx>/<field>" if str(args.mode) == 'dataset' and str(args.segment_mode) == "event_windows" else "<anchor>/<field>",
             "field_names": [
                 "source_eeg",
                 FNIRS_SOURCE_CHANNEL0_FIELD,
@@ -701,7 +742,7 @@ def main() -> None:
             ],
         },
         "anchors_processed": len(anchor_names),
-        "events_processed": len(selected_event_windows or []),
+        "events_processed": processed_segments,
         "jobs_processed": len(results),
         "anchor_names": list(anchor_names),
         "assembly_meta": {k: {mk: mv for mk, mv in v.items()} for k, v in assembly_meta.items()},
@@ -732,9 +773,8 @@ def main() -> None:
     print("TIMING SUMMARY")
     print(f"{'='*72}")
     print(f"  Anchors processed:    {len(anchor_names)}")
-    if str(args.segment_mode) == "event_windows":
-        print(f"  Events processed:     {len(selected_event_windows or [])}")
-        print(f"  Jobs processed:       {len(results)}")
+    print(f"  Events processed:     {processed_segments}")
+    print(f"  Jobs processed:       {len(results)}")
     print(f"  Total wall time:      {total_wall:.1f}s ({total_wall/60:.1f}min)")
     print(f"  Total PF time:        {total_pf_s:.1f}s ({total_pf_s/60:.1f}min)")
     print(f"  Total data loading:   {total_load_s:.1f}s")

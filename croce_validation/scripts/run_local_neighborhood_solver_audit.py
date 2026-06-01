@@ -1319,8 +1319,41 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         eeg_positions = ensure_2d_positions(bundle_npz['eeg_positions_mm'])
         fnirs_positions = ensure_2d_positions(bundle_npz['fnirs_positions_mm'])
         fnirs_fs_hz = float(np.asarray(bundle_npz['fnirs_fs_hz']).item())
+        eeg_channel_names = tuple(
+            str(name) for name in np.asarray(bundle_npz['eeg_channel_names']).reshape(-1).tolist()
+        ) if 'eeg_channel_names' in bundle_npz else ()
+        fnirs_channel_bases = tuple(
+            str(name) for name in np.asarray(bundle_npz['fnirs_channel_names']).reshape(-1).tolist()
+        ) if 'fnirs_channel_names' in bundle_npz else ()
 
-        if 'anchor_position_mm' in bundle_npz:
+        requested_anchor = str(getattr(args, 'anchor_fnirs_channel', '')).strip()
+        anchor_base_name = ''
+        bundle_task = str(np.asarray(bundle_npz['task']).item()) if 'task' in bundle_npz else ''
+        bundle_segment_kind = str(np.asarray(bundle_npz['segment_kind']).item()) if 'segment_kind' in bundle_npz else ''
+        bundle_segment_index = int(np.asarray(bundle_npz['segment_index']).item()) if 'segment_index' in bundle_npz else None
+        bundle_segment_label = str(np.asarray(bundle_npz['label_name']).item()) if 'label_name' in bundle_npz else ''
+        optical_projection_kind = str(np.asarray(bundle_npz['optical_projection_kind']).item()) if 'optical_projection_kind' in bundle_npz else ''
+        bundle_segment_start_s = float(np.asarray(bundle_npz['eeg_start_ms']).item()) / 1000.0 if 'eeg_start_ms' in bundle_npz else None
+        bundle_segment_duration_s = (
+            float(np.asarray(bundle_npz['eeg_end_ms']).item()) - float(np.asarray(bundle_npz['eeg_start_ms']).item())
+        ) / 1000.0 if 'eeg_start_ms' in bundle_npz and 'eeg_end_ms' in bundle_npz else None
+        bundle_event_idx = int(np.asarray(bundle_npz['event_idx']).item()) if 'event_idx' in bundle_npz else None
+        bundle_event_window_pre_s = float(np.asarray(bundle_npz['event_window_pre_s']).item()) if 'event_window_pre_s' in bundle_npz else None
+        bundle_event_window_post_s = float(np.asarray(bundle_npz['event_window_post_s']).item()) if 'event_window_post_s' in bundle_npz else None
+        bundle_aligned_window_start_s = float(np.asarray(bundle_npz['aligned_window_start_s']).item()) if 'aligned_window_start_s' in bundle_npz else None
+        bundle_aligned_window_end_s = float(np.asarray(bundle_npz['aligned_window_end_s']).item()) if 'aligned_window_end_s' in bundle_npz else None
+        bundle_eeg_event_onset_s = float(np.asarray(bundle_npz['eeg_event_onset_ms']).item()) / 1000.0 if 'eeg_event_onset_ms' in bundle_npz else None
+        bundle_fnirs_event_onset_s = float(np.asarray(bundle_npz['fnirs_event_onset_ms']).item()) / 1000.0 if 'fnirs_event_onset_ms' in bundle_npz else None
+
+        if requested_anchor and fnirs_channel_bases:
+            anchor_base_name = resolve_anchor_base_name(requested_anchor, fnirs_channel_bases)
+            anchor_key = canonicalize_channel_label(anchor_base_name)
+            anchor_index = next(
+                index for index, base_name in enumerate(fnirs_channel_bases)
+                if canonicalize_channel_label(base_name) == anchor_key
+            )
+            anchor = fnirs_positions[anchor_index]
+        elif 'anchor_position_mm' in bundle_npz:
             anchor = np.asarray(bundle_npz['anchor_position_mm'], dtype=np.float64).ravel()
         elif 'eeg_anchor_index' in bundle_npz:
             anchor = eeg_positions[int(np.asarray(bundle_npz['eeg_anchor_index']).item())]
@@ -1329,7 +1362,12 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         else:
             anchor = np.mean(np.concatenate([eeg_positions, fnirs_positions], axis=0), axis=0)
 
-        if 'fnirs_690' in bundle_npz and 'fnirs_830' in bundle_npz:
+        if 'fnirs_850' in bundle_npz and 'fnirs_760' in bundle_npz:
+            fnirs_primary = np.asarray(bundle_npz['fnirs_850'], dtype=np.float64)
+            fnirs_secondary = np.asarray(bundle_npz['fnirs_760'], dtype=np.float64)
+            pair_mode = 'wavelength'
+            pair_labels = ('highWL', 'lowWL')
+        elif 'fnirs_690' in bundle_npz and 'fnirs_830' in bundle_npz:
             fnirs_primary = np.asarray(bundle_npz['fnirs_690'], dtype=np.float64)
             fnirs_secondary = np.asarray(bundle_npz['fnirs_830'], dtype=np.float64)
             pair_mode = 'wavelength'
@@ -1380,6 +1418,62 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
     fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_local)
     fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_local)
 
+    if pair_mode_uses_concentration_space(pair_mode):
+        primary_suffix = '_O'
+        secondary_suffix = '_R'
+    else:
+        primary_suffix = 'highWL'
+        secondary_suffix = 'lowWL'
+
+    if eeg_channel_names:
+        eeg_channel_names_local = tuple(eeg_channel_names[index] for index in eeg_indices.tolist())
+    else:
+        eeg_channel_names_local = tuple(f'EEG_{index}' for index in eeg_indices.tolist())
+
+    if fnirs_channel_bases:
+        fnirs_primary_channel_names = tuple(
+            f'{fnirs_channel_bases[index]}{primary_suffix}' for index in fnirs_indices.tolist()
+        )
+        fnirs_secondary_channel_names = tuple(
+            f'{fnirs_channel_bases[index]}{secondary_suffix}' for index in fnirs_indices.tolist()
+        )
+    else:
+        fnirs_primary_channel_names = tuple(f'{pair_labels[0]}_{index}' for index in fnirs_indices.tolist())
+        fnirs_secondary_channel_names = tuple(f'{pair_labels[1]}_{index}' for index in fnirs_indices.tolist())
+
+    metadata: Dict[str, Any] = {'signal_source': 'npz_bundle', 'segment_mode': 'npz_bundle'}
+    if requested_anchor and anchor_base_name:
+        metadata['anchor_fnirs_base'] = anchor_base_name
+    if fnirs_channel_bases:
+        metadata['fnirs_channel_bases'] = list(fnirs_channel_bases)
+    if bundle_task:
+        metadata['task'] = bundle_task
+    if bundle_segment_kind:
+        metadata['bundle_segment_kind'] = bundle_segment_kind
+    if bundle_segment_index is not None:
+        metadata['segment_index'] = bundle_segment_index
+    if bundle_event_idx is not None:
+        metadata['event_idx'] = bundle_event_idx
+    if bundle_segment_label:
+        metadata['segment_label_name'] = bundle_segment_label
+    if optical_projection_kind:
+        metadata['optical_projection_kind'] = optical_projection_kind
+    if bundle_segment_start_s is not None and bundle_segment_duration_s is not None:
+        metadata['segment_start_s'] = bundle_segment_start_s
+        metadata['segment_duration_s'] = bundle_segment_duration_s
+    if bundle_event_window_pre_s is not None:
+        metadata['event_window_pre_s'] = bundle_event_window_pre_s
+    if bundle_event_window_post_s is not None:
+        metadata['event_window_post_s'] = bundle_event_window_post_s
+    if bundle_aligned_window_start_s is not None:
+        metadata['aligned_window_start_s'] = bundle_aligned_window_start_s
+    if bundle_aligned_window_end_s is not None:
+        metadata['aligned_window_end_s'] = bundle_aligned_window_end_s
+    if bundle_eeg_event_onset_s is not None:
+        metadata['eeg_event_onset_s'] = bundle_eeg_event_onset_s
+    if bundle_fnirs_event_onset_s is not None:
+        metadata['fnirs_event_onset_s'] = bundle_fnirs_event_onset_s
+
     return ObservationBundle(
         mode='npz',
         pair_mode=pair_mode,
@@ -1416,10 +1510,10 @@ def load_real_bundle(args: argparse.Namespace, spatial_config: SpatialConfig) ->
         eeg_obs_raw=eeg_local,
         fnirs_primary_obs_raw=fnirs_primary_local,
         fnirs_secondary_obs_raw=fnirs_secondary_local,
-        eeg_channel_names=tuple(f'EEG_{index}' for index in eeg_indices.tolist()),
-        fnirs_primary_channel_names=tuple(f'{pair_labels[0]}_{index}' for index in fnirs_indices.tolist()),
-        fnirs_secondary_channel_names=tuple(f'{pair_labels[1]}_{index}' for index in fnirs_indices.tolist()),
-        metadata={'signal_source': 'npz_bundle'},
+        eeg_channel_names=eeg_channel_names_local,
+        fnirs_primary_channel_names=fnirs_primary_channel_names,
+        fnirs_secondary_channel_names=fnirs_secondary_channel_names,
+        metadata=metadata,
     )
 
 

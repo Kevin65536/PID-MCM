@@ -1,13 +1,11 @@
 """Visualize raw continuous EEG/fNIRS recordings on an aligned event timeline.
 
-This tool is intended as a human-readable correctness check for dataset loading.
-It plots:
-1. An event track with EEG and fNIRS onsets on the same aligned timeline.
-2. Raw EEG traces for selected channels.
-3. Raw fNIRS traces for selected channels.
-
-The current implementation supports datasets whose loader is already implemented.
-At the moment this means EEG+NIRS Single-Trial.
+This tool is intended as a human-readable correctness check for dataset loading
+and cross-modal synchronization. It can render:
+1. a channel-layout figure for datasets that expose montage metadata,
+2. an event track with EEG and fNIRS onsets on the same aligned timeline,
+3. full-length raw EEG/fNIRS traces with event-window shading,
+4. a local zoom around one selected event.
 """
 
 from __future__ import annotations
@@ -30,7 +28,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data import create_continuous_visualization_dataset, load_experiment_config, require_dataset_loader
+from src.data import (
+    create_continuous_visualization_dataset,
+    load_experiment_config,
+    project_points_to_2d,
+    require_dataset_loader,
+)
+from src.data.eeg_fnirs_dataset import get_eeg_channel_mask, load_mat_struct
 
 
 DEFAULT_CONFIG = 'source_observation/phase1/default.yaml'
@@ -41,9 +45,14 @@ DEFAULT_FNIRS_CHANNELS = ('AF7', 'AFF5', 'AFp7', 'AF5h')
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Visualize raw continuous EEG/fNIRS recordings with aligned event markers.')
     parser.add_argument('--config', default=DEFAULT_CONFIG, help='Config path relative to experiments/configs')
+    parser.add_argument('--dataset-override', default='', help='Optional dataset id override, e.g. simultaneous_eeg_nirs')
+    parser.add_argument('--data-root-override', default='', help='Optional dataset root override')
+    parser.add_argument('--task-override', default='', help='Optional task override, e.g. nback or wg')
     parser.add_argument('--subject-id', type=int, default=1, help='Subject id to visualize')
     parser.add_argument('--session-idx', type=int, default=0, help='Session index in the raw dataset file')
     parser.add_argument('--task-duration-s', type=float, default=10.0, help='Task window duration used for shaded spans')
+    parser.add_argument('--event-window-pre-s', type=float, default=None, help='Optional seconds shown before each event onset for shaded extraction windows')
+    parser.add_argument('--event-window-post-s', type=float, default=None, help='Optional seconds shown after each event onset for shaded extraction windows')
     parser.add_argument('--align-mode', choices=('first_event', 'recording_start'), default='first_event')
     parser.add_argument('--eeg-channels', default=','.join(DEFAULT_EEG_CHANNELS), help='Comma separated channel names or indices')
     parser.add_argument('--fnirs-channels', default=','.join(DEFAULT_FNIRS_CHANNELS), help='Comma separated channel names or indices')
@@ -51,8 +60,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--focus-trial-idx', type=int, default=0, help='Trial index used for local zoom inspection')
     parser.add_argument('--zoom-pre-s', type=float, default=4.0, help='Seconds shown before the focus event in the local zoom figure')
     parser.add_argument('--zoom-post-s', type=float, default=12.0, help='Seconds shown after the focus event in the local zoom figure')
+    parser.add_argument('--skip-channel-layout', action='store_true', help='Skip channel-layout rendering even if montage metadata is available')
     parser.add_argument('--output-dir', default='', help='Optional output directory')
     return parser.parse_args()
+
+
+def apply_data_overrides(config: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
+    data_cfg = dict(config['data'])
+    if args.dataset_override:
+        data_cfg['dataset'] = str(args.dataset_override)
+    if args.data_root_override:
+        data_cfg['data_root'] = str(args.data_root_override)
+    if args.task_override:
+        data_cfg['task'] = str(args.task_override)
+    updated = dict(config)
+    updated['data'] = data_cfg
+    return updated
 
 
 def resolve_normalization_config(data_cfg: Dict[str, Any]) -> Tuple[bool, str]:
@@ -111,6 +134,102 @@ def infer_region_boundaries(regions: List[Dict[str, Any]], total_duration_s: flo
         updated['end_s'] = max(updated['start_s'], next_onset_s)
         resolved.append(updated)
     return resolved
+
+
+def shift_regions_to_aligned_timeline(regions: Sequence[Dict[str, Any]], anchor_s: float) -> List[Dict[str, Any]]:
+    shifted: List[Dict[str, Any]] = []
+    for region in regions:
+        updated = dict(region)
+        updated['onset_s'] = float(region['onset_s']) - float(anchor_s)
+        updated['start_s'] = float(region['start_s']) - float(anchor_s)
+        updated['end_s'] = float(region['end_s']) - float(anchor_s)
+        shifted.append(updated)
+    return shifted
+
+
+def resolve_window_parameters(args: argparse.Namespace) -> Tuple[bool, float, float, float, float]:
+    if args.event_window_pre_s is None and args.event_window_post_s is None:
+        duration_s = float(args.task_duration_s)
+        return False, 0.0, duration_s, duration_s, 0.0
+
+    pre_s = float(0.0 if args.event_window_pre_s is None else args.event_window_pre_s)
+    if args.event_window_post_s is None:
+        post_s = max(float(args.task_duration_s) - pre_s, 0.0)
+    else:
+        post_s = float(args.event_window_post_s)
+    duration_s = pre_s + post_s
+    return True, pre_s, post_s, duration_s, -1000.0 * pre_s
+
+
+def _load_mnt_struct(data_root: Path, subject_id: int, modality: str, task: str) -> Any:
+    suffix = 'EEG' if modality == 'eeg' else 'NIRS'
+    path = data_root / f'VP{int(subject_id):03d}-{suffix}' / f'mnt_{task}.mat'
+    mat = load_mat_struct(str(path))
+    key = next(name for name in mat if not name.startswith('__'))
+    return mat[key]
+
+
+def load_simultaneous_layout(
+    *,
+    data_root: Path,
+    subject_id: int,
+    task: str,
+    exclude_eog: bool,
+) -> Dict[str, Any]:
+    eeg_mnt = _load_mnt_struct(data_root, subject_id, 'eeg', task)
+    fnirs_mnt = _load_mnt_struct(data_root, subject_id, 'fnirs', task)
+
+    eeg_channel_names_all = [str(name) for name in np.asarray(eeg_mnt.clab).tolist()]
+    eeg_channel_mask = get_eeg_channel_mask(eeg_channel_names_all, exclude_eog=exclude_eog)
+    eeg_channel_names = [name for index, name in enumerate(eeg_channel_names_all) if eeg_channel_mask[index]]
+
+    eeg_positions_3d = np.asarray(eeg_mnt.pos_3d, dtype=np.float32)
+    if eeg_positions_3d.ndim == 2 and eeg_positions_3d.shape[0] == 3:
+        eeg_positions_3d = eeg_positions_3d.T
+    eeg_positions_3d = eeg_positions_3d[np.asarray(eeg_channel_mask, dtype=bool)]
+
+    fnirs_channel_names = [str(name) for name in np.asarray(fnirs_mnt.clab).tolist()]
+    fnirs_positions_3d = np.asarray(fnirs_mnt.pos_3d, dtype=np.float32)
+    if fnirs_positions_3d.ndim == 2 and fnirs_positions_3d.shape[0] == 3:
+        fnirs_positions_3d = fnirs_positions_3d.T
+
+    return {
+        'eeg_channel_names': eeg_channel_names,
+        'eeg_positions_3d': eeg_positions_3d,
+        'fnirs_channel_names': fnirs_channel_names,
+        'fnirs_positions_3d': fnirs_positions_3d,
+        'geometry_note': 'Local Simultaneous MATLAB export preserves official EEG/NIRS channel coordinates but not explicit source/detector optode coordinates.',
+    }
+
+
+def create_simultaneous_channel_layout_figure(
+    *,
+    layout: Dict[str, Any],
+    output_path: Path,
+    subject_id: int,
+    task: str,
+) -> None:
+    eeg_xy = project_points_to_2d(np.asarray(layout['eeg_positions_3d'], dtype=np.float32), method='orthographic')
+    fnirs_xy = project_points_to_2d(np.asarray(layout['fnirs_positions_3d'], dtype=np.float32), method='orthographic')
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    ax.scatter(eeg_xy[:, 0], eeg_xy[:, 1], c='#2E86AB', s=44, label='EEG electrodes', zorder=3)
+    ax.scatter(fnirs_xy[:, 0], fnirs_xy[:, 1], c='#D35400', s=52, marker='x', label='fNIRS channels', zorder=4)
+
+    for name, (x_coord, y_coord) in zip(layout['eeg_channel_names'], eeg_xy):
+        ax.text(float(x_coord), float(y_coord), str(name), fontsize=7, color='#1B4F72', ha='center', va='bottom')
+    for name, (x_coord, y_coord) in zip(layout['fnirs_channel_names'], fnirs_xy):
+        ax.text(float(x_coord), float(y_coord), str(name), fontsize=6, color='#7D3C0C', ha='center', va='top')
+
+    ax.set_title(f'Simultaneous EEG-fNIRS channel layout | subject {subject_id:03d} | task {task}')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.legend(loc='upper right')
+    ax.set_aspect('equal')
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close(fig)
 
 
 def parse_channel_spec(spec: str) -> List[str]:
@@ -348,6 +467,7 @@ def create_alignment_figure(
     subject_id: int,
     session_idx: int,
     sync_summary: Dict[str, Any],
+    window_note: str,
 ) -> None:
     fig, axes = plt.subplots(
         3,
@@ -417,7 +537,7 @@ def create_alignment_figure(
             f'Subject {subject_id} | session {session_idx} | raw continuous alignment check\n'
             f"Initial EEG->fNIRS offset: {sync_summary['initial_offset_ms']:.2f} ms | "
             f"max residual after alignment: {residual_text} | "
-            f"label sequence match: {sync_summary['label_sequence_match']}"
+            f"label sequence match: {sync_summary['label_sequence_match']} | {window_note}"
         ),
         fontsize=14,
         fontweight='bold',
@@ -600,7 +720,7 @@ def create_local_zoom_figure(
 
 def main() -> None:
     args = parse_args()
-    config = load_experiment_config(args.config)
+    config = apply_data_overrides(load_experiment_config(args.config), args)
     data_cfg = config['data']
     require_dataset_loader(data_cfg['dataset'])
 
@@ -613,6 +733,8 @@ def main() -> None:
 
     eeg_signal = eeg_dataset.get_session_continuous_data(args.subject_id, args.session_idx, processed=False, normalized=False)
     nirs_signal = nirs_dataset.get_session_continuous_data(args.subject_id, args.session_idx, processed=False, normalized=False)
+    eeg_total_duration_s = float(eeg_signal.shape[1]) / float(max(eeg_dataset.get_sample_rate(), 1e-8))
+    nirs_total_duration_s = float(nirs_signal.shape[1]) / float(max(nirs_dataset.get_sample_rate(), 1e-8))
 
     eeg_markers = get_visualization_markers(eeg_dataset, args.subject_id, args.session_idx)
     nirs_markers = get_visualization_markers(nirs_dataset, args.subject_id, args.session_idx)
@@ -640,31 +762,30 @@ def main() -> None:
     nirs_channel_names = nirs_dataset.get_channel_names()
     eeg_channel_indices = resolve_channel_indices(eeg_channel_names, args.eeg_channels, DEFAULT_EEG_CHANNELS)
     nirs_channel_indices = resolve_channel_indices(nirs_channel_names, args.fnirs_channels, DEFAULT_FNIRS_CHANNELS)
-    total_duration_s = max(
-        float(eeg_signal.shape[1]) / float(max(eeg_dataset.get_sample_rate(), 1e-8)),
-        float(nirs_signal.shape[1]) / float(max(nirs_dataset.get_sample_rate(), 1e-8)),
-    )
+    use_explicit_event_windows, event_window_pre_s, event_window_post_s, region_duration_s, region_offset_ms = resolve_window_parameters(args)
     eeg_regions = eeg_dataset.get_session_trial_regions(
         args.subject_id,
         args.session_idx,
-        window_duration_s=float(args.task_duration_s),
-        offset_ms=0.0,
+        window_duration_s=region_duration_s,
+        offset_ms=region_offset_ms,
     )
     nirs_regions = nirs_dataset.get_session_trial_regions(
         args.subject_id,
         args.session_idx,
-        window_duration_s=float(args.task_duration_s),
-        offset_ms=0.0,
+        window_duration_s=region_duration_s,
+        offset_ms=region_offset_ms,
     )
-    if data_cfg['dataset'] == 'simultaneous_eeg_nirs':
+    if data_cfg['dataset'] == 'simultaneous_eeg_nirs' and not use_explicit_event_windows:
         eeg_regions = infer_region_boundaries(
             eeg_regions,
-            float(eeg_signal.shape[1]) / float(max(eeg_dataset.get_sample_rate(), 1e-8)),
+            eeg_total_duration_s,
         )
         nirs_regions = infer_region_boundaries(
             nirs_regions,
-            float(nirs_signal.shape[1]) / float(max(nirs_dataset.get_sample_rate(), 1e-8)),
+            nirs_total_duration_s,
         )
+    eeg_regions = shift_regions_to_aligned_timeline(eeg_regions, eeg_anchor_s)
+    nirs_regions = shift_regions_to_aligned_timeline(nirs_regions, nirs_anchor_s)
 
     sync_summary = build_sync_summary(
         eeg_event_times_s=eeg_events_aligned_s,
@@ -688,6 +809,33 @@ def main() -> None:
     ):
         session_alignment_summary = eeg_dataset.loader.align_session_markers(args.subject_id)
 
+    layout_path = None
+    layout_note = None
+    if data_cfg['dataset'] == 'simultaneous_eeg_nirs' and not args.skip_channel_layout:
+        data_root = Path(str(data_cfg['data_root']))
+        if not data_root.is_absolute():
+            data_root = (PROJECT_ROOT / data_root).resolve()
+        layout = load_simultaneous_layout(
+            data_root=data_root,
+            subject_id=args.subject_id,
+            task=str(data_cfg.get('task', 'nback')),
+            exclude_eog=bool(data_cfg.get('exclude_eog', True)),
+        )
+        layout_note = str(layout['geometry_note'])
+        layout_path = output_dir / f"subject{args.subject_id}_session{args.session_idx}_channel_layout.png"
+        create_simultaneous_channel_layout_figure(
+            layout=layout,
+            output_path=layout_path,
+            subject_id=args.subject_id,
+            task=str(data_cfg.get('task', 'nback')),
+        )
+
+    window_note = (
+        f'event windows: -{event_window_pre_s:.1f}s / +{event_window_post_s:.1f}s'
+        if use_explicit_event_windows
+        else f'legacy task spans: {float(args.task_duration_s):.1f}s from onset'
+    )
+
     figure_path = output_dir / f'subject{args.subject_id}_session{args.session_idx}_continuous_alignment.png'
     create_alignment_figure(
         eeg_time_axis=eeg_time_axis,
@@ -702,13 +850,14 @@ def main() -> None:
         nirs_events_s=nirs_events_aligned_s,
         eeg_labels=eeg_labels,
         eeg_class_names=eeg_class_names,
-        task_duration_s=float(args.task_duration_s),
+        task_duration_s=region_duration_s,
         eeg_regions=eeg_regions,
         nirs_regions=nirs_regions,
         output_path=figure_path,
         subject_id=args.subject_id,
         session_idx=args.session_idx,
         sync_summary=sync_summary,
+        window_note=window_note,
     )
 
     local_figure_path = output_dir / f'subject{args.subject_id}_session{args.session_idx}_continuous_alignment_local.png'
@@ -728,7 +877,7 @@ def main() -> None:
         focus_trial_idx=args.focus_trial_idx,
         zoom_pre_s=float(args.zoom_pre_s),
         zoom_post_s=float(args.zoom_post_s),
-        task_duration_s=float(args.task_duration_s),
+        task_duration_s=region_duration_s,
         eeg_regions=eeg_regions,
         nirs_regions=nirs_regions,
         output_path=local_figure_path,
@@ -746,15 +895,29 @@ def main() -> None:
     except ValueError:
         local_figure_relative_path = str(local_figure_path.resolve())
 
+    if layout_path is not None:
+        try:
+            layout_relative_path = str(layout_path.resolve().relative_to(PROJECT_ROOT)).replace('\\', '/')
+        except ValueError:
+            layout_relative_path = str(layout_path.resolve())
+    else:
+        layout_relative_path = None
+
     summary = {
         'config': args.config,
         'dataset': data_cfg['dataset'],
+        'data_root': str(data_cfg.get('data_root', '')),
+        'task': str(data_cfg.get('task', '')),
         'subject_id': args.subject_id,
         'session_idx': args.session_idx,
         'align_mode': args.align_mode,
         'task_duration_s': float(args.task_duration_s),
+        'event_window_pre_s': None if not use_explicit_event_windows else event_window_pre_s,
+        'event_window_post_s': None if not use_explicit_event_windows else event_window_post_s,
         'figure': figure_relative_path,
         'local_figure': local_figure_relative_path,
+        'channel_layout_figure': layout_relative_path,
+        'channel_layout_note': layout_note,
         'selected_eeg_channels': [eeg_channel_names[idx] for idx in eeg_channel_indices],
         'selected_fnirs_channels': [nirs_channel_names[idx] for idx in nirs_channel_indices],
         'eeg_sample_rate_hz': float(eeg_dataset.get_sample_rate()),
@@ -771,6 +934,8 @@ def main() -> None:
     summary_path = output_dir / 'summary.json'
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
 
+    if layout_path is not None:
+        print(f'[ContinuousAlignment] Saved channel layout: {layout_path}')
     print(f'[ContinuousAlignment] Saved figure: {figure_path}')
     print(f'[ContinuousAlignment] Saved local figure: {local_figure_path}')
     print(f'[ContinuousAlignment] Saved summary: {summary_path}')
