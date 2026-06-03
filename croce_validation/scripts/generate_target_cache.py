@@ -74,6 +74,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-npz", default="",
                         help="Required when --mode=npz. Pre-segmented local bundle to cache.")
     parser.add_argument("--data-root", default="data/EEG+NIRS Single-Trial")
+    parser.add_argument("--task", choices=("motor_imagery", "mental_arithmetic"), default="motor_imagery",
+                        help="Task paradigm to load (motor_imagery or mental_arithmetic).")
     parser.add_argument("--subject-id", type=int, default=1)
     parser.add_argument("--session-idx", type=int, default=0)
     parser.add_argument("--segment-mode", choices=("continuous", "event_windows"), default="event_windows",
@@ -506,7 +508,7 @@ def main() -> None:
     # Resolve anchor list
     dataset_args_no_anchor = argparse.Namespace(
         mode=str(args.mode), input_npz=str(args.input_npz),
-        data_root=args.data_root, subject_id=int(args.subject_id),
+        data_root=args.data_root, task=str(args.task), subject_id=int(args.subject_id),
         session_idx=int(args.session_idx),
         segment_mode='continuous' if str(args.mode) == 'npz' else str(args.segment_mode),
         segment_start_s=float(args.segment_start_s),
@@ -537,7 +539,7 @@ def main() -> None:
         from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset
         tmp_dataset = MultiModalEEGfNIRSDataset(
             data_root=args.data_root, subject_ids=[int(args.subject_id)],
-            task="motor_imagery", window_duration_s=2.5,
+            task=args.task, window_duration_s=2.5,
             normalize=False, normalization_mode="none",
             eeg_preprocessing={"bandpass": [0.5, 45.0]},
             fnirs_preprocessing={"lowpass": 0.2},

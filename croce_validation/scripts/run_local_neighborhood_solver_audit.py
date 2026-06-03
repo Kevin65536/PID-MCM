@@ -1538,7 +1538,7 @@ def resolve_dataset_event_windows(
     dataset = dataset or MultiModalEEGfNIRSDataset(
         data_root=args.data_root,
         subject_ids=[int(args.subject_id)],
-        task='motor_imagery',
+        task=getattr(args, 'task', 'motor_imagery'),
         window_duration_s=2.5,
         normalize=False,
         normalization_mode='none',
@@ -1612,7 +1612,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     dataset = MultiModalEEGfNIRSDataset(
         data_root=args.data_root,
         subject_ids=[int(args.subject_id)],
-        task='motor_imagery',
+        task=getattr(args, 'task', 'motor_imagery'),
         window_duration_s=2.5,
         normalize=False,
         normalization_mode='none',

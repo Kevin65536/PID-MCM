@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
         description="Batch generate target cache for all 29 subjects."
     )
     p.add_argument("--data-root", default=str(PROJECT_ROOT / "data" / "EEG+NIRS Single-Trial"))
+    p.add_argument("--task", choices=("motor_imagery", "mental_arithmetic"), default="motor_imagery",
+                    help="Task paradigm to load.")
     p.add_argument("--segment-mode", choices=("continuous", "event_windows"), default="event_windows")
     p.add_argument("--segment-start-s", type=float, default=0.0)
     p.add_argument("--segment-duration-s", type=float, default=0.0,
@@ -68,6 +70,7 @@ def run_subject(args: argparse.Namespace, subject_id: int, output_dir: Path) -> 
     cmd = [
         sys.executable, str(CACHE_SCRIPT),
         "--data-root", args.data_root,
+        "--task", str(args.task),
         "--subject-id", str(subject_id),
         "--segment-mode", str(args.segment_mode),
         "--segment-start-s", str(args.segment_start_s),
