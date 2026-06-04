@@ -1531,6 +1531,34 @@ def label_name_for_index(label: int, class_names: Sequence[str]) -> str:
     return str(int(label))
 
 
+def resolve_task_session_index(args: argparse.Namespace, total_sessions: int) -> Tuple[int, int, str]:
+    """Map task-relative session index to the raw Single-Trial session list."""
+    task = str(getattr(args, 'task', 'motor_imagery')).strip().lower()
+    task_session_idx = int(getattr(args, 'session_idx', 0))
+    task_to_raw_sessions = {
+        'motor_imagery': (0, 2, 4),
+        'mental_arithmetic': (1, 3, 5),
+    }
+    raw_candidates = task_to_raw_sessions.get(task)
+    if raw_candidates is None:
+        if task_session_idx < 0 or task_session_idx >= total_sessions:
+            raise ValueError(f'session-idx {task_session_idx} is out of range')
+        return task_session_idx, task_session_idx, task
+
+    if task_session_idx < 0 or task_session_idx >= len(raw_candidates):
+        raise ValueError(
+            f'session-idx {task_session_idx} is out of range for task {task!r}; '
+            f'valid task-relative indices are 0..{len(raw_candidates) - 1}'
+        )
+    raw_session_idx = int(raw_candidates[task_session_idx])
+    if raw_session_idx >= total_sessions:
+        raise ValueError(
+            f'raw session index {raw_session_idx} for task {task!r} is out of range '
+            f'for {total_sessions} loaded sessions'
+        )
+    return task_session_idx, raw_session_idx, task
+
+
 def resolve_dataset_event_windows(
     args: argparse.Namespace,
     dataset: Optional[MultiModalEEGfNIRSDataset] = None,
@@ -1552,14 +1580,15 @@ def resolve_dataset_event_windows(
 
     eeg_session_list, eeg_marker_list, eeg_info = dataset._get_eeg_data(int(args.subject_id), processed=True)
     fnirs_session_list, fnirs_marker_list, fnirs_info = dataset._get_nirs_data(int(args.subject_id), processed=True)
-    session_idx = int(args.session_idx)
-    if session_idx < 0 or session_idx >= min(len(eeg_session_list), len(fnirs_session_list)):
-        raise ValueError(f'session-idx {session_idx} is out of range')
+    task_session_idx, raw_session_idx, task = resolve_task_session_index(
+        args,
+        min(len(eeg_session_list), len(fnirs_session_list)),
+    )
 
-    eeg_duration_s = float(np.asarray(eeg_session_list[session_idx]).shape[0]) / float(eeg_info['fs'])
-    fnirs_duration_s = float(np.asarray(fnirs_session_list[session_idx]).shape[0]) / float(fnirs_info['fs'])
-    eeg_event_times_s, eeg_labels, eeg_class_names = extract_marker_event_info(eeg_marker_list[session_idx])
-    fnirs_event_times_s, fnirs_labels, fnirs_class_names = extract_marker_event_info(fnirs_marker_list[session_idx])
+    eeg_duration_s = float(np.asarray(eeg_session_list[raw_session_idx]).shape[0]) / float(eeg_info['fs'])
+    fnirs_duration_s = float(np.asarray(fnirs_session_list[raw_session_idx]).shape[0]) / float(fnirs_info['fs'])
+    eeg_event_times_s, eeg_labels, eeg_class_names = extract_marker_event_info(eeg_marker_list[raw_session_idx])
+    fnirs_event_times_s, fnirs_labels, fnirs_class_names = extract_marker_event_info(fnirs_marker_list[raw_session_idx])
 
     common_events = int(min(len(eeg_event_times_s), len(fnirs_event_times_s)))
     pre_s = float(getattr(args, 'event_window_pre_s', 10.0))
@@ -1586,6 +1615,9 @@ def resolve_dataset_event_windows(
         fnirs_label = int(fnirs_labels[event_idx])
         descriptors.append({
             'event_idx': event_idx,
+            'task': task,
+            'task_session_idx': task_session_idx,
+            'raw_session_idx': raw_session_idx,
             'eeg_onset_s': eeg_onset_s,
             'fnirs_onset_s': fnirs_onset_s,
             'eeg_start_s': eeg_start_s,
@@ -1626,9 +1658,10 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
 
     eeg_session_list, _, eeg_info = dataset._get_eeg_data(int(args.subject_id), processed=True)
     fnirs_session_list, _, fnirs_info = dataset._get_nirs_data(int(args.subject_id), processed=True)
-    session_idx = int(args.session_idx)
-    if session_idx < 0 or session_idx >= min(len(eeg_session_list), len(fnirs_session_list)):
-        raise ValueError(f'session-idx {session_idx} is out of range')
+    task_session_idx, raw_session_idx, task = resolve_task_session_index(
+        args,
+        min(len(eeg_session_list), len(fnirs_session_list)),
+    )
 
     adjacency = build_channel_adjacency(
         'eeg_fnirs_single_trial',
@@ -1661,8 +1694,8 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         max(int(spatial_config.eeg_neighbors), 1),
     )
 
-    eeg_full = np.asarray(eeg_session_list[session_idx], dtype=np.float64)
-    fnirs_full = np.asarray(fnirs_session_list[session_idx], dtype=np.float64)
+    eeg_full = np.asarray(eeg_session_list[raw_session_idx], dtype=np.float64)
+    fnirs_full = np.asarray(fnirs_session_list[raw_session_idx], dtype=np.float64)
     eeg_fs_hz = float(eeg_info['fs'])
     fnirs_fs_hz = float(fnirs_info['fs'])
     eeg_substeps_per_fnirs = int(round(eeg_fs_hz / fnirs_fs_hz))
@@ -1707,7 +1740,7 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         else:
             event_windows = resolve_dataset_event_windows(args, dataset=dataset)
             if event_idx >= len(event_windows):
-                raise ValueError(f'event_idx {event_idx} is out of range for session {session_idx}')
+                raise ValueError(f'event_idx {event_idx} is out of range for task session {task_session_idx}')
             event_window = event_windows[event_idx]
         if not bool(event_window['is_valid']):
             raise ValueError(
@@ -1778,8 +1811,10 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
         'fnirs_signal_semantics': 'paired_optical_wavelength_channels',
         'fnirs_cache_requirement': 'keep_fNIRS_targets_in_optical_measurement_space_before_cross_dataset_caching',
         'data_root': str(args.data_root),
+        'task': task,
         'subject_id': int(args.subject_id),
-        'session_idx': session_idx,
+        'session_idx': task_session_idx,
+        'raw_session_idx': raw_session_idx,
         'segment_mode': segment_mode,
         'segment_start_s': segment_start_s,
         'segment_duration_s': effective_segment_duration_s,

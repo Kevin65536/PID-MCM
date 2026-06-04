@@ -77,7 +77,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--task", choices=("motor_imagery", "mental_arithmetic"), default="motor_imagery",
                         help="Task paradigm to load (motor_imagery or mental_arithmetic).")
     parser.add_argument("--subject-id", type=int, default=1)
-    parser.add_argument("--session-idx", type=int, default=0)
+    parser.add_argument("--session-idx", type=int, default=0,
+                        help="Task-relative session index: 0..2 maps to MI raw sessions 0/2/4 or MA raw sessions 1/3/5.")
     parser.add_argument("--segment-mode", choices=("continuous", "event_windows"), default="event_windows",
                         help="Use one continuous segment or one event-aligned window per valid event")
     parser.add_argument("--segment-start-s", type=float, default=0.0,
@@ -349,6 +350,7 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
         },
         "fnirs_signal_semantics": str(bundle.metadata.get("fnirs_signal_semantics", "unknown")),
         "bundle_task": str(bundle.metadata.get("task", "")),
+        "raw_session_idx": int(bundle.metadata.get("raw_session_idx", getattr(ds_args, "session_idx", 0))),
         "bundle_segment_kind": str(bundle.metadata.get("bundle_segment_kind", "")),
         "bundle_segment_label": str(bundle.metadata.get("segment_label_name", "")),
         "segment_mode": str(bundle.metadata.get("segment_mode", getattr(ds_args, "segment_mode", "continuous"))),
@@ -609,7 +611,7 @@ def main() -> None:
     print("=" * 72)
     print("Target Cache Generator")
     print("=" * 72)
-    print(f"Subject: {args.subject_id}, Session: {args.session_idx}")
+    print(f"Subject: {args.subject_id}, Task: {args.task}, Task session: {args.session_idx}")
     processed_segments = 1 if str(args.mode) == 'npz' else len(selected_event_windows or [])
     if str(args.mode) == 'npz':
         print("Segmentation: pre-segmented NPZ bundle")
@@ -689,8 +691,10 @@ def main() -> None:
         "config": {
             "mode": str(args.mode),
             "input_npz": str(args.input_npz) if str(args.mode) == 'npz' else None,
+            "task": str(args.task),
             "subject_id": int(args.subject_id),
             "session_idx": int(args.session_idx),
+            "raw_session_idx": int(results[0].get("raw_session_idx", args.session_idx)) if results else int(args.session_idx),
             "segment_mode": str(results[0]["segment_mode"]) if results else ("npz_bundle" if str(args.mode) == 'npz' else str(args.segment_mode)),
             "segment_start_s": float(results[0]["segment_start_s"]) if results else float(args.segment_start_s),
             "segment_duration_s": float(results[0]["segment_duration_s"]) if results else float(args.segment_duration_s),

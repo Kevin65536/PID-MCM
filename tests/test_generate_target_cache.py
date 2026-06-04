@@ -24,6 +24,10 @@ MODULE_SPEC.loader.exec_module(GEN)
 
 class _AuditStub:
     @staticmethod
+    def destandardize_matrix(values, stats):
+        return values
+
+    @staticmethod
     def predict_observations(particles, lead_field, jac_primary, jac_secondary, pair_mode):
         pred_eeg = 2.0 * particles[:, 4:5]
         pred_primary = particles[:, 2:3] + particles[:, 3:4]
@@ -34,7 +38,11 @@ class _AuditStub:
 class GenerateTargetCacheTests(unittest.TestCase):
     def test_build_cache_entry_uses_optical_channel_field_names(self):
         bundle = SimpleNamespace(
-            normalization={},
+            normalization={
+                "eeg": {"mean": [0.0], "std": [1.0]},
+                "fnirs_primary": {"mean": [0.0], "std": [1.0]},
+                "fnirs_secondary": {"mean": [0.0], "std": [1.0]},
+            },
             lead_field=np.asarray([1.0], dtype=np.float64),
             jac_primary=np.asarray([1.0], dtype=np.float64),
             jac_secondary=np.asarray([1.0], dtype=np.float64),
@@ -42,6 +50,9 @@ class GenerateTargetCacheTests(unittest.TestCase):
             eeg_obs_raw=np.asarray([[5.0], [6.0], [7.0]], dtype=np.float64),
             fnirs_primary_obs_raw=np.asarray([[11.0], [12.0], [13.0]], dtype=np.float64),
             fnirs_secondary_obs_raw=np.asarray([[17.0], [18.0], [19.0]], dtype=np.float64),
+            fnirs_primary_channel_names=("Fp1_highWL",),
+            fnirs_secondary_channel_names=("Fp1_lowWL",),
+            eeg_channel_names=("AF7",),
         )
         pf_result = {
             "r_estimates_eeg": np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
@@ -61,14 +72,14 @@ class GenerateTargetCacheTests(unittest.TestCase):
         self.assertIn("obs_fnirs_optical_channel_1", entry)
         self.assertNotIn("source_fnirs_hbo", entry)
 
-        np.testing.assert_allclose(entry["source_eeg"].ravel(), np.asarray([2.0, 4.0, 6.0], dtype=np.float32))
+        np.testing.assert_allclose(entry["source_eeg"].ravel(), np.asarray([1.0, 2.0, 3.0], dtype=np.float32))
         np.testing.assert_allclose(
             entry["source_fnirs_optical_channel_0"].ravel(),
-            np.asarray([3.0, 5.0, 7.0], dtype=np.float32),
+            np.asarray([1.0, 2.0, 3.0], dtype=np.float32),
         )
         np.testing.assert_allclose(
             entry["obs_fnirs_optical_channel_1"].ravel(),
-            np.asarray([16.0, 17.0, 18.0], dtype=np.float32),
+            np.asarray([15.0, 15.0, 15.0], dtype=np.float32),
         )
 
 
