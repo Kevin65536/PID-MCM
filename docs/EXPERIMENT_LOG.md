@@ -4,7 +4,7 @@
 
 ## ⚠️ Lessons Learned from Pre-Experiments
 
-**Archived Results:** Previous experiment runs and logs have been archived to `experiments/runs/archive/pre_experiments` and `docs/archive/logs/`. Historical shared/private stage experiments are available via git history.
+**Archived Results:** Previous experiment runs and logs have been archived under `experiments/runs/archive/`, `experiments/archive/`, `croce_validation/archive/`, and `docs/archive/logs/`. Historical shared/private stage experiments are available via git history.
 
 **Key Bottleneck:**
 The downstream Motor Imagery (MI) classification task suffered from a severe lack of cross-subject generalization (hovering around ~50% accuracy, essentially chance level for binary classification), despite performing reasonably well on within-subject tests. 
@@ -27,7 +27,7 @@ The downstream Motor Imagery (MI) classification task suffered from a severe lac
 |------|----|-------|-------------|--------|
 | 2026-05-11 | EXP-P1-GATE1-LOCK | Phase 1 | Source/observation Gate1 stabilization, best-baseline lock, and archive handoff | Completed |
 | 2026-05-14 | EXP-P2B-ARCH-STABLE | Phase 2B | Architecture stabilized: Croce 2017 physical model + coupling structure priors implemented and merged | Completed |
-| 2026-06-04 | EXP-CROCE-HIGHWL-LOCAL | Croce local tokenizer | HighWL-only local cache adapter, explicit source/observation targets, Gate0 contract, and launch configs | Ready for training |
+| 2026-06-04 | EXP-CROCE-HIGHWL-LOCAL | Croce local tokenizer | HighWL-only local cache adapter, explicit source/observation targets, Gate0 contract, launch configs, and first training launch | Active |
 
 ---
 
@@ -48,10 +48,10 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 - Locked baseline: [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
 - Best config alias: [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml)
-- Best long-warmup run: [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
-- Reference long run: [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538)
+- Best long-warmup run: [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
+- Reference long run: [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538)
 - Archive log: [docs/archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md](archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md)
-- Result index: [experiments/results/source_observation_index.json](../experiments/results/source_observation_index.json)
+- Result index: [experiments/archive/results/pre_croce_local_highwl_20260604/source_observation_index.json](../experiments/archive/results/pre_croce_local_highwl_20260604/source_observation_index.json)
 
 ### Results
 
@@ -64,7 +64,7 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 - Explicit phase supervision is no longer part of the source/observation mainline. The stable Gate1 baseline now relies on time-domain reconstruction plus FFT amplitude supervision.
 - The 320-epoch slow-warmup run is the current best Gate1 handoff because it keeps Gate1 passing while achieving the lowest validated val_loss among the no-phase runs.
-- The phase is closed as “archive in place” rather than by moving run directories, because existing analysis artifacts and comparison reports already encode their original paths.
+- The phase is closed under the formal Phase 1 archive bundle; the reference long run was moved into that bundle during the 2026-06-04 storage cleanup.
 - The project is not promotion-ready: Gate2-Gate4 still fail, so the correct next step is Phase 2 HRF source-target work, not more Phase 1 loss churn.
 
 ### Conclusion
@@ -113,10 +113,13 @@ Start the next tokenizer training phase from generated Croce source/observation 
 - Dataset adapter: [src/data/croce_local_cache_dataset.py](../src/data/croce_local_cache_dataset.py)
 - Training base config: `experiments/configs/source_observation/croce_local/highwl_base.yaml`
 - Sweep configs: `highwl_lr2e4.yaml`, `highwl_fnirsobs64.yaml`
-- Cache roots:
-  - `croce_validation/cache/EEG_fNIRS_single_trail_pf_full`
-  - `croce_validation/cache/EEG_fNIRS_single_trail_pf_full_mental_arithmetic_regen_20260603_182938`
-  - `croce_validation/cache/simultaneous_optical_pf_cache`
+- Canonical cache roots:
+  - `croce_validation/cache/croce_local/highwl_v1/single_trial_motor_imagery`
+  - `croce_validation/cache/croce_local/highwl_v1/single_trial_mental_arithmetic`
+  - `croce_validation/cache/croce_local/highwl_v1/simultaneous_cognitive`
+- Future run namespace: `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`
+- Current live run, launched before namespace normalization: `experiments/runs/s2_croce_local_highwl_base_20260604_153549/`
+- Storage layout: [docs/STORAGE_LAYOUT.md](STORAGE_LAYOUT.md)
 
 ### Key Decisions
 
@@ -139,7 +142,7 @@ Smoke dataloader creation on the real cache produced:
 
 ### Conclusion
 
-The cache/input contract is ready for the first highWL-only local tokenizer run. Gate0 is now required before interpreting semantic gates.
+The cache/input contract is ready and the first highWL-only local tokenizer run has been launched. Gate0 is now required before interpreting semantic gates.
 
 ---
 

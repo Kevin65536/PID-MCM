@@ -62,7 +62,7 @@ graph TB
 ## Linked Artifacts
 
 - **Config**: `experiments/configs/source_observation/<phase>/<config>.yaml`
-- **Experiment**: `experiments/runs/<run_name>/`
+- **Experiment**: `experiments/runs/<optional_run_group>/<run_name>/`
 - **Scorecard**: Gate 1-4 results summary
 - **Related changelog entries**: [YYYY-MM-DD Title](YYYY-MM-DD_title.md)
 

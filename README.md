@@ -38,19 +38,26 @@ experiments/
     probe/                 # Exploratory, non-standardized probe experiments only
     archive/            # Old experiment scripts
   runs/               # Experiment outputs
-  results/            # Comparison results
+    source_observation/croce_local/highwl_v1/
+                      # Current Croce local highWL tokenizer outputs
+  results/            # Lightweight generated summaries; old results archived
+  archive/            # Retired generated reports/results
 
 docs/
   ARCHITECTURE.md     # Current architecture specification
   PHYSIOLOGICAL_COUPLING_PLAN.md  # Physiological coupling constraints design
   SEMANTIC_TOKEN_SCORECARD.md     # 4-Gate evaluation framework
   EXPERIMENT_LOG.md   # Formal experiment conclusions
+  STORAGE_LAYOUT.md   # Canonical generated-data and run-output layout
   THEORY.md           # Theoretical background
 
 croce_validation/
   README.md           # Independent workspace for Croce real-data validation on Single-Trial motor imagery
   scripts/            # Standardized validation runners and utilities
+  cache/croce_local/highwl_v1/
+                      # Canonical symlink namespace for active highWL caches
   results/            # Validation outputs, manifests, and figures
+  archive/            # Retired validation caches/results
 ```
 
 ## Quick Start
@@ -91,7 +98,7 @@ bash experiments/scripts/launch_training_nohup.sh \
   --config phase1a/P1A_eeg_classification.yaml
 ```
 
-The launcher prints the background PID and command. Training logs remain available inside each run directory, for example `experiments/runs/<run_name>/training.log`.
+The launcher prints the background PID and command. Training logs remain available inside each run directory, for example `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/training.log`.
 
 For the full task list and task-specific parameters, see [docs/TRAIN_LAUNCH_STANDARD.md](docs/TRAIN_LAUNCH_STANDARD.md).
 
@@ -137,7 +144,7 @@ You can still pass `--output-csv`, `--output-json`, or `--output-md` if you want
 - [x] Lag focus + joint smoothness coupling priors
 - [x] Croce local cache adapter with explicit source/observation targets
 - [x] Gate0 highWL-only cache/input contract
-- [ ] First highWL-only local tokenizer run
+- [x] First highWL-only local tokenizer run launched
 - [ ] Gate 1-4 evaluation on Croce local cache
 - [ ] Downstream utility evaluation
 

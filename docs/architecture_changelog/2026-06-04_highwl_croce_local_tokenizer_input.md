@@ -50,6 +50,7 @@ flowchart LR
 | fNIRS semantics | Added `spatial_anchors`, `optical_components`, and `component_labels` metadata |
 | Scorecard | Added Gate0 for highWL-only cache/input contract checks |
 | Configs | Added base/LR/fNIRS-capacity Croce local highWL sweep configs |
+| Storage | Current configs use canonical cache roots under `croce_validation/cache/croce_local/highwl_v1/` |
 
 ## Gate0 Contract
 

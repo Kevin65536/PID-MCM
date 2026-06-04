@@ -293,7 +293,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
 | [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
 | [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
-| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. Files are ignored by repo-level `.gitignore`, so commits must add them with `git add -f` |
+| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. The base config uses canonical cache roots under `croce_validation/cache/croce_local/highwl_v1/` and writes future runs under `experiments/runs/source_observation/croce_local/highwl_v1/` |
 
 ## 5. Quantizer Summary
 
@@ -380,7 +380,7 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Phase 2 | Historical Proxy-Target Stages | ⚠️ Historical | Legacy proxy-target experiments, retained only for comparison |
 | Phase 2A | Decoder Structure Redesign | ✅ Complete | Dual decoder, explicit observation target, additive reconstruction |
 | Phase 2B | Croce Candidate Model Audit | ⚠️ Historical Candidate | Joint state-space tooling and proxy-target baselines introduced |
-| Current | Branch-Target Revalidation | ✅ **Active** | Select or refine a physical model that outputs symmetric clean EEG/fNIRS source targets with linear observation residuals |
+| Current | Croce Local HighWL Tokenizer Training | ✅ **Active** | Train and evaluate the local highWL-only source/observation tokenizer on generated Croce caches |
 | Mechanism C | Causal Asymmetry | ❌ Abandoned | See IMPLEMENTATION_PLAN.md §11 |
 
 ### Locked Phase1 Handoff
@@ -389,14 +389,14 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 |----------|------|
 | [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Current best Gate1-stable baseline alias |
 | [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline |
-| [experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
+| [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
 
 ### Phase 2 Diagnostic Baseline
 
 | Artifact | Role |
 |----------|------|
-| [experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/](../experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/) | Phase 2 run with full Gate 1-4 analysis |
-| [experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json](../experiments/runs/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json) | Gate scorecard: Gate1=pending, Gate2/3/4=fail |
+| [experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/](../experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/) | Phase 2 run with full Gate 1-4 analysis |
+| [experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json](../experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json) | Gate scorecard: Gate1=pending, Gate2/3/4=fail |
 
 ## 10. Related Documents
 
@@ -407,4 +407,5 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
 | [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |
+| [STORAGE_LAYOUT.md](STORAGE_LAYOUT.md) | Canonical generated-data and run-output paths |
 | [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records |

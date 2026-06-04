@@ -26,6 +26,7 @@ gantt
         Croce 2017 + Coupling Priors      :done, 2026-05-13, 2026-05-14
     section Phase 2C: Croce Local Cache
         HighWL-only Local Tokenizer Input :done, 2026-06-04, 2026-06-04
+        Storage Layout Normalization      :done, 2026-06-04, 2026-06-04
 ```
 
 ## Change Records
@@ -39,6 +40,7 @@ gantt
 | 5 | 2026-05-13 | Phase 2B | [Croce 2017 Physical Model Targets](2026-05-13_phase2b_croce2017_physical_model_targets.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` | Merged |
 | 6 | 2026-05-14 | Phase 2B | Architecture Stabilization & Document Alignment | `IMPLEMENTATION_PLAN.md`, `ARCHITECTURE.md`, `README.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `SEMANTIC_TOKEN_SCORECARD.md`, `THEORY.md`, `EXPERIMENT_LOG.md`, `INDEX.md` | Merged |
 | 7 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
+| 8 | 2026-06-04 | Phase 2C | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | `ExperimentLogger`, `run_metrics_comparison.py`, `croce_local configs`, `STORAGE_LAYOUT.md` | Merged |
 
 ## How to Add a New Entry
 

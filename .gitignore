@@ -47,6 +47,7 @@ __pycache__
 /croce_validation/analysis
 /croce_validation/results/*
 !/croce_validation/results/README.md
+/croce_validation/archive/
 
 # Claude Code — personal overrides and auto-generated cache 
 .claude

@@ -78,9 +78,20 @@ def resolve_run_dirs(
     resolved: list[Path] = []
     seen: set[Path] = set()
 
-    def add_path(path: Path) -> None:
+    def is_run_dir(path: Path) -> bool:
+        return path.is_dir() and (path / 'metrics.json').exists()
+
+    def is_archived(path: Path) -> bool:
+        try:
+            return 'archive' in path.relative_to(runs_root).parts
+        except ValueError:
+            return False
+
+    def add_path(path: Path, *, skip_archive: bool = False) -> None:
         real_path = path.resolve()
-        if real_path in seen or not path.is_dir():
+        if real_path in seen or not is_run_dir(path):
+            return
+        if skip_archive and is_archived(path):
             return
         seen.add(real_path)
         resolved.append(real_path)
@@ -95,12 +106,15 @@ def resolve_run_dirs(
             add_path(candidate)
 
     for pattern in patterns or []:
-        for candidate in sorted(runs_root.glob(pattern)):
+        pattern_matches = list(runs_root.glob(pattern))
+        if '/' not in pattern and '\\' not in pattern:
+            pattern_matches.extend(runs_root.rglob(pattern))
+        for candidate in sorted(set(pattern_matches)):
             add_path(candidate)
 
     if not resolved:
-        for candidate in sorted(runs_root.iterdir()):
-            add_path(candidate)
+        for metrics_path in sorted(runs_root.rglob('metrics.json')):
+            add_path(metrics_path.parent, skip_archive=True)
 
     return resolved
 

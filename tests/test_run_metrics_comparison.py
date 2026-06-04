@@ -117,6 +117,41 @@ class RunMetricsComparisonTests(unittest.TestCase):
             self.assertTrue((bundle['report_dir'] / 'figures' / 'trajectory_patterns.png').exists())
             self.assertTrue((bundle['report_dir'] / 'figures' / 'branch_perplexity_trajectories.png').exists())
 
+    def test_resolve_run_dirs_recurses_namespaced_runs_and_skips_archive_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_root = Path(tmpdir) / 'runs'
+            top_level = self._create_run(
+                runs_root / 'baseline_run',
+                best_epoch=2,
+                best_val_loss=3.20,
+                last_val_loss=3.35,
+                source_k=32,
+                gate1_metrics={},
+            )
+            nested = self._create_run(
+                runs_root / 'source_observation' / 'croce_local' / 'highwl_v1' / 'candidate_run',
+                best_epoch=3,
+                best_val_loss=3.05,
+                last_val_loss=3.11,
+                source_k=32,
+                gate1_metrics={},
+            )
+            archived = self._create_run(
+                runs_root / 'archive' / 'old_phase' / 'archived_run',
+                best_epoch=1,
+                best_val_loss=4.00,
+                last_val_loss=4.00,
+                source_k=32,
+                gate1_metrics={},
+            )
+
+            run_dirs = resolve_run_dirs(runs_root)
+            self.assertEqual(run_dirs, [top_level.resolve(), nested.resolve()])
+            self.assertNotIn(archived.resolve(), run_dirs)
+
+            pattern_dirs = resolve_run_dirs(runs_root, patterns=['candidate_*'])
+            self.assertEqual(pattern_dirs, [nested.resolve()])
+
     def _create_run(
         self,
         run_dir: Path,

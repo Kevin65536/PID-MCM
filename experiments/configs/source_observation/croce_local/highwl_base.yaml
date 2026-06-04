@@ -2,6 +2,7 @@ _base_: "../phase2a/gate2_phase2a_dual_decoder_uniform32_obs64_bs128_provq_recov
 
 experiment:
   name: "s2_croce_local_highwl_base"
+  run_group: "source_observation/croce_local/highwl_v1"
   description: "Croce local cache tokenizer using 6 EEG channels and one highWL fNIRS optical component"
 
 data:
@@ -10,13 +11,13 @@ data:
   data_root: "croce_validation/cache"
   cache_sources:
     - name: "single_trial_motor_imagery"
-      root: "croce_validation/cache/EEG_fNIRS_single_trail_pf_full"
+      root: "croce_validation/cache/croce_local/highwl_v1/single_trial_motor_imagery"
       task: "motor_imagery"
     - name: "single_trial_mental_arithmetic"
-      root: "croce_validation/cache/EEG_fNIRS_single_trail_pf_full_mental_arithmetic_regen_20260603_182938"
+      root: "croce_validation/cache/croce_local/highwl_v1/single_trial_mental_arithmetic"
       task: "mental_arithmetic"
     - name: "simultaneous_cognitive"
-      root: "croce_validation/cache/simultaneous_optical_pf_cache"
+      root: "croce_validation/cache/croce_local/highwl_v1/simultaneous_cognitive"
       task: "cognitive"
   split:
     train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]

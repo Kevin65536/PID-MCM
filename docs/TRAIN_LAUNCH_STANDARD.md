@@ -25,6 +25,7 @@ Supported task-specific arguments:
 - `--skip-post-analysis`
 
 Default post-analysis writes the gate scorecard plus codebook usage, reconstruction, and token pattern visualizations under the run `analysis/` directory.
+Croce local highWL configs set `experiment.run_group`, so their outputs are written under `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`.
 
 Example:
 

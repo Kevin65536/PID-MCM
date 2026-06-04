@@ -8,8 +8,9 @@ import hashlib
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Iterator, Optional, List
 import numpy as np
+import yaml
 
 from .checkpoints import save_checkpoint_payload
 from .io import write_json, write_yaml
@@ -55,7 +56,8 @@ class ExperimentLogger:
         exp_name = self.config.get("experiment", {}).get("name", "unknown")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_name = run_name or f"{exp_name}_{timestamp}"
-        self.run_dir = self.runs_dir / self.run_name
+        self.run_root = self._resolve_run_root()
+        self.run_dir = self.run_root / self.run_name
         metrics_path = self.run_dir / "metrics.json"
         existing_run = self.run_dir.exists()
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -92,6 +94,19 @@ class ExperimentLogger:
         else:
             print(f"[ExperimentLogger] Initialized run: {self.run_name}")
         print(f"[ExperimentLogger] Run directory: {self.run_dir}")
+
+    def _resolve_run_root(self) -> Path:
+        """Resolve the namespace used for this experiment's run directory."""
+        run_group = self.config.get("experiment", {}).get("run_group")
+        if not run_group:
+            return self.runs_dir
+
+        group_path = Path(str(run_group).replace("\\", "/"))
+        if group_path.is_absolute() or ".." in group_path.parts:
+            raise ValueError(
+                "experiment.run_group must be a relative path below experiments/runs"
+            )
+        return self.runs_dir / group_path
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load config through the shared experiment config interface."""
@@ -705,6 +720,23 @@ Token Statistics:
         return history
 
 
+def _iter_metric_run_dirs(runs_dir: Path) -> Iterator[Path]:
+    """Yield non-archived run directories that contain a metrics.json file."""
+    if not runs_dir.exists():
+        return
+
+    for metrics_path in sorted(runs_dir.rglob("metrics.json")):
+        run_dir = metrics_path.parent
+        try:
+            relative_parts = run_dir.relative_to(runs_dir).parts
+        except ValueError:
+            continue
+        if "archive" in relative_parts:
+            continue
+        if (run_dir / "config.yaml").exists():
+            yield run_dir
+
+
 def update_comparison_csv(experiments_dir: str = "experiments"):
     """Aggregate all experiment results into a comparison CSV."""
     import csv
@@ -717,15 +749,9 @@ def update_comparison_csv(experiments_dir: str = "experiments"):
     csv_path = results_dir / "comparison.csv"
     
     rows = []
-    for run_dir in sorted(runs_dir.iterdir()):
-        if not run_dir.is_dir():
-            continue
-        
+    for run_dir in _iter_metric_run_dirs(runs_dir):
         metrics_path = run_dir / "metrics.json"
         config_path = run_dir / "config.yaml"
-        
-        if not metrics_path.exists():
-            continue
         
         with open(metrics_path, 'r') as f:
             metrics = json.load(f)
