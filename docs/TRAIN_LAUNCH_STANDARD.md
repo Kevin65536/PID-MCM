@@ -31,8 +31,8 @@ Example:
 ```bash
 bash experiments/scripts/launch_training_nohup.sh \
   --task source-observation-tokenizer \
-  --config debug/simultaneous_nback_short_train.yaml \
-  --run-name smoke_s2
+  --config source_observation/croce_local/highwl_base.yaml \
+  --run-name s2_croce_local_highwl_base
 ```
 
 ### tokenizer

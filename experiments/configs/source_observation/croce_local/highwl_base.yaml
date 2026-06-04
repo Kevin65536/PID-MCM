@@ -1,0 +1,59 @@
+_base_: "../phase2a/gate2_phase2a_dual_decoder_uniform32_obs64_bs128_provq_recovery_20s.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_base"
+  description: "Croce local cache tokenizer using 6 EEG channels and one highWL fNIRS optical component"
+
+data:
+  modality: "both"
+  dataset: "croce_local_cache"
+  data_root: "croce_validation/cache"
+  cache_sources:
+    - name: "single_trial_motor_imagery"
+      root: "croce_validation/cache/EEG_fNIRS_single_trail_pf_full"
+      task: "motor_imagery"
+    - name: "single_trial_mental_arithmetic"
+      root: "croce_validation/cache/EEG_fNIRS_single_trail_pf_full_mental_arithmetic_regen_20260603_182938"
+      task: "mental_arithmetic"
+    - name: "simultaneous_cognitive"
+      root: "croce_validation/cache/simultaneous_optical_pf_cache"
+      task: "cognitive"
+  split:
+    train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    val_subjects: [21, 22, 23, 24]
+    test_subjects: [25, 26, 27, 28, 29]
+  window:
+    duration_s: 20.0
+  crop:
+    train_random: true
+    eval_event_offsets_s: [-10.0, 0.0, 20.0]
+  normalization:
+    enabled: false
+    mode: "none"
+  num_workers: 8
+  dataloader:
+    persistent_workers: true
+    prefetch_factor: 4
+    drop_last: true
+
+model:
+  eeg:
+    seq_length: 4000
+    patch_size: 400
+    channels: 6
+  fnirs:
+    seq_length: 200
+    patch_size: 20
+    spatial_anchors: 1
+    optical_components: 1
+    channels: 1
+    component_labels: ["highWL"]
+  source:
+    codebook_size: 32
+  eeg_observation:
+    codebook_size: 64
+  fnirs_observation:
+    codebook_size: 32
+
+training:
+  learning_rate: 0.0001

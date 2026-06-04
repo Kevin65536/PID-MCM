@@ -1,12 +1,14 @@
 # Current Architecture: Source/Observation Tokenizer
 
-> **Semantics version**: `s2_source_observation_v3_branch_target_reset`
-> **Last updated**: 2026-05-22
-> **Current phase**: Source/observation architecture stabilized; branch-target physical model under revalidation
+> **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
+> **Last updated**: 2026-06-04
+> **Current phase**: Croce local cache tokenizer training with highWL-only fNIRS input
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
 > **Active note**: repository code still contains legacy proxy target implementations. They are candidate baselines only. They do **not** define the current branch-target contract.
+
+> **Current training contract**: the active tokenizer dataset is `croce_local_cache`. Each sample is one fNIRS spatial anchor, its six-channel local EEG neighbourhood, and explicit source/observation targets from the generated Croce cache. fNIRS uses only `highWL` (`source_fnirs_optical_channel_0` / `obs_fnirs_optical_channel_0`) as an optical measurement-space, HbO-sensitive proxy; `lowWL` remains in cache metadata but is ignored by the current model input.
 
 ---
 
@@ -37,13 +39,13 @@
 ```mermaid
 graph TB
     subgraph Inputs
-        EEG["EEG Signal<br/>B x 30ch x 2000"]
-        FNIRS["fNIRS Signal<br/>B x 36ch x 100"]
+        EEG["Local EEG Signal<br/>B x 6ch x 4000"]
+        FNIRS["fNIRS highWL Signal<br/>B x 1ch x 200"]
     end
 
     subgraph PatchEmbedding
-        E_PE["MultiChannelPatchEmbedding<br/>patch=400 → 5 patches"]
-        F_PE["MultiChannelPatchEmbedding<br/>patch=20 → 5 patches"]
+        E_PE["MultiChannelPatchEmbedding<br/>patch=400 → 10 patches"]
+        F_PE["MultiChannelPatchEmbedding<br/>patch=20 → 10 patches"]
     end
 
     subgraph Encoders
@@ -62,7 +64,7 @@ graph TB
         E_SQ["eeg_source_quantizer<br/>K=32 D=48"]
         F_SQ["fnirs_source_quantizer<br/>K=32 D=48"]
         E_OQ["eeg_observation_quantizer<br/>K=64 D=64"]
-        F_OQ["fnirs_observation_quantizer<br/>K=64 D=48"]
+        F_OQ["fnirs_observation_quantizer<br/>K=32 base / 64 sweep D=48"]
     end
 
     subgraph Coupling["Cross-Modal Coupling"]
@@ -81,14 +83,14 @@ graph TB
     end
 
     subgraph OutputHeads["Output Heads (8×)"]
-        E_SA["eeg_src_amp_head<br/>256→30x201"]
-        E_SPH["eeg_src_phase_head<br/>256→30x201"]
-        E_OA["eeg_obs_amp_head<br/>256→30x201"]
-        E_OPH["eeg_obs_phase_head<br/>256→30x201"]
-        F_SA["fnirs_src_amp_head<br/>160→36x11"]
-        F_SPH["fnirs_src_phase_head<br/>160→36x11"]
-        F_OA["fnirs_obs_amp_head<br/>160→36x11"]
-        F_OPH["fnirs_obs_phase_head<br/>160→36x11"]
+        E_SA["eeg_src_amp_head<br/>256→6x201"]
+        E_SPH["eeg_src_phase_head<br/>256→6x201"]
+        E_OA["eeg_obs_amp_head<br/>256→6x201"]
+        E_OPH["eeg_obs_phase_head<br/>256→6x201"]
+        F_SA["fnirs_src_amp_head<br/>160→1x11"]
+        F_SPH["fnirs_src_phase_head<br/>160→1x11"]
+        F_OA["fnirs_obs_amp_head<br/>160→1x11"]
+        F_OPH["fnirs_obs_phase_head<br/>160→1x11"]
     end
 
     subgraph Reconstruction
@@ -151,8 +153,8 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant EEG as EEG [B,30,2000]
-    participant fNIRS as fNIRS [B,36,100]
+    participant EEG as EEG [B,6,4000]
+    participant fNIRS as fNIRS highWL [B,1,200]
     participant Enc as Encoders
     participant Proj as Projection Heads
     participant Quant as Quantizers (4×)
@@ -164,7 +166,7 @@ sequenceDiagram
 
     EEG->>Target: provide raw EEG observation
     fNIRS->>Target: provide raw fNIRS observation
-    Target->>Target: jointly infer clean EEG + clean fNIRS source targets
+    Target->>Target: read explicit Croce clean EEG + highWL source targets
     Target->>Target: obs_target = raw - source_target (per modality)
 
     EEG->>Enc: EEG encoder
@@ -273,6 +275,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | File | Role |
 |------|------|
+| [src/data/croce_local_cache_dataset.py](../src/data/croce_local_cache_dataset.py) | Active Croce local cache adapter: returns `eeg [B,6,4000]`, `fnirs [B,1,200]`, explicit source/observation targets, and Gate0 highWL-only metadata |
 | [src/data/channel_adjacency.py](../src/data/channel_adjacency.py) | 10-10 EEG neighbor table, fNIRS channel name parsing, `mnt.mat` 3D coordinate validation, spatial adjacency matrix construction, per-channel RMS envelope and spatially-weighted fNIRS neural driver |
 | [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py) | Candidate physical-model inference utilities for joint EEG-fNIRS source estimation; current implementations include legacy Croce-style proxy paths under review |
 
@@ -281,7 +284,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | File | Role |
 |------|------|
 | [src/visualization/tokenizer_analysis_suite.py](../src/visualization/tokenizer_analysis_suite.py) | Standardized analysis entry point |
-| [src/visualization/source_observation_analysis.py](../src/visualization/source_observation_analysis.py) | Source/observation alignment analysis, Gate 1-4 scorecard |
+| [src/visualization/source_observation_analysis.py](../src/visualization/source_observation_analysis.py) | Source/observation alignment analysis, Gate 0-4 scorecard. Gate0 asserts the highWL-only cache/input contract before semantic metrics are interpreted |
 
 ### Configs
 
@@ -290,6 +293,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
 | [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
 | [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
+| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. Files are ignored by repo-level `.gitignore`, so commits must add them with `git add -f` |
 
 ## 5. Quantizer Summary
 
@@ -298,9 +302,9 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | `eeg_source_quantizer` | K=32 | D=48 | EEG neurovascular coupling state (shared neural driver) |
 | `fnirs_source_quantizer` | K=32 | D=48 | fNIRS neurovascular coupling state (shared neural driver) |
 | `eeg_observation_quantizer` | K=64 | D=64 | EEG modality-specific encoding debt |
-| `fnirs_observation_quantizer` | K=64 | D=48 | fNIRS modality-specific encoding debt |
+| `fnirs_observation_quantizer` | K=32 base / K=64 sweep | D=48 | highWL fNIRS modality-specific encoding debt |
 
-All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). Phase 2A expands observation codebooks to 64 while keeping source at 32, providing more capacity for modality-specific details.
+All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). The active Croce local base keeps source at K=32, EEG observation at K=64, and starts highWL-only fNIRS observation at K=32; the small sweep tests LR=2e-4 and fNIRS observation K=64.
 
 ## 6. Coupling Mechanism
 

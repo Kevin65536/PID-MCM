@@ -1,7 +1,7 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
-> Created: 2026-04-30 | Last revised: 2026-05-22
-> Status: Active design document — source/observation architecture stable, branch-target physical model under revalidation
+> Created: 2026-04-30 | Last revised: 2026-06-04
+> Status: Active design document — Croce local highWL-only source/observation training contract under evaluation
 > Reference implementation surface: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py), [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py)
 
 ---
@@ -23,6 +23,16 @@
 ---
 
 ## 2. Current Branch-Target Contract
+
+### 2.0 Current Training Input Scope
+
+As of 2026-06-04, the active tokenizer experiment uses the generated Croce local cache rather than raw whole-brain windows:
+
+1. EEG input is one local six-channel neighbourhood per fNIRS spatial anchor: `eeg [B, 6, 4000]`.
+2. fNIRS input is one spatial anchor and one optical component: `fnirs [B, 1, 200]`.
+3. The selected fNIRS component is `highWL`, read from `source_fnirs_optical_channel_0` and `obs_fnirs_optical_channel_0`.
+4. `lowWL` remains recorded in the cache as the second wavelength (`pair_labels=["highWL", "lowWL"]`) but is ignored for this tokenizer training phase.
+5. This is still optical measurement-space high-wavelength signal, not HbO concentration. It is only treated as an HbO-sensitive response proxy.
 
 ### 2.1 Naming
 
@@ -141,3 +151,4 @@ lag focus 与 joint smoothness 仍是有效的结构先验，但它们的职责�
 2. 旧 proxy 文档只保留为历史记录或候选 baseline 说明。
 3. 代码中现存的 legacy target-construction 路径不能反向定义当前文档语义。
 4. 如果历史 changelog 与当前活动文档冲突，以当前活动文档为准。
+5. 当前 highWL-only 输入选择是训练阶段的临时约束，不等同于删除 lowWL 缓存，也不等同于完成 HbO/HbR 浓度转换。

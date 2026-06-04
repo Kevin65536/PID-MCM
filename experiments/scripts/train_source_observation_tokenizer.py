@@ -54,6 +54,22 @@ def create_multimodal_dataloaders(config: dict):
     return create_configured_multimodal_dataloaders(config)
 
 
+def move_source_observation_targets_to_device(
+    batch: Dict[str, Any],
+    device: torch.device,
+) -> Optional[Dict[str, torch.Tensor]]:
+    targets = batch.get('targets')
+    if not isinstance(targets, dict):
+        return None
+    moved: Dict[str, torch.Tensor] = {}
+    for key, value in targets.items():
+        if torch.is_tensor(value):
+            moved[key] = value.to(device, non_blocking=True)
+        else:
+            moved[key] = torch.as_tensor(value, device=device)
+    return moved
+
+
 def inject_channel_names_into_config(config: Dict[str, Any], dataloaders: Dict[str, Any]) -> None:
     reference_dataset = None
     for split_name in ('train', 'val', 'test'):
@@ -423,9 +439,10 @@ def train_epoch(
     for batch in dataloader:
         eeg = batch['eeg'].to(device, non_blocking=True)
         fnirs = batch['fnirs'].to(device, non_blocking=True)
+        targets = move_source_observation_targets_to_device(batch, device)
 
         optimizer.zero_grad()
-        outputs = model(eeg, fnirs)
+        outputs = model(eeg, fnirs, targets=targets)
         aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         loss = outputs['loss'] + aux_loss
         batch_gradient_dashboard: Optional[Dict[str, Any]] = None
@@ -495,7 +512,8 @@ def validate_epoch(
     for batch in dataloader:
         eeg = batch['eeg'].to(device, non_blocking=True)
         fnirs = batch['fnirs'].to(device, non_blocking=True)
-        outputs = model(eeg, fnirs)
+        targets = move_source_observation_targets_to_device(batch, device)
+        outputs = model(eeg, fnirs, targets=targets)
         aux_loss, aux_metrics, _ = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         total_batches += 1
 

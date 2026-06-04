@@ -78,7 +78,7 @@ pip install torch numpy scipy matplotlib pyyaml
 # Source/observation multimodal tokenizer
 bash experiments/scripts/launch_training_nohup.sh \
   --task source-observation-tokenizer \
-  --config debug/simultaneous_nback_short_train.yaml
+  --config source_observation/croce_local/highwl_base.yaml
 
 # Single-modality tokenizer
 bash experiments/scripts/launch_training_nohup.sh \
@@ -131,11 +131,14 @@ You can still pass `--output-csv`, `--output-json`, or `--output-md` if you want
 
 ## Current Status
 
-**Phase 2B: Croce 2017 Physical Model + Coupling Priors** (Current)
+**Phase 2C: Croce local highWL-only tokenizer training** (Current)
 - [x] Source/Observation dual-decoder tokenizer
 - [x] HRF convolution source target
 - [x] Lag focus + joint smoothness coupling priors
-- [ ] Gate 3 (Structure) validation
+- [x] Croce local cache adapter with explicit source/observation targets
+- [x] Gate0 highWL-only cache/input contract
+- [ ] First highWL-only local tokenizer run
+- [ ] Gate 1-4 evaluation on Croce local cache
 - [ ] Downstream utility evaluation
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap.

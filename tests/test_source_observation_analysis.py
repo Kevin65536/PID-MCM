@@ -8,6 +8,37 @@ from src.visualization import source_observation_analysis as soa
 
 
 class SourceObservationAnalysisTests(unittest.TestCase):
+    def test_build_gate_0_passes_highwl_only_contract(self):
+        split_stats = {
+            'gate0_contract': {
+                'available': True,
+                'selected_fnirs_component': 'highWL',
+                'ignored_fnirs_components': ['lowWL'],
+                'pair_mode': 'wavelength',
+                'pair_labels': ['highWL', 'lowWL'],
+                'fnirs_target_semantics': 'optical_measurement_space',
+                'fnirs_spatial_anchors': 1,
+                'fnirs_optical_components': 1,
+                'fnirs_channels': 1,
+            }
+        }
+        config = {
+            'model': {
+                'fnirs': {
+                    'spatial_anchors': 1,
+                    'optical_components': 1,
+                    'channels': 1,
+                    'component_labels': ['highWL'],
+                }
+            }
+        }
+
+        gate_0 = soa._build_gate_0(split_stats, config)
+
+        self.assertEqual(gate_0['status'], 'pass')
+        self.assertEqual(gate_0['metrics']['selected_fnirs_component'], 'highWL')
+        self.assertEqual(gate_0['metrics']['pair_labels'], ['highWL', 'lowWL'])
+
     def test_build_gate_1_ignores_disabled_fnirs_observation_codebook(self):
         split_stats = {
             'codebooks': {

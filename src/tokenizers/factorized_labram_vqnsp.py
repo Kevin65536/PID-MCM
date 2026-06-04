@@ -52,6 +52,9 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_seq_length: int = 100,
         fnirs_patch_size: int = 20,
         fnirs_channels: int = 36,
+        fnirs_spatial_anchors: Optional[int] = None,
+        fnirs_optical_components: Optional[int] = None,
+        fnirs_component_labels: Optional[Sequence[str]] = None,
         fnirs_encoder_embed_dim: int = 160,
         fnirs_encoder_depth: int = 6,
         fnirs_encoder_num_heads: int = 4,
@@ -138,6 +141,19 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.fnirs_seq_length = fnirs_seq_length
         self.fnirs_patch_size = fnirs_patch_size
         self.fnirs_channels = fnirs_channels
+        self.fnirs_spatial_anchors = int(fnirs_spatial_anchors) if fnirs_spatial_anchors is not None else None
+        self.fnirs_optical_components = (
+            int(fnirs_optical_components) if fnirs_optical_components is not None else None
+        )
+        self.fnirs_component_labels = list(fnirs_component_labels) if fnirs_component_labels is not None else []
+        if self.fnirs_spatial_anchors is not None and self.fnirs_optical_components is not None:
+            expected_fnirs_channels = self.fnirs_spatial_anchors * self.fnirs_optical_components
+            if expected_fnirs_channels != self.fnirs_channels:
+                raise ValueError(
+                    'fnirs.channels must equal fnirs.spatial_anchors * fnirs.optical_components '
+                    f'(got channels={self.fnirs_channels}, spatial_anchors={self.fnirs_spatial_anchors}, '
+                    f'optical_components={self.fnirs_optical_components})'
+                )
         self.eeg_n_patches = eeg_seq_length // eeg_patch_size
         self.fnirs_n_patches = fnirs_seq_length // fnirs_patch_size
         if self.eeg_n_patches != self.fnirs_n_patches:
@@ -462,6 +478,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         spatial_cfg = source_target_cfg.get('spatial', {})
 
         source_codebook_size = source_cfg.get('codebook_size', 128)
+        fnirs_spatial_anchors = fnirs_cfg.get('spatial_anchors')
+        fnirs_optical_components = fnirs_cfg.get('optical_components')
+        if fnirs_cfg.get('channels') is not None:
+            fnirs_channels = int(fnirs_cfg.get('channels'))
+        elif fnirs_spatial_anchors is not None and fnirs_optical_components is not None:
+            fnirs_channels = int(fnirs_spatial_anchors) * int(fnirs_optical_components)
+        else:
+            fnirs_channels = 36
         return cls(
             eeg_seq_length=eeg_cfg.get('seq_length', 2000),
             eeg_patch_size=eeg_cfg.get('patch_size', 400),
@@ -474,7 +498,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             eeg_decoder_num_heads=eeg_cfg.get('decoder_num_heads', 8),
             fnirs_seq_length=fnirs_cfg.get('seq_length', 100),
             fnirs_patch_size=fnirs_cfg.get('patch_size', 20),
-            fnirs_channels=fnirs_cfg.get('channels', 36),
+            fnirs_channels=fnirs_channels,
+            fnirs_spatial_anchors=fnirs_spatial_anchors,
+            fnirs_optical_components=fnirs_optical_components,
+            fnirs_component_labels=fnirs_cfg.get('component_labels', fnirs_cfg.get('fnirs_component_labels')),
             fnirs_encoder_embed_dim=fnirs_cfg.get('encoder_embed_dim', 160),
             fnirs_encoder_depth=fnirs_cfg.get('encoder_depth', 6),
             fnirs_encoder_num_heads=fnirs_cfg.get('encoder_num_heads', 4),
@@ -1097,13 +1124,53 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
     def decode(self, z_q: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError('Use modality-specific decode paths for the source/observation tokenizer')
 
-    def forward(self, eeg: torch.Tensor, fnirs: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def _resolve_explicit_targets(
+        self,
+        targets: Optional[Dict[str, torch.Tensor]],
+        *,
+        eeg: torch.Tensor,
+        fnirs: torch.Tensor,
+    ) -> Optional[Dict[str, torch.Tensor]]:
+        if targets is None:
+            return None
+        required = {
+            'eeg_source': eeg,
+            'eeg_observation': eeg,
+            'fnirs_source': fnirs,
+            'fnirs_observation': fnirs,
+        }
+        resolved: Dict[str, torch.Tensor] = {}
+        for name, reference in required.items():
+            if name not in targets:
+                raise KeyError(f"Explicit source/observation targets must include {name!r}")
+            value = targets[name]
+            if not torch.is_tensor(value):
+                value = torch.as_tensor(value)
+            value = value.to(device=reference.device, dtype=reference.dtype, non_blocking=True)
+            if tuple(value.shape) != tuple(reference.shape):
+                raise ValueError(
+                    f"Target {name!r} must have shape {tuple(reference.shape)}, got {tuple(value.shape)}"
+                )
+            resolved[name] = value
+        return resolved
+
+    def forward(
+        self,
+        eeg: torch.Tensor,
+        fnirs: torch.Tensor,
+        targets: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, torch.Tensor]:
         if eeg.dim() != 3 or fnirs.dim() != 3:
             raise ValueError('Expected eeg and fnirs tensors with shape [B, C, T]')
+        if eeg.shape[1] != self.eeg_channels:
+            raise ValueError(f'Expected EEG channels {self.eeg_channels}, got {eeg.shape[1]}')
+        if fnirs.shape[1] != self.fnirs_channels:
+            raise ValueError(f'Expected fNIRS channels {self.fnirs_channels}, got {fnirs.shape[1]}')
         if eeg.shape[-1] != self.eeg_seq_length:
             raise ValueError(f'Expected EEG length {self.eeg_seq_length}, got {eeg.shape[-1]}')
         if fnirs.shape[-1] != self.fnirs_seq_length:
             raise ValueError(f'Expected fNIRS length {self.fnirs_seq_length}, got {fnirs.shape[-1]}')
+        explicit_targets = self._resolve_explicit_targets(targets, eeg=eeg, fnirs=fnirs)
 
         eeg_patches = self._split_to_patches(eeg, self.eeg_patch_size)
         fnirs_patches = self._split_to_patches(fnirs, self.fnirs_patch_size)
@@ -1214,11 +1281,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.fnirs_time_weight * fnirs_time_loss
         )
 
-        shared_state = self._compute_shared_neural_state(eeg)
-        fnirs_source_target = self._compute_fnirs_source_target(shared_state, fnirs)
-        eeg_source_aux_target = self._compute_eeg_source_target(eeg)
-        eeg_observation_target = self._compute_observation_target(eeg, eeg_source_aux_target)
-        fnirs_observation_target = self._compute_observation_target(fnirs, fnirs_source_target)
+        if explicit_targets is None:
+            shared_state = self._compute_shared_neural_state(eeg)
+            fnirs_source_target = self._compute_fnirs_source_target(shared_state, fnirs)
+            eeg_source_aux_target = self._compute_eeg_source_target(eeg)
+            eeg_observation_target = self._compute_observation_target(eeg, eeg_source_aux_target)
+            fnirs_observation_target = self._compute_observation_target(fnirs, fnirs_source_target)
+        else:
+            fnirs_source_target = explicit_targets['fnirs_source']
+            eeg_source_aux_target = explicit_targets['eeg_source']
+            eeg_observation_target = explicit_targets['eeg_observation']
+            fnirs_observation_target = explicit_targets['fnirs_observation']
+        explicit_targets_used = eeg.new_tensor(1.0 if explicit_targets is not None else 0.0)
 
         eeg_source_reconstructed = reconstructions['eeg_source_reconstructed']
         fnirs_source_reconstructed = reconstructions['fnirs_source_reconstructed']
@@ -1345,9 +1419,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'eeg_observation_z_q': eeg_observation_q,
             'fnirs_observation_z_q': fnirs_observation_q,
             'fnirs_source_target': fnirs_source_target,
+            'eeg_source_target': eeg_source_aux_target,
             'eeg_source_aux_target': eeg_source_aux_target,
             'eeg_observation_target': eeg_observation_target,
             'fnirs_observation_target': fnirs_observation_target,
+            'explicit_targets_used': explicit_targets_used,
+            'croce_targets_used': explicit_targets_used,
             'spatial_source_prior_enabled': torch.tensor(
                 1.0 if self.spatial_source_prior_enabled else 0.0,
                 device=eeg.device,

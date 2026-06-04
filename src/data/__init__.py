@@ -33,6 +33,7 @@ from .factory import (
     create_unimodal_window_dataset,
     resolve_normalization_config,
 )
+from .croce_local_cache_dataset import CroceLocalCacheDataset
 from .registry import (
     DatasetRegistration,
     DocumentationReference,
@@ -110,6 +111,7 @@ __all__ = [
     'create_configured_multimodal_dataloaders',
     'create_continuous_visualization_dataset',
     'resolve_normalization_config',
+    'CroceLocalCacheDataset',
     'SpatialAdjacencyInfo',
     'build_channel_adjacency',
     'canonicalize_channel_label',

@@ -1,0 +1,8 @@
+_base_: "./highwl_base.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_lr2e4"
+  description: "Croce local highWL-only tokenizer LR check at 2e-4"
+
+training:
+  learning_rate: 0.0002

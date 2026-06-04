@@ -1,0 +1,9 @@
+_base_: "./highwl_base.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_fnirsobs64"
+  description: "Croce local highWL-only tokenizer fNIRS observation capacity check with K=64"
+
+model:
+  fnirs_observation:
+    codebook_size: 64

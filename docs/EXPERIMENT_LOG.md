@@ -27,6 +27,7 @@ The downstream Motor Imagery (MI) classification task suffered from a severe lac
 |------|----|-------|-------------|--------|
 | 2026-05-11 | EXP-P1-GATE1-LOCK | Phase 1 | Source/observation Gate1 stabilization, best-baseline lock, and archive handoff | Completed |
 | 2026-05-14 | EXP-P2B-ARCH-STABLE | Phase 2B | Architecture stabilized: Croce 2017 physical model + coupling structure priors implemented and merged | Completed |
+| 2026-06-04 | EXP-CROCE-HIGHWL-LOCAL | Croce local tokenizer | HighWL-only local cache adapter, explicit source/observation targets, Gate0 contract, and launch configs | Ready for training |
 
 ---
 
@@ -98,6 +99,47 @@ Complete the Croce 2017 physical model source target implementation, integrate c
 ### Conclusion
 
 Architecture is now stabilized. No further major architectural exploration planned. Current focus: Gate 3 (Structure) validation, diagnostic refinement, and downstream evaluation.
+
+---
+
+## EXP-CROCE-HIGHWL-LOCAL: Croce Local HighWL-Only Tokenizer Setup (2026-06-04)
+
+### Objective
+
+Start the next tokenizer training phase from generated Croce source/observation caches, using local spatial anchors and highWL-only fNIRS input while preserving explicit source/observation targets.
+
+### Configuration
+
+- Dataset adapter: [src/data/croce_local_cache_dataset.py](../src/data/croce_local_cache_dataset.py)
+- Training base config: `experiments/configs/source_observation/croce_local/highwl_base.yaml`
+- Sweep configs: `highwl_lr2e4.yaml`, `highwl_fnirsobs64.yaml`
+- Cache roots:
+  - `croce_validation/cache/EEG_fNIRS_single_trail_pf_full`
+  - `croce_validation/cache/EEG_fNIRS_single_trail_pf_full_mental_arithmetic_regen_20260603_182938`
+  - `croce_validation/cache/simultaneous_optical_pf_cache`
+
+### Key Decisions
+
+1. Tokenizer input is local, not whole-brain: EEG `[B,6,4000]`, fNIRS `[B,1,200]`.
+2. fNIRS uses `highWL` only: `source_fnirs_optical_channel_0` and `obs_fnirs_optical_channel_0`.
+3. `lowWL` remains in cache metadata and must be reported by Gate0 as ignored.
+4. The highWL signal remains optical measurement-space, not HbO concentration.
+5. Default codebooks: source K=32, EEG observation K=64, fNIRS observation K=32; sweep fNIRS observation K=64.
+6. Default fNIRS lowpass for raw dataset preprocessing is 0.2 Hz; downstream task config absence is ignored in registry tests for this checkout.
+
+### Validation
+
+Smoke dataloader creation on the real cache produced:
+
+| Split | Samples | EEG shape | fNIRS shape | Gate0 pair |
+|-------|---------|-----------|-------------|------------|
+| train | 90000 | `[B,6,4000]` | `[B,1,200]` | `wavelength: highWL/lowWL` |
+| val | 41472 | `[B,6,4000]` | `[B,1,200]` | `wavelength: highWL/lowWL` |
+| test | 33048 | `[B,6,4000]` | `[B,1,200]` | `wavelength: highWL/lowWL` |
+
+### Conclusion
+
+The cache/input contract is ready for the first highWL-only local tokenizer run. Gate0 is now required before interpreting semantic gates.
 
 ---
 

@@ -64,6 +64,36 @@ class DatasetRegistration:
 
 
 REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
+    'croce_local_cache': DatasetRegistration(
+        dataset_id='croce_local_cache',
+        display_name='Croce local source/observation cache',
+        default_root='croce_validation/cache',
+        aliases=(
+            'croce cache',
+            'croce_local',
+            'croce source observation cache',
+        ),
+        supported_modalities=('both',),
+        eeg_sample_rate_hz=200.0,
+        fnirs_sample_rate_hz=10.0,
+        eeg_channels=6,
+        fnirs_channels=1,
+        default_task='mixed',
+        sync_strategy='anchor_event_window_cache',
+        loader_status='implemented',
+        documentation=(
+            DocumentationReference(
+                title='Current source/observation architecture',
+                relative_path='docs/ARCHITECTURE.md',
+                kind='markdown',
+            ),
+        ),
+        notes=(
+            'Each sample is one fNIRS spatial anchor with its local six-channel EEG neighbourhood.',
+            'The current tokenizer training contract uses highWL only as an optical measurement-space HbO-sensitive proxy.',
+            'lowWL remains in the cache and is explicitly ignored by the highWL-only training dataset.',
+        ),
+    ),
     'eeg_fnirs_single_trial': DatasetRegistration(
         dataset_id='eeg_fnirs_single_trial',
         display_name='EEG+NIRS Single-Trial',
@@ -251,13 +281,13 @@ def infer_dataset_id_from_root(data_root: str) -> Optional[str]:
 
 
 def resolve_dataset_id(data_cfg: Mapping[str, Any]) -> str:
-    sources = data_cfg.get('sources')
-    if isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)) and len(sources) > 0:
-        return 'multi_source'
-
     explicit = data_cfg.get('dataset')
     if isinstance(explicit, str) and explicit.strip() and explicit.strip().upper() != 'TBD':
         return get_dataset_registration(explicit).dataset_id
+
+    sources = data_cfg.get('sources')
+    if isinstance(sources, Sequence) and not isinstance(sources, (str, bytes)) and len(sources) > 0:
+        return 'multi_source'
 
     data_root = data_cfg.get('data_root') or data_cfg.get('root')
     if isinstance(data_root, str) and data_root.strip():

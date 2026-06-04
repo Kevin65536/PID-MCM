@@ -91,6 +91,19 @@ def _probe_id_array(values: Optional[np.ndarray], take: int) -> np.ndarray:
     return values[:take].astype(np.int64, copy=False)
 
 
+def _move_targets_to_device(batch: Dict[str, object], device: torch.device) -> Optional[Dict[str, torch.Tensor]]:
+    targets = batch.get('targets')
+    if not isinstance(targets, dict):
+        return None
+    moved: Dict[str, torch.Tensor] = {}
+    for key, value in targets.items():
+        if torch.is_tensor(value):
+            moved[key] = value.to(device, non_blocking=True)
+        else:
+            moved[key] = torch.as_tensor(value, device=device)
+    return moved
+
+
 def _source_hist_features(eeg_tokens: np.ndarray, fnirs_tokens: np.ndarray, codebook_size: int) -> np.ndarray:
     batch_size = int(eeg_tokens.shape[0])
     features = np.zeros((batch_size, codebook_size * 2), dtype=np.float64)
@@ -1540,6 +1553,14 @@ def _collect_split_statistics(
     source_codebook_size = int(getattr(model, 'source_codebook_size', model.get_codebook_size()))
     eeg_observation_codebook_size = int(getattr(model, 'eeg_observation_codebook_size', source_codebook_size))
     fnirs_observation_codebook_size = int(getattr(model, 'fnirs_observation_codebook_size', source_codebook_size))
+    dataset = getattr(dataloader, 'dataset', None)
+    gate0_contract: Optional[Dict[str, object]] = None
+    gate0_getter = getattr(dataset, 'get_gate0_metadata', None)
+    if callable(gate0_getter):
+        try:
+            gate0_contract = dict(gate0_getter())
+        except Exception as exc:
+            gate0_contract = {'available': False, 'reason': str(exc)}
 
     was_training = model.training
     model.eval()
@@ -1548,7 +1569,8 @@ def _collect_split_statistics(
             for batch in dataloader:
                 eeg = batch['eeg'].to(device, non_blocking=True)
                 fnirs = batch['fnirs'].to(device, non_blocking=True)
-                outputs = model(eeg, fnirs)
+                targets = _move_targets_to_device(batch, device)
+                outputs = model(eeg, fnirs, targets=targets)
                 batch_count += 1
 
                 for key, value in outputs.items():
@@ -1728,6 +1750,8 @@ def _collect_split_statistics(
             'fnirs_observation': _codebook_summary(index_bank['fnirs_observation_indices'], fnirs_observation_codebook_size),
         },
     }
+    if gate0_contract is not None:
+        result['gate0_contract'] = gate0_contract
 
     if reconstruction_bank is not None and reconstruction_capture_count > 0:
         reconstruction_samples = {
@@ -1807,6 +1831,68 @@ def _collect_split_statistics(
         result['token_pattern_samples'] = token_pattern_samples
 
     return result
+
+
+def _build_gate_0(split_stats: Dict[str, object], config: Dict[str, object]) -> Dict[str, object]:
+    contract = split_stats.get('gate0_contract')
+    if not isinstance(contract, dict) or not contract.get('available', False):
+        reason = contract.get('reason') if isinstance(contract, dict) else 'dataset_gate0_metadata_unavailable'
+        return {
+            'status': 'pending',
+            'metrics': {
+                'contract': contract or {},
+                'checks': {},
+            },
+            'notes': [f'Gate0 cache contract metadata is unavailable: {reason}.'],
+        }
+
+    model_cfg = config.get('model', {}) if isinstance(config.get('model', {}), dict) else {}
+    fnirs_cfg = model_cfg.get('fnirs', {}) if isinstance(model_cfg.get('fnirs', {}), dict) else {}
+    component_labels = fnirs_cfg.get('component_labels', fnirs_cfg.get('fnirs_component_labels'))
+
+    def _int_equals(value: object, expected: int) -> bool:
+        try:
+            return int(value) == int(expected)
+        except (TypeError, ValueError):
+            return False
+
+    checks = {
+        'selected_component_is_highWL': contract.get('selected_fnirs_component') == 'highWL',
+        'ignored_component_includes_lowWL': 'lowWL' in list(contract.get('ignored_fnirs_components', [])),
+        'cache_pair_mode_is_wavelength': contract.get('pair_mode') == 'wavelength',
+        'cache_pair_labels_are_high_low': list(contract.get('pair_labels', [])) == ['highWL', 'lowWL'],
+        'one_fnirs_spatial_anchor': _int_equals(contract.get('fnirs_spatial_anchors'), 1),
+        'one_fnirs_optical_component': _int_equals(contract.get('fnirs_optical_components'), 1),
+        'one_internal_fnirs_channel': _int_equals(contract.get('fnirs_channels'), 1),
+    }
+    if component_labels is not None:
+        checks['config_component_labels_are_highWL_only'] = list(component_labels) == ['highWL']
+    if fnirs_cfg.get('spatial_anchors') is not None:
+        checks['config_spatial_anchors_is_one'] = _int_equals(fnirs_cfg.get('spatial_anchors'), 1)
+    if fnirs_cfg.get('optical_components') is not None:
+        checks['config_optical_components_is_one'] = _int_equals(fnirs_cfg.get('optical_components'), 1)
+    if fnirs_cfg.get('channels') is not None:
+        checks['config_fnirs_channels_is_one'] = _int_equals(fnirs_cfg.get('channels'), 1)
+
+    failed = [name for name, passed in checks.items() if not bool(passed)]
+    notes: List[str] = []
+    if failed:
+        notes.append('Gate0 highWL-only cache contract checks failed: ' + ', '.join(failed) + '.')
+    status = 'pass' if not failed else 'fail'
+
+    return {
+        'status': status,
+        'metrics': {
+            'contract': contract,
+            'checks': checks,
+            'selected_fnirs_component': contract.get('selected_fnirs_component'),
+            'ignored_fnirs_components': list(contract.get('ignored_fnirs_components', [])),
+            'pair_mode': contract.get('pair_mode'),
+            'pair_labels': list(contract.get('pair_labels', [])),
+            'fnirs_target_semantics': contract.get('fnirs_target_semantics'),
+        },
+        'notes': notes,
+    }
 
 
 def _build_gate_1(
@@ -2071,6 +2157,7 @@ def _build_split_gate_summary(
     figure_path = _plot_coupling_heatmap(coupling, analysis_root / f"{split_name}_coupling_heatmap.png")
     structure_profile_path = _plot_coupling_structure_profile(coupling, analysis_root / f"{split_name}_coupling_structure.png")
     branch_policy = _resolve_gate_branch_policy(config)
+    gate_0 = _build_gate_0(split_stats, config)
     gate_1 = _build_gate_1(split_stats, metrics_payload, branch_policy=branch_policy)
     gate_2 = _build_gate_2(split_stats, best_lag=best_lag, coupling=coupling, branch_policy=branch_policy)
     gate_3 = _build_gate_3(coupling, figure_path=figure_path, structure_profile_path=structure_profile_path)
@@ -2098,6 +2185,7 @@ def _build_split_gate_summary(
     )
     gate_1['artifacts']['token_pattern_paths'] = token_pattern_paths
     gates = {
+        'gate0': gate_0,
         'gate1': gate_1,
         'gate2': gate_2,
         'gate3': gate_3,
@@ -2116,9 +2204,11 @@ def _build_split_gate_summary(
 
 def _promotion_verdict(gates: Dict[str, object]) -> str:
     statuses = {name: details['status'] for name, details in gates.items()}
+    if statuses.get('gate0') == 'fail':
+        return 'blocked_gate0'
     if statuses.get('gate1') == 'fail':
         return 'blocked_gate1'
-    if any(status == 'fail' for gate_name, status in statuses.items() if gate_name != 'gate1'):
+    if any(status == 'fail' for gate_name, status in statuses.items() if gate_name not in {'gate0', 'gate1'}):
         return 'hold_repair'
     if all(status == 'pass' for status in statuses.values()):
         return 'promote'
@@ -2218,6 +2308,7 @@ def generate_source_observation_scorecard(
             'mean_scalars': split_stats['mean_scalars'],
             'branch_reconstruction': split_stats['branch_reconstruction'],
             'codebooks': split_stats['codebooks'],
+            'gate0_contract': split_stats.get('gate0_contract'),
             'gates': gates,
             'artifacts': split_artifacts,
         }

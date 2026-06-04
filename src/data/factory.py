@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
+from .croce_local_cache_dataset import CroceLocalCacheDataset
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
 from .registry import normalize_data_config, resolve_dataset_id, resolve_modality_preprocessing
 from .simultaneous_eeg_nirs_dataset import (
@@ -36,10 +37,13 @@ def _resolve_dataloader_kwargs(data_cfg: Dict[str, Any], *, is_train: bool) -> D
     if num_workers > 0 and prefetch_factor is not None:
         kwargs['prefetch_factor'] = int(prefetch_factor)
 
-    if is_train and 'drop_last' in dataloader_cfg:
-        kwargs['drop_last'] = bool(dataloader_cfg.get('drop_last'))
-
     return kwargs
+
+
+def _resolve_drop_last(data_cfg: Dict[str, Any], *, is_train: bool) -> bool:
+    if not is_train:
+        return False
+    return bool(data_cfg.get('dataloader', {}).get('drop_last', True))
 
 
 class CombinedMultiModalDataset(Dataset):
@@ -276,6 +280,20 @@ def create_multimodal_window_dataset(
     dataset_id = resolve_dataset_id(data_cfg)
     params = _dataset_params(data_cfg)
 
+    if dataset_id == 'croce_local_cache':
+        crop_cfg = data_cfg.get('crop', {})
+        return CroceLocalCacheDataset(
+            cache_sources=data_cfg.get('cache_sources', [data_cfg.get('data_root', 'croce_validation/cache')]),
+            subject_ids=subject_ids,
+            split=str(data_cfg.get('_split_name', 'train')),
+            crop_duration_s=float(data_cfg.get('window', {}).get('duration_s', window_duration_s)),
+            eeg_sample_rate_hz=float(data_cfg.get('eeg_sample_rate_hz', 200.0)),
+            fnirs_sample_rate_hz=float(data_cfg.get('fnirs_sample_rate_hz', 10.0)),
+            train_random_crop=bool(crop_cfg.get('train_random', True)),
+            eval_event_offsets_s=crop_cfg.get('eval_event_offsets_s', [-10.0, 0.0, 20.0]),
+            seed=int(data_cfg.get('seed', 42)),
+        )
+
     if dataset_id == 'eeg_fnirs_single_trial':
         return MultiModalEEGfNIRSDataset(
             data_root=data_cfg['data_root'],
@@ -397,6 +415,32 @@ def create_configured_dataloader(config: Dict[str, Any], split: str) -> DataLoad
 def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str, DataLoader]:
     data_cfg = config['data']
     normalize, normalization_mode = resolve_normalization_config(data_cfg)
+    dataset_id = resolve_dataset_id(data_cfg)
+
+    if dataset_id == 'croce_local_cache':
+        dataloaders: Dict[str, DataLoader] = {}
+        for split_name in ('train', 'val', 'test'):
+            split_cfg = data_cfg.get('split', {})
+            subjects = split_cfg.get(f'{split_name}_subjects', split_cfg.get(split_name, []))
+            split_data_cfg = dict(data_cfg)
+            split_data_cfg['_split_name'] = split_name
+            dataset = create_multimodal_window_dataset(
+                split_data_cfg,
+                subjects,
+                window_duration_s=float(data_cfg['window']['duration_s']),
+                normalize=normalize,
+                normalization_mode=normalization_mode,
+            )
+            loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=(split_name == 'train'))
+            dataloaders[split_name] = DataLoader(
+                dataset,
+                batch_size=config['training']['batch_size'],
+                shuffle=(split_name == 'train'),
+                drop_last=_resolve_drop_last(data_cfg, is_train=(split_name == 'train')),
+                **loader_kwargs,
+            )
+        return dataloaders
+
     if isinstance(data_cfg.get('sources'), list) and data_cfg.get('sources'):
         dataloaders: Dict[str, DataLoader] = {}
         for split_name in ('train', 'val', 'test'):
@@ -411,12 +455,10 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
                 dataset,
                 batch_size=config['training']['batch_size'],
                 shuffle=(split_name == 'train'),
-                drop_last=(split_name == 'train'),
+                drop_last=_resolve_drop_last(data_cfg, is_train=(split_name == 'train')),
                 **loader_kwargs,
             )
         return dataloaders
-
-    dataset_id = resolve_dataset_id(data_cfg)
 
     if dataset_id == 'eeg_fnirs_single_trial':
         return create_single_trial_dataloaders(
@@ -459,7 +501,7 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
             dataset,
             batch_size=config['training']['batch_size'],
             shuffle=(split_name == 'train'),
-            drop_last=(split_name == 'train'),
+            drop_last=_resolve_drop_last(data_cfg, is_train=(split_name == 'train')),
             **loader_kwargs,
         )
     return dataloaders

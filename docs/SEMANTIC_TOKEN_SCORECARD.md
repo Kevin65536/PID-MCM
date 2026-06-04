@@ -1,7 +1,7 @@
 # Tokenizer Evaluation Gates
 
-> Last Updated: 2026-05-14
-> Status: Active — covers Phase 2B source/observation architecture with Croce 2017 physical model targets
+> Last Updated: 2026-06-04
+> Status: Active — covers Croce local source/observation tokenizer training with highWL-only fNIRS input
 > Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
 > Supersedes: pre-S2 five-layer scorecard (Layer A-E) — archived by this rewrite
 
@@ -41,7 +41,25 @@ S2 架构中，token 的语义目标分为两类：
 
 ## 3. Evaluation Gates
 
-每个 gate 是进入下一实现阶段的准入条件。Gate 1 不通过 → 不进入 Gate 2，以此类推。
+每个 gate 是进入下一实现阶段的准入条件。Gate 0 不通过 → 不解释任何后续语义指标；Gate 1 不通过 → 不进入 Gate 2，以此类推。
+
+### Gate 0: Cache/Input Contract
+
+**回答的问题**：当前 run 是否真的使用了约定的 highWL-only Croce local cache 输入？
+
+这是当前 highWL-only 训练范式的硬门槛。它不是训练效果指标，而是防止把 fNIRS 两个波长误读成两个物理通道、或把 optical measurement-space 信号误写成 HbO/HbR concentration。
+
+| 指标 | 健康阈值 | 来源 |
+|------|----------|------|
+| **Selected fNIRS component** | `highWL` | `dataset.get_gate0_metadata()` |
+| **Ignored fNIRS component** | includes `lowWL` | `dataset.get_gate0_metadata()` |
+| **Cache pair mode** | `wavelength` | `cache_manifest.json` via dataset metadata |
+| **Cache pair labels** | `["highWL", "lowWL"]` | `cache_manifest.json` via dataset metadata |
+| **fNIRS layout** | `1 spatial anchor × 1 optical component = 1 channel` | config + dataset metadata |
+
+**通过条件**：上述所有合同检查均通过。
+
+**失败处理**：停止解释 Gate1-Gate4；先修复 cache source、component selector 或 config 的 `model.fnirs.*` 字段。
 
 ### Gate 1: Architecture Health
 
@@ -68,15 +86,16 @@ S2 架构中，token 的语义目标分为两类：
 
 | 指标 | 计算 | 健康阈值 | 来源 |
 |------|------|----------|------|
-| **Source HRF target MSE** | MSE(fnirs_source_recon, HRF_target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
+| **fNIRS source target MSE** | MSE(fnirs_source_recon, cached highWL source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
+| **EEG source target MSE** | MSE(eeg_source_recon, cached local EEG source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
 | **Observation contribution gap** | MSE(source_only_recon) - MSE(source+obs_recon) | $> 0$（observation 有正贡献） | 从 forward 输出计算 |
 | **Cross-modal token predictability** | 给定 EEG source token，预测 fNIRS source token 的 top-1 accuracy | $> 1/K_{src}$（random baseline） | 从 coupling_logits 直接计算 |
 | **Source codebook independence** | eeg_source_quantizer 和 fnirs_source_quantizer 各自的利用率偏差 | $|u_{eeg} - u_{fnirs}| < 0.3$ | 从两个 quantizer 的 marginal 统计 |
 
-**通过条件**：HRF target reconstruction 显著优于 random；observation gap > 0；cross-modal predictability > chance；两个 source codebook 都健康。
+**通过条件**：cached source target reconstruction 显著优于 random；observation gap > 0；cross-modal predictability > chance；两个 source codebook 都健康。
 
 **失败处理**：
-- HRF target 不收敛 → 检查 HRF 核参数初始化、source_target_weight、warmup schedule
+- source target 不收敛 → 检查 Croce cache 质量、source_target_weight、warmup schedule
 - Observation gap ≈ 0 → observation branch 可能 collapse；检查 orthogonality weight
 - Cross-modal predictability ≈ random → coupling training 可能失败；进入 Gate 3 诊断
 
@@ -125,6 +144,11 @@ S2 架构中，token 的语义目标分为两类：
 每个实现 phase 只关注一个 gate。不通过则阻塞，不回退到更早的 gate。
 
 ```
+Phase 0: Cache/Input Contract
+  └── Gate 0: highWL-only Croce local cache contract
+      ├── ✅ PASS → interpret architecture and semantic gates
+      └── ❌ FAIL → fix cache/config semantics; do NOT interpret tokenizer metrics
+
 Phase 1: Structural Migration
   └── Gate 1: Architecture Health
       ├── ✅ PASS → proceed to Phase 2
@@ -175,12 +199,18 @@ Phase 2B: Croce 2017 Physical Model + Coupling Structure Priors
 每个正式 mainline 实验至少输出以下内容：
 
 ```
+Gate 0: Cache/Input Contract
+  - selected_fnirs_component = highWL
+  - ignored_fnirs_components includes lowWL
+  - pair_mode = wavelength; pair_labels = [highWL, lowWL]
+  - fNIRS layout = 1 spatial anchor × 1 highWL optical component
+
 Gate 1: Architecture Health
   - 4 个 codebook 的 perplexity, utilization, dead codes, top-5 coverage
   - EEG/fNIRS full reconstruction MSE
 
 Gate 2: Branch Semantics
-  - Source HRF target MSE（含 random baseline 对比）
+  - Cached source target MSE（含 random baseline 对比）
   - Observation contribution gap (source_only vs source+obs)
   - Cross-modal token predictability (from coupling_logits)
 
