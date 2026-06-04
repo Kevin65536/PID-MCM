@@ -910,11 +910,13 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         return z * mask / max(keep_prob, 1e-6)
 
     def _code_overlap(self, left_indices: torch.Tensor, right_indices: torch.Tensor) -> torch.Tensor:
-        left_codes = set(torch.unique(left_indices).tolist())
-        right_codes = set(torch.unique(right_indices).tolist())
-        union_size = max(len(left_codes | right_codes), 1)
-        overlap = len(left_codes & right_codes) / union_size
-        return torch.tensor(overlap, device=left_indices.device, dtype=torch.float32)
+        left_codes = torch.unique(left_indices.reshape(-1))
+        right_codes = torch.unique(right_indices.reshape(-1))
+        if left_codes.numel() == 0 and right_codes.numel() == 0:
+            return left_indices.new_tensor(0.0, dtype=torch.float32)
+        overlap = torch.isin(left_codes, right_codes).sum()
+        union = left_codes.numel() + right_codes.numel() - overlap
+        return overlap.to(dtype=torch.float32) / union.clamp_min(1).to(dtype=torch.float32)
 
     def _compute_source_alignment_state(
         self,

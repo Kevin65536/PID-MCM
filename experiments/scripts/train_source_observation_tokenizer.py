@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -48,6 +49,20 @@ def setup_device(config: dict) -> torch.device:
     if requested == 'cpu':
         return torch.device('cpu')
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def setup_torch_performance(config: dict, device: torch.device) -> None:
+    perf_cfg = config.get('training', {}).get('performance', {})
+    if device.type != 'cuda':
+        return
+
+    if bool(perf_cfg.get('tf32', True)):
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        try:
+            torch.set_float32_matmul_precision(str(perf_cfg.get('matmul_precision', 'high')))
+        except AttributeError:
+            pass
 
 
 def create_multimodal_dataloaders(config: dict):
@@ -125,6 +140,39 @@ def filter_numeric_scalars(
             tag = tag[len(strip_prefix):]
         scalars[tag] = numeric_value
     return scalars
+
+
+def _positive_int_or_none(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    parsed = int(value)
+    return parsed if parsed > 0 else None
+
+
+def _cuda_synchronize_if_needed(device: torch.device) -> None:
+    if device.type == 'cuda':
+        torch.cuda.synchronize(device)
+
+
+def _accumulate_metric(totals: Dict[str, Any], key: str, value: Any) -> None:
+    if torch.is_tensor(value):
+        if value.ndim != 0:
+            return
+        metric_value = value.detach()
+        totals[key] = totals.get(key, metric_value.new_zeros(())) + metric_value
+        return
+    totals[key] = float(totals.get(key, 0.0)) + float(value)
+
+
+def _finalize_metric_totals(totals: Dict[str, Any], total_batches: int) -> Dict[str, float]:
+    denominator = max(total_batches, 1)
+    averaged: Dict[str, float] = {}
+    for key, value in totals.items():
+        if torch.is_tensor(value):
+            averaged[key] = float((value / denominator).item())
+        else:
+            averaged[key] = float(value) / denominator
+    return averaged
 
 
 def build_tensorboard_hparams(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -388,12 +436,12 @@ def compute_multimodal_aux_losses(
     eeg: torch.Tensor,
     fnirs: torch.Tensor,
     outputs: Dict[str, Any],
-) -> Tuple[torch.Tensor, Dict[str, float], Dict[str, torch.Tensor]]:
+) -> Tuple[torch.Tensor, Dict[str, Any], Dict[str, torch.Tensor]]:
     spectral_cfg = config.get('loss', {}).get('spectral', {})
     spectral_weight = float(spectral_cfg.get('weight', 0.0))
     zero = eeg.new_tensor(0.0)
     aux_loss = zero
-    scalar_metrics: Dict[str, float] = {}
+    scalar_metrics: Dict[str, Any] = {}
     tensor_metrics: Dict[str, torch.Tensor] = {}
 
     if not spectral_cfg.get('enabled', False) or spectral_weight <= 0.0:
@@ -409,10 +457,10 @@ def compute_multimodal_aux_losses(
     spectral_loss = 0.5 * (eeg_spectral_loss + fnirs_spectral_loss)
     aux_loss = aux_loss + spectral_weight * spectral_loss
 
-    scalar_metrics['eeg_spectral_loss'] = float(eeg_spectral_loss.detach().item())
-    scalar_metrics['fnirs_spectral_loss'] = float(fnirs_spectral_loss.detach().item())
-    scalar_metrics['spectral_loss'] = float(spectral_loss.detach().item())
-    scalar_metrics['aux_loss'] = float(aux_loss.detach().item())
+    scalar_metrics['eeg_spectral_loss'] = eeg_spectral_loss.detach()
+    scalar_metrics['fnirs_spectral_loss'] = fnirs_spectral_loss.detach()
+    scalar_metrics['spectral_loss'] = spectral_loss.detach()
+    scalar_metrics['aux_loss'] = aux_loss.detach()
     tensor_metrics['spectral_loss'] = spectral_loss
     tensor_metrics['aux_loss'] = aux_loss
     return aux_loss, scalar_metrics, tensor_metrics
@@ -426,9 +474,10 @@ def train_epoch(
     device: torch.device,
     grad_clip: float,
     gradient_attribution_cfg: Optional[Dict[str, Any]] = None,
+    max_batches: Optional[int] = None,
 ) -> Tuple[Dict[str, float], Optional[Dict[str, Any]]]:
     model.train()
-    totals: Dict[str, float] = {}
+    totals: Dict[str, Any] = {}
     total_batches = 0
     grad_totals: Dict[str, float] = {}
     grad_batches = 0
@@ -436,7 +485,7 @@ def train_epoch(
     gradient_dashboard: Optional[Dict[str, Any]] = None
     gradient_dashboard_batches = 0
 
-    for batch in dataloader:
+    for batch_index, batch in enumerate(dataloader, start=1):
         eeg = batch['eeg'].to(device, non_blocking=True)
         fnirs = batch['fnirs'].to(device, non_blocking=True)
         targets = move_source_observation_targets_to_device(batch, device)
@@ -481,16 +530,19 @@ def train_epoch(
         optimizer.step()
         total_batches += 1
 
-        totals['loss'] = totals.get('loss', 0.0) + tensor_to_float(loss.detach())
+        _accumulate_metric(totals, 'loss', loss.detach())
         for key, value in outputs.items():
             if key == 'loss':
                 continue
             if torch.is_tensor(value) and value.ndim == 0:
-                totals[key] = totals.get(key, 0.0) + tensor_to_float(value)
+                _accumulate_metric(totals, key, value)
         for key, value in aux_metrics.items():
-            totals[key] = totals.get(key, 0.0) + value
+            _accumulate_metric(totals, key, value)
 
-    averaged = {key: value / max(total_batches, 1) for key, value in totals.items()}
+        if max_batches is not None and batch_index >= max_batches:
+            break
+
+    averaged = _finalize_metric_totals(totals, total_batches)
     if grad_batches > 0:
         averaged.update({key: value / grad_batches for key, value in grad_totals.items()})
     if gradient_dashboard is not None and gradient_dashboard_batches > 0:
@@ -504,12 +556,13 @@ def validate_epoch(
     dataloader,
     config: Dict[str, Any],
     device: torch.device,
+    max_batches: Optional[int] = None,
 ) -> Dict[str, float]:
     model.eval()
-    totals: Dict[str, float] = {}
+    totals: Dict[str, Any] = {}
     total_batches = 0
 
-    for batch in dataloader:
+    for batch_index, batch in enumerate(dataloader, start=1):
         eeg = batch['eeg'].to(device, non_blocking=True)
         fnirs = batch['fnirs'].to(device, non_blocking=True)
         targets = move_source_observation_targets_to_device(batch, device)
@@ -517,16 +570,19 @@ def validate_epoch(
         aux_loss, aux_metrics, _ = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         total_batches += 1
 
-        totals['val_loss'] = totals.get('val_loss', 0.0) + tensor_to_float((outputs['loss'] + aux_loss).detach())
+        _accumulate_metric(totals, 'val_loss', (outputs['loss'] + aux_loss).detach())
         for key, value in outputs.items():
             if key == 'loss':
                 continue
             if torch.is_tensor(value) and value.ndim == 0:
-                totals[f'val_{key}'] = totals.get(f'val_{key}', 0.0) + tensor_to_float(value)
+                _accumulate_metric(totals, f'val_{key}', value)
         for key, value in aux_metrics.items():
-            totals[f'val_{key}'] = totals.get(f'val_{key}', 0.0) + value
+            _accumulate_metric(totals, f'val_{key}', value)
 
-    return {key: value / max(total_batches, 1) for key, value in totals.items()}
+        if max_batches is not None and batch_index >= max_batches:
+            break
+
+    return _finalize_metric_totals(totals, total_batches)
 
 
 def maybe_seed_best_checkpoint(
@@ -962,7 +1018,14 @@ def main():
             tb_logger.flush()
 
         device = setup_device(config)
+        setup_torch_performance(config, device)
         print(f"Training device: {device}")
+        if device.type == 'cuda':
+            print(
+                "CUDA performance: "
+                f"tf32_matmul={torch.backends.cuda.matmul.allow_tf32}, "
+                f"tf32_cudnn={torch.backends.cudnn.allow_tf32}"
+            )
 
         seed = config['experiment'].get('seed', 42)
         torch.manual_seed(seed)
@@ -1040,6 +1103,11 @@ def main():
             'enabled': bool(config['training'].get('gradient_attribution', {}).get('enabled', False)),
             'max_batches': int(config['training'].get('gradient_attribution', {}).get('max_batches', 1)),
         }
+        validation_cfg = config['training'].get('validation', {})
+        validation_interval = max(int(validation_cfg.get('interval_epochs', 1)), 1)
+        validation_start_epoch = max(int(validation_cfg.get('start_epoch', 1)), 1)
+        validation_max_batches = _positive_int_or_none(validation_cfg.get('max_batches'))
+        max_train_batches = _positive_int_or_none(config['training'].get('max_train_batches'))
 
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
         interrupted = False
@@ -1054,6 +1122,8 @@ def main():
                 schedule_metrics = apply_epoch_schedules(model, epoch, config)
                 alignment_scale = schedule_metrics['alignment_scale']
 
+                _cuda_synchronize_if_needed(device)
+                train_started_at = time.perf_counter()
                 train_metrics, gradient_dashboard = train_epoch(
                     model,
                     train_loader,
@@ -1062,16 +1132,54 @@ def main():
                     device,
                     grad_clip,
                     gradient_attribution_cfg=gradient_attribution_cfg,
+                    max_batches=max_train_batches,
                 )
-                val_metrics = validate_epoch(model, val_loader, config, device)
+                _cuda_synchronize_if_needed(device)
+                train_seconds = time.perf_counter() - train_started_at
+
+                run_validation = (
+                    epoch >= validation_start_epoch
+                    and (
+                        (epoch - validation_start_epoch) % validation_interval == 0
+                        or epoch == total_epochs
+                    )
+                )
+                if run_validation:
+                    _cuda_synchronize_if_needed(device)
+                    val_started_at = time.perf_counter()
+                    val_metrics = validate_epoch(
+                        model,
+                        val_loader,
+                        config,
+                        device,
+                        max_batches=validation_max_batches,
+                    )
+                    _cuda_synchronize_if_needed(device)
+                    val_seconds = time.perf_counter() - val_started_at
+                else:
+                    val_metrics = {}
+                    val_seconds = 0.0
 
                 if epoch > warmup_epochs:
                     scheduler.step()
 
                 lr = optimizer.param_groups[0]['lr']
                 train_loss = train_metrics.get('loss', float('nan'))
-                val_loss = val_metrics.get('val_loss', float('nan'))
-                merged_metrics = {'lr': lr, **schedule_metrics}
+                val_loss = val_metrics.get('val_loss')
+                train_batches = max_train_batches or len(train_loader)
+                val_batches = validation_max_batches or len(val_loader)
+                merged_metrics = {
+                    'lr': lr,
+                    **schedule_metrics,
+                    'train_epoch_seconds': train_seconds,
+                    'train_batches_per_second': train_batches / max(train_seconds, 1e-12),
+                    'validation_ran': 1.0 if run_validation else 0.0,
+                }
+                if run_validation:
+                    merged_metrics.update({
+                        'val_epoch_seconds': val_seconds,
+                        'val_batches_per_second': val_batches / max(val_seconds, 1e-12),
+                    })
                 merged_metrics.update({
                     key: value
                     for key, value in train_metrics.items()
@@ -1092,7 +1200,8 @@ def main():
 
                 if tb_logger is not None:
                     tb_logger.log_scalars('train', filter_numeric_scalars(train_metrics), epoch)
-                    tb_logger.log_scalars('val', filter_numeric_scalars(val_metrics, strip_prefix='val_'), epoch)
+                    if run_validation:
+                        tb_logger.log_scalars('val', filter_numeric_scalars(val_metrics, strip_prefix='val_'), epoch)
                     tb_logger.log_learning_rate(lr, epoch)
                     tb_logger.log_scalars('schedule', schedule_metrics, epoch)
                     if gradient_dashboard is not None:
@@ -1122,10 +1231,10 @@ def main():
                     tb_logger.flush()
 
                 monitor_value = val_metrics.get(monitor_metric)
-                if monitor_value is None:
+                if run_validation and monitor_value is None:
                     raise ValueError(f"Monitor metric '{monitor_metric}' not found in validation metrics")
 
-                monitor_active = epoch >= early_stopping_start_epoch
+                monitor_active = run_validation and epoch >= early_stopping_start_epoch
                 improved = False
                 if monitor_active:
                     improved = (
@@ -1145,16 +1254,16 @@ def main():
                     optimizer=optimizer,
                     config=config,
                     train_loss=train_loss,
-                    val_loss=val_loss,
+                    val_loss=float(val_loss) if val_loss is not None else float('nan'),
                     monitor_metric=monitor_metric,
-                    monitor_value=float(monitor_value),
+                    monitor_value=float(monitor_value) if monitor_value is not None else float('nan'),
                     best_epoch=best_epoch,
                     best_monitor=best_monitor,
                     alignment_scale=alignment_scale,
                     is_best=improved,
                 )
 
-                save_periodic_checkpoint = (epoch % save_every == 0)
+                save_periodic_checkpoint = save_every > 0 and (epoch % save_every == 0)
                 if save_periodic_checkpoint or improved:
                     logger.save_checkpoint(
                         checkpoint_payload,
