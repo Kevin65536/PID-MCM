@@ -6,6 +6,8 @@ experiment:
   description: "Croce local highWL-only GPU utilization probe with larger batches and sparse validation"
 
 data:
+  cache_npz_handles: true
+  max_npz_cache_size: 128
   num_workers: 8
   dataloader:
     persistent_workers: true

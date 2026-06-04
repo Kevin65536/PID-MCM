@@ -102,6 +102,8 @@ class CroceLocalCacheDataset(Dataset):
         train_random_crop: bool = True,
         eval_event_offsets_s: Sequence[float] = (-10.0, 0.0, 20.0),
         seed: int = 42,
+        cache_npz_handles: bool = True,
+        max_npz_cache_size: int = 128,
     ):
         if crop_duration_s <= 0:
             raise ValueError("crop_duration_s must be positive")
@@ -118,6 +120,9 @@ class CroceLocalCacheDataset(Dataset):
         self.train_random_crop = bool(train_random_crop)
         self.eval_event_offsets_s = tuple(float(value) for value in eval_event_offsets_s)
         self.rng = np.random.default_rng(int(seed))
+        self.cache_npz_handles = bool(cache_npz_handles)
+        self.max_npz_cache_size = max(int(max_npz_cache_size), 1)
+        self._npz_cache: Dict[Path, Any] = {}
         self.cache_sources = [self._normalize_source(source, index) for index, source in enumerate(cache_sources)]
 
         discovered = self._discover_entries()
@@ -131,6 +136,24 @@ class CroceLocalCacheDataset(Dataset):
             raise ValueError(
                 f"No Croce cache samples found for split={self.split!r} and subjects={sorted(self.subject_ids or [])}."
             )
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = dict(self.__dict__)
+        state["_npz_cache"] = {}
+        return state
+
+    def close(self) -> None:
+        for handle in self._npz_cache.values():
+            close = getattr(handle, "close", None)
+            if callable(close):
+                close()
+        self._npz_cache.clear()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     @staticmethod
     def _normalize_source(source: Mapping[str, Any] | str, index: int) -> Dict[str, Any]:
@@ -247,17 +270,12 @@ class CroceLocalCacheDataset(Dataset):
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         entry = self.entries[index]
-        with np.load(entry.cache_path, allow_pickle=False) as npz:
-            def read(field: str, expected_channels: int) -> np.ndarray:
-                key = f"{entry.prefix}/{field}"
-                if key not in npz:
-                    raise KeyError(f"Missing Croce cache field {key!r} in {entry.cache_path}")
-                return _as_channel_time(npz[key], expected_channels=expected_channels, field_name=key)
-
-            eeg_source = read("source_eeg", 6)
-            eeg_obs = read("obs_eeg", 6)
-            fnirs_source = read(HIGHWL_SOURCE_FIELD, 1)
-            fnirs_obs = read(HIGHWL_OBSERVATION_FIELD, 1)
+        if self.cache_npz_handles:
+            npz = self._open_npz(entry.cache_path)
+            eeg_source, eeg_obs, fnirs_source, fnirs_obs = self._read_entry_arrays(entry, npz)
+        else:
+            with np.load(entry.cache_path, allow_pickle=False) as npz:
+                eeg_source, eeg_obs, fnirs_source, fnirs_obs = self._read_entry_arrays(entry, npz)
 
         total_fnirs = min(fnirs_source.shape[0], fnirs_obs.shape[0])
         fnirs_start = self._crop_start(total_fnirs, entry)
@@ -299,6 +317,36 @@ class CroceLocalCacheDataset(Dataset):
             "crop_start_fnirs": torch.tensor(fnirs_start, dtype=torch.long),
             "fnirs_component": "highWL",
         }
+
+    def _open_npz(self, path: Path):
+        cached = self._npz_cache.get(path)
+        if cached is not None:
+            return cached
+
+        if len(self._npz_cache) >= self.max_npz_cache_size:
+            evict_path, evict_handle = next(iter(self._npz_cache.items()))
+            close = getattr(evict_handle, "close", None)
+            if callable(close):
+                close()
+            del self._npz_cache[evict_path]
+
+        handle = np.load(path, allow_pickle=False)
+        self._npz_cache[path] = handle
+        return handle
+
+    def _read_entry_arrays(self, entry: CroceCacheEntry, npz: Any):
+        def read(field: str, expected_channels: int) -> np.ndarray:
+            key = f"{entry.prefix}/{field}"
+            if key not in npz:
+                raise KeyError(f"Missing Croce cache field {key!r} in {entry.cache_path}")
+            return _as_channel_time(npz[key], expected_channels=expected_channels, field_name=key)
+
+        return (
+            read("source_eeg", 6),
+            read("obs_eeg", 6),
+            read(HIGHWL_SOURCE_FIELD, 1),
+            read(HIGHWL_OBSERVATION_FIELD, 1),
+        )
 
     def get_num_eeg_channels(self) -> int:
         return 6

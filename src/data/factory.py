@@ -292,6 +292,8 @@ def create_multimodal_window_dataset(
             train_random_crop=bool(crop_cfg.get('train_random', True)),
             eval_event_offsets_s=crop_cfg.get('eval_event_offsets_s', [-10.0, 0.0, 20.0]),
             seed=int(data_cfg.get('seed', 42)),
+            cache_npz_handles=bool(data_cfg.get('cache_npz_handles', params.get('cache_npz_handles', True))),
+            max_npz_cache_size=int(data_cfg.get('max_npz_cache_size', params.get('max_npz_cache_size', 128))),
         )
 
     if dataset_id == 'eeg_fnirs_single_trial':

@@ -82,6 +82,26 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             self.assertEqual(gate0["pair_labels"], ["highWL", "lowWL"])
             self.assertEqual(gate0["fnirs_channels"], 1)
 
+    def test_dataset_reuses_npz_handles_when_cache_enabled(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write_cache(root)
+
+            dataset = CroceLocalCacheDataset(
+                cache_sources=[{"name": "toy", "root": str(root), "task": "mental_arithmetic"}],
+                subject_ids=[1],
+                split="val",
+                crop_duration_s=20.0,
+                eval_event_offsets_s=[0.0],
+                cache_npz_handles=True,
+            )
+            _ = dataset[0]
+            _ = dataset[0]
+
+            self.assertEqual(len(dataset._npz_cache), 1)
+            dataset.close()
+            self.assertEqual(len(dataset._npz_cache), 0)
+
     def test_factory_creates_croce_local_dataloaders(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
