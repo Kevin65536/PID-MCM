@@ -83,6 +83,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         coupling_smoothness_neighbors: int = 5,
         source_target_weight: float = 0.0,
         eeg_source_aux_weight: float = 0.5,
+        source_target_correlation_weight: float = 0.0,
+        eeg_source_aux_correlation_weight: float = 0.0,
         observation_target_weight: float = 0.0,
         codebook_balance_weight: float = 0.02,
         source_balance_scale: float = 1.0,
@@ -186,6 +188,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.coupling_smoothness_neighbors = max(int(coupling_smoothness_neighbors), 0)
         self.source_target_weight = max(float(source_target_weight), 0.0)
         self.eeg_source_aux_weight = max(float(eeg_source_aux_weight), 0.0)
+        self.source_target_correlation_weight = max(float(source_target_correlation_weight), 0.0)
+        self.eeg_source_aux_correlation_weight = max(float(eeg_source_aux_correlation_weight), 0.0)
         self.observation_target_weight = max(float(observation_target_weight), 0.0)
         self.codebook_balance_weight = codebook_balance_weight
         self.source_balance_scale = max(float(source_balance_scale), 0.0)
@@ -530,6 +534,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             coupling_smoothness_neighbors=coupling_cfg.get('smoothness_neighbors', 5),
             source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
             eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
+            source_target_correlation_weight=source_target_cfg.get(
+                'correlation_weight',
+                source_target_cfg.get('source_correlation_weight', 0.0),
+            ),
+            eeg_source_aux_correlation_weight=source_target_cfg.get(
+                'eeg_aux_correlation_weight',
+                source_target_cfg.get('eeg_source_aux_correlation_weight', 0.0),
+            ),
             observation_target_weight=observation_target_cfg.get('weight', 0.0),
             codebook_balance_weight=codebook_cfg.get('balance_weight', 0.02),
             source_balance_scale=codebook_cfg.get('source_balance_scale', 1.0),
@@ -845,6 +857,33 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             shift = max(target.shape[-1] // 3, 1)
             randomized_target = target.roll(shifts=shift, dims=-1)
         return self.loss_fn(prediction.detach(), randomized_target)
+
+    def _signal_correlation(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        prediction_flat = prediction.reshape(prediction.shape[0], -1).float()
+        target_flat = target.reshape(target.shape[0], -1).float()
+        prediction_centered = prediction_flat - prediction_flat.mean(dim=-1, keepdim=True)
+        target_centered = target_flat - target_flat.mean(dim=-1, keepdim=True)
+        numerator = (prediction_centered * target_centered).sum(dim=-1)
+        denominator = (
+            prediction_centered.square().sum(dim=-1).sqrt()
+            * target_centered.square().sum(dim=-1).sqrt()
+        ).clamp_min(1e-6)
+        return (numerator / denominator).clamp(-1.0, 1.0).mean()
+
+    def _signal_correlation_loss(self, prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        return 1.0 - self._signal_correlation(prediction, target)
+
+    def _randomized_signal_correlation_loss(
+        self,
+        prediction: torch.Tensor,
+        target: torch.Tensor,
+    ) -> torch.Tensor:
+        if target.shape[0] > 1:
+            randomized_target = target.roll(shifts=1, dims=0)
+        else:
+            shift = max(target.shape[-1] // 3, 1)
+            randomized_target = target.roll(shifts=shift, dims=-1)
+        return self._signal_correlation_loss(prediction.detach(), randomized_target)
 
     def _decode_modality(
         self,
@@ -1309,8 +1348,24 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             fnirs_source_reconstructed,
             fnirs_source_target,
         )
+        source_target_corr_loss = (
+            self._signal_correlation_loss(fnirs_source_reconstructed, fnirs_source_target)
+            if self.source_branch_enabled else zero_scalar
+        )
+        source_target_corr_random_baseline = (
+            self._randomized_signal_correlation_loss(fnirs_source_reconstructed, fnirs_source_target)
+            if self.source_branch_enabled else zero_scalar
+        )
         eeg_source_aux_loss = (
             self.loss_fn(eeg_source_reconstructed, eeg_source_aux_target)
+            if self.source_branch_enabled else zero_scalar
+        )
+        eeg_source_aux_corr_loss = (
+            self._signal_correlation_loss(eeg_source_reconstructed, eeg_source_aux_target)
+            if self.source_branch_enabled else zero_scalar
+        )
+        eeg_source_aux_corr_random_baseline = (
+            self._randomized_signal_correlation_loss(eeg_source_reconstructed, eeg_source_aux_target)
             if self.source_branch_enabled else zero_scalar
         )
         eeg_observation_loss = (
@@ -1346,6 +1401,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             vq_loss +
             (self.source_target_weight * self.source_target_scale) * source_target_loss +
             (self.source_target_weight * self.eeg_source_aux_weight * self.source_target_scale) * eeg_source_aux_loss +
+            (self.source_target_correlation_weight * self.source_target_scale) * source_target_corr_loss +
+            (self.eeg_source_aux_correlation_weight * self.source_target_scale) * eeg_source_aux_corr_loss +
             (self.observation_target_weight * self.observation_target_scale) * observation_loss +
             self.coupling_weight * source_coupling_loss +
             self.codebook_balance_weight * codebook_balance_loss +
@@ -1369,7 +1426,11 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'vq_observation_loss': vq_observation_loss,
             'source_target_loss': source_target_loss,
             'source_target_random_baseline': source_target_random_baseline,
+            'source_target_corr_loss': source_target_corr_loss,
+            'source_target_corr_random_baseline': source_target_corr_random_baseline,
             'eeg_source_aux_loss': eeg_source_aux_loss,
+            'eeg_source_aux_corr_loss': eeg_source_aux_corr_loss,
+            'eeg_source_aux_corr_random_baseline': eeg_source_aux_corr_random_baseline,
             'eeg_observation_loss': eeg_observation_loss,
             'fnirs_observation_loss': fnirs_observation_loss,
             'observation_loss': observation_loss,
@@ -1515,6 +1576,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'vq_loss': 1.0,
             'source_target_loss': self.source_target_weight * source_target_scale,
             'eeg_source_aux_loss': self.source_target_weight * self.eeg_source_aux_weight * source_target_scale,
+            'source_target_corr_loss': self.source_target_correlation_weight * source_target_scale,
+            'eeg_source_aux_corr_loss': self.eeg_source_aux_correlation_weight * source_target_scale,
             'observation_loss': self.observation_target_weight * float(self.get_observation_target_scale()),
             'source_coupling_loss': self.coupling_weight,
             'codebook_balance_loss': self.codebook_balance_weight,

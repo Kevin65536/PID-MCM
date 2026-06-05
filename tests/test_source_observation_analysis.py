@@ -75,7 +75,11 @@ class SourceObservationAnalysisTests(unittest.TestCase):
             'mean_scalars': {
                 'source_target_loss': 0.20,
                 'source_target_random_baseline': 0.45,
+                'source_target_corr_loss': 0.70,
+                'source_target_corr_random_baseline': 0.95,
                 'eeg_source_aux_loss': 0.18,
+                'eeg_source_aux_corr_loss': 0.68,
+                'eeg_source_aux_corr_random_baseline': 0.94,
                 'observation_loss': 0.14,
             },
             'branch_reconstruction': {
@@ -100,6 +104,48 @@ class SourceObservationAnalysisTests(unittest.TestCase):
 
         self.assertEqual(gate_2['status'], 'pass')
         self.assertAlmostEqual(float(gate_2['metrics']['source_target_mse']), 0.20, places=6)
+        self.assertAlmostEqual(float(gate_2['metrics']['source_target_corr_loss']), 0.70, places=6)
+        self.assertTrue(gate_2['metrics']['source_target_readiness']['fnirs_corr_ready'])
+
+    def test_build_gate_2_can_use_correlation_when_mse_is_uninformative(self):
+        split_stats = {
+            'eeg_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
+            'fnirs_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
+            'mean_scalars': {
+                'source_target_loss': 0.45,
+                'source_target_random_baseline': 0.45,
+                'source_target_corr_loss': 0.72,
+                'source_target_corr_random_baseline': 0.98,
+                'eeg_source_aux_loss': 0.40,
+                'eeg_source_aux_corr_loss': 0.70,
+                'eeg_source_aux_corr_random_baseline': 0.96,
+                'observation_loss': 0.14,
+            },
+            'branch_reconstruction': {
+                'eeg_source_target_random_baseline': 0.40,
+                'eeg_observation_target_mse': 0.09,
+                'fnirs_observation_target_mse': 0.11,
+                'eeg_observation_contribution_gap': 0.10,
+                'fnirs_observation_contribution_gap': 0.12,
+            },
+            'codebooks': {
+                'eeg_source': {'active_code_ratio': 0.62},
+                'fnirs_source': {'active_code_ratio': 0.58},
+            },
+        }
+        coupling = {
+            'available': True,
+            'lag': 0,
+            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
+        }
+
+        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling)
+
+        self.assertEqual(gate_2['status'], 'pass')
+        readiness = gate_2['metrics']['source_target_readiness']
+        self.assertFalse(readiness['fnirs_mse_ready'])
+        self.assertTrue(readiness['fnirs_corr_ready'])
+        self.assertTrue(readiness['fnirs_ready'])
 
     def test_build_gate_2_ignores_disabled_fnirs_observation_branch(self):
         split_stats = {
@@ -196,6 +242,19 @@ class SourceObservationAnalysisTests(unittest.TestCase):
 
         self.assertEqual(gate_2['status'], 'pending')
         self.assertTrue(any('Observation target metrics' in note for note in gate_2['notes']))
+
+    def test_source_target_labels_match_current_source_observation_semantics(self):
+        labels = {
+            'eeg': soa._resolve_source_target_label('eeg'),
+            'fnirs': soa._resolve_source_target_label('fnirs'),
+        }
+
+        self.assertEqual(labels['eeg'], 'EEG source target')
+        self.assertEqual(labels['fnirs'], 'highWL fNIRS source target')
+        for label in labels.values():
+            self.assertNotIn('HRF', label)
+            self.assertNotIn('Power envelope', label)
+            self.assertNotIn('cached', label.lower())
 
     def test_resolve_token_pattern_visualization_config_defaults_to_enabled(self):
         resolved = soa._resolve_token_pattern_visualization_config({'analysis': {}})

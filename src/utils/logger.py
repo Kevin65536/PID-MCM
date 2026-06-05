@@ -26,6 +26,35 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
+def _json_safe_metric_value(value: Any) -> Any:
+    """Convert common scalar-like metric values into JSON-safe values."""
+    if isinstance(value, (str, bool, int, float)) or value is None:
+        return value
+    if isinstance(value, np.generic):
+        return value.item()
+    if hasattr(value, 'detach'):
+        value = value.detach()
+    if hasattr(value, 'cpu'):
+        value = value.cpu()
+    if hasattr(value, 'item'):
+        try:
+            return value.item()
+        except (TypeError, ValueError):
+            return str(value)
+    return value
+
+
+def _sanitize_metrics(metrics: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return {str(key): _json_safe_metric_value(value) for key, value in (metrics or {}).items()}
+
+
+def _format_metric_for_log(key: str, value: Any) -> str:
+    del key
+    if isinstance(value, (int, float, np.number)) and not isinstance(value, bool):
+        return f"{float(value):.4f}"
+    return str(value)
+
+
 class ExperimentLogger:
     """Logger for tracking experiment configurations, metrics, and results."""
     
@@ -149,18 +178,24 @@ class ExperimentLogger:
             loss_breakdown: Dict of individual loss components
             metrics: Dict of evaluation metrics (correlations, HSIC, etc.)
         """
+        safe_loss_breakdown = _sanitize_metrics(loss_breakdown)
+        safe_metrics = _sanitize_metrics(metrics)
         epoch_data = {
             "epoch": epoch,
             "train_loss": float(train_loss),
             "val_loss": float(val_loss) if val_loss is not None else None,
-            "loss_breakdown": loss_breakdown or {},
-            "metrics": metrics or {}
+            "loss_breakdown": safe_loss_breakdown,
+            "metrics": safe_metrics,
+            "scalars": dict(safe_metrics),
         }
+        for key, value in safe_metrics.items():
+            if key not in epoch_data:
+                epoch_data[key] = value
         self.metrics["epochs"].append(epoch_data)
         self._save_metrics()
         
         # Print progress
-        metrics_str = ", ".join(f"{k}: {v:.4f}" for k, v in (metrics or {}).items())
+        metrics_str = ", ".join(f"{k}: {_format_metric_for_log(k, v)}" for k, v in safe_metrics.items())
         if val_loss is not None:
             print(f"[Epoch {epoch}] train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f} | {metrics_str}")
         else:

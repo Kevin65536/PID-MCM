@@ -1,7 +1,9 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from src.utils.logger import ExperimentLogger
@@ -47,6 +49,48 @@ class ExperimentLoggerTests(unittest.TestCase):
             )
             self.assertEqual(logger.run_dir, expected)
             self.assertTrue((expected / 'config.yaml').exists())
+
+    def test_log_epoch_expands_metric_scalars_for_direct_analysis(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            experiments_dir = Path(tmpdir) / 'experiments'
+            config_dir = experiments_dir / 'configs'
+            config_dir.mkdir(parents=True)
+            config_path = config_dir / 'test.yaml'
+            config_path.write_text(
+                yaml.safe_dump(
+                    {
+                        'experiment': {'name': 'test_exp'},
+                        'data': {
+                            'dataset': 'croce_local_cache',
+                            'modality': 'both',
+                        },
+                    },
+                    sort_keys=False,
+                ),
+                encoding='utf-8',
+            )
+
+            logger = ExperimentLogger(
+                config_path='test.yaml',
+                experiments_dir=str(experiments_dir),
+                run_name='run_metrics',
+            )
+            logger.log_epoch(
+                epoch=1,
+                train_loss=1.25,
+                val_loss=0.75,
+                metrics={
+                    'val_fnirs_source_perplexity': np.float32(5.5),
+                    'validation_ran': 1.0,
+                },
+            )
+
+            metrics_payload = json.loads((logger.run_dir / 'metrics.json').read_text(encoding='utf-8'))
+            epoch_payload = metrics_payload['epochs'][0]
+            self.assertEqual(epoch_payload['metrics']['val_fnirs_source_perplexity'], 5.5)
+            self.assertEqual(epoch_payload['scalars']['validation_ran'], 1.0)
+            self.assertEqual(epoch_payload['val_fnirs_source_perplexity'], 5.5)
+            self.assertEqual(epoch_payload['validation_ran'], 1.0)
 
     def test_run_group_rejects_parent_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:

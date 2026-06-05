@@ -37,6 +37,9 @@ def _resolve_dataloader_kwargs(data_cfg: Dict[str, Any], *, is_train: bool) -> D
     if num_workers > 0 and prefetch_factor is not None:
         kwargs['prefetch_factor'] = int(prefetch_factor)
 
+    if num_workers > 0 and 'in_order' in dataloader_cfg:
+        kwargs['in_order'] = bool(dataloader_cfg['in_order'])
+
     return kwargs
 
 

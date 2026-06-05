@@ -10,7 +10,11 @@ import yaml
 project_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(project_root))
 
-from experiments.scripts.train_source_observation_tokenizer import create_multimodal_dataloaders, setup_device
+from experiments.scripts.train_source_observation_tokenizer import (
+    create_multimodal_dataloaders,
+    setup_device,
+    shutdown_dataloader_workers,
+)
 from src.tokenizers import create_tokenizer
 from src.utils import load_checkpoint_file
 from src.visualization import generate_tokenizer_analysis_suite
@@ -47,6 +51,8 @@ def main():
     config = yaml.safe_load(config_path.read_text())
     if args.device is not None:
         config.setdefault('experiment', {})['device'] = args.device
+    dataloader_cfg = config.setdefault('data', {}).setdefault('dataloader', {})
+    dataloader_cfg['persistent_workers'] = False
     device = setup_device(config)
 
     model = create_tokenizer(config).to(device)
@@ -57,21 +63,24 @@ def main():
     dataloaders = create_multimodal_dataloaders(config)
     output_dir = Path(args.output_dir) if args.output_dir else run_dir / 'analysis'
 
-    suite_results = generate_tokenizer_analysis_suite(
-        model=model,
-        dataloaders=dataloaders,
-        config=config,
-        run_dir=run_dir,
-        output_dir=output_dir,
-        device=device,
-        splits=args.splits,
-        analysis_type=args.analysis_type,
-        max_batches=args.max_batches,
-        max_feature_samples=args.max_feature_samples,
-        max_probe_samples=args.max_probe_samples,
-        augmentation_probe_batches=args.augmentation_probe_batches,
-        probe_seed=args.probe_seed,
-    )
+    try:
+        suite_results = generate_tokenizer_analysis_suite(
+            model=model,
+            dataloaders=dataloaders,
+            config=config,
+            run_dir=run_dir,
+            output_dir=output_dir,
+            device=device,
+            splits=args.splits,
+            analysis_type=args.analysis_type,
+            max_batches=args.max_batches,
+            max_feature_samples=args.max_feature_samples,
+            max_probe_samples=args.max_probe_samples,
+            augmentation_probe_batches=args.augmentation_probe_batches,
+            probe_seed=args.probe_seed,
+        )
+    finally:
+        shutdown_dataloader_workers(dataloaders)
     scorecard_results = suite_results['scorecard']
 
     print(

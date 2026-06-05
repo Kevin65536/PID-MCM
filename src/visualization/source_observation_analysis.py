@@ -637,6 +637,10 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
     source_target_random_baseline = gate2.get('metrics', {}).get('source_target_random_baseline')
     eeg_source_target_mse = gate2.get('metrics', {}).get('eeg_source_target_mse')
     eeg_source_target_random_baseline = gate2.get('metrics', {}).get('eeg_source_target_random_baseline')
+    source_target_corr_loss = gate2.get('metrics', {}).get('source_target_corr_loss')
+    source_target_corr_random_baseline = gate2.get('metrics', {}).get('source_target_corr_random_baseline')
+    eeg_source_target_corr_loss = gate2.get('metrics', {}).get('eeg_source_target_corr_loss')
+    eeg_source_target_corr_random_baseline = gate2.get('metrics', {}).get('eeg_source_target_corr_random_baseline')
     observation_loss = gate2.get('metrics', {}).get('observation_loss')
 
     labels: List[str] = []
@@ -650,6 +654,14 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
         labels.append('EEG src gain')
         values.append(float(eeg_source_target_random_baseline) - float(eeg_source_target_mse))
         colors.append('#27AE60')
+    if source_target_corr_loss is not None and source_target_corr_random_baseline is not None:
+        labels.append('fNIRS corr gain')
+        values.append(float(source_target_corr_random_baseline) - float(source_target_corr_loss))
+        colors.append('#1ABC9C')
+    if eeg_source_target_corr_loss is not None and eeg_source_target_corr_random_baseline is not None:
+        labels.append('EEG corr gain')
+        values.append(float(eeg_source_target_corr_random_baseline) - float(eeg_source_target_corr_loss))
+        colors.append('#16A085')
     if 'eeg' in observation_gap:
         labels.append('EEG obs gap')
         values.append(float(observation_gap.get('eeg', 0.0)))
@@ -972,7 +984,7 @@ def _prepare_time_domain_view(
 
 
 def _resolve_source_target_label(modality: str) -> str:
-    return 'HRF target' if modality == 'fnirs' else 'Power envelope target'
+    return 'highWL fNIRS source target' if modality == 'fnirs' else 'EEG source target'
 
 
 def _plot_reconstruction_domain_grid(
@@ -994,8 +1006,8 @@ def _plot_reconstruction_domain_grid(
 
     comparison_order = [
         ('full', 'Full vs original'),
-        ('source_target', f'{_resolve_source_target_label(modality)} vs original'),
-        ('source_only', f'Source branch vs {_resolve_source_target_label(modality)}'),
+        ('source_target', 'Source target vs original'),
+        ('source_only', 'Source branch vs source target'),
         ('observation_only', 'Observation branch vs residual'),
     ]
     available_comparisons = [
@@ -1972,6 +1984,10 @@ def _build_gate_2(
     )
     eeg_source_target_mse = mean_scalars.get('eeg_source_aux_loss', branch_metrics.get('eeg_source_target_mse'))
     eeg_source_target_random_baseline = branch_metrics.get('eeg_source_target_random_baseline')
+    source_target_corr_loss = mean_scalars.get('source_target_corr_loss')
+    source_target_corr_random_baseline = mean_scalars.get('source_target_corr_random_baseline')
+    eeg_source_target_corr_loss = mean_scalars.get('eeg_source_aux_corr_loss')
+    eeg_source_target_corr_random_baseline = mean_scalars.get('eeg_source_aux_corr_random_baseline')
     observation_loss = mean_scalars.get('observation_loss')
     active_observation_modalities = list((branch_policy or {}).get('active_observation_modalities', ['eeg', 'fnirs']))
     ignored_observation_modalities = list((branch_policy or {}).get('ignored_observation_modalities', []))
@@ -1999,7 +2015,19 @@ def _build_gate_2(
         and eeg_source_target_random_baseline is not None
         and float(eeg_source_target_mse) < float(eeg_source_target_random_baseline)
     )
-    source_target_ready = fnirs_source_target_ready and eeg_source_target_ready
+    fnirs_source_target_corr_ready = (
+        source_target_corr_loss is not None
+        and source_target_corr_random_baseline is not None
+        and float(source_target_corr_loss) < float(source_target_corr_random_baseline)
+    )
+    eeg_source_target_corr_ready = (
+        eeg_source_target_corr_loss is not None
+        and eeg_source_target_corr_random_baseline is not None
+        and float(eeg_source_target_corr_loss) < float(eeg_source_target_corr_random_baseline)
+    )
+    fnirs_source_decoding_ready = fnirs_source_target_ready or fnirs_source_target_corr_ready
+    eeg_source_decoding_ready = eeg_source_target_ready or eeg_source_target_corr_ready
+    source_target_ready = fnirs_source_decoding_ready and eeg_source_decoding_ready
     observation_target_mse = {
         'eeg': branch_metrics.get('eeg_observation_target_mse'),
         'fnirs': branch_metrics.get('fnirs_observation_target_mse'),
@@ -2018,6 +2046,14 @@ def _build_gate_2(
         notes.append('EEG source target metrics are not available in this run.')
     elif eeg_source_target_random_baseline is None:
         notes.append('EEG source target random baseline is missing, so Gate 2 cannot fully pass.')
+    if source_target_corr_loss is None:
+        notes.append('fNIRS source target correlation metrics are not available in this run.')
+    elif source_target_corr_random_baseline is None:
+        notes.append('fNIRS source target correlation random baseline is missing.')
+    if eeg_source_target_corr_loss is None:
+        notes.append('EEG source target correlation metrics are not available in this run.')
+    elif eeg_source_target_corr_random_baseline is None:
+        notes.append('EEG source target correlation random baseline is missing.')
     if observation_loss is None:
         notes.append('Observation target metrics are not available in this run.')
     missing_observation_target_modalities = [
@@ -2051,6 +2087,18 @@ def _build_gate_2(
             'source_target_random_baseline': source_target_random_baseline,
             'eeg_source_target_mse': eeg_source_target_mse,
             'eeg_source_target_random_baseline': eeg_source_target_random_baseline,
+            'source_target_corr_loss': source_target_corr_loss,
+            'source_target_corr_random_baseline': source_target_corr_random_baseline,
+            'eeg_source_target_corr_loss': eeg_source_target_corr_loss,
+            'eeg_source_target_corr_random_baseline': eeg_source_target_corr_random_baseline,
+            'source_target_readiness': {
+                'fnirs_mse_ready': fnirs_source_target_ready,
+                'eeg_mse_ready': eeg_source_target_ready,
+                'fnirs_corr_ready': fnirs_source_target_corr_ready,
+                'eeg_corr_ready': eeg_source_target_corr_ready,
+                'fnirs_ready': fnirs_source_decoding_ready,
+                'eeg_ready': eeg_source_decoding_ready,
+            },
             'observation_loss': observation_loss,
             'observation_target_mse': observation_target_mse,
             'observation_contribution_gap': {

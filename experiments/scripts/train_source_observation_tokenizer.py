@@ -64,6 +64,88 @@ def setup_torch_performance(config: dict, device: torch.device) -> None:
         except AttributeError:
             pass
 
+    if bool(perf_cfg.get('cudnn_benchmark', True)):
+        torch.backends.cudnn.benchmark = True
+
+
+def shutdown_dataloader_workers(dataloaders: Any) -> None:
+    """Best-effort cleanup for DataLoaders that used persistent workers."""
+    if dataloaders is None:
+        return
+    if isinstance(dataloaders, dict):
+        for dataloader in dataloaders.values():
+            shutdown_dataloader_workers(dataloader)
+        return
+    iterator = getattr(dataloaders, '_iterator', None)
+    if iterator is not None and hasattr(iterator, '_shutdown_workers'):
+        try:
+            iterator._shutdown_workers()
+        except Exception as exc:  # pragma: no cover - cleanup should not mask analysis results.
+            print(f"[Warning] Failed to shutdown DataLoader workers cleanly: {exc}")
+        finally:
+            try:
+                dataloaders._iterator = None
+            except Exception:
+                pass
+
+
+def maybe_compile_model_forward(model, config: dict, device: torch.device):
+    perf_cfg = config.get('training', {}).get('performance', {})
+    compile_cfg = perf_cfg.get('compile', perf_cfg.get('torch_compile', {}))
+    if isinstance(compile_cfg, bool):
+        compile_cfg = {'enabled': compile_cfg}
+    if not isinstance(compile_cfg, dict) or not bool(compile_cfg.get('enabled', False)):
+        return model
+
+    if not hasattr(torch, 'compile'):
+        message = 'torch.compile requested, but this PyTorch build does not expose torch.compile'
+        if bool(compile_cfg.get('required', False)):
+            raise RuntimeError(message)
+        print(f'[Warning] {message}; continuing without compile.')
+        return model
+
+    if device.type != 'cuda' and not bool(compile_cfg.get('allow_cpu', False)):
+        print('[Warning] torch.compile requested on a non-CUDA device; continuing without compile.')
+        return model
+
+    scope = str(compile_cfg.get('scope', 'forward'))
+    compile_kwargs: Dict[str, Any] = {
+        'mode': str(compile_cfg.get('mode', 'reduce-overhead')),
+        'fullgraph': bool(compile_cfg.get('fullgraph', False)),
+        'dynamic': bool(compile_cfg.get('dynamic', False)),
+    }
+    backend = compile_cfg.get('backend')
+    if backend:
+        compile_kwargs['backend'] = str(backend)
+
+    try:
+        import torch._dynamo as torch_dynamo
+
+        torch_dynamo.config.suppress_errors = bool(compile_cfg.get('suppress_errors', True))
+        torch_dynamo.config.capture_scalar_outputs = bool(compile_cfg.get('capture_scalar_outputs', False))
+    except Exception as exc:
+        print(f'[Warning] Unable to configure torch._dynamo options ({exc}).')
+
+    try:
+        if scope in {'encode_modalities', 'encoders'} and hasattr(model, 'encode_modalities'):
+            model.encode_modalities = torch.compile(model.encode_modalities, **compile_kwargs)
+        elif scope == 'forward':
+            model.forward = torch.compile(model.forward, **compile_kwargs)
+        else:
+            raise ValueError("training.performance.compile.scope must be 'forward' or 'encode_modalities'")
+    except Exception as exc:
+        if bool(compile_cfg.get('required', False)):
+            raise
+        print(f'[Warning] torch.compile failed during setup ({exc}); continuing without compile.')
+        return model
+
+    print(
+        f'torch.compile enabled for model.{scope} '
+        f"(mode={compile_kwargs['mode']}, fullgraph={compile_kwargs['fullgraph']}, "
+        f"dynamic={compile_kwargs['dynamic']})"
+    )
+    return model
+
 
 def create_multimodal_dataloaders(config: dict):
     return create_configured_multimodal_dataloaders(config)
@@ -83,6 +165,54 @@ def move_source_observation_targets_to_device(
         else:
             moved[key] = torch.as_tensor(value, device=device)
     return moved
+
+
+def move_batch_to_device(
+    batch: Dict[str, Any],
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
+    eeg = batch['eeg'].to(device, non_blocking=True)
+    fnirs = batch['fnirs'].to(device, non_blocking=True)
+    targets = move_source_observation_targets_to_device(batch, device)
+    return eeg, fnirs, targets
+
+
+def iter_device_batches(
+    dataloader,
+    device: torch.device,
+    *,
+    prefetch: bool,
+):
+    if device.type != 'cuda' or not prefetch:
+        for batch in dataloader:
+            yield move_batch_to_device(batch, device)
+        return
+
+    stream = torch.cuda.Stream(device=device)
+    iterator = iter(dataloader)
+    next_batch = None
+
+    def preload_next() -> bool:
+        nonlocal next_batch
+        try:
+            cpu_batch = next(iterator)
+        except StopIteration:
+            next_batch = None
+            return False
+        with torch.cuda.stream(stream):
+            next_batch = move_batch_to_device(cpu_batch, device)
+        return True
+
+    if not preload_next():
+        return
+
+    while next_batch is not None:
+        torch.cuda.current_stream(device).wait_stream(stream)
+        batch = next_batch
+        has_next = preload_next()
+        yield batch
+        if not has_next:
+            break
 
 
 def inject_channel_names_into_config(config: Dict[str, Any], dataloaders: Dict[str, Any]) -> None:
@@ -484,12 +614,14 @@ def train_epoch(
     grad_cfg = gradient_attribution_cfg or {'enabled': False, 'max_batches': 1}
     gradient_dashboard: Optional[Dict[str, Any]] = None
     gradient_dashboard_batches = 0
+    prefetch_batches = bool(
+        config.get('training', {}).get('performance', {}).get('cuda_prefetch', False)
+    )
 
-    for batch_index, batch in enumerate(dataloader, start=1):
-        eeg = batch['eeg'].to(device, non_blocking=True)
-        fnirs = batch['fnirs'].to(device, non_blocking=True)
-        targets = move_source_observation_targets_to_device(batch, device)
-
+    for batch_index, (eeg, fnirs, targets) in enumerate(
+        iter_device_batches(dataloader, device, prefetch=prefetch_batches),
+        start=1,
+    ):
         optimizer.zero_grad()
         outputs = model(eeg, fnirs, targets=targets)
         aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
@@ -561,11 +693,14 @@ def validate_epoch(
     model.eval()
     totals: Dict[str, Any] = {}
     total_batches = 0
+    prefetch_batches = bool(
+        config.get('training', {}).get('performance', {}).get('cuda_prefetch', False)
+    )
 
-    for batch_index, batch in enumerate(dataloader, start=1):
-        eeg = batch['eeg'].to(device, non_blocking=True)
-        fnirs = batch['fnirs'].to(device, non_blocking=True)
-        targets = move_source_observation_targets_to_device(batch, device)
+    for batch_index, (eeg, fnirs, targets) in enumerate(
+        iter_device_batches(dataloader, device, prefetch=prefetch_batches),
+        start=1,
+    ):
         outputs = model(eeg, fnirs, targets=targets)
         aux_loss, aux_metrics, _ = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
         total_batches += 1
@@ -944,15 +1079,19 @@ def finalize_training_run(
         return final_metrics
 
     print(f"Running tokenizer analysis suite -> {summary_root}")
-    suite_results = generate_tokenizer_analysis_suite(
-        model=model,
-        dataloaders={'val': val_loader, 'test': test_loader},
-        config=config,
-        run_dir=logger.run_dir,
-        output_dir=summary_root,
-        device=analysis_device,
-        analysis_type=analysis_type,
-    )
+    analysis_dataloaders = {'val': val_loader, 'test': test_loader}
+    try:
+        suite_results = generate_tokenizer_analysis_suite(
+            model=model,
+            dataloaders=analysis_dataloaders,
+            config=config,
+            run_dir=logger.run_dir,
+            output_dir=summary_root,
+            device=analysis_device,
+            analysis_type=analysis_type,
+        )
+    finally:
+        shutdown_dataloader_workers(analysis_dataloaders)
     scorecard_results = suite_results['scorecard']
     write_final_summary(logger, scorecard_results['final_summary'])
 
@@ -1054,6 +1193,7 @@ def main():
         print(f"Model: {model.__class__.__name__}")
         print(f"Source codebook size: {model.get_codebook_size()}")
         maybe_apply_warm_start(model, config, device)
+        model = maybe_compile_model_forward(model, config, device)
         analysis_type = getattr(model, 'get_analysis_type', lambda: 'source_observation_alignment')()
         write_run_manifest(
             logger=logger,

@@ -342,13 +342,15 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
     fnirs_p_raw = np.asarray(bundle.fnirs_primary_obs_raw, dtype=np.float64)
     fnirs_s_raw = np.asarray(bundle.fnirs_secondary_obs_raw, dtype=np.float64)
 
-    eeg_substeps = eeg_raw.shape[0] // estimates.shape[0]
-
-    r_eeg_fnirs = estimates[:, 4]
-    if eeg_substeps > 1:
-        r_eeg_eeg = np.repeat(r_eeg_fnirs, eeg_substeps)[: eeg_raw.shape[0]]
-    else:
+    # EEG source must stay at EEG sampling resolution. Repeating the
+    # fNIRS-rate latent state creates visible 10 Hz stair-steps in the cached
+    # 200 Hz EEG target.
+    if r_estimates_eeg.shape[0] == eeg_raw.shape[0]:
         r_eeg_eeg = r_estimates_eeg
+    else:
+        source_time = np.linspace(0.0, 1.0, num=r_estimates_eeg.shape[0], endpoint=False)
+        target_time = np.linspace(0.0, 1.0, num=eeg_raw.shape[0], endpoint=False)
+        r_eeg_eeg = np.interp(target_time, source_time, r_estimates_eeg)
     pred_eeg_norm = r_eeg_eeg.reshape(-1, 1) * lead_eeg.reshape(1, -1)
 
     _jac_p0 = jac_p.reshape(1, -1)[:, 0:1]

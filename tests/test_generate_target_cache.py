@@ -82,6 +82,41 @@ class GenerateTargetCacheTests(unittest.TestCase):
             np.asarray([15.0, 15.0, 15.0], dtype=np.float32),
         )
 
+    def test_build_cache_entry_uses_eeg_rate_latent_for_eeg_source(self):
+        eeg_rate_latent = np.linspace(-1.0, 1.0, num=40, dtype=np.float64)
+        bundle = SimpleNamespace(
+            normalization={
+                "eeg": {"mean": [0.0], "std": [1.0]},
+                "fnirs_primary": {"mean": [0.0], "std": [1.0]},
+                "fnirs_secondary": {"mean": [0.0], "std": [1.0]},
+            },
+            lead_field=np.asarray([2.0], dtype=np.float64),
+            jac_primary=np.asarray([1.0], dtype=np.float64),
+            jac_secondary=np.asarray([1.0], dtype=np.float64),
+            pair_mode="wavelength",
+            eeg_obs_raw=np.zeros((40, 1), dtype=np.float64),
+            fnirs_primary_obs_raw=np.zeros((2, 1), dtype=np.float64),
+            fnirs_secondary_obs_raw=np.zeros((2, 1), dtype=np.float64),
+            fnirs_primary_channel_names=("Fp1_highWL",),
+            fnirs_secondary_channel_names=("Fp1_lowWL",),
+            eeg_channel_names=("AF7",),
+        )
+        pf_result = {
+            "r_estimates_eeg": eeg_rate_latent,
+            "state_estimates": np.asarray(
+                [
+                    [0.0, 0.0, 0.0, 0.0, 100.0],
+                    [0.0, 0.0, 0.0, 0.0, -100.0],
+                ],
+                dtype=np.float64,
+            ),
+        }
+
+        entry = GEN._build_cache_entry(bundle, pf_result, _AuditStub())
+
+        np.testing.assert_allclose(entry["source_eeg"].ravel(), (2.0 * eeg_rate_latent).astype(np.float32))
+        self.assertLess(np.mean(np.diff(entry["source_eeg"].ravel()) == 0.0), 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()
