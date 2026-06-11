@@ -258,6 +258,59 @@ class GradientDiagnosticsTests(unittest.TestCase):
             places=6,
         )
 
+        comparison_model.set_alignment_scale(0.5)
+        with torch.no_grad():
+            half_scale_outputs = comparison_model(eeg, fnirs)
+        self.assertTrue(
+            torch.allclose(
+                half_scale_outputs['loss'] - base_outputs['loss'],
+                0.35 * half_scale_outputs['source_coupling_loss'],
+                atol=1e-6,
+            )
+        )
+        self.assertAlmostEqual(
+            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
+            0.35,
+            places=6,
+        )
+
+        comparison_model.set_alignment_scale(0.0)
+        with torch.no_grad():
+            zero_scale_outputs = comparison_model(eeg, fnirs)
+        self.assertTrue(torch.allclose(base_outputs['loss'], zero_scale_outputs['loss'], atol=1e-6))
+        self.assertAlmostEqual(
+            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
+            0.0,
+            places=6,
+        )
+
+    def test_coupling_association_loss_updates_coupling_logits(self):
+        torch.manual_seed(31)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        model = self._build_tiny_model(
+            coupling_weight=0.4,
+            coupling_association_weight=1.0,
+            coupling_lag_focus_weight=0.0,
+            coupling_smoothness_weight=0.0,
+            alignment_lag_candidates=[0, 1],
+        )
+        model.train()
+
+        outputs = model(eeg, fnirs)
+        self.assertGreater(float(outputs['source_coupling_association_loss'].detach().item()), 0.0)
+        self.assertTrue(
+            torch.allclose(
+                outputs['source_coupling_loss'],
+                outputs['source_coupling_association_loss'],
+                atol=1e-6,
+            )
+        )
+
+        outputs['loss'].backward()
+        self.assertIsNotNone(model.coupling_logits.grad)
+        self.assertGreater(float(model.coupling_logits.grad.abs().sum().item()), 0.0)
+
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)
         model = self._build_tiny_model(
