@@ -1,0 +1,66 @@
+# Phase 1A: fNIRS Token Classification
+# Motor Imagery (Left vs Right hand) using pre-trained FSQ tokenizer
+
+experiment:
+  name: "P1A_fnirs_classification"
+  description: "Classify MI task using fNIRS token representations"
+  seed: 42
+  device: "cuda"
+
+# Data configuration
+data:
+  root: "data/EEG+NIRS Single-Trial"
+  modality: "fnirs"
+  task: "motor_imagery"
+  train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  val_subjects: [21, 22, 23, 24, 25]
+  test_subjects: [26, 27, 28, 29]
+  preprocessing:
+    resample_rate: 10
+    lowpass: 0.2
+  window:
+    length: 25           # Match tokenizer: 25 samples = 2.5s @ 10Hz
+  normalize: true
+  normalization:
+    enabled: true
+    mode: "session"
+  num_workers: 0
+
+# Pre-trained tokenizer
+tokenizer:
+  type: "fsq"
+  checkpoint: "experiments/runs/comparison_20260114_183311/FSQ_fNIRS/checkpoint.pt"
+  model:
+    seq_length: 25       # Match original: 25 samples = 2.5s @ 10Hz
+    input_channels: 1
+    levels: [8, 8, 8]     # 512 codes
+    encoder_dims: [32, 64]
+    encoder_kernel: 5
+    encoder_stride: 2
+
+# Classifier configuration
+classifier:
+  type: "end_to_end"
+  num_classes: 2
+  pool_type: "mean"
+  hidden_dims: [64]       # Smaller for fNIRS
+  dropout: 0.1
+  freeze_tokenizer: true
+  use_pre_quantized: false
+
+# Training configuration
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  gradient_clip: 1.0
+  early_stopping:
+    enabled: true
+    patience: 20
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  save_checkpoint_every: 10

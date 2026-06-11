@@ -53,21 +53,33 @@ bash experiments/scripts/launch_training_nohup.sh \
   --config phase0plus/eeg_labram_vqnsp.yaml
 ```
 
-### downstream
+### source-observation-token-export
 
-Script: `experiments/scripts/train_downstream.py`
+Script: `experiments/scripts/export_source_observation_tokens.py`
+
+This is the current first-stage downstream entry point for the Croce source/observation tokenizer line. It freezes a completed tokenizer checkpoint and exports 2s token sequences under `experiments/runs/downstream/source_observation_tokens/`.
 
 Supported task-specific arguments:
 
 - `--config PATH`
+- `--tokenizer-run-dir PATH`
+- `--checkpoint PATH`
+- `--run-name NAME`
+- `--splits train,val,test`
+- `--max-batches N`
+- `--max-samples N`
 
 Example:
 
 ```bash
 bash experiments/scripts/launch_training_nohup.sh \
-  --task downstream \
-  --config phase1a/P1A_eeg_classification.yaml
+  --task source-observation-token-export \
+  --foreground \
+  --config downstream/source_observation_token_export_coupling0.yaml \
+  --max-batches 1
 ```
+
+The previous raw-signal downstream classifier script is archived at `experiments/scripts/archive/downstream_legacy_20260611/train_downstream_legacy_raw_signal.py`; its old phase1a configs are archived under `experiments/configs/archive/phase1a_legacy_downstream_20260611/`.
 
 ### foundation-interface
 

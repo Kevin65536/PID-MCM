@@ -13,8 +13,8 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.tokenizers import VQVAETokenizer, FSQTokenizer
-from src.classifiers import EndToEndClassifier, SimpleTokenClassifier
-from src.classifiers.simple_classifier import RawSignalClassifier
+from src.classifiers_legacy import EndToEndClassifier, SimpleTokenClassifier
+from src.classifiers_legacy.simple_classifier import RawSignalClassifier
 
 def test_tokenizer_loading():
     """Test loading pre-trained tokenizers."""

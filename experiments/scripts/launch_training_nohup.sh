@@ -19,9 +19,9 @@ Supported tasks:
     Script: experiments/scripts/train_tokenizer.py
     Args: --config PATH [--resume PATH]
 
-  downstream
-    Script: experiments/scripts/train_downstream.py
-    Args: --config PATH
+  source-observation-token-export
+    Script: experiments/scripts/export_source_observation_tokens.py
+    Args: [--config PATH] [--tokenizer-run-dir PATH] [--checkpoint PATH] [--run-name NAME]
 
   foundation-interface
     Script: experiments/scripts/train_foundation_interface.py
@@ -30,7 +30,7 @@ Supported tasks:
 Examples:
   bash experiments/scripts/launch_training_nohup.sh --task source-observation-tokenizer --config debug/simultaneous_nback_short_train.yaml --run-name smoke_run
   bash experiments/scripts/launch_training_nohup.sh --task tokenizer --config phase0plus/eeg_labram_vqnsp.yaml
-  bash experiments/scripts/launch_training_nohup.sh --task downstream --config downstream/P1A_eeg_classification.yaml
+  bash experiments/scripts/launch_training_nohup.sh --task source-observation-token-export --foreground --max-batches 1
 
 Notes:
   - This is the only repository-supported training launcher.
@@ -47,8 +47,8 @@ resolve_script() {
         tokenizer)
             echo "experiments/scripts/train_tokenizer.py"
             ;;
-        downstream)
-            echo "experiments/scripts/train_downstream.py"
+        source-observation-token-export)
+            echo "experiments/scripts/export_source_observation_tokens.py"
             ;;
         foundation-interface)
             echo "experiments/scripts/train_foundation_interface.py"

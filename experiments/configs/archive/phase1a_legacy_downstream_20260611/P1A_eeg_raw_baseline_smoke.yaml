@@ -1,0 +1,18 @@
+_base_: phase1a/P1A_eeg_raw_baseline.yaml
+
+experiment:
+  name: "P1A_eeg_raw_baseline_smoke"
+  description: "Smoke test for downstream raw EEG training pipeline"
+
+training:
+  epochs: 2
+  warmup_epochs: 1
+  batch_size: 32
+  early_stopping:
+    enabled: true
+    patience: 2
+
+logging:
+  export_probe_data: false
+  log_every_n_steps: 20
+  save_checkpoint_every: 1000

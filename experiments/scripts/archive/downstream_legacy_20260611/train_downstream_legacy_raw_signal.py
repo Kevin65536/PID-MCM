@@ -73,7 +73,7 @@ from src.data.factory import create_multimodal_window_dataset, create_unimodal_w
 from src.data.augmentation import SignalAugmentor, create_augmentor_from_config
 from src.losses import LabelSmoothingCrossEntropy
 from src.tokenizers import create_tokenizer
-from src.classifiers.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
+from src.classifiers_legacy.multi_lead import MultiLeadClassifier, DualModalityMultiLeadClassifier
 from src.utils import (
     load_checkpoint_file,
     load_training_checkpoint,
@@ -554,7 +554,7 @@ def create_model(config: dict, device: torch.device) -> nn.Module:
     
     if use_raw:
         # Import raw classifiers
-        from src.classifiers.multi_lead import RawMultiLeadClassifier, RawDualModalityClassifier
+        from src.classifiers_legacy.multi_lead import RawMultiLeadClassifier, RawDualModalityClassifier
         
         if modality == 'both':
             model = RawDualModalityClassifier(

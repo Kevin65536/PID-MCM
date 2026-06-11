@@ -1,0 +1,21 @@
+experiment:
+  name: "source_observation_token_export_coupling0"
+  description: "Export 2s source/observation token sequences from the completed Croce highWL v2 coupling0 tokenizer run."
+
+device: "cpu"
+
+tokenizer:
+  run_dir: "experiments/runs/source_observation/croce_local/highwl_v2/s2_croce_local_highwl_v2_branch_norm_coupling0_lr2e4_compile_20260610_161921"
+  checkpoint: "best_model.pt"
+
+data:
+  splits: "train,val,test"
+  batch_size: 64
+  num_workers: 0
+  seed: 42
+  train_random_crop: false
+
+output:
+  root: "experiments/runs/downstream/source_observation_tokens"
+  compress: true
+  include_latents: false

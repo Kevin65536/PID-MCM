@@ -1,0 +1,67 @@
+# Phase 1A: EEG Token Classification
+# Motor Imagery (Left vs Right hand) using pre-trained VQ-VAE tokenizer
+
+experiment:
+  name: "P1A_eeg_classification"
+  description: "Classify MI task using EEG token representations"
+  seed: 42
+  device: "cuda"
+
+# Data configuration
+data:
+  root: "data/EEG+NIRS Single-Trial"
+  modality: "eeg"
+  task: "motor_imagery"
+  train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+  val_subjects: [21, 22, 23, 24, 25]
+  test_subjects: [26, 27, 28, 29]
+  preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  window:
+    length: 512           # 2.56s @ 200Hz
+  normalize: true
+  normalization:
+    enabled: true
+    mode: "session"
+  num_workers: 0
+
+# Pre-trained tokenizer
+tokenizer:
+  type: "vqvae"
+  checkpoint: "experiments/runs/comparison_20260114_183311/VQVAE_EEG/checkpoint.pt"
+  model:
+    seq_length: 512
+    input_channels: 1
+    codebook_size: 512
+    embedding_dim: 64
+    encoder_dims: [32, 64, 128]  # Match original training config
+    encoder_kernel: 7
+    encoder_stride: 2
+
+# Classifier configuration
+classifier:
+  type: "end_to_end"      # end_to_end | raw | simple_token
+  num_classes: 2          # Left MI vs Right MI
+  pool_type: "mean"       # mean | max | attention
+  hidden_dims: [128]      # Hidden layers before output
+  dropout: 0.1
+  freeze_tokenizer: true  # Keep tokenizer frozen
+  use_pre_quantized: false  # Use quantized embeddings (z_q)
+
+# Training configuration
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  gradient_clip: 1.0
+  early_stopping:
+    enabled: true
+    patience: 20
+
+# Logging
+logging:
+  log_every_n_steps: 50
+  save_checkpoint_every: 10
