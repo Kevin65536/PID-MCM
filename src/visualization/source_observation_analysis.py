@@ -356,6 +356,7 @@ def _compute_cross_modal_predictability(
         return {'available': False, 'reason': 'invalid_joint_probabilities'}
 
     lag_accuracies: List[float] = []
+    lag_empirical_baselines: List[float] = []
     usable_counts: List[int] = []
     for lag in range(joint.shape[1]):
         usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - int(lag))
@@ -365,6 +366,8 @@ def _compute_cross_modal_predictability(
         aligned_fnirs = fnirs_tokens[:, int(lag):int(lag) + usable]
         predictions = joint[:, lag, :].argmax(axis=-1)[aligned_eeg]
         lag_accuracies.append(float(np.mean(predictions == aligned_fnirs)))
+        target_counts = np.bincount(aligned_fnirs.reshape(-1), minlength=joint.shape[2])
+        lag_empirical_baselines.append(float(target_counts.max() / max(target_counts.sum(), 1)))
         usable_counts.append(int(aligned_eeg.size))
 
     if not lag_accuracies:
@@ -372,15 +375,52 @@ def _compute_cross_modal_predictability(
 
     counts = np.asarray(usable_counts, dtype=np.float64)
     accuracies = np.asarray(lag_accuracies, dtype=np.float64)
+    empirical_baselines = np.asarray(lag_empirical_baselines, dtype=np.float64)
     accuracy = float(np.average(accuracies, weights=counts))
-    chance = float(1.0 / max(joint.shape[2], 1))
+    empirical_chance = float(np.average(empirical_baselines, weights=counts))
+    uniform_chance = float(1.0 / max(joint.shape[2], 1))
+    best_lag = int(np.argmax(accuracies))
+
+    joint_argmax = joint.reshape(joint.shape[0], -1).argmax(axis=-1)
+    joint_argmax_lags = joint_argmax // joint.shape[2]
+    joint_argmax_tokens = joint_argmax % joint.shape[2]
+    joint_correct = 0
+    joint_total = 0
+    weighted_true_probability = 0.0
+    weighted_total = 0.0
+    for lag in range(joint.shape[1]):
+        usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - int(lag))
+        if usable <= 0:
+            continue
+        aligned_eeg = eeg_tokens[:, :usable]
+        aligned_fnirs = fnirs_tokens[:, int(lag):int(lag) + usable]
+        lag_mask = joint_argmax_lags[aligned_eeg] == lag
+        if np.any(lag_mask):
+            joint_predictions = joint_argmax_tokens[aligned_eeg]
+            joint_correct += int(np.sum((joint_predictions == aligned_fnirs) & lag_mask))
+            joint_total += int(np.sum(lag_mask))
+        weighted_true_probability += float(joint[aligned_eeg, lag, aligned_fnirs].sum())
+        weighted_total += float(joint[aligned_eeg, lag, :].sum(axis=-1).sum())
+
+    joint_argmax_accuracy = None
+    if joint_total > 0:
+        joint_argmax_accuracy = float(joint_correct / joint_total)
+    model_weighted_true_token_probability = float(weighted_true_probability / max(weighted_total, 1e-12))
     return {
         'available': True,
         'num_lags': int(len(lag_accuracies)),
         'accuracy': accuracy,
-        'chance_accuracy': chance,
+        'chance_accuracy': empirical_chance,
+        'uniform_chance_accuracy': uniform_chance,
         'usable_tokens': int(np.sum(counts)),
         'lag_accuracies': lag_accuracies,
+        'lag_empirical_baselines': lag_empirical_baselines,
+        'best_lag': best_lag,
+        'best_lag_accuracy': float(accuracies[best_lag]),
+        'best_lag_empirical_baseline': float(empirical_baselines[best_lag]),
+        'joint_argmax_accuracy': joint_argmax_accuracy,
+        'joint_argmax_usable_tokens': int(joint_total),
+        'model_weighted_true_token_probability': model_weighted_true_token_probability,
     }
 
 
@@ -2193,7 +2233,7 @@ def _build_gate_3(
     notes: List[str] = []
     if not predictability_ok:
         if predictability_payload.get('available', False):
-            notes.append('Cross-modal token predictability does not exceed chance.')
+            notes.append('Cross-modal token predictability does not exceed the empirical token baseline.')
         else:
             notes.append('Cross-modal token predictability is unavailable.')
 

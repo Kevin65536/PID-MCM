@@ -107,16 +107,16 @@ S2 架构中，token 的语义目标分为两类：
 | **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | $< \log(K)/2$（显著非均匀） | 直接从 coupling_logits 计算 |
 | **Concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$，按行平均 | $> 1.5$（行有明确峰值） | 直接从 coupling_logits 计算 |
 | **Row entropy variance** | $\text{Var}(H(T_{i,:}))$ across rows | $> 0$（不同 source state 有不同的确定性） | 直接从 coupling_logits 计算 |
-| **Cross-modal token predictability** | 给定 EEG source token 和 coupling tensor，预测 fNIRS source token 的 top-1 accuracy | $> 1/K_{src}$（random baseline） | source token 序列 + coupling tensor |
+| **Cross-modal token predictability** | 给定 EEG source token 和 coupling tensor，预测 fNIRS source token 的 top-1 accuracy | 高于同一 lag/target 分布的 empirical majority baseline；同时报告 $1/K_{src}$ uniform baseline | source token 序列 + coupling tensor |
 | **Coupling matrix visualization** | 按行熵排序的热力图 | 可见块状或带状结构 | 单次 matplotlib 可视化 |
 
-**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）；cross-modal token predictability 高于 chance。
+**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）；cross-modal token predictability 高于经验 token baseline。
 
 **失败处理**：
 - Row entropy ≈ log(K)（接近均匀）→ concentration_weight 太小，增大或检查 coupling_kl_loss 是否正常
 - Concentration ratio < 1.5 → concentration prior 未生效，sweep weight
 - 所有行熵相同 → coupling 可能 collapsed 到 trivial solution
-- Cross-modal predictability ≈ random → coupling tensor 的结构没有对应到实际 EEG/fNIRS source token 序列
+- Cross-modal predictability ≤ empirical baseline → coupling tensor 的结构没有超越 fNIRS token 边际分布，不能视为 EEG→fNIRS 条件映射
 
 ### Gate 4: Representation Utility
 

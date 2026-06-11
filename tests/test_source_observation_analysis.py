@@ -234,6 +234,25 @@ class SourceObservationAnalysisTests(unittest.TestCase):
         self.assertIn('cross_modal_token_predictability', gate_3['metrics'])
         self.assertTrue(any('predictability' in note for note in gate_3['notes']))
 
+    def test_cross_modal_predictability_uses_empirical_token_baseline(self):
+        eeg_tokens = np.asarray([[0, 0, 1, 1]], dtype=np.int64)
+        fnirs_tokens = np.asarray([[0, 0, 0, 1]], dtype=np.int64)
+        joint = np.asarray(
+            [
+                [[0.90, 0.10]],
+                [[0.90, 0.10]],
+            ],
+            dtype=np.float64,
+        )
+
+        predictability = soa._compute_cross_modal_predictability(eeg_tokens, fnirs_tokens, joint)
+
+        self.assertTrue(predictability['available'])
+        self.assertAlmostEqual(float(predictability['uniform_chance_accuracy']), 0.5, places=6)
+        self.assertAlmostEqual(float(predictability['chance_accuracy']), 0.75, places=6)
+        self.assertAlmostEqual(float(predictability['accuracy']), 0.75, places=6)
+        self.assertFalse(predictability['accuracy'] > predictability['chance_accuracy'])
+
     def test_build_gate_2_ignores_disabled_fnirs_observation_branch(self):
         split_stats = {
             'eeg_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
