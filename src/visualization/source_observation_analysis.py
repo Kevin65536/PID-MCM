@@ -9,6 +9,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 import torch
 
+from src.visualization.visualize_coupling_tensor import (
+    plot_coupling_tensor_overview,
+    prepare_coupling_tensor_views,
+)
+
 try:
     import matplotlib
 
@@ -342,43 +347,81 @@ def _convergence_summary(metrics_payload: Dict[str, object], key: str) -> Dict[s
 def _compute_cross_modal_predictability(
     eeg_tokens: np.ndarray,
     fnirs_tokens: np.ndarray,
-    transition: np.ndarray,
-    lag: int,
+    joint_probabilities: np.ndarray,
 ) -> Dict[str, object]:
     if eeg_tokens.size == 0 or fnirs_tokens.size == 0:
         return {'available': False, 'reason': 'empty_tokens'}
-    usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - int(lag))
-    if usable <= 0:
-        return {'available': False, 'reason': 'lag_out_of_range'}
-    aligned_eeg = eeg_tokens[:, :usable]
-    aligned_fnirs = fnirs_tokens[:, int(lag):int(lag) + usable]
-    predictions = transition.argmax(axis=-1)[aligned_eeg]
-    accuracy = float(np.mean(predictions == aligned_fnirs))
-    chance = float(1.0 / max(transition.shape[1], 1))
+    joint = np.asarray(joint_probabilities, dtype=np.float64)
+    if joint.ndim != 3:
+        return {'available': False, 'reason': 'invalid_joint_probabilities'}
+
+    lag_accuracies: List[float] = []
+    usable_counts: List[int] = []
+    for lag in range(joint.shape[1]):
+        usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - int(lag))
+        if usable <= 0:
+            continue
+        aligned_eeg = eeg_tokens[:, :usable]
+        aligned_fnirs = fnirs_tokens[:, int(lag):int(lag) + usable]
+        predictions = joint[:, lag, :].argmax(axis=-1)[aligned_eeg]
+        lag_accuracies.append(float(np.mean(predictions == aligned_fnirs)))
+        usable_counts.append(int(aligned_eeg.size))
+
+    if not lag_accuracies:
+        return {'available': False, 'reason': 'no_valid_lags'}
+
+    counts = np.asarray(usable_counts, dtype=np.float64)
+    accuracies = np.asarray(lag_accuracies, dtype=np.float64)
+    accuracy = float(np.average(accuracies, weights=counts))
+    chance = float(1.0 / max(joint.shape[2], 1))
     return {
         'available': True,
-        'lag': int(lag),
+        'num_lags': int(len(lag_accuracies)),
         'accuracy': accuracy,
         'chance_accuracy': chance,
-        'usable_tokens': int(aligned_eeg.size),
+        'usable_tokens': int(np.sum(counts)),
+        'lag_accuracies': lag_accuracies,
     }
 
 
-def _compute_coupling_structure(model, lag: int) -> Dict[str, object]:
+def _compute_coupling_structure(model) -> Dict[str, object]:
     logits = getattr(model, 'coupling_logits', None)
     if logits is None:
         return {'available': False, 'reason': 'missing_coupling_logits'}
-    if int(lag) < 0 or int(lag) >= int(logits.shape[0]):
-        return {'available': False, 'reason': 'invalid_lag'}
+    logits_np = logits.detach().float().cpu().numpy()
+    raw_joint_logits = np.transpose(logits_np, (1, 0, 2))
+    raw_joint_flat = raw_joint_logits.reshape(raw_joint_logits.shape[0], -1)
+    raw_joint_flat = raw_joint_flat - raw_joint_flat.max(axis=-1, keepdims=True)
+    raw_joint_exp = np.exp(raw_joint_flat)
+    raw_joint_probabilities = (
+        raw_joint_exp / np.clip(raw_joint_exp.sum(axis=-1, keepdims=True), 1e-12, None)
+    ).reshape(raw_joint_logits.shape)
 
-    transition = torch.softmax(logits[int(lag)], dim=-1).detach().float().cpu().numpy()
-    row_entropy = -(transition * np.log(transition + 1e-12)).sum(axis=-1)
-    max_entropy = math.log(float(transition.shape[1])) if transition.shape[1] > 1 else 1.0
-    concentration_ratio = float(np.mean(transition.max(axis=-1) / np.clip(transition.mean(axis=-1), 1e-12, None)))
+    eeg_quantizer = getattr(model, 'eeg_source_quantizer', None)
+    fnirs_quantizer = getattr(model, 'fnirs_source_quantizer', None)
+    eeg_codebook = None
+    fnirs_codebook = None
+    if eeg_quantizer is not None:
+        eeg_codebook = eeg_quantizer.get_codebook_weight().detach().float().cpu().numpy()
+    if fnirs_quantizer is not None:
+        fnirs_codebook = fnirs_quantizer.get_codebook_weight().detach().float().cpu().numpy()
+
+    views = prepare_coupling_tensor_views(
+        coupling_logits=logits_np,
+        eeg_codebook=eeg_codebook,
+        fnirs_codebook=fnirs_codebook,
+    )
+    fnirs_marginal = np.asarray(views['fnirs_marginal'], dtype=np.float64)
+    row_entropy = -(fnirs_marginal * np.log(fnirs_marginal + 1e-12)).sum(axis=-1)
+    max_entropy = math.log(float(fnirs_marginal.shape[1])) if fnirs_marginal.shape[1] > 1 else 1.0
+    concentration_ratio = float(np.mean(fnirs_marginal.max(axis=-1) / np.clip(fnirs_marginal.mean(axis=-1), 1e-12, None)))
     return {
         'available': True,
-        'lag': int(lag),
-        'transition': transition,
+        'coupling_logits': logits_np,
+        'joint_probabilities': raw_joint_probabilities,
+        'fnirs_marginal': fnirs_marginal,
+        'lag_marginal': np.asarray(views['lag_marginal'], dtype=np.float64),
+        'transition': fnirs_marginal,
         'row_entropy': row_entropy,
         'row_entropy_mean': float(np.mean(row_entropy)),
         'row_entropy_variance': float(np.var(row_entropy)),
@@ -386,6 +429,9 @@ def _compute_coupling_structure(model, lag: int) -> Dict[str, object]:
         'concentration_ratio': concentration_ratio,
         'max_entropy': float(max_entropy),
         'sorted_row_indices': np.argsort(row_entropy).tolist(),
+        'tensor_summary': dict(views['summary']),
+        'eeg_order': np.asarray(views['eeg_order'], dtype=np.int64).tolist(),
+        'fnirs_order': np.asarray(views['fnirs_order'], dtype=np.int64).tolist(),
     }
 
 
@@ -396,7 +442,7 @@ def _plot_coupling_heatmap(coupling: Dict[str, object], output_path: Path) -> Op
     sorted_rows = np.asarray(coupling['sorted_row_indices'], dtype=np.int64)
     figure, axis = plt.subplots(figsize=(8, 6))
     image = axis.imshow(transition[sorted_rows], aspect='auto', cmap='viridis')
-    axis.set_title(f"Coupling Heatmap (lag={coupling['lag']})")
+    axis.set_title("Coupling Heatmap (EEG x fNIRS marginal)")
     axis.set_xlabel('fNIRS source token')
     axis.set_ylabel('EEG source token (sorted by row entropy)')
     figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
@@ -426,7 +472,7 @@ def _plot_coupling_structure_profile(coupling: Dict[str, object], output_path: P
     axes[1].set_ylabel('Max transition probability')
     axes[1].grid(True, alpha=0.25)
 
-    figure.suptitle(f"Coupling Structure Profile (lag={coupling['lag']})", fontsize=13, fontweight='bold')
+    figure.suptitle("Coupling Structure Profile (all-lag marginal)", fontsize=13, fontweight='bold')
     figure.tight_layout(rect=(0.0, 0.0, 1.0, 0.95))
     return _save_figure(figure, output_path)
 
@@ -525,7 +571,7 @@ def _plot_training_gate_metrics(metrics_payload: Dict[str, object], output_path:
         flat_axes[5],
         epochs,
         metrics_payload,
-        [('alignment_scale', 'Alignment scale'), ('source_target_scale', 'Source target scale'), ('observation_target_scale', 'Observation target scale'), ('val_selected_source_lag', 'Selected lag')],
+        [('alignment_scale', 'Alignment scale'), ('source_target_scale', 'Source target scale'), ('observation_target_scale', 'Observation target scale'), ('val_coupling_lag_count', 'Coupling lag count')],
         'Gate 2/3 Control Signals',
         'Value',
     )
@@ -1964,15 +2010,13 @@ def _build_gate_1(
 
 def _build_gate_2(
     split_stats: Dict[str, object],
-    best_lag: int,
     coupling: Dict[str, object],
     branch_policy: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     predictability = _compute_cross_modal_predictability(
         split_stats['eeg_source_tokens'],
         split_stats['fnirs_source_tokens'],
-        np.asarray(coupling['transition']) if coupling.get('available', False) else np.zeros((1, 1), dtype=np.float64),
-        lag=best_lag,
+        np.asarray(coupling['joint_probabilities']) if coupling.get('available', False) else np.zeros((1, 1, 1), dtype=np.float64),
     ) if coupling.get('available', False) else {'available': False, 'reason': 'missing_coupling'}
 
     mean_scalars = split_stats['mean_scalars']
@@ -2118,7 +2162,12 @@ def _build_gate_2(
     }
 
 
-def _build_gate_3(coupling: Dict[str, object], figure_path: Optional[str], structure_profile_path: Optional[str]) -> Dict[str, object]:
+def _build_gate_3(
+    coupling: Dict[str, object],
+    figure_path: Optional[str],
+    structure_profile_path: Optional[str],
+    tensor_overview_path: Optional[str],
+) -> Dict[str, object]:
     if not coupling.get('available', False):
         return {
             'status': 'pending',
@@ -2127,6 +2176,7 @@ def _build_gate_3(coupling: Dict[str, object], figure_path: Optional[str], struc
             'artifacts': {},
         }
 
+    tensor_summary = dict(coupling.get('tensor_summary', {}))
     entropy_ok = coupling['row_entropy_mean'] < (coupling['max_entropy'] / 2.0)
     concentration_ok = coupling['concentration_ratio'] > 1.5
     variance_ok = coupling['row_entropy_variance'] > 0.0
@@ -2135,18 +2185,26 @@ def _build_gate_3(coupling: Dict[str, object], figure_path: Optional[str], struc
     return {
         'status': status,
         'metrics': {
-            'best_lag': coupling['lag'],
+            'n_lags': tensor_summary.get('n_lags'),
             'row_entropy_mean': coupling['row_entropy_mean'],
             'row_entropy_variance': coupling['row_entropy_variance'],
             'row_entropy_ratio_to_logk': coupling['row_entropy_ratio_to_logk'],
             'concentration_ratio': coupling['concentration_ratio'],
+            'lag_entropy_ratio_to_logl': tensor_summary.get('lag_entropy_ratio_to_logl'),
+            'joint_entropy_ratio': tensor_summary.get('joint_entropy_ratio'),
+            'slice_peak_mean': tensor_summary.get('slice_peak_mean'),
+            'lag_focus_mean': tensor_summary.get('lag_focus_mean'),
+            'fnirs_roughness': tensor_summary.get('fnirs_roughness'),
+            'lag_roughness': tensor_summary.get('lag_roughness'),
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
+            'tensor_overview_path': tensor_overview_path,
         },
         'notes': [],
         'artifacts': {
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
+            'tensor_overview_path': tensor_overview_path,
         },
     }
 
@@ -2200,15 +2258,38 @@ def _build_split_gate_summary(
     reconstruction_viz_cfg: Dict[str, object],
     token_pattern_viz_cfg: Dict[str, object],
 ) -> Tuple[Dict[str, object], Dict[str, object]]:
-    best_lag = int(round(float(split_stats['mean_scalars'].get('selected_source_lag', 0.0))))
-    coupling = _compute_coupling_structure(model=split_stats['model_ref'], lag=best_lag)
+    model_ref = split_stats['model_ref']
+    coupling = _compute_coupling_structure(model=model_ref)
     figure_path = _plot_coupling_heatmap(coupling, analysis_root / f"{split_name}_coupling_heatmap.png")
     structure_profile_path = _plot_coupling_structure_profile(coupling, analysis_root / f"{split_name}_coupling_structure.png")
+    tensor_overview_path = None
+    if coupling.get('available', False):
+        try:
+            eeg_quantizer = getattr(model_ref, 'eeg_source_quantizer', None)
+            fnirs_quantizer = getattr(model_ref, 'fnirs_source_quantizer', None)
+            eeg_codebook = None if eeg_quantizer is None else eeg_quantizer.get_codebook_weight().detach().float().cpu().numpy()
+            fnirs_codebook = None if fnirs_quantizer is None else fnirs_quantizer.get_codebook_weight().detach().float().cpu().numpy()
+            tensor_payload = plot_coupling_tensor_overview(
+                coupling_logits=np.asarray(coupling['coupling_logits']),
+                eeg_codebook=eeg_codebook,
+                fnirs_codebook=fnirs_codebook,
+                output_path=analysis_root / f"{split_name}_coupling_tensor_overview.png",
+                title=f'{split_name} EEG-fNIRS source coupling tensor',
+                subtitle='All valid lag slices are considered; no selected lag is used.',
+            )
+            tensor_overview_path = str(tensor_payload['figure_path'])
+        except Exception:
+            tensor_overview_path = None
     branch_policy = _resolve_gate_branch_policy(config)
     gate_0 = _build_gate_0(split_stats, config)
     gate_1 = _build_gate_1(split_stats, metrics_payload, branch_policy=branch_policy)
-    gate_2 = _build_gate_2(split_stats, best_lag=best_lag, coupling=coupling, branch_policy=branch_policy)
-    gate_3 = _build_gate_3(coupling, figure_path=figure_path, structure_profile_path=structure_profile_path)
+    gate_2 = _build_gate_2(split_stats, coupling=coupling, branch_policy=branch_policy)
+    gate_3 = _build_gate_3(
+        coupling,
+        figure_path=figure_path,
+        structure_profile_path=structure_profile_path,
+        tensor_overview_path=tensor_overview_path,
+    )
     gate_4 = _build_gate_4(split_stats)
     codebook_usage_paths: Dict[str, Optional[str]] = {}
     for codebook_name, codebook_payload in split_stats['codebooks'].items():
@@ -2244,6 +2325,7 @@ def _build_split_gate_summary(
         'gate_dashboard_path': dashboard_path,
         'coupling_heatmap_path': figure_path,
         'coupling_structure_path': structure_profile_path,
+        'coupling_tensor_overview_path': tensor_overview_path,
         'codebook_usage_paths': codebook_usage_paths,
         'reconstruction_visualization_paths': reconstruction_visualization_paths,
         'token_pattern_paths': token_pattern_paths,
@@ -2263,10 +2345,9 @@ def _promotion_verdict(gates: Dict[str, object]) -> str:
     return 'hold_pending'
 
 
-def _build_summary_text(primary_split: str, gates: Dict[str, object], best_lag: Optional[int]) -> str:
+def _build_summary_text(primary_split: str, gates: Dict[str, object]) -> str:
     gate_states = ', '.join(f"{name}={details['status']}" for name, details in gates.items())
-    lag_text = 'n/a' if best_lag is None else str(best_lag)
-    return f'Primary split {primary_split}: {gate_states}; best_lag={lag_text}.'
+    return f'Primary split {primary_split}: {gate_states}; coupling tensor uses all valid lags.'
 
 
 def _build_markdown_report(payload: Dict[str, object]) -> str:
@@ -2275,7 +2356,7 @@ def _build_markdown_report(payload: Dict[str, object]) -> str:
         '',
         f"- Primary split: {payload['primary_split']}",
         f"- Promotion verdict: {payload['promotion_verdict']}",
-        f"- Best lag: {payload['final_summary'].get('best_lag')}",
+        f"- Coupling lag policy: all valid lags",
         f"- Training gate metrics figure: {payload.get('artifacts', {}).get('training_gate_metrics_path')}",
         '',
     ]
@@ -2368,9 +2449,6 @@ def generate_source_observation_scorecard(
     _write_manifest(analysis_root, split_payloads.keys(), artifact_paths)
     primary_split = 'test' if 'test' in split_payloads else next(iter(split_payloads.keys()), 'val')
     primary_gates = split_gates.get(primary_split, {})
-    best_lag = None
-    if primary_gates:
-        best_lag = primary_gates['gate3']['metrics'].get('best_lag')
     promotion_verdict = _promotion_verdict(primary_gates) if primary_gates else 'hold_pending'
     final_summary = {
         'schema_version': SCORECARD_SCHEMA_VERSION,
@@ -2379,8 +2457,8 @@ def generate_source_observation_scorecard(
         'promotion_verdict': promotion_verdict,
         'gate_verdicts': {name: details['status'] for name, details in primary_gates.items()},
         'best_checkpoint': 'checkpoints/best_model.pt',
-        'best_lag': best_lag,
-        'summary': _build_summary_text(primary_split, primary_gates, best_lag),
+        'coupling_lag_policy': 'all_valid_lags',
+        'summary': _build_summary_text(primary_split, primary_gates),
     }
     payload = {
         'schema_version': SCORECARD_SCHEMA_VERSION,

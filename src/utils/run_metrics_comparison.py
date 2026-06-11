@@ -155,7 +155,7 @@ def build_run_summary(
         'gate2_status': _nested_get(final_summary, 'gate_verdicts', 'gate2'),
         'gate3_status': _nested_get(final_summary, 'gate_verdicts', 'gate3'),
         'gate4_status': _nested_get(final_summary, 'gate_verdicts', 'gate4'),
-        'best_lag': _safe_int(final_summary.get('best_lag')),
+        'coupling_lag_policy': final_summary.get('coupling_lag_policy'),
         'experiment_name': _nested_get(config, 'experiment', 'name'),
         'experiment_description': _nested_get(config, 'experiment', 'description'),
         'learning_rate': _safe_float(_nested_get(config, 'training', 'learning_rate')),

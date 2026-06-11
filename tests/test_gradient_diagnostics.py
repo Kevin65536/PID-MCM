@@ -42,7 +42,6 @@ class GradientDiagnosticsTests(unittest.TestCase):
             eeg_observation_codebook_dim=8,
             fnirs_observation_codebook_size=4,
             fnirs_observation_codebook_dim=8,
-            alignment_lag_candidates=[0],
             kmeans_init=False,
             revive_dead_codes=False,
             drop_path=0.0,
@@ -226,8 +225,8 @@ class GradientDiagnosticsTests(unittest.TestCase):
         torch.manual_seed(29)
         eeg = torch.randn(2, 3, 40)
         fnirs = torch.randn(2, 4, 20)
-        base_model = self._build_tiny_model(coupling_weight=0.0, alignment_lag_candidates=[0, 1, 2])
-        comparison_model = self._build_tiny_model(coupling_weight=0.7, alignment_lag_candidates=[0, 1, 2])
+        base_model = self._build_tiny_model(coupling_weight=0.0)
+        comparison_model = self._build_tiny_model(coupling_weight=0.7)
         comparison_model.load_state_dict(base_model.state_dict())
         base_model.eval()
         comparison_model.eval()
@@ -293,7 +292,6 @@ class GradientDiagnosticsTests(unittest.TestCase):
             coupling_association_weight=1.0,
             coupling_lag_focus_weight=0.0,
             coupling_smoothness_weight=0.0,
-            alignment_lag_candidates=[0, 1],
         )
         model.train()
 

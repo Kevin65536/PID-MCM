@@ -1095,17 +1095,6 @@ def finalize_training_run(
     scorecard_results = suite_results['scorecard']
     write_final_summary(logger, scorecard_results['final_summary'])
 
-    lag_set = config.get('validation', {}).get('lag_set', [])
-    max_validation_lag = max(lag_set) if lag_set else None
-    if max_validation_lag is not None:
-        for split_name, split_result in scorecard_results.get('splits', {}).items():
-            best_lag = split_result.get('gates', {}).get('gate3', {}).get('metrics', {}).get('best_lag')
-            if best_lag is not None and int(best_lag) >= int(max_validation_lag):
-                print(
-                    f"[Warning] {split_name} best_lag={best_lag} hit validation lag boundary "
-                    f"({max_validation_lag}). Consider widening lag_set and training lag candidates."
-                )
-
     return final_metrics
 
 
@@ -1410,14 +1399,6 @@ def main():
                         epoch=epoch,
                         is_best=improved,
                         keep_epoch_copy=save_periodic_checkpoint,
-                    )
-
-                selected_lag = val_metrics.get('val_selected_alignment_lag')
-                lag_candidates = getattr(model, 'alignment_lag_candidates', None)
-                if lag_candidates and selected_lag is not None and int(round(float(selected_lag))) >= max(lag_candidates):
-                    print(
-                        f"[Warning] epoch {epoch}: selected alignment lag {selected_lag:.2f} hit the current "
-                        f"training boundary {max(lag_candidates)}"
                     )
 
                 if es_cfg.get('enabled', True) and monitor_active and epochs_without_improvement >= patience:

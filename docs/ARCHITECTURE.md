@@ -69,7 +69,7 @@ graph TB
 
     subgraph Coupling["Cross-Modal Coupling"]
         COUP_LOGITS["coupling_logits<br/>Parameter: n_lags x K_src x K_src"]
-        COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss"]
+        COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss<br/>+ optional association_loss"]
     end
 
     subgraph SourceDecoders["Source Decoders (2×)"]
@@ -308,12 +308,13 @@ All quantizers use EMA updates, kmeans initialization, dead code revival, and co
 
 ## 6. Coupling Mechanism
 
-The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned parameter.
+The coupling tensor `coupling_logits` is an `[n_lags, K_src, K_src]` learned parameter. `n_lags` is derived from the token window length, so the active 20s Croce local tokenizer with 10 tokens uses valid nonnegative lags `0..9`. There is no user-configured `lag_candidates` list and no selected-lag optimization path.
 
-**Forward pass** (for each lag):
-1. Align EEG and fNIRS source token distributions with lag offset
-2. Maintain `coupling_logits[lag]` as the lag-indexed source-state correspondence scaffold
-3. Current implementation does not optimize a direct KL-based EEG-fNIRS matching loss
+**Forward pass**:
+1. Maintain `coupling_logits` as a full lag-indexed source-state correspondence scaffold
+2. Convert it to the EEG-conditioned joint delay-response distribution
+    $$Q_i(\tau, j) = P(\tau, z_{fnirs}=j \mid z_{eeg}=i)$$
+3. Apply structural coupling losses over all valid lag slices rather than selecting one lag
 
 **Structural priors** (current active design):
 - **Lag focus**: for each EEG source token, the lag marginal of the joint distribution
@@ -321,10 +322,9 @@ The coupling matrix `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
     should prefer a few delays. This sharpens delay structure without forcing only a few token-lag pairs overall.
 - **Joint smoothness**: nearby EEG tokens in codebook space should have similar joint delay-response distributions $Q_i(\tau, j)$.
     Neighborhoods are computed from detached EEG source codebook geometry rather than raw token indices.
+- **Optional association loss**: when enabled, EEG/fNIRS source token distributions are aligned for every valid lag and averaged; it does not choose a best lag.
 
-**Selection**: Diagnostics now use the dominant lag under the average lag marginal of $Q_i(\tau, j)$; this is still a structural summary, not a batch-level best-lag search.
-
-**Current lags**: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]`
+**Diagnostics**: Analysis reports all-lag tensor views: EEG×fNIRS marginal, EEG×lag marginal, expected fNIRS index by lag, and per-lag conditional slices. It does not report a best or selected lag as a training objective.
 
 ## 7. Branch Target Contract
 

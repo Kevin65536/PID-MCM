@@ -109,6 +109,19 @@ def _prepare_coupling_views(
     }
 
 
+def prepare_coupling_tensor_views(
+    coupling_logits: np.ndarray,
+    eeg_codebook: Optional[np.ndarray] = None,
+    fnirs_codebook: Optional[np.ndarray] = None,
+) -> Dict[str, Any]:
+    """Prepare standard all-lag coupling tensor views for analysis integrations."""
+    return _prepare_coupling_views(
+        coupling_logits=coupling_logits,
+        eeg_codebook=eeg_codebook,
+        fnirs_codebook=fnirs_codebook,
+    )
+
+
 def _plot_case(views: Dict[str, Any], output_path: Path, title: str, subtitle: str) -> None:
     slice_probs = np.asarray(views['slice_probs'], dtype=np.float64)
     fnirs_marginal = np.asarray(views['fnirs_marginal'], dtype=np.float64)
@@ -175,6 +188,30 @@ def _plot_case(views: Dict[str, Any], output_path: Path, title: str, subtitle: s
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=200, bbox_inches='tight')
     plt.close(figure)
+
+
+def plot_coupling_tensor_overview(
+    *,
+    coupling_logits: np.ndarray,
+    output_path: Path,
+    title: str,
+    subtitle: str,
+    eeg_codebook: Optional[np.ndarray] = None,
+    fnirs_codebook: Optional[np.ndarray] = None,
+) -> Dict[str, Any]:
+    """Write the standard EEG x fNIRS x lag coupling overview and return summary metrics."""
+    views = _prepare_coupling_views(
+        coupling_logits=coupling_logits,
+        eeg_codebook=eeg_codebook,
+        fnirs_codebook=fnirs_codebook,
+    )
+    _plot_case(views=views, output_path=output_path, title=title, subtitle=subtitle)
+    return {
+        'figure_path': str(output_path),
+        'summary': views['summary'],
+        'eeg_order': np.asarray(views['eeg_order'], dtype=np.int64).tolist(),
+        'fnirs_order': np.asarray(views['fnirs_order'], dtype=np.int64).tolist(),
+    }
 
 
 def _synthetic_codebook(n_tokens: int, seed: int) -> np.ndarray:

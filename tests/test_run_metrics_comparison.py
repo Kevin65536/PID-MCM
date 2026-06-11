@@ -214,7 +214,7 @@ class RunMetricsComparisonTests(unittest.TestCase):
                 'gate3': 'fail',
                 'gate4': 'fail',
             },
-            'best_lag': 4,
+            'coupling_lag_policy': 'all_valid_lags',
         }
         (run_dir / 'final_summary.json').write_text(json.dumps(final_summary, indent=2), encoding='utf-8')
 

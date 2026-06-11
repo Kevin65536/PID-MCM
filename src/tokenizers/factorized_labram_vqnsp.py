@@ -19,7 +19,6 @@ from src.losses.multimodal_tokenizer import (
     align_pair,
     batch_usage_entropy_loss,
     coupling_eeg_neighbor_smoothness_loss,
-    coupling_joint_probabilities,
     coupling_lag_focus_loss,
     orthogonality_loss,
     straight_through_assignment_probs,
@@ -101,9 +100,6 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_simvq_loss_weight: float = 1.0,
         observation_simvq_enabled: bool = False,
         observation_simvq_loss_weight: float = 1.0,
-        alignment_lag_candidates: List[int] | None = None,
-        alignment_selection: str = 'min',
-        alignment_compare_mode: str = 'variable',
         source_branch_dropout: float = 0.0,
         eeg_observation_branch_dropout: float = 0.0,
         fnirs_observation_branch_dropout: float = 0.0,
@@ -211,24 +207,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             assignment_temperature if observation_balance_temperature is None else observation_balance_temperature
         )
         self.coupling_temperature = coupling_temperature
-        self.alignment_lag_candidates = sorted({max(int(lag), 0) for lag in (alignment_lag_candidates or [0])})
-        if not self.alignment_lag_candidates:
-            self.alignment_lag_candidates = [0]
-        if alignment_selection not in {'min', 'mean'}:
-            raise ValueError("alignment_selection must be 'min' or 'mean'")
-        if alignment_compare_mode not in {'variable', 'fixed_min'}:
-            raise ValueError("alignment_compare_mode must be 'variable' or 'fixed_min'")
-        self.alignment_selection = alignment_selection
-        self.alignment_compare_mode = alignment_compare_mode
-        self.fixed_alignment_compare_length = None
-        if self.alignment_compare_mode == 'fixed_min':
-            min_usable = min(self.n_patches - lag for lag in self.alignment_lag_candidates)
-            if min_usable <= 0:
-                raise ValueError(
-                    'alignment_lag_candidates leave no usable tokens under fixed_min comparison '
-                    f'(n_patches={self.n_patches}, lags={self.alignment_lag_candidates})'
-                )
-            self.fixed_alignment_compare_length = int(min_usable)
+        self.coupling_lags = list(range(max(int(self.n_patches), 1)))
+        self.n_coupling_lags = len(self.coupling_lags)
 
         self.source_branch_dropout = max(float(source_branch_dropout), 0.0)
         self.eeg_observation_branch_dropout = max(float(eeg_observation_branch_dropout), 0.0)
@@ -398,7 +378,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.quantizer = self.eeg_source_quantizer
         self.quantization_strength = 1.0
         self.coupling_logits = nn.Parameter(
-            torch.zeros(len(self.alignment_lag_candidates), source_codebook_size, source_codebook_size)
+            torch.zeros(self.n_coupling_lags, source_codebook_size, source_codebook_size)
         )
 
         self.eeg_source_decode_input_proj = nn.Linear(
@@ -481,7 +461,6 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         codebook_cfg = loss_cfg.get('codebook', {})
         data_cfg = config.get('data', {})
         window_cfg = data_cfg.get('window', {})
-        validation_cfg = config.get('validation', {})
         hrf_cfg = source_target_cfg.get('hrf', {})
         spatial_cfg = source_target_cfg.get('spatial', {})
 
@@ -562,9 +541,6 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             source_simvq_loss_weight=quantizer_cfg.get('source_simvq_loss_weight', 1.0),
             observation_simvq_enabled=quantizer_cfg.get('observation_simvq_enabled', False),
             observation_simvq_loss_weight=quantizer_cfg.get('observation_simvq_loss_weight', 1.0),
-            alignment_lag_candidates=coupling_cfg.get('lag_candidates', validation_cfg.get('lag_set', [0])),
-            alignment_selection=coupling_cfg.get('selection', 'min'),
-            alignment_compare_mode=coupling_cfg.get('compare_mode', 'variable'),
             source_branch_dropout=branch_dropout_cfg.get('source', 0.0),
             eeg_observation_branch_dropout=branch_dropout_cfg.get('eeg_observation', 0.0),
             fnirs_observation_branch_dropout=branch_dropout_cfg.get('fnirs_observation', 0.0),
@@ -985,30 +961,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.coupling_smoothness_weight * smoothness_loss
         )
 
-        coupling_joint_probs = coupling_joint_probabilities(self.coupling_logits).detach()
-        lag_mass = coupling_joint_probs.sum(dim=-1)
-        lag_profile = lag_mass.mean(dim=0) if lag_mass.numel() > 0 else eeg_source_logits.new_zeros((1,))
-        selected_lag_index = int(torch.argmax(lag_profile).item()) if lag_profile.numel() > 0 else 0
-        selected_lag = int(self.alignment_lag_candidates[selected_lag_index]) if self.alignment_lag_candidates else 0
-        target_length = self.fixed_alignment_compare_length if self.alignment_compare_mode == 'fixed_min' else None
-        aligned_eeg_probs, _ = align_pair(
-            eeg_source_probs,
-            fnirs_source_probs,
-            selected_lag,
-            target_length=target_length,
-        )
-        selected_source_lag = eeg_source_logits.new_tensor(float(selected_lag))
-        source_alignment_usable_tokens = eeg_source_logits.new_tensor(float(aligned_eeg_probs.shape[1]))
+        coupling_lag_count = eeg_source_logits.new_tensor(float(self.n_coupling_lags))
 
         return {
             'source_coupling_loss': source_coupling_loss,
             'source_coupling_association_loss': association_loss,
             'source_coupling_lag_focus_loss': lag_focus_loss,
             'source_coupling_smoothness_loss': smoothness_loss,
-            'selected_source_lag': selected_source_lag,
-            'selected_alignment_lag': selected_source_lag,
-            'source_alignment_usable_tokens': source_alignment_usable_tokens,
-            'alignment_usable_tokens': source_alignment_usable_tokens,
+            'coupling_lag_count': coupling_lag_count,
             'eeg_source_probs': eeg_source_probs,
             'fnirs_source_probs': fnirs_source_probs,
         }
@@ -1023,10 +983,9 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
         eeg_probs = eeg_source_probs.detach() if self.coupling_detach_assignments else eeg_source_probs
         fnirs_probs = fnirs_source_probs.detach() if self.coupling_detach_assignments else fnirs_source_probs
-        target_length = self.fixed_alignment_compare_length if self.alignment_compare_mode == 'fixed_min' else None
         losses = []
-        for lag_index, lag in enumerate(self.alignment_lag_candidates):
-            aligned_eeg, aligned_fnirs = align_pair(eeg_probs, fnirs_probs, lag, target_length=target_length)
+        for lag_index, lag in enumerate(self.coupling_lags):
+            aligned_eeg, aligned_fnirs = align_pair(eeg_probs, fnirs_probs, lag, target_length=None)
             if aligned_eeg.shape[1] <= 0:
                 continue
             transition = F.softmax(self.coupling_logits[lag_index], dim=-1)
@@ -1044,10 +1003,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
 
         if not losses:
             return eeg_source_probs.new_zeros(())
-        stacked = torch.stack(losses)
-        if self.alignment_selection == 'min':
-            return stacked.min()
-        return stacked.mean()
+        return torch.stack(losses).mean()
 
     def decode_from_components(
         self,
@@ -1185,6 +1141,24 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
     def get_analysis_type(self) -> str:
         return 'source_observation_alignment'
 
+    def load_state_dict(self, state_dict, strict: bool = True, assign: bool = False):
+        coupling_logits = state_dict.get('coupling_logits') if isinstance(state_dict, dict) else None
+        if torch.is_tensor(coupling_logits) and tuple(coupling_logits.shape) != tuple(self.coupling_logits.shape):
+            if coupling_logits.ndim != 3:
+                raise RuntimeError(
+                    f'Invalid coupling_logits shape in checkpoint: expected 3D tensor, got {tuple(coupling_logits.shape)}'
+                )
+            self.n_coupling_lags = int(coupling_logits.shape[0])
+            self.coupling_lags = list(range(self.n_coupling_lags))
+            self.coupling_logits = nn.Parameter(
+                torch.zeros(
+                    tuple(coupling_logits.shape),
+                    dtype=self.coupling_logits.dtype,
+                    device=self.coupling_logits.device,
+                )
+            )
+        return super().load_state_dict(state_dict, strict=strict, assign=assign)
+
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError('Use encode_modalities(eeg, fnirs) for the source/observation tokenizer')
 
@@ -1301,8 +1275,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_coupling_association_loss = source_alignment['source_coupling_association_loss']
         source_coupling_lag_focus_loss = source_alignment['source_coupling_lag_focus_loss']
         source_coupling_smoothness_loss = source_alignment['source_coupling_smoothness_loss']
-        selected_source_lag = source_alignment['selected_source_lag']
-        alignment_usable_tokens = source_alignment['alignment_usable_tokens']
+        coupling_lag_count = source_alignment['coupling_lag_count']
         eeg_source_probs = source_alignment['eeg_source_probs']
         fnirs_source_probs = source_alignment['fnirs_source_probs']
 
@@ -1484,14 +1457,11 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_association_loss': source_coupling_association_loss,
             'source_coupling_lag_focus_loss': source_coupling_lag_focus_loss,
             'source_coupling_smoothness_loss': source_coupling_smoothness_loss,
+            'coupling_lag_count': coupling_lag_count,
             'codebook_balance_loss': codebook_balance_loss,
             'source_balance_loss': source_balance_loss,
             'observation_balance_loss': observation_balance_loss,
             'orthogonality_loss': branch_orthogonality_loss,
-            'selected_source_lag': selected_source_lag,
-            'selected_alignment_lag': selected_source_lag,
-            'source_alignment_usable_tokens': alignment_usable_tokens,
-            'alignment_usable_tokens': alignment_usable_tokens,
             'alignment_scale': torch.tensor(self.alignment_scale, device=eeg.device, dtype=torch.float32),
             'source_target_scale': torch.tensor(self.source_target_scale, device=eeg.device, dtype=torch.float32),
             'observation_target_scale': torch.tensor(self.observation_target_scale, device=eeg.device, dtype=torch.float32),

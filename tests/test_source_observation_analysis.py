@@ -8,6 +8,20 @@ from src.visualization import source_observation_analysis as soa
 
 
 class SourceObservationAnalysisTests(unittest.TestCase):
+    def _identity_joint_coupling(self) -> dict:
+        joint = np.asarray(
+            [
+                [[0.90, 0.10], [0.70, 0.30]],
+                [[0.10, 0.90], [0.30, 0.70]],
+            ],
+            dtype=np.float64,
+        )
+        return {
+            'available': True,
+            'joint_probabilities': joint,
+            'transition': joint.sum(axis=1),
+        }
+
     def test_build_gate_0_passes_highwl_only_contract(self):
         split_stats = {
             'gate0_contract': {
@@ -94,13 +108,9 @@ class SourceObservationAnalysisTests(unittest.TestCase):
                 'fnirs_source': {'active_code_ratio': 0.58},
             },
         }
-        coupling = {
-            'available': True,
-            'lag': 0,
-            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
-        }
+        coupling = self._identity_joint_coupling()
 
-        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling)
+        gate_2 = soa._build_gate_2(split_stats, coupling=coupling)
 
         self.assertEqual(gate_2['status'], 'pass')
         self.assertAlmostEqual(float(gate_2['metrics']['source_target_mse']), 0.20, places=6)
@@ -133,13 +143,9 @@ class SourceObservationAnalysisTests(unittest.TestCase):
                 'fnirs_source': {'active_code_ratio': 0.58},
             },
         }
-        coupling = {
-            'available': True,
-            'lag': 0,
-            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
-        }
+        coupling = self._identity_joint_coupling()
 
-        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling)
+        gate_2 = soa._build_gate_2(split_stats, coupling=coupling)
 
         self.assertEqual(gate_2['status'], 'pass')
         readiness = gate_2['metrics']['source_target_readiness']
@@ -168,11 +174,7 @@ class SourceObservationAnalysisTests(unittest.TestCase):
                 'fnirs_source': {'active_code_ratio': 0.58},
             },
         }
-        coupling = {
-            'available': True,
-            'lag': 0,
-            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
-        }
+        coupling = self._identity_joint_coupling()
         branch_policy = {
             'active_codebooks': ['eeg_source', 'fnirs_source', 'eeg_observation'],
             'ignored_branches': ['fnirs_observation'],
@@ -180,7 +182,7 @@ class SourceObservationAnalysisTests(unittest.TestCase):
             'ignored_observation_modalities': ['fnirs'],
         }
 
-        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling, branch_policy=branch_policy)
+        gate_2 = soa._build_gate_2(split_stats, coupling=coupling, branch_policy=branch_policy)
 
         self.assertEqual(gate_2['status'], 'pass')
         self.assertEqual(gate_2['metrics']['active_observation_modalities'], ['eeg'])
@@ -202,13 +204,9 @@ class SourceObservationAnalysisTests(unittest.TestCase):
                 'fnirs_source': {'active_code_ratio': 0.58},
             },
         }
-        coupling = {
-            'available': True,
-            'lag': 0,
-            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
-        }
+        coupling = self._identity_joint_coupling()
 
-        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling)
+        gate_2 = soa._build_gate_2(split_stats, coupling=coupling)
 
         self.assertEqual(gate_2['status'], 'pending')
         self.assertTrue(gate_2['notes'])
@@ -232,13 +230,9 @@ class SourceObservationAnalysisTests(unittest.TestCase):
                 'fnirs_source': {'active_code_ratio': 0.58},
             },
         }
-        coupling = {
-            'available': True,
-            'lag': 0,
-            'transition': np.asarray([[0.9, 0.1], [0.1, 0.9]], dtype=np.float64),
-        }
+        coupling = self._identity_joint_coupling()
 
-        gate_2 = soa._build_gate_2(split_stats, best_lag=0, coupling=coupling)
+        gate_2 = soa._build_gate_2(split_stats, coupling=coupling)
 
         self.assertEqual(gate_2['status'], 'pending')
         self.assertTrue(any('Observation target metrics' in note for note in gate_2['notes']))
