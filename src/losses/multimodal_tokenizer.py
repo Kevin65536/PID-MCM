@@ -3,26 +3,9 @@
 from __future__ import annotations
 
 import math
-from typing import Tuple
 
 import torch
 import torch.nn.functional as F
-
-
-def align_pair(
-    tensor_a: torch.Tensor,
-    tensor_b: torch.Tensor,
-    lag: int,
-    target_length: int | None = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    if lag < 0:
-        raise ValueError('Only non-negative lag is supported')
-    usable = min(tensor_a.shape[1], tensor_b.shape[1] - lag)
-    if target_length is not None:
-        usable = min(usable, int(target_length))
-    if usable <= 0:
-        return tensor_a[:, :0], tensor_b[:, :0]
-    return tensor_a[:, :usable], tensor_b[:, lag:lag + usable]
 
 
 def batch_usage_entropy_loss(probs: torch.Tensor) -> torch.Tensor:
@@ -109,7 +92,6 @@ def coupling_eeg_neighbor_smoothness_loss(
 
 
 __all__ = [
-    'align_pair',
     'batch_usage_entropy_loss',
     'coupling_eeg_neighbor_smoothness_loss',
     'coupling_joint_probabilities',

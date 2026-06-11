@@ -3,7 +3,6 @@
 from .alignment import AlignmentLoss
 from .classification import LabelSmoothingCrossEntropy
 from .multimodal_tokenizer import (
-    align_pair,
     batch_usage_entropy_loss,
     coupling_eeg_neighbor_smoothness_loss,
     coupling_joint_probabilities,
@@ -20,7 +19,6 @@ from .reconstruction import (
 __all__ = [
     'AlignmentLoss',
     'LabelSmoothingCrossEntropy',
-    'align_pair',
     'batch_usage_entropy_loss',
     'coupling_eeg_neighbor_smoothness_loss',
     'coupling_joint_probabilities',

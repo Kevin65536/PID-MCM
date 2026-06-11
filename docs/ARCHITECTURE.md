@@ -69,7 +69,7 @@ graph TB
 
     subgraph Coupling["Cross-Modal Coupling"]
         COUP_LOGITS["coupling_logits<br/>Parameter: n_lags x K_src x K_src"]
-        COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss<br/>+ optional association_loss"]
+        COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss"]
     end
 
     subgraph SourceDecoders["Source Decoders (2×)"]
@@ -268,7 +268,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `align_pair`, `coupling_lag_focus_loss`, `coupling_eeg_neighbor_smoothness_loss` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `coupling_lag_focus_loss`, `coupling_eeg_neighbor_smoothness_loss` |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Spatial & Physiological Priors
@@ -322,7 +322,6 @@ The coupling tensor `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
     should prefer a few delays. This sharpens delay structure without forcing only a few token-lag pairs overall.
 - **Joint smoothness**: nearby EEG tokens in codebook space should have similar joint delay-response distributions $Q_i(\tau, j)$.
     Neighborhoods are computed from detached EEG source codebook geometry rather than raw token indices.
-- **Optional association loss**: when enabled, EEG/fNIRS source token distributions are aligned for every valid lag and averaged; it does not choose a best lag.
 
 **Diagnostics**: Analysis reports all-lag tensor views: EEG×fNIRS marginal, EEG×lag marginal, expected fNIRS index by lag, and per-lag conditional slices. It does not report a best or selected lag as a training objective.
 

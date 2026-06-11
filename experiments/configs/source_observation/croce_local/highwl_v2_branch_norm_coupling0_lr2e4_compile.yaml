@@ -1,0 +1,22 @@
+_base_: "./highwl_v2_gate12_recovery_lr2e4_compile.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_branch_norm_coupling0_lr2e4_compile"
+  device: "cuda:1"
+  description: "Croce local highWL v2 branch-wise source/observation normalization with coupling disabled; codebook sizes unchanged."
+
+data:
+  normalization:
+    enabled: true
+    mode: "source_observation_branch"
+    center: "mean"
+    estimator: "std"
+    eps: 0.000001
+    eeg:
+      branch_scales: "separate"
+    fnirs:
+      branch_scales: "separate"
+
+loss:
+  coupling:
+    weight: 0.0

@@ -86,18 +86,17 @@ S2 架构中，token 的语义目标分为两类：
 
 | 指标 | 计算 | 健康阈值 | 来源 |
 |------|------|----------|------|
-| **fNIRS source target MSE** | MSE(fnirs_source_recon, cached highWL source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
-| **EEG source target MSE** | MSE(eeg_source_recon, cached local EEG source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
+| **fNIRS source target MSE** | MSE(fnirs_source_recon, highWL source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
+| **EEG source target MSE** | MSE(eeg_source_recon, local EEG source target) | 随训练下降，且显著低于 random baseline | 训练损失直接读取 |
 | **Observation contribution gap** | MSE(source_only_recon) - MSE(source+obs_recon) | $> 0$（observation 有正贡献） | 从 forward 输出计算 |
-| **Cross-modal token predictability** | 给定 EEG source token，预测 fNIRS source token 的 top-1 accuracy | $> 1/K_{src}$（random baseline） | 从 coupling_logits 直接计算 |
 | **Source codebook independence** | eeg_source_quantizer 和 fnirs_source_quantizer 各自的利用率偏差 | $|u_{eeg} - u_{fnirs}| < 0.3$ | 从两个 quantizer 的 marginal 统计 |
 
-**通过条件**：cached source target reconstruction 显著优于 random；observation gap > 0；cross-modal predictability > chance；两个 source codebook 都健康。
+**通过条件**：source target reconstruction 显著优于 random；observation gap > 0；两个 source codebook 都健康且没有明显利用率偏斜。
 
 **失败处理**：
 - source target 不收敛 → 检查 Croce cache 质量、source_target_weight、warmup schedule
 - Observation gap ≈ 0 → observation branch 可能 collapse；检查 orthogonality weight
-- Cross-modal predictability ≈ random → coupling training 可能失败；进入 Gate 3 诊断
+- EEG/fNIRS source codebook 利用率严重偏斜 → 检查 source quantizer balance、branch normalization、source branch 容量
 
 ### Gate 3: Coupling Structure
 
@@ -108,14 +107,16 @@ S2 架构中，token 的语义目标分为两类：
 | **Coupling row entropy** | $H_{row} = -\frac{1}{K}\sum_{i,j} T_{ij}\log T_{ij}$ | $< \log(K)/2$（显著非均匀） | 直接从 coupling_logits 计算 |
 | **Concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$，按行平均 | $> 1.5$（行有明确峰值） | 直接从 coupling_logits 计算 |
 | **Row entropy variance** | $\text{Var}(H(T_{i,:}))$ across rows | $> 0$（不同 source state 有不同的确定性） | 直接从 coupling_logits 计算 |
+| **Cross-modal token predictability** | 给定 EEG source token 和 coupling tensor，预测 fNIRS source token 的 top-1 accuracy | $> 1/K_{src}$（random baseline） | source token 序列 + coupling tensor |
 | **Coupling matrix visualization** | 按行熵排序的热力图 | 可见块状或带状结构 | 单次 matplotlib 可视化 |
 
-**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）。
+**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）；cross-modal token predictability 高于 chance。
 
 **失败处理**：
 - Row entropy ≈ log(K)（接近均匀）→ concentration_weight 太小，增大或检查 coupling_kl_loss 是否正常
 - Concentration ratio < 1.5 → concentration prior 未生效，sweep weight
 - 所有行熵相同 → coupling 可能 collapsed 到 trivial solution
+- Cross-modal predictability ≈ random → coupling tensor 的结构没有对应到实际 EEG/fNIRS source token 序列
 
 ### Gate 4: Representation Utility
 
@@ -171,7 +172,7 @@ Phase 2B: Croce 2017 Physical Model + Coupling Structure Priors
 
 比较 S1 vs S2 的有效口径：
 1. Gate 1: 两者都应通过
-2. Gate 2: S2 应有**定性更清晰**的 branch semantics（HRF target vs. smooth_signal proxy）
+2. Gate 2: S2 应有**定性更清晰**的 branch semantics（explicit source/observation target vs. smooth_signal proxy）
 3. Gate 3: S2 应有**定量更结构化**的 coupling（concentration prior vs. free parameter）
 4. Gate 4: 期望 S2 不倒退
 
@@ -188,7 +189,7 @@ Phase 2B: Croce 2017 Physical Model + Coupling Structure Priors
 | **Coupling** | 自由参数 `[K,K]` | concentration-constrained `[K,K]` | S2 结构化 |
 | **Loss count** | 12 terms | 9 terms | S2 更简洁 |
 | **Gate 1** | 通过 | 应通过 | 不应退化 |
-| **Gate 2** | BRG (common/residual) | HRF target + obs gap | 定性差异 |
+| **Gate 2** | BRG (common/residual) | explicit source target + obs gap | 定性差异 |
 | **Gate 3** | post-hoc CKG/LMIG | concentration metrics from logits | S2 应更结构化 |
 | **Gate 4** | SLS/TCS on shared/private | SLS/TCS on source/obs | S2 不倒退 |
 
@@ -210,13 +211,14 @@ Gate 1: Architecture Health
   - EEG/fNIRS full reconstruction MSE
 
 Gate 2: Branch Semantics
-  - Cached source target MSE（含 random baseline 对比）
+  - Source target MSE（含 random baseline 对比）
   - Observation contribution gap (source_only vs source+obs)
-  - Cross-modal token predictability (from coupling_logits)
+  - Source codebook independence
 
 Gate 3: Coupling Structure
   - Coupling row entropy（与 log(K) 的比值）
   - Concentration ratio
+  - Cross-modal token predictability (from source tokens + coupling tensor)
   - Coupling matrix visualization（按行熵排序的热力图）
 
 Gate 4: Representation Utility

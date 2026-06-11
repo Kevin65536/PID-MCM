@@ -1,0 +1,96 @@
+_base_: "./highwl_v2_base.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_gate12_recovery_lr2e4_compile"
+  device: "cuda:1"
+  description: "Croce local highWL v2 clean-cache retry with archived Gate1/Gate2 recovery weights, LR 2e-4, torch.compile, and CUDA prefetch."
+
+model:
+  fnirs_observation:
+    codebook_size: 64
+
+loss:
+  source_target:
+    weight: 0.3
+    eeg_source_aux_weight: 1.0
+    eeg_aux_weight: 1.0
+    correlation_weight: 0.0
+    eeg_aux_correlation_weight: 0.0
+  observation_target:
+    weight: 0.15
+  coupling:
+    weight: 0.07
+  codebook:
+    balance_weight: 0.08
+    assignment_temperature: 1.0
+    source_assignment_temperature: 2.0
+    observation_assignment_temperature: 1.0
+    source_balance_scale: 1.0
+    observation_balance_scale: 0.5
+  branch:
+    orthogonality_weight: 0.05
+
+training:
+  batch_size: 128
+  learning_rate: 0.0002
+  epochs: 200
+  min_lr: 0.00002
+  quantization_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 60
+    start_scale: 0.0
+    end_scale: 1.0
+  alignment_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  source_target_warmup:
+    enabled: true
+    start_epoch: 31
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  observation_target_warmup:
+    enabled: true
+    start_epoch: 31
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  early_stopping:
+    enabled: true
+    start_epoch: 61
+    patience: 80
+    metric: "val_loss"
+    mode: "min"
+  validation:
+    interval_epochs: 2
+    start_epoch: 1
+    max_batches: null
+  checkpoint:
+    save_every: 20
+  performance:
+    tf32: true
+    matmul_precision: "high"
+    cudnn_benchmark: true
+    cuda_prefetch: true
+    compile:
+      enabled: true
+      scope: "encode_modalities"
+      mode: "default"
+      fullgraph: false
+      dynamic: false
+      suppress_errors: true
+      capture_scalar_outputs: true
+
+data:
+  num_workers: 16
+  max_npz_cache_size: 128
+  dataloader:
+    persistent_workers: true
+    prefetch_factor: 6
+    in_order: false
+    pin_memory: true
+    drop_last: true

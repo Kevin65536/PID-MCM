@@ -283,24 +283,24 @@ class GradientDiagnosticsTests(unittest.TestCase):
             places=6,
         )
 
-    def test_coupling_association_loss_updates_coupling_logits(self):
+    def test_structural_coupling_loss_updates_coupling_logits(self):
         torch.manual_seed(31)
         eeg = torch.randn(2, 3, 40)
         fnirs = torch.randn(2, 4, 20)
         model = self._build_tiny_model(
             coupling_weight=0.4,
-            coupling_association_weight=1.0,
-            coupling_lag_focus_weight=0.0,
+            coupling_lag_focus_weight=1.0,
             coupling_smoothness_weight=0.0,
         )
         model.train()
 
         outputs = model(eeg, fnirs)
-        self.assertGreater(float(outputs['source_coupling_association_loss'].detach().item()), 0.0)
+        self.assertNotIn('source_coupling_association_loss', outputs)
+        self.assertGreater(float(outputs['source_coupling_lag_focus_loss'].detach().item()), 0.0)
         self.assertTrue(
             torch.allclose(
                 outputs['source_coupling_loss'],
-                outputs['source_coupling_association_loss'],
+                outputs['source_coupling_lag_focus_loss'],
                 atol=1e-6,
             )
         )

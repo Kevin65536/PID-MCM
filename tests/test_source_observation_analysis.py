@@ -22,6 +22,39 @@ class SourceObservationAnalysisTests(unittest.TestCase):
             'transition': joint.sum(axis=1),
         }
 
+    def _anti_identity_joint_coupling(self) -> dict:
+        joint = np.asarray(
+            [
+                [[0.05, 0.95], [0.10, 0.90]],
+                [[0.95, 0.05], [0.90, 0.10]],
+            ],
+            dtype=np.float64,
+        )
+        return {
+            'available': True,
+            'joint_probabilities': joint,
+            'transition': joint.sum(axis=1),
+        }
+
+    def _structured_gate3_coupling(self) -> dict:
+        return {
+            'available': True,
+            'row_entropy_mean': 0.10,
+            'max_entropy': 1.0,
+            'row_entropy_variance': 0.02,
+            'row_entropy_ratio_to_logk': 0.10,
+            'concentration_ratio': 2.0,
+            'tensor_summary': {
+                'n_lags': 2,
+                'lag_entropy_ratio_to_logl': 0.40,
+                'joint_entropy_ratio': 0.45,
+                'slice_peak_mean': 0.80,
+                'lag_focus_mean': 0.70,
+                'fnirs_roughness': 0.10,
+                'lag_roughness': 0.10,
+            },
+        }
+
     def test_build_gate_0_passes_highwl_only_contract(self):
         split_stats = {
             'gate0_contract': {
@@ -152,6 +185,54 @@ class SourceObservationAnalysisTests(unittest.TestCase):
         self.assertFalse(readiness['fnirs_mse_ready'])
         self.assertTrue(readiness['fnirs_corr_ready'])
         self.assertTrue(readiness['fnirs_ready'])
+
+    def test_build_gate_2_does_not_require_cross_modal_predictability(self):
+        split_stats = {
+            'eeg_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
+            'fnirs_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
+            'mean_scalars': {
+                'source_target_loss': 0.20,
+                'source_target_random_baseline': 0.45,
+                'eeg_source_aux_loss': 0.18,
+                'observation_loss': 0.14,
+            },
+            'branch_reconstruction': {
+                'eeg_source_target_random_baseline': 0.40,
+                'eeg_observation_target_mse': 0.09,
+                'fnirs_observation_target_mse': 0.11,
+                'eeg_observation_contribution_gap': 0.10,
+                'fnirs_observation_contribution_gap': 0.12,
+            },
+            'codebooks': {
+                'eeg_source': {'active_code_ratio': 0.62},
+                'fnirs_source': {'active_code_ratio': 0.58},
+            },
+        }
+
+        gate_2 = soa._build_gate_2(split_stats, coupling=self._anti_identity_joint_coupling())
+
+        self.assertEqual(gate_2['status'], 'pass')
+        self.assertNotIn('cross_modal_token_predictability', gate_2['metrics'])
+
+    def test_build_gate_3_requires_cross_modal_predictability(self):
+        predictability = {
+            'available': True,
+            'accuracy': 0.25,
+            'chance_accuracy': 0.50,
+            'usable_tokens': 16,
+        }
+
+        gate_3 = soa._build_gate_3(
+            self._structured_gate3_coupling(),
+            figure_path=None,
+            structure_profile_path=None,
+            tensor_overview_path=None,
+            predictability=predictability,
+        )
+
+        self.assertEqual(gate_3['status'], 'fail')
+        self.assertIn('cross_modal_token_predictability', gate_3['metrics'])
+        self.assertTrue(any('predictability' in note for note in gate_3['notes']))
 
     def test_build_gate_2_ignores_disabled_fnirs_observation_branch(self):
         split_stats = {

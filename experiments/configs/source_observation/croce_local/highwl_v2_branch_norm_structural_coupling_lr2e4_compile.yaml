@@ -1,0 +1,20 @@
+_base_: "./highwl_v2_branch_norm_coupling0_lr2e4_compile.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_branch_norm_structural_coupling_lr2e4_compile"
+  device: "cuda:0"
+  description: "Croce local highWL v2 branch normalization with delayed low-weight structural source-token coupling."
+
+loss:
+  coupling:
+    weight: 0.03
+    lag_focus_weight: 0.25
+    smoothness_weight: 0.05
+
+training:
+  alignment_warmup:
+    enabled: true
+    start_epoch: 61
+    ramp_epochs: 40
+    start_scale: 0.0
+    end_scale: 1.0

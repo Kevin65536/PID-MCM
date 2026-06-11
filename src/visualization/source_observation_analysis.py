@@ -677,7 +677,6 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
         flat_axes[0].text(0.5, 0.5, 'No Gate 1 payload', ha='center', va='center', transform=flat_axes[0].transAxes)
 
     gate2 = gates.get('gate2', {})
-    predictability = gate2.get('metrics', {}).get('cross_modal_token_predictability', {})
     observation_gap = gate2.get('metrics', {}).get('observation_contribution_gap', {})
     source_target_mse = gate2.get('metrics', {}).get('source_target_mse')
     source_target_random_baseline = gate2.get('metrics', {}).get('source_target_random_baseline')
@@ -716,11 +715,6 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
         labels.append('fNIRS obs gap')
         values.append(float(observation_gap.get('fnirs', 0.0)))
         colors.append('#F18F01')
-    if predictability.get('available', False):
-        labels.append('Predict. lift')
-        values.append(float(predictability.get('accuracy', 0.0)) - float(predictability.get('chance_accuracy', 0.0)))
-        colors.append('#2E86AB')
-
     if values:
         flat_axes[1].bar(np.arange(len(values)), values, color=colors, alpha=0.8)
         flat_axes[1].axhline(0.0, color='#95A5A6', linewidth=1.2)
@@ -731,9 +725,6 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
         metrics_text = []
         if observation_loss is not None:
             metrics_text.append(f'obs_loss={float(observation_loss):.4f}')
-        if predictability.get('available', False):
-            metrics_text.append(f"predict={float(predictability.get('accuracy', 0.0)):.3f}")
-            metrics_text.append(f"chance={float(predictability.get('chance_accuracy', 0.0)):.3f}")
         if metrics_text:
             flat_axes[1].text(
                 0.02,
@@ -751,14 +742,34 @@ def _plot_gate_dashboard(split_name: str, gates: Dict[str, object], output_path:
     gate3 = gates.get('gate3', {})
     gate3_metrics = gate3.get('metrics', {})
     if gate3_metrics:
-        values = [float(gate3_metrics.get('row_entropy_ratio_to_logk', 0.0)), float(gate3_metrics.get('concentration_ratio', 0.0)), float(gate3_metrics.get('row_entropy_variance', 0.0))]
+        predictability = gate3_metrics.get('cross_modal_token_predictability', {})
+        values = [
+            float(gate3_metrics.get('row_entropy_ratio_to_logk', 0.0)),
+            float(gate3_metrics.get('concentration_ratio', 0.0)),
+            float(gate3_metrics.get('row_entropy_variance', 0.0)),
+        ]
         labels = ['Entropy/logK', 'Concentration', 'Entropy variance']
-        flat_axes[2].bar(np.arange(len(values)), values, color=['#2E86AB', '#A23B72', '#F18F01'], alpha=0.8)
+        colors = ['#2E86AB', '#A23B72', '#F18F01']
+        if predictability.get('available', False):
+            values.append(float(predictability.get('accuracy', 0.0)) - float(predictability.get('chance_accuracy', 0.0)))
+            labels.append('Predict. lift')
+            colors.append('#27AE60')
+        flat_axes[2].bar(np.arange(len(values)), values, color=colors, alpha=0.8)
         flat_axes[2].axhline(0.5, color='#E74C3C', linestyle='--', linewidth=1.2)
         flat_axes[2].axhline(1.5, color='#2ECC71', linestyle=':', linewidth=1.2)
         flat_axes[2].set_xticks(np.arange(len(values)))
         flat_axes[2].set_xticklabels(labels, rotation=20, ha='right')
         flat_axes[2].set_title(f"Gate 3 Structure ({gate3.get('status', 'pending')})")
+        if predictability.get('available', False):
+            flat_axes[2].text(
+                0.02,
+                0.98,
+                f"predict={float(predictability.get('accuracy', 0.0)):.3f}\nchance={float(predictability.get('chance_accuracy', 0.0)):.3f}",
+                transform=flat_axes[2].transAxes,
+                verticalalignment='top',
+                fontsize=9,
+                bbox={'boxstyle': 'round', 'facecolor': 'white', 'alpha': 0.8},
+            )
         flat_axes[2].grid(True, alpha=0.25, axis='y')
     else:
         flat_axes[2].text(0.5, 0.5, 'Coupling structure unavailable', ha='center', va='center', transform=flat_axes[2].transAxes)
@@ -2010,15 +2021,9 @@ def _build_gate_1(
 
 def _build_gate_2(
     split_stats: Dict[str, object],
-    coupling: Dict[str, object],
+    coupling: Optional[Dict[str, object]] = None,
     branch_policy: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
-    predictability = _compute_cross_modal_predictability(
-        split_stats['eeg_source_tokens'],
-        split_stats['fnirs_source_tokens'],
-        np.asarray(coupling['joint_probabilities']) if coupling.get('available', False) else np.zeros((1, 1, 1), dtype=np.float64),
-    ) if coupling.get('available', False) else {'available': False, 'reason': 'missing_coupling'}
-
     mean_scalars = split_stats['mean_scalars']
     branch_metrics = split_stats['branch_reconstruction']
     source_target_mse = mean_scalars.get('source_target_loss', branch_metrics.get('fnirs_source_target_mse'))
@@ -2043,7 +2048,6 @@ def _build_gate_2(
         for modality in active_observation_modalities
     }
     observation_gap_ok = all(float(value) > 0.0 for value in observation_gap.values()) if observation_gap else True
-    predictability_ok = predictability.get('available', False) and predictability['accuracy'] > predictability['chance_accuracy']
     source_util_gap = abs(
         split_stats['codebooks']['eeg_source']['active_code_ratio'] -
         split_stats['codebooks']['fnirs_source']['active_code_ratio']
@@ -2083,9 +2087,9 @@ def _build_gate_2(
 
     notes: List[str] = []
     if source_target_mse is None:
-        notes.append('HRF source target metrics are not available in this run.')
+        notes.append('fNIRS source target metrics are not available in this run.')
     elif source_target_random_baseline is None:
-        notes.append('HRF source target random baseline is missing, so Gate 2 cannot fully pass.')
+        notes.append('fNIRS source target random baseline is missing, so Gate 2 cannot fully pass.')
     if eeg_source_target_mse is None:
         notes.append('EEG source target metrics are not available in this run.')
     elif eeg_source_target_random_baseline is None:
@@ -2117,7 +2121,7 @@ def _build_gate_2(
             + '.'
         )
 
-    if not observation_gap_ok or not predictability_ok or not source_independence_ok:
+    if not observation_gap_ok or not source_independence_ok:
         status = 'fail'
     elif source_target_ready and observation_target_ready:
         status = 'pass'
@@ -2149,7 +2153,6 @@ def _build_gate_2(
                 'eeg': branch_metrics.get('eeg_observation_contribution_gap', branch_metrics.get('eeg_observation_gap')),
                 'fnirs': branch_metrics.get('fnirs_observation_contribution_gap', branch_metrics.get('fnirs_observation_gap')),
             },
-            'cross_modal_token_predictability': predictability,
             'source_codebook_independence': {
                 'active_code_ratio_gap': source_util_gap,
                 'eeg_source_active_ratio': split_stats['codebooks']['eeg_source']['active_code_ratio'],
@@ -2167,6 +2170,7 @@ def _build_gate_3(
     figure_path: Optional[str],
     structure_profile_path: Optional[str],
     tensor_overview_path: Optional[str],
+    predictability: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     if not coupling.get('available', False):
         return {
@@ -2180,7 +2184,18 @@ def _build_gate_3(
     entropy_ok = coupling['row_entropy_mean'] < (coupling['max_entropy'] / 2.0)
     concentration_ok = coupling['concentration_ratio'] > 1.5
     variance_ok = coupling['row_entropy_variance'] > 0.0
-    status = 'pass' if entropy_ok and concentration_ok and variance_ok else 'fail'
+    predictability_payload = dict(predictability or {'available': False, 'reason': 'missing_predictability'})
+    predictability_ok = (
+        predictability_payload.get('available', False)
+        and float(predictability_payload.get('accuracy', 0.0)) > float(predictability_payload.get('chance_accuracy', 0.0))
+    )
+    status = 'pass' if entropy_ok and concentration_ok and variance_ok and predictability_ok else 'fail'
+    notes: List[str] = []
+    if not predictability_ok:
+        if predictability_payload.get('available', False):
+            notes.append('Cross-modal token predictability does not exceed chance.')
+        else:
+            notes.append('Cross-modal token predictability is unavailable.')
 
     return {
         'status': status,
@@ -2196,11 +2211,12 @@ def _build_gate_3(
             'lag_focus_mean': tensor_summary.get('lag_focus_mean'),
             'fnirs_roughness': tensor_summary.get('fnirs_roughness'),
             'lag_roughness': tensor_summary.get('lag_roughness'),
+            'cross_modal_token_predictability': predictability_payload,
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
             'tensor_overview_path': tensor_overview_path,
         },
-        'notes': [],
+        'notes': notes,
         'artifacts': {
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
@@ -2284,11 +2300,17 @@ def _build_split_gate_summary(
     gate_0 = _build_gate_0(split_stats, config)
     gate_1 = _build_gate_1(split_stats, metrics_payload, branch_policy=branch_policy)
     gate_2 = _build_gate_2(split_stats, coupling=coupling, branch_policy=branch_policy)
+    predictability = _compute_cross_modal_predictability(
+        split_stats['eeg_source_tokens'],
+        split_stats['fnirs_source_tokens'],
+        np.asarray(coupling['joint_probabilities']) if coupling.get('available', False) else np.zeros((1, 1, 1), dtype=np.float64),
+    ) if coupling.get('available', False) else {'available': False, 'reason': 'missing_coupling'}
     gate_3 = _build_gate_3(
         coupling,
         figure_path=figure_path,
         structure_profile_path=structure_profile_path,
         tensor_overview_path=tensor_overview_path,
+        predictability=predictability,
     )
     gate_4 = _build_gate_4(split_stats)
     codebook_usage_paths: Dict[str, Optional[str]] = {}
