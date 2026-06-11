@@ -84,7 +84,7 @@ class ExperimentLogger:
         # Create run directory
         exp_name = self.config.get("experiment", {}).get("name", "unknown")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_name = run_name or f"{exp_name}_{timestamp}"
+        self.run_name = run_name or f"{timestamp}_{exp_name}"
         self.run_root = self._resolve_run_root()
         self.run_dir = self.run_root / self.run_name
         metrics_path = self.run_dir / "metrics.json"

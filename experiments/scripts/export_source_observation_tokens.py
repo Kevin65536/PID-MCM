@@ -331,7 +331,7 @@ def main() -> None:
     )
     output_root = resolve_path(args.output_root or output_cfg.get("root", DEFAULT_OUTPUT_ROOT))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_name = args.run_name or f"{experiment_cfg.get('name', 'source_observation_token_export')}_{timestamp}"
+    run_name = args.run_name or f"{timestamp}_{experiment_cfg.get('name', 'source_observation_token_export')}"
     run_dir = output_root / run_name
 
     device_name = args.device or export_cfg.get("device", "cpu")
