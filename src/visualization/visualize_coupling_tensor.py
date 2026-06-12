@@ -73,6 +73,22 @@ def _prepare_coupling_views(
     lag_mass = np.clip(lag_marginal[..., None], 1e-12, None)
     conditional_joint_given_lag = joint_probs / lag_mass
     expected_fnirs_per_lag = (conditional_joint_given_lag * fnirs_positions[None, None, :]).sum(axis=-1)
+    conditional_argmax = conditional_joint_given_lag.argmax(axis=-1)
+    conditional_peak = conditional_joint_given_lag.max(axis=-1)
+    conditional_entropy = -(
+        conditional_joint_given_lag * np.log(conditional_joint_given_lag + 1e-12)
+    ).sum(axis=-1)
+    lag_fnirs_marginal = conditional_joint_given_lag.mean(axis=0)
+    lag_fnirs_marginal = lag_fnirs_marginal / np.clip(
+        lag_fnirs_marginal.sum(axis=-1, keepdims=True), 1e-12, None
+    )
+    conditional_kl_to_lag_marginal = (
+        conditional_joint_given_lag
+        * (
+            np.log(conditional_joint_given_lag + 1e-12)
+            - np.log(lag_fnirs_marginal[None, :, :] + 1e-12)
+        )
+    ).sum(axis=-1)
     row_entropy = -(slice_probs * np.log(slice_probs + 1e-12)).sum(axis=-1)
     lag_entropy = -(lag_marginal * np.log(lag_marginal + 1e-12)).sum(axis=-1)
     joint_entropy = -(joint_probs * np.log(joint_probs + 1e-12)).sum(axis=(1, 2))
@@ -89,6 +105,10 @@ def _prepare_coupling_views(
         'expected_fnirs': expected_fnirs,
         'expected_lag': expected_lag,
         'expected_fnirs_per_lag': expected_fnirs_per_lag,
+        'conditional_argmax': conditional_argmax,
+        'conditional_peak': conditional_peak,
+        'conditional_entropy': conditional_entropy,
+        'conditional_kl_to_lag_marginal': conditional_kl_to_lag_marginal,
         'row_entropy': row_entropy,
         'lag_entropy': lag_entropy,
         'joint_entropy': joint_entropy,
@@ -107,6 +127,47 @@ def _prepare_coupling_views(
             'lag_roughness': lag_roughness,
         },
     }
+
+
+def _plot_conditional_diagnostics(views: Dict[str, Any], output_path: Path, title: str) -> None:
+    expected = np.asarray(views['expected_fnirs_per_lag'], dtype=np.float64)
+    argmax = np.asarray(views['conditional_argmax'], dtype=np.float64)
+    peak = np.asarray(views['conditional_peak'], dtype=np.float64)
+    entropy = np.asarray(views['conditional_entropy'], dtype=np.float64)
+    kl_to_marginal = np.asarray(views['conditional_kl_to_lag_marginal'], dtype=np.float64)
+    n_fnirs = int(views['summary']['n_fnirs_tokens'])
+    max_entropy = math.log(max(n_fnirs, 2))
+
+    figure, axes = plt.subplots(2, 3, figsize=(18, 10), constrained_layout=True)
+    panels = [
+        (expected, 'Expected fNIRS index', 'cividis', 0.0, max(n_fnirs - 1, 1)),
+        (argmax, 'Most probable fNIRS index', 'viridis', 0.0, max(n_fnirs - 1, 1)),
+        (peak, 'Conditional peak probability', 'magma', 0.0, max(float(peak.max()), 1.0 / max(n_fnirs, 1))),
+        (entropy / max(max_entropy, 1e-12), 'Conditional entropy / log(K)', 'magma_r', 0.0, 1.0),
+        (kl_to_marginal, 'KL to lag-specific fNIRS marginal', 'plasma', 0.0, max(float(kl_to_marginal.max()), 1e-6)),
+    ]
+    for axis, (values, panel_title, cmap, vmin, vmax) in zip(axes.flat, panels):
+        image = axis.imshow(values, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax)
+        axis.set_title(panel_title)
+        axis.set_xlabel('Lag index')
+        axis.set_ylabel('Ordered EEG token')
+        figure.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+
+    axes.flat[-1].axis('off')
+    axes.flat[-1].text(
+        0.05,
+        0.95,
+        'Expected index is retained as a tensor projection.\n'
+        'Argmax, peak, entropy, and KL expose distinct\n'
+        'conditional patterns that can share the same mean index.',
+        va='top',
+        ha='left',
+        fontsize=12,
+    )
+    figure.suptitle(title, fontsize=16, fontweight='bold')
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=200, bbox_inches='tight')
+    plt.close(figure)
 
 
 def prepare_coupling_tensor_views(
@@ -211,6 +272,31 @@ def plot_coupling_tensor_overview(
         'summary': views['summary'],
         'eeg_order': np.asarray(views['eeg_order'], dtype=np.int64).tolist(),
         'fnirs_order': np.asarray(views['fnirs_order'], dtype=np.int64).tolist(),
+    }
+
+
+def plot_coupling_conditional_diagnostics(
+    *,
+    coupling_logits: np.ndarray,
+    output_path: Path,
+    title: str,
+    eeg_codebook: Optional[np.ndarray] = None,
+    fnirs_codebook: Optional[np.ndarray] = None,
+) -> Dict[str, Any]:
+    """Write conditional projections of the EEG x lag x fNIRS tensor."""
+    views = _prepare_coupling_views(
+        coupling_logits=coupling_logits,
+        eeg_codebook=eeg_codebook,
+        fnirs_codebook=fnirs_codebook,
+    )
+    _plot_conditional_diagnostics(views=views, output_path=output_path, title=title)
+    return {
+        'figure_path': str(output_path),
+        'conditional_peak_mean': float(np.mean(views['conditional_peak'])),
+        'conditional_entropy_ratio_mean': float(
+            np.mean(views['conditional_entropy']) / max(math.log(max(int(views['summary']['n_fnirs_tokens']), 2)), 1e-12)
+        ),
+        'conditional_kl_to_lag_marginal_mean': float(np.mean(views['conditional_kl_to_lag_marginal'])),
     }
 
 

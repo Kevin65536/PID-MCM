@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 from src.visualization.visualize_coupling_tensor import (
+    plot_coupling_conditional_diagnostics,
     plot_coupling_tensor_overview,
     prepare_coupling_tensor_views,
 )
@@ -422,6 +423,263 @@ def _compute_cross_modal_predictability(
         'joint_argmax_usable_tokens': int(joint_total),
         'model_weighted_true_token_probability': model_weighted_true_token_probability,
     }
+
+
+def _empirical_pair_statistics(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    n_eeg_tokens: int,
+    n_fnirs_tokens: int,
+) -> Tuple[Dict[str, float], np.ndarray]:
+    counts = np.zeros((n_eeg_tokens, n_fnirs_tokens), dtype=np.float64)
+    np.add.at(counts, (eeg_tokens.reshape(-1), fnirs_tokens.reshape(-1)), 1.0)
+    total = float(counts.sum())
+    if total <= 0.0:
+        return {
+            'sample_count': 0,
+            'mutual_information_nats': 0.0,
+            'normalized_mi_by_fnirs_entropy': 0.0,
+            'conditional_top1_accuracy': 0.0,
+            'marginal_top1_accuracy': 0.0,
+        }, np.zeros_like(counts)
+
+    joint = counts / total
+    eeg_marginal = joint.sum(axis=1)
+    fnirs_marginal = joint.sum(axis=0)
+    independent = eeg_marginal[:, None] * fnirs_marginal[None, :]
+    active = joint > 0.0
+    mutual_information = float(
+        np.sum(joint[active] * (np.log(joint[active] + 1e-12) - np.log(independent[active] + 1e-12)))
+    )
+    fnirs_active = fnirs_marginal > 0.0
+    fnirs_entropy = float(-np.sum(fnirs_marginal[fnirs_active] * np.log(fnirs_marginal[fnirs_active] + 1e-12)))
+    conditional = counts / np.clip(counts.sum(axis=1, keepdims=True), 1.0, None)
+    conditional_predictions = conditional.argmax(axis=1)[eeg_tokens]
+    marginal_prediction = int(np.argmax(fnirs_marginal))
+    return {
+        'sample_count': int(total),
+        'mutual_information_nats': mutual_information,
+        'normalized_mi_by_fnirs_entropy': mutual_information / max(fnirs_entropy, 1e-12),
+        'conditional_top1_accuracy': float(np.mean(conditional_predictions == fnirs_tokens)),
+        'marginal_top1_accuracy': float(np.mean(fnirs_tokens == marginal_prediction)),
+    }, conditional - fnirs_marginal[None, :]
+
+
+def _leave_one_subject_out_pair_accuracy(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    subject_ids: np.ndarray,
+    n_eeg_tokens: int,
+    n_fnirs_tokens: int,
+) -> Dict[str, object]:
+    unique_subjects = np.unique(subject_ids[subject_ids >= 0])
+    if unique_subjects.size < 2:
+        return {'available': False, 'reason': 'fewer_than_two_subjects'}
+
+    conditional_correct = 0
+    marginal_correct = 0
+    total = 0
+    per_subject: List[Dict[str, object]] = []
+    for subject_id in unique_subjects:
+        train_mask = subject_ids != subject_id
+        test_mask = subject_ids == subject_id
+        if not np.any(train_mask) or not np.any(test_mask):
+            continue
+        train_eeg = eeg_tokens[train_mask]
+        train_fnirs = fnirs_tokens[train_mask]
+        counts = np.zeros((n_eeg_tokens, n_fnirs_tokens), dtype=np.float64)
+        np.add.at(counts, (train_eeg, train_fnirs), 1.0)
+        fnirs_counts = counts.sum(axis=0)
+        marginal_prediction = int(np.argmax(fnirs_counts))
+        row_totals = counts.sum(axis=1)
+        conditional_predictions_by_eeg = counts.argmax(axis=1)
+        conditional_predictions_by_eeg[row_totals <= 0.0] = marginal_prediction
+
+        test_eeg = eeg_tokens[test_mask]
+        test_fnirs = fnirs_tokens[test_mask]
+        conditional_predictions = conditional_predictions_by_eeg[test_eeg]
+        subject_conditional_correct = int(np.sum(conditional_predictions == test_fnirs))
+        subject_marginal_correct = int(np.sum(test_fnirs == marginal_prediction))
+        subject_total = int(test_fnirs.size)
+        conditional_correct += subject_conditional_correct
+        marginal_correct += subject_marginal_correct
+        total += subject_total
+        per_subject.append({
+            'subject_id': int(subject_id),
+            'sample_count': subject_total,
+            'conditional_accuracy': subject_conditional_correct / max(subject_total, 1),
+            'marginal_accuracy': subject_marginal_correct / max(subject_total, 1),
+        })
+
+    if total <= 0:
+        return {'available': False, 'reason': 'no_held_out_samples'}
+    conditional_accuracy = conditional_correct / total
+    marginal_accuracy = marginal_correct / total
+    return {
+        'available': True,
+        'subject_count': int(unique_subjects.size),
+        'sample_count': int(total),
+        'conditional_accuracy': float(conditional_accuracy),
+        'marginal_accuracy': float(marginal_accuracy),
+        'accuracy_gain': float(conditional_accuracy - marginal_accuracy),
+        'per_subject': per_subject,
+    }
+
+
+def _compute_lag_balanced_empirical_audit(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    subject_ids: np.ndarray,
+    *,
+    n_eeg_tokens: int,
+    n_fnirs_tokens: int,
+    n_lags: int,
+    shuffle_repeats: int = 20,
+    seed: int = 20260612,
+) -> Tuple[Dict[str, object], List[np.ndarray]]:
+    if eeg_tokens.size == 0 or fnirs_tokens.size == 0:
+        return {'available': False, 'reason': 'empty_tokens'}, []
+    rng = np.random.default_rng(seed)
+    per_lag: List[Dict[str, object]] = []
+    conditional_deltas: List[np.ndarray] = []
+    max_lag = min(int(n_lags), int(fnirs_tokens.shape[1]))
+
+    for lag in range(max_lag):
+        usable = min(eeg_tokens.shape[1], fnirs_tokens.shape[1] - lag)
+        if usable <= 0:
+            continue
+        aligned_eeg = eeg_tokens[:, :usable].reshape(-1)
+        aligned_fnirs = fnirs_tokens[:, lag:lag + usable].reshape(-1)
+        aligned_subjects = np.repeat(subject_ids.reshape(-1), usable)
+        base_metrics, conditional_delta = _empirical_pair_statistics(
+            aligned_eeg,
+            aligned_fnirs,
+            n_eeg_tokens,
+            n_fnirs_tokens,
+        )
+        conditional_deltas.append(conditional_delta)
+
+        shuffle_mi: List[float] = []
+        for _ in range(max(int(shuffle_repeats), 0)):
+            shuffled_eeg = aligned_eeg.copy()
+            for subject_id in np.unique(aligned_subjects):
+                mask = aligned_subjects == subject_id
+                shuffled_eeg[mask] = rng.permutation(shuffled_eeg[mask])
+            shuffled_metrics, _ = _empirical_pair_statistics(
+                shuffled_eeg,
+                aligned_fnirs,
+                n_eeg_tokens,
+                n_fnirs_tokens,
+            )
+            shuffle_mi.append(float(shuffled_metrics['mutual_information_nats']))
+
+        loso = _leave_one_subject_out_pair_accuracy(
+            aligned_eeg,
+            aligned_fnirs,
+            aligned_subjects,
+            n_eeg_tokens,
+            n_fnirs_tokens,
+        )
+        shuffle_mean = float(np.mean(shuffle_mi)) if shuffle_mi else 0.0
+        shuffle_std = float(np.std(shuffle_mi)) if shuffle_mi else 0.0
+        mi_significant = bool(
+            float(base_metrics['mutual_information_nats']) > shuffle_mean + 2.0 * shuffle_std
+        )
+        loso_positive = bool(
+            loso.get('available', False) and float(loso.get('accuracy_gain', 0.0)) > 0.0
+        )
+        per_lag.append({
+            'lag': int(lag),
+            **base_metrics,
+            'shuffle_mi_mean': shuffle_mean,
+            'shuffle_mi_std': shuffle_std,
+            'mi_above_shuffle': float(base_metrics['mutual_information_nats']) - shuffle_mean,
+            'mi_exceeds_shuffle_2std': mi_significant,
+            'leave_one_subject_out': loso,
+            'stable_cross_subject_signal': bool(mi_significant and loso_positive),
+        })
+
+    if not per_lag:
+        return {'available': False, 'reason': 'no_valid_lags'}, []
+
+    loso_gains = np.asarray([
+        item['leave_one_subject_out'].get('accuracy_gain', float('-inf'))
+        if item['leave_one_subject_out'].get('available', False) else float('-inf')
+        for item in per_lag
+    ])
+    mi_gains = np.asarray([item['mi_above_shuffle'] for item in per_lag], dtype=np.float64)
+    best_loso_index = int(np.argmax(loso_gains)) if np.isfinite(loso_gains).any() else None
+    best_mi_index = int(np.argmax(mi_gains))
+    stable_lags = [int(item['lag']) for item in per_lag if item['stable_cross_subject_signal']]
+    return {
+        'available': True,
+        'lag_weighting': 'equal_per_lag',
+        'shuffle_policy': 'within_subject_eeg_token_permutation',
+        'shuffle_repeats': int(shuffle_repeats),
+        'per_lag': per_lag,
+        'best_lag_by_loso_gain': None if best_loso_index is None else int(per_lag[best_loso_index]['lag']),
+        'best_lag_loso_gain': None if best_loso_index is None else float(loso_gains[best_loso_index]),
+        'best_lag_by_mi_above_shuffle': int(per_lag[best_mi_index]['lag']),
+        'best_mi_above_shuffle': float(mi_gains[best_mi_index]),
+        'stable_lags': stable_lags,
+        'stable_lag_count': len(stable_lags),
+    }, conditional_deltas
+
+
+def _plot_lag_balanced_empirical_audit(
+    audit: Dict[str, object],
+    conditional_deltas: List[np.ndarray],
+    output_path: Path,
+) -> Optional[str]:
+    if not HAS_MATPLOTLIB or not audit.get('available', False):
+        return None
+    per_lag = list(audit['per_lag'])
+    lags = np.asarray([item['lag'] for item in per_lag], dtype=np.int64)
+    mi = np.asarray([item['mutual_information_nats'] for item in per_lag], dtype=np.float64)
+    shuffle_mi = np.asarray([item['shuffle_mi_mean'] for item in per_lag], dtype=np.float64)
+    loso_cond = np.asarray([
+        item['leave_one_subject_out'].get('conditional_accuracy', np.nan) for item in per_lag
+    ], dtype=np.float64)
+    loso_base = np.asarray([
+        item['leave_one_subject_out'].get('marginal_accuracy', np.nan) for item in per_lag
+    ], dtype=np.float64)
+
+    n_cols = min(5, len(conditional_deltas))
+    n_rows = int(math.ceil(len(conditional_deltas) / max(n_cols, 1)))
+    figure = plt.figure(figsize=(18, 7 + 3.0 * n_rows))
+    outer = figure.add_gridspec(2, 1, height_ratios=[1.0, max(1.0, 0.8 * n_rows)], hspace=0.32)
+    top = outer[0].subgridspec(1, 2, wspace=0.25)
+    axis_mi = figure.add_subplot(top[0, 0])
+    axis_acc = figure.add_subplot(top[0, 1])
+    axis_mi.plot(lags, mi, marker='o', label='Observed MI')
+    axis_mi.plot(lags, shuffle_mi, marker='o', label='Within-subject shuffle MI')
+    axis_mi.set_title('Lag-balanced empirical mutual information')
+    axis_mi.set_xlabel('Lag index')
+    axis_mi.set_ylabel('MI (nats)')
+    axis_mi.grid(True, alpha=0.25)
+    axis_mi.legend()
+
+    axis_acc.plot(lags, loso_cond, marker='o', label='LOSO conditional')
+    axis_acc.plot(lags, loso_base, marker='o', label='LOSO fNIRS marginal')
+    axis_acc.set_title('Leave-one-subject-out token prediction')
+    axis_acc.set_xlabel('Lag index')
+    axis_acc.set_ylabel('Accuracy')
+    axis_acc.grid(True, alpha=0.25)
+    axis_acc.legend()
+
+    slices = outer[1].subgridspec(n_rows, n_cols, wspace=0.18, hspace=0.28)
+    vmax = max(max(float(np.abs(values).max()), 1e-6) for values in conditional_deltas)
+    for index, values in enumerate(conditional_deltas):
+        axis = figure.add_subplot(slices[index // n_cols, index % n_cols])
+        axis.imshow(values, aspect='auto', cmap='coolwarm', vmin=-vmax, vmax=vmax)
+        axis.set_title(f'Lag {index}: P(F|E) - P(F)')
+        axis.set_xlabel('fNIRS token')
+        axis.set_ylabel('EEG token')
+    for index in range(len(conditional_deltas), n_rows * n_cols):
+        figure.add_subplot(slices[index // n_cols, index % n_cols]).axis('off')
+
+    figure.suptitle('Lag-balanced empirical EEG-fNIRS source-token audit', fontsize=16, fontweight='bold')
+    return _save_figure(figure, output_path)
 
 
 def _compute_coupling_structure(model) -> Dict[str, object]:
@@ -2210,6 +2468,10 @@ def _build_gate_3(
     figure_path: Optional[str],
     structure_profile_path: Optional[str],
     tensor_overview_path: Optional[str],
+    conditional_diagnostics_path: Optional[str] = None,
+    conditional_diagnostics: Optional[Dict[str, object]] = None,
+    empirical_audit: Optional[Dict[str, object]] = None,
+    empirical_audit_path: Optional[str] = None,
     predictability: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     if not coupling.get('available', False):
@@ -2229,13 +2491,23 @@ def _build_gate_3(
         predictability_payload.get('available', False)
         and float(predictability_payload.get('accuracy', 0.0)) > float(predictability_payload.get('chance_accuracy', 0.0))
     )
-    status = 'pass' if entropy_ok and concentration_ok and variance_ok and predictability_ok else 'fail'
+    empirical_payload = dict(empirical_audit or {'available': False, 'reason': 'missing_empirical_audit'})
+    empirical_ok = (
+        empirical_payload.get('available', False)
+        and int(empirical_payload.get('stable_lag_count', 0)) > 0
+    )
+    status = 'pass' if entropy_ok and concentration_ok and variance_ok and predictability_ok and empirical_ok else 'fail'
     notes: List[str] = []
     if not predictability_ok:
         if predictability_payload.get('available', False):
             notes.append('Cross-modal token predictability does not exceed the empirical token baseline.')
         else:
             notes.append('Cross-modal token predictability is unavailable.')
+    if not empirical_ok:
+        if empirical_payload.get('available', False):
+            notes.append('No lag exceeds both the within-subject shuffle MI threshold and the leave-one-subject-out marginal baseline.')
+        else:
+            notes.append('Lag-balanced empirical coupling audit is unavailable.')
 
     return {
         'status': status,
@@ -2252,15 +2524,21 @@ def _build_gate_3(
             'fnirs_roughness': tensor_summary.get('fnirs_roughness'),
             'lag_roughness': tensor_summary.get('lag_roughness'),
             'cross_modal_token_predictability': predictability_payload,
+            'lag_balanced_empirical_audit': empirical_payload,
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
             'tensor_overview_path': tensor_overview_path,
+            'conditional_diagnostics_path': conditional_diagnostics_path,
+            'conditional_diagnostics': dict(conditional_diagnostics or {'available': False}),
+            'empirical_audit_path': empirical_audit_path,
         },
         'notes': notes,
         'artifacts': {
             'heatmap_path': figure_path,
             'structure_profile_path': structure_profile_path,
             'tensor_overview_path': tensor_overview_path,
+            'conditional_diagnostics_path': conditional_diagnostics_path,
+            'empirical_audit_path': empirical_audit_path,
         },
     }
 
@@ -2319,6 +2597,8 @@ def _build_split_gate_summary(
     figure_path = _plot_coupling_heatmap(coupling, analysis_root / f"{split_name}_coupling_heatmap.png")
     structure_profile_path = _plot_coupling_structure_profile(coupling, analysis_root / f"{split_name}_coupling_structure.png")
     tensor_overview_path = None
+    conditional_diagnostics_path = None
+    conditional_diagnostics: Dict[str, object] = {'available': False}
     if coupling.get('available', False):
         try:
             eeg_quantizer = getattr(model_ref, 'eeg_source_quantizer', None)
@@ -2334,8 +2614,26 @@ def _build_split_gate_summary(
                 subtitle='All valid lag slices are considered; no selected lag is used.',
             )
             tensor_overview_path = str(tensor_payload['figure_path'])
+            conditional_payload = plot_coupling_conditional_diagnostics(
+                coupling_logits=np.asarray(coupling['coupling_logits']),
+                eeg_codebook=eeg_codebook,
+                fnirs_codebook=fnirs_codebook,
+                output_path=analysis_root / f"{split_name}_coupling_conditional_diagnostics.png",
+                title=f'{split_name} EEG-fNIRS source coupling conditional projections',
+            )
+            conditional_diagnostics_path = str(conditional_payload['figure_path'])
+            conditional_diagnostics = {
+                'available': True,
+                **{
+                    key: value
+                    for key, value in conditional_payload.items()
+                    if key != 'figure_path'
+                },
+            }
         except Exception:
             tensor_overview_path = None
+            conditional_diagnostics_path = None
+            conditional_diagnostics = {'available': False, 'reason': 'visualization_failed'}
     branch_policy = _resolve_gate_branch_policy(config)
     gate_0 = _build_gate_0(split_stats, config)
     gate_1 = _build_gate_1(split_stats, metrics_payload, branch_policy=branch_policy)
@@ -2345,11 +2643,28 @@ def _build_split_gate_summary(
         split_stats['fnirs_source_tokens'],
         np.asarray(coupling['joint_probabilities']) if coupling.get('available', False) else np.zeros((1, 1, 1), dtype=np.float64),
     ) if coupling.get('available', False) else {'available': False, 'reason': 'missing_coupling'}
+    empirical_audit, empirical_conditional_deltas = _compute_lag_balanced_empirical_audit(
+        split_stats['eeg_source_tokens'],
+        split_stats['fnirs_source_tokens'],
+        split_stats['subject_ids'],
+        n_eeg_tokens=int(split_stats['codebook_sizes']['source']),
+        n_fnirs_tokens=int(split_stats['codebook_sizes']['source']),
+        n_lags=int(coupling.get('tensor_summary', {}).get('n_lags', 1)),
+    )
+    empirical_audit_path = _plot_lag_balanced_empirical_audit(
+        empirical_audit,
+        empirical_conditional_deltas,
+        analysis_root / f"{split_name}_lag_balanced_empirical_coupling_audit.png",
+    )
     gate_3 = _build_gate_3(
         coupling,
         figure_path=figure_path,
         structure_profile_path=structure_profile_path,
         tensor_overview_path=tensor_overview_path,
+        conditional_diagnostics_path=conditional_diagnostics_path,
+        conditional_diagnostics=conditional_diagnostics,
+        empirical_audit=empirical_audit,
+        empirical_audit_path=empirical_audit_path,
         predictability=predictability,
     )
     gate_4 = _build_gate_4(split_stats)
@@ -2388,6 +2703,8 @@ def _build_split_gate_summary(
         'coupling_heatmap_path': figure_path,
         'coupling_structure_path': structure_profile_path,
         'coupling_tensor_overview_path': tensor_overview_path,
+        'coupling_conditional_diagnostics_path': conditional_diagnostics_path,
+        'lag_balanced_empirical_audit_path': empirical_audit_path,
         'codebook_usage_paths': codebook_usage_paths,
         'reconstruction_visualization_paths': reconstruction_visualization_paths,
         'token_pattern_paths': token_pattern_paths,

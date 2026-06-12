@@ -253,6 +253,29 @@ class SourceObservationAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(float(predictability['accuracy']), 0.75, places=6)
         self.assertFalse(predictability['accuracy'] > predictability['chance_accuracy'])
 
+    def test_lag_balanced_empirical_audit_finds_cross_subject_mapping(self):
+        rng = np.random.default_rng(20260612)
+        eeg_tokens = rng.integers(0, 4, size=(24, 8), dtype=np.int64)
+        fnirs_tokens = rng.integers(0, 4, size=(24, 8), dtype=np.int64)
+        fnirs_tokens[:, 1:] = eeg_tokens[:, :-1]
+        subject_ids = np.repeat(np.arange(4, dtype=np.int64), 6)
+
+        audit, conditional_deltas = soa._compute_lag_balanced_empirical_audit(
+            eeg_tokens,
+            fnirs_tokens,
+            subject_ids,
+            n_eeg_tokens=4,
+            n_fnirs_tokens=4,
+            n_lags=4,
+            shuffle_repeats=8,
+        )
+
+        self.assertTrue(audit['available'])
+        self.assertEqual(audit['lag_weighting'], 'equal_per_lag')
+        self.assertEqual(audit['best_lag_by_loso_gain'], 1)
+        self.assertGreater(float(audit['best_lag_loso_gain']), 0.5)
+        self.assertEqual(len(conditional_deltas), 4)
+
     def test_build_gate_2_ignores_disabled_fnirs_observation_branch(self):
         split_stats = {
             'eeg_source_tokens': np.asarray([[0, 1, 0], [1, 0, 1]], dtype=np.int64),
