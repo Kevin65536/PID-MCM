@@ -1,0 +1,27 @@
+_base_: "./highwl_v2_coupling_residual_soft_w03_bs256_420ep.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_coupling_calibration_fixed_init"
+  device: "cuda:0"
+  description: "Freeze the trained tokenizer and calibrate only the residual EEG/fNIRS coupling tensor from its learned initialization."
+
+training:
+  performance:
+    compile:
+      enabled: true
+  coupling_calibration:
+    enabled: true
+    source_checkpoint: "experiments/runs/source_observation/croce_local/highwl_v2/s2_croce_local_highwl_v2_coupling_residual_soft_w03_bs256_420ep_20260612_232836/checkpoints/best_model.pt"
+    reset_coupling: false
+    epochs: 60
+    learning_rate: 0.001
+    min_lr: 0.0001
+    weight_decay: 0.0
+    validation_interval_epochs: 1
+    save_every_epochs: 10
+    patience: 15
+    objective:
+      pair_likelihood: 1.0
+      lag_focus: 0.0
+      smoothness: 0.0
+      lag_evidence: 0.0

@@ -1,0 +1,11 @@
+_base_: "./highwl_v2_coupling_calibration_fixed_init_gpu0.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_coupling_calibration_random_init"
+  device: "cuda:1"
+  description: "Freeze the trained tokenizer and fit a randomly reset residual EEG/fNIRS coupling tensor as an initialization control."
+
+training:
+  coupling_calibration:
+    reset_coupling: true
+    reset_std: 0.02

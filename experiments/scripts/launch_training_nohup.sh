@@ -15,6 +15,10 @@ Supported tasks:
     Script: experiments/scripts/train_source_observation_tokenizer.py
     Args: --config PATH [--resume PATH] [--run-name NAME] [--skip-post-analysis]
 
+  source-observation-coupling-calibration
+    Script: experiments/scripts/calibrate_source_observation_coupling.py
+    Args: --config PATH [--checkpoint PATH] [--run-name NAME] [--skip-post-analysis]
+
   tokenizer
     Script: experiments/scripts/train_tokenizer.py
     Args: --config PATH [--resume PATH]
@@ -43,6 +47,9 @@ resolve_script() {
     case "$1" in
         source-observation-tokenizer)
             echo "experiments/scripts/train_source_observation_tokenizer.py"
+            ;;
+        source-observation-coupling-calibration)
+            echo "experiments/scripts/calibrate_source_observation_coupling.py"
             ;;
         tokenizer)
             echo "experiments/scripts/train_tokenizer.py"
