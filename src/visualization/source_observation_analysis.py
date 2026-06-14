@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 from datetime import datetime
 from pathlib import Path
@@ -91,10 +92,34 @@ def _maybe_batch_vector(batch: Dict[str, object], keys: Iterable[str]) -> Option
     return None
 
 
+def _maybe_batch_values(batch: Dict[str, object], keys: Iterable[str]) -> Optional[np.ndarray]:
+    for key in keys:
+        if key not in batch:
+            continue
+        value = batch[key]
+        if value is None:
+            continue
+        if isinstance(value, torch.Tensor):
+            array = value.detach().cpu().numpy()
+        else:
+            array = np.asarray(value)
+        if array.ndim == 0:
+            continue
+        return array.reshape(-1)
+    return None
+
+
 def _probe_id_array(values: Optional[np.ndarray], take: int) -> np.ndarray:
     if values is None:
         return np.full((take,), -1, dtype=np.int64)
     return values[:take].astype(np.int64, copy=False)
+
+
+def _probe_value_array(values: Optional[np.ndarray], take: int, default: str = 'unknown') -> np.ndarray:
+    if values is None:
+        return np.full((take,), default, dtype=object)
+    normalized = np.asarray(values).reshape(-1)[:take]
+    return normalized.astype(str, copy=False)
 
 
 def _move_targets_to_device(batch: Dict[str, object], device: torch.device) -> Optional[Dict[str, torch.Tensor]]:
@@ -173,6 +198,18 @@ def _stratified_split_indices(labels: np.ndarray, seed: int, train_ratio: float 
 def _nearest_centroid_probe(features: np.ndarray, labels: np.ndarray, seed: int) -> Dict[str, object]:
     if features.size == 0 or labels.size == 0:
         return {'available': False, 'reason': 'empty_features'}
+    feature_rows = np.ascontiguousarray(features, dtype=np.float64)
+    row_hashes = np.fromiter(
+        (
+            int.from_bytes(hashlib.blake2b(row.tobytes(), digest_size=8).digest(), 'little')
+            for row in feature_rows
+        ),
+        dtype=np.uint64,
+        count=feature_rows.shape[0],
+    )
+    stable_order = np.lexsort((row_hashes, labels))
+    features = feature_rows[stable_order]
+    labels = labels[stable_order]
     train_idx, test_idx, classes = _stratified_split_indices(labels, seed=seed)
     if train_idx.size == 0 or test_idx.size == 0 or classes.size < 2:
         return {'available': False, 'reason': 'insufficient_label_support'}
@@ -204,7 +241,29 @@ def _nearest_centroid_probe(features: np.ndarray, labels: np.ndarray, seed: int)
         'accuracy': accuracy,
         'balanced_accuracy': balanced_accuracy,
         'normalized_lift': normalized_lift,
+        'sample_order': 'label_then_stable_feature_hash',
     }
+
+
+def _repeated_nearest_centroid_probe(
+    features: np.ndarray,
+    labels: np.ndarray,
+    seeds: Iterable[int],
+) -> Dict[str, object]:
+    results = [_nearest_centroid_probe(features, labels, seed=int(seed)) for seed in seeds]
+    available = [result for result in results if result.get('available', False)]
+    if not available:
+        return results[0] if results else {'available': False, 'reason': 'no_probe_repeats'}
+
+    payload = dict(available[0])
+    for key in ('accuracy', 'balanced_accuracy', 'normalized_lift'):
+        values = np.asarray([float(result[key]) for result in available], dtype=np.float64)
+        payload[key] = float(values.mean())
+        payload[f'{key}_std'] = float(values.std())
+    payload['repeat_count'] = len(available)
+    payload['seeds'] = [int(seed) for seed in seeds]
+    payload['repeats'] = available
+    return payload
 
 
 def _codebook_summary(indices_chunks: List[np.ndarray], codebook_size: int) -> Dict[str, object]:
@@ -682,12 +741,162 @@ def _plot_lag_balanced_empirical_audit(
     return _save_figure(figure, output_path)
 
 
-def _compute_coupling_structure(model) -> Dict[str, object]:
-    analysis_logits = getattr(model, 'get_coupling_analysis_logits', None)
-    logits = analysis_logits() if callable(analysis_logits) else getattr(model, 'coupling_logits', None)
+def _compute_stratified_empirical_audits(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    subject_ids: np.ndarray,
+    strata: np.ndarray,
+    *,
+    stratum_kind: str,
+    n_eeg_tokens: int,
+    n_fnirs_tokens: int,
+    n_lags: int,
+    shuffle_repeats: int = 20,
+) -> Dict[str, object]:
+    strata = np.asarray(strata).astype(str)
+    groups: Dict[str, object] = {}
+    for group_index, name in enumerate(sorted(np.unique(strata).tolist())):
+        mask = strata == name
+        group_audit, _ = _compute_lag_balanced_empirical_audit(
+            eeg_tokens[mask],
+            fnirs_tokens[mask],
+            subject_ids[mask],
+            n_eeg_tokens=n_eeg_tokens,
+            n_fnirs_tokens=n_fnirs_tokens,
+            n_lags=n_lags,
+            shuffle_repeats=shuffle_repeats,
+            seed=20260612 + group_index,
+        )
+        groups[name] = {
+            'sample_count': int(mask.sum()),
+            'subject_count': int(np.unique(subject_ids[mask]).size),
+            'audit': group_audit,
+        }
+    return {
+        'available': bool(groups),
+        'stratum_kind': str(stratum_kind),
+        'group_count': len(groups),
+        'groups': groups,
+    }
+
+
+def _plot_stratified_empirical_audits(payload: Dict[str, object], output_path: Path) -> Optional[str]:
+    if not HAS_MATPLOTLIB or not payload.get('available', False):
+        return None
+    groups = dict(payload.get('groups', {}))
+    available_groups = [
+        (name, group)
+        for name, group in groups.items()
+        if isinstance(group, dict) and dict(group.get('audit', {})).get('available', False)
+    ]
+    if not available_groups:
+        return None
+
+    figure, axes = plt.subplots(
+        len(available_groups),
+        2,
+        figsize=(14, max(4.0 * len(available_groups), 4.5)),
+        squeeze=False,
+        constrained_layout=True,
+    )
+    for row, (name, group) in enumerate(available_groups):
+        audit = dict(group['audit'])
+        per_lag = list(audit['per_lag'])
+        lags = np.asarray([item['lag'] for item in per_lag], dtype=np.int64)
+        mi_gain = np.asarray([item['mi_above_shuffle'] for item in per_lag], dtype=np.float64)
+        loso_gain = np.asarray([
+            item['leave_one_subject_out'].get('accuracy_gain', np.nan)
+            for item in per_lag
+        ], dtype=np.float64)
+        axes[row, 0].plot(lags, mi_gain, marker='o')
+        axes[row, 0].axhline(0.0, color='black', linewidth=1, alpha=0.4)
+        axes[row, 0].set_title(f'{name}: MI above within-subject shuffle')
+        axes[row, 0].set_ylabel('MI gain (nats)')
+        axes[row, 1].plot(lags, loso_gain, marker='o')
+        axes[row, 1].axhline(0.0, color='black', linewidth=1, alpha=0.4)
+        axes[row, 1].set_title(
+            f"{name}: LOSO gain (n={group['sample_count']}, subjects={group['subject_count']})"
+        )
+        axes[row, 1].set_ylabel('Accuracy gain')
+        for axis in axes[row]:
+            axis.set_xlabel('Lag index')
+            axis.grid(True, alpha=0.25)
+    figure.suptitle(
+        f"Coupling audit stratified by {payload.get('stratum_kind', 'group')}",
+        fontsize=16,
+        fontweight='bold',
+    )
+    return _save_figure(figure, output_path)
+
+
+def _residual_coupling_logits_from_tokens(
+    raw_logits: np.ndarray,
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, object]]]:
+    n_lags, n_eeg_tokens, n_fnirs_tokens = raw_logits.shape
+    effective_logits = np.empty_like(raw_logits, dtype=np.float64)
+    residual_logits = np.empty_like(raw_logits, dtype=np.float64)
+    marginal_metadata: List[Dict[str, object]] = []
+
+    for lag in range(n_lags):
+        usable = min(int(eeg_tokens.shape[1]), int(fnirs_tokens.shape[1]) - lag)
+        if usable <= 0:
+            eeg_marginal = np.full((n_eeg_tokens,), 1.0 / max(n_eeg_tokens, 1), dtype=np.float64)
+            fnirs_marginal = np.full((n_fnirs_tokens,), 1.0 / max(n_fnirs_tokens, 1), dtype=np.float64)
+            sample_count = 0
+        else:
+            aligned_eeg = eeg_tokens[:, :usable].reshape(-1)
+            aligned_fnirs = fnirs_tokens[:, lag:lag + usable].reshape(-1)
+            eeg_marginal = np.bincount(aligned_eeg, minlength=n_eeg_tokens).astype(np.float64)
+            fnirs_marginal = np.bincount(aligned_fnirs, minlength=n_fnirs_tokens).astype(np.float64)
+            eeg_marginal = np.clip(eeg_marginal, 1e-8, None)
+            fnirs_marginal = np.clip(fnirs_marginal, 1e-8, None)
+            eeg_marginal /= eeg_marginal.sum()
+            fnirs_marginal /= fnirs_marginal.sum()
+            sample_count = int(aligned_eeg.size)
+
+        column_bias = (eeg_marginal[:, None] * raw_logits[lag]).sum(axis=0, keepdims=True)
+        lag_residual_logits = raw_logits[lag] - column_bias
+        lag_effective_logits = lag_residual_logits + np.log(fnirs_marginal)[None, :]
+        lag_effective_logits -= np.logaddexp.reduce(lag_effective_logits, axis=-1, keepdims=True)
+        residual_logits[lag] = lag_residual_logits
+        effective_logits[lag] = lag_effective_logits
+        marginal_metadata.append({
+            'lag': int(lag),
+            'aligned_pair_count': sample_count,
+            'eeg_marginal': eeg_marginal.tolist(),
+            'fnirs_marginal': fnirs_marginal.tolist(),
+        })
+
+    return effective_logits, residual_logits, marginal_metadata
+
+
+def _compute_coupling_structure(
+    model,
+    eeg_tokens: Optional[np.ndarray] = None,
+    fnirs_tokens: Optional[np.ndarray] = None,
+) -> Dict[str, object]:
+    logits = getattr(model, 'coupling_logits', None)
     if logits is None:
         return {'available': False, 'reason': 'missing_coupling_logits'}
-    logits_np = logits.detach().float().cpu().numpy()
+    raw_logits_np = logits.detach().float().cpu().numpy().astype(np.float64, copy=False)
+    residual_mode = bool(getattr(model, 'coupling_residualize_fnirs_marginal', False))
+    marginal_metadata: List[Dict[str, object]] = []
+    residual_logits_np = raw_logits_np
+    if residual_mode:
+        if eeg_tokens is None or fnirs_tokens is None:
+            return {'available': False, 'reason': 'residual_coupling_requires_split_tokens'}
+        logits_np, residual_logits_np, marginal_metadata = _residual_coupling_logits_from_tokens(
+            raw_logits_np,
+            np.asarray(eeg_tokens, dtype=np.int64),
+            np.asarray(fnirs_tokens, dtype=np.int64),
+        )
+        probability_semantics = 'split_marginal_residual_conditional'
+    else:
+        logits_np = raw_logits_np
+        probability_semantics = 'raw_coupling_softmax'
+
     raw_joint_logits = np.transpose(logits_np, (1, 0, 2))
     raw_joint_flat = raw_joint_logits.reshape(raw_joint_logits.shape[0], -1)
     raw_joint_flat = raw_joint_flat - raw_joint_flat.max(axis=-1, keepdims=True)
@@ -710,6 +919,11 @@ def _compute_coupling_structure(model) -> Dict[str, object]:
         eeg_codebook=eeg_codebook,
         fnirs_codebook=fnirs_codebook,
     )
+    raw_views = prepare_coupling_tensor_views(
+        coupling_logits=residual_logits_np,
+        eeg_codebook=eeg_codebook,
+        fnirs_codebook=fnirs_codebook,
+    )
     fnirs_marginal = np.asarray(views['fnirs_marginal'], dtype=np.float64)
     row_entropy = -(fnirs_marginal * np.log(fnirs_marginal + 1e-12)).sum(axis=-1)
     max_entropy = math.log(float(fnirs_marginal.shape[1])) if fnirs_marginal.shape[1] > 1 else 1.0
@@ -717,6 +931,10 @@ def _compute_coupling_structure(model) -> Dict[str, object]:
     return {
         'available': True,
         'coupling_logits': logits_np,
+        'raw_coupling_logits': raw_logits_np,
+        'residual_coupling_logits': residual_logits_np,
+        'probability_semantics': probability_semantics,
+        'split_marginals': marginal_metadata,
         'joint_probabilities': raw_joint_probabilities,
         'fnirs_marginal': fnirs_marginal,
         'lag_marginal': np.asarray(views['lag_marginal'], dtype=np.float64),
@@ -729,6 +947,7 @@ def _compute_coupling_structure(model) -> Dict[str, object]:
         'max_entropy': float(max_entropy),
         'sorted_row_indices': np.argsort(row_entropy).tolist(),
         'tensor_summary': dict(views['summary']),
+        'raw_tensor_summary': dict(raw_views['summary']),
         'eeg_order': np.asarray(views['eeg_order'], dtype=np.int64).tolist(),
         'fnirs_order': np.asarray(views['fnirs_order'], dtype=np.int64).tolist(),
     }
@@ -1884,6 +2103,8 @@ def _collect_split_statistics(
     observation_feature_chunks: List[np.ndarray] = []
     subject_id_chunks: List[np.ndarray] = []
     label_id_chunks: List[np.ndarray] = []
+    source_name_chunks: List[np.ndarray] = []
+    source_task_chunks: List[np.ndarray] = []
     batch_count = 0
     capture_reconstructions = bool(reconstruction_viz_cfg.get('enabled', False))
     reconstruction_limit = int(reconstruction_viz_cfg.get('max_samples', 0)) if capture_reconstructions else 0
@@ -2009,8 +2230,12 @@ def _collect_split_statistics(
                 take = int(eeg_source_tokens.shape[0])
                 subject_ids = _maybe_batch_vector(batch, ('subject', 'subject_id'))
                 label_ids = _maybe_batch_vector(batch, ('label', 'labels', 'task', 'condition'))
+                source_names = _maybe_batch_values(batch, ('source_name',))
+                source_tasks = _maybe_batch_values(batch, ('source_task', 'task'))
                 subject_id_chunks.append(_probe_id_array(subject_ids, take))
                 label_id_chunks.append(_probe_id_array(label_ids, take))
+                source_name_chunks.append(_probe_value_array(source_names, take))
+                source_task_chunks.append(_probe_value_array(source_tasks, take))
 
                 if reconstruction_bank is not None and reconstruction_capture_count < reconstruction_limit:
                     capture_take = min(reconstruction_limit - reconstruction_capture_count, int(eeg.shape[0]))
@@ -2111,6 +2336,8 @@ def _collect_split_statistics(
         'observation_features': np.concatenate(observation_feature_chunks, axis=0),
         'subject_ids': np.concatenate(subject_id_chunks, axis=0),
         'label_ids': np.concatenate(label_id_chunks, axis=0),
+        'source_names': np.concatenate(source_name_chunks, axis=0),
+        'source_tasks': np.concatenate(source_task_chunks, axis=0),
         'codebooks': {
             'eeg_source': _codebook_summary(index_bank['eeg_source_indices'], source_codebook_size),
             'fnirs_source': _codebook_summary(index_bank['fnirs_source_indices'], source_codebook_size),
@@ -2473,6 +2700,8 @@ def _build_gate_3(
     conditional_diagnostics: Optional[Dict[str, object]] = None,
     empirical_audit: Optional[Dict[str, object]] = None,
     empirical_audit_path: Optional[str] = None,
+    stratified_audits: Optional[Dict[str, object]] = None,
+    stratified_audit_paths: Optional[Dict[str, Optional[str]]] = None,
     predictability: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     if not coupling.get('available', False):
@@ -2532,6 +2761,10 @@ def _build_gate_3(
             'conditional_diagnostics_path': conditional_diagnostics_path,
             'conditional_diagnostics': dict(conditional_diagnostics or {'available': False}),
             'empirical_audit_path': empirical_audit_path,
+            'probability_semantics': coupling.get('probability_semantics'),
+            'raw_tensor_summary': coupling.get('raw_tensor_summary'),
+            'stratified_empirical_audits': dict(stratified_audits or {}),
+            'stratified_empirical_audit_paths': dict(stratified_audit_paths or {}),
         },
         'notes': notes,
         'artifacts': {
@@ -2540,14 +2773,21 @@ def _build_gate_3(
             'tensor_overview_path': tensor_overview_path,
             'conditional_diagnostics_path': conditional_diagnostics_path,
             'empirical_audit_path': empirical_audit_path,
+            'stratified_empirical_audit_paths': dict(stratified_audit_paths or {}),
         },
     }
 
 
 def _build_gate_4(split_stats: Dict[str, object]) -> Dict[str, object]:
-    source_subject_probe = _nearest_centroid_probe(split_stats['source_features'], split_stats['subject_ids'], seed=17)
-    observation_subject_probe = _nearest_centroid_probe(split_stats['observation_features'], split_stats['subject_ids'], seed=19)
-    source_task_probe = _nearest_centroid_probe(split_stats['source_features'], split_stats['label_ids'], seed=23)
+    source_subject_probe = _repeated_nearest_centroid_probe(
+        split_stats['source_features'], split_stats['subject_ids'], seeds=(17, 117, 217, 317, 417)
+    )
+    observation_subject_probe = _repeated_nearest_centroid_probe(
+        split_stats['observation_features'], split_stats['subject_ids'], seeds=(19, 119, 219, 319, 419)
+    )
+    source_task_probe = _repeated_nearest_centroid_probe(
+        split_stats['source_features'], split_stats['label_ids'], seeds=(23, 123, 223, 323, 423)
+    )
 
     ssr = None
     if source_subject_probe.get('available') and source_task_probe.get('available'):
@@ -2594,10 +2834,15 @@ def _build_split_gate_summary(
     token_pattern_viz_cfg: Dict[str, object],
 ) -> Tuple[Dict[str, object], Dict[str, object]]:
     model_ref = split_stats['model_ref']
-    coupling = _compute_coupling_structure(model=model_ref)
+    coupling = _compute_coupling_structure(
+        model=model_ref,
+        eeg_tokens=split_stats['eeg_source_tokens'],
+        fnirs_tokens=split_stats['fnirs_source_tokens'],
+    )
     figure_path = _plot_coupling_heatmap(coupling, analysis_root / f"{split_name}_coupling_heatmap.png")
     structure_profile_path = _plot_coupling_structure_profile(coupling, analysis_root / f"{split_name}_coupling_structure.png")
     tensor_overview_path = None
+    raw_tensor_overview_path = None
     conditional_diagnostics_path = None
     conditional_diagnostics: Dict[str, object] = {'available': False}
     if coupling.get('available', False):
@@ -2612,9 +2857,21 @@ def _build_split_gate_summary(
                 fnirs_codebook=fnirs_codebook,
                 output_path=analysis_root / f"{split_name}_coupling_tensor_overview.png",
                 title=f'{split_name} EEG-fNIRS source coupling tensor',
-                subtitle='All valid lag slices are considered; no selected lag is used.',
+                subtitle=(
+                    'Effective P(fNIRS token | EEG token, lag) under split token marginals; '
+                    'all valid lag slices are considered.'
+                ),
             )
             tensor_overview_path = str(tensor_payload['figure_path'])
+            raw_tensor_payload = plot_coupling_tensor_overview(
+                coupling_logits=np.asarray(coupling['residual_coupling_logits']),
+                eeg_codebook=eeg_codebook,
+                fnirs_codebook=fnirs_codebook,
+                output_path=analysis_root / f"{split_name}_coupling_parameter_tensor_overview.png",
+                title=f'{split_name} EEG-fNIRS residual coupling parameters',
+                subtitle='Residual parameter tensor before adding the split-specific fNIRS marginal.',
+            )
+            raw_tensor_overview_path = str(raw_tensor_payload['figure_path'])
             conditional_payload = plot_coupling_conditional_diagnostics(
                 coupling_logits=np.asarray(coupling['coupling_logits']),
                 eeg_codebook=eeg_codebook,
@@ -2657,6 +2914,35 @@ def _build_split_gate_summary(
         empirical_conditional_deltas,
         analysis_root / f"{split_name}_lag_balanced_empirical_coupling_audit.png",
     )
+    stratified_audits = {
+        'source_name': _compute_stratified_empirical_audits(
+            split_stats['eeg_source_tokens'],
+            split_stats['fnirs_source_tokens'],
+            split_stats['subject_ids'],
+            split_stats['source_names'],
+            stratum_kind='data source',
+            n_eeg_tokens=int(split_stats['codebook_sizes']['source']),
+            n_fnirs_tokens=int(split_stats['codebook_sizes']['source']),
+            n_lags=int(coupling.get('tensor_summary', {}).get('n_lags', 1)),
+        ),
+        'source_task': _compute_stratified_empirical_audits(
+            split_stats['eeg_source_tokens'],
+            split_stats['fnirs_source_tokens'],
+            split_stats['subject_ids'],
+            split_stats['source_tasks'],
+            stratum_kind='task',
+            n_eeg_tokens=int(split_stats['codebook_sizes']['source']),
+            n_fnirs_tokens=int(split_stats['codebook_sizes']['source']),
+            n_lags=int(coupling.get('tensor_summary', {}).get('n_lags', 1)),
+        ),
+    }
+    stratified_audit_paths = {
+        name: _plot_stratified_empirical_audits(
+            payload,
+            analysis_root / f'{split_name}_{name}_stratified_coupling_audit.png',
+        )
+        for name, payload in stratified_audits.items()
+    }
     gate_3 = _build_gate_3(
         coupling,
         figure_path=figure_path,
@@ -2666,8 +2952,12 @@ def _build_split_gate_summary(
         conditional_diagnostics=conditional_diagnostics,
         empirical_audit=empirical_audit,
         empirical_audit_path=empirical_audit_path,
+        stratified_audits=stratified_audits,
+        stratified_audit_paths=stratified_audit_paths,
         predictability=predictability,
     )
+    gate_3['artifacts']['raw_tensor_overview_path'] = raw_tensor_overview_path
+    gate_3['metrics']['raw_tensor_overview_path'] = raw_tensor_overview_path
     gate_4 = _build_gate_4(split_stats)
     codebook_usage_paths: Dict[str, Optional[str]] = {}
     for codebook_name, codebook_payload in split_stats['codebooks'].items():

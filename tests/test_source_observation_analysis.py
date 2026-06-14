@@ -3,11 +3,19 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from src.visualization import source_observation_analysis as soa
 
 
 class SourceObservationAnalysisTests(unittest.TestCase):
+    class _ResidualCouplingModel:
+        def __init__(self, logits: np.ndarray):
+            self.coupling_logits = torch.tensor(logits, dtype=torch.float32)
+            self.coupling_residualize_fnirs_marginal = True
+            self.eeg_source_quantizer = None
+            self.fnirs_source_quantizer = None
+
     def _identity_joint_coupling(self) -> dict:
         joint = np.asarray(
             [
@@ -275,6 +283,68 @@ class SourceObservationAnalysisTests(unittest.TestCase):
         self.assertEqual(audit['best_lag_by_loso_gain'], 1)
         self.assertGreater(float(audit['best_lag_loso_gain']), 0.5)
         self.assertEqual(len(conditional_deltas), 4)
+
+    def test_residual_coupling_analysis_uses_split_token_marginals(self):
+        model = self._ResidualCouplingModel(
+            np.asarray([[[2.0, 0.0], [0.0, 0.0]]], dtype=np.float64)
+        )
+        eeg_tokens = np.asarray([[0, 0, 0, 1]], dtype=np.int64)
+        fnirs_tokens = np.asarray([[0, 1, 1, 1]], dtype=np.int64)
+
+        coupling = soa._compute_coupling_structure(model, eeg_tokens, fnirs_tokens)
+
+        self.assertTrue(coupling['available'])
+        self.assertEqual(coupling['probability_semantics'], 'split_marginal_residual_conditional')
+        conditional = np.exp(np.asarray(coupling['coupling_logits'])[0])
+        np.testing.assert_allclose(conditional.sum(axis=-1), 1.0, atol=1e-8)
+        self.assertGreater(float(conditional[0, 0]), float(conditional[1, 0]))
+        residual = np.asarray(coupling['residual_coupling_logits'])[0]
+        np.testing.assert_allclose(
+            np.asarray([0.75, 0.25]) @ residual,
+            np.zeros((2,), dtype=np.float64),
+            atol=1e-8,
+        )
+
+    def test_repeated_probe_is_invariant_to_input_row_order(self):
+        rng = np.random.default_rng(42)
+        labels = np.repeat(np.arange(3, dtype=np.int64), 12)
+        features = rng.normal(size=(labels.size, 8)) + labels[:, None]
+        permutation = rng.permutation(labels.size)
+
+        original = soa._repeated_nearest_centroid_probe(features, labels, seeds=(1, 2, 3))
+        shuffled = soa._repeated_nearest_centroid_probe(
+            features[permutation], labels[permutation], seeds=(1, 2, 3)
+        )
+
+        self.assertEqual(original['repeat_count'], 3)
+        self.assertAlmostEqual(float(original['accuracy']), float(shuffled['accuracy']), places=12)
+        self.assertAlmostEqual(
+            float(original['normalized_lift']), float(shuffled['normalized_lift']), places=12
+        )
+
+    def test_stratified_audit_keeps_data_sources_separate(self):
+        rng = np.random.default_rng(7)
+        eeg_tokens = rng.integers(0, 4, size=(16, 6), dtype=np.int64)
+        fnirs_tokens = rng.integers(0, 4, size=(16, 6), dtype=np.int64)
+        fnirs_tokens[:8, 1:] = eeg_tokens[:8, :-1]
+        subject_ids = np.repeat(np.arange(4, dtype=np.int64), 4)
+        sources = np.asarray(['mapped'] * 8 + ['noise'] * 8)
+
+        payload = soa._compute_stratified_empirical_audits(
+            eeg_tokens,
+            fnirs_tokens,
+            subject_ids,
+            sources,
+            stratum_kind='data source',
+            n_eeg_tokens=4,
+            n_fnirs_tokens=4,
+            n_lags=3,
+            shuffle_repeats=4,
+        )
+
+        self.assertTrue(payload['available'])
+        self.assertEqual(set(payload['groups']), {'mapped', 'noise'})
+        self.assertEqual(payload['groups']['mapped']['sample_count'], 8)
 
     def test_build_gate_2_ignores_disabled_fnirs_observation_branch(self):
         split_stats = {
