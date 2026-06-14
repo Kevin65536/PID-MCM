@@ -683,7 +683,8 @@ def _plot_lag_balanced_empirical_audit(
 
 
 def _compute_coupling_structure(model) -> Dict[str, object]:
-    logits = getattr(model, 'coupling_logits', None)
+    analysis_logits = getattr(model, 'get_coupling_analysis_logits', None)
+    logits = analysis_logits() if callable(analysis_logits) else getattr(model, 'coupling_logits', None)
     if logits is None:
         return {'available': False, 'reason': 'missing_coupling_logits'}
     logits_np = logits.detach().float().cpu().numpy()

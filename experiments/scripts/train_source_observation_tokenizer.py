@@ -128,8 +128,10 @@ def maybe_compile_model_forward(model, config: dict, device: torch.device):
 
     try:
         if scope in {'encode_modalities', 'encoders'} and hasattr(model, 'encode_modalities'):
+            model._gradient_attribution_uncompiled_encode_modalities = model.encode_modalities
             model.encode_modalities = torch.compile(model.encode_modalities, **compile_kwargs)
         elif scope == 'forward':
+            model._gradient_attribution_uncompiled_forward = model.forward
             model.forward = torch.compile(model.forward, **compile_kwargs)
         else:
             raise ValueError("training.performance.compile.scope must be 'forward' or 'encode_modalities'")
@@ -145,6 +147,27 @@ def maybe_compile_model_forward(model, config: dict, device: torch.device):
         f"dynamic={compile_kwargs['dynamic']})"
     )
     return model
+
+
+def forward_for_gradient_attribution(model, eeg, fnirs, targets):
+    compiled_encode = None
+    compiled_forward = None
+    uncompiled_encode = getattr(model, '_gradient_attribution_uncompiled_encode_modalities', None)
+    uncompiled_forward = getattr(model, '_gradient_attribution_uncompiled_forward', None)
+
+    if uncompiled_encode is not None:
+        compiled_encode = model.encode_modalities
+        model.encode_modalities = uncompiled_encode
+    if uncompiled_forward is not None:
+        compiled_forward = model.forward
+        model.forward = uncompiled_forward
+    try:
+        return model(eeg, fnirs, targets=targets)
+    finally:
+        if compiled_forward is not None:
+            model.forward = compiled_forward
+        if compiled_encode is not None:
+            model.encode_modalities = compiled_encode
 
 
 def create_multimodal_dataloaders(config: dict):
@@ -623,14 +646,18 @@ def train_epoch(
         start=1,
     ):
         optimizer.zero_grad()
-        outputs = model(eeg, fnirs, targets=targets)
-        aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
-        loss = outputs['loss'] + aux_loss
         batch_gradient_dashboard: Optional[Dict[str, Any]] = None
 
         if grad_cfg.get('enabled', False) and grad_batches < int(grad_cfg.get('max_batches', 1)):
-            grad_outputs = dict(outputs)
-            grad_outputs.update(aux_tensors)
+            diagnostic_outputs = forward_for_gradient_attribution(model, eeg, fnirs, targets)
+            _, _, diagnostic_aux_tensors = compute_multimodal_aux_losses(
+                config,
+                eeg,
+                fnirs,
+                diagnostic_outputs,
+            )
+            grad_outputs = dict(diagnostic_outputs)
+            grad_outputs.update(diagnostic_aux_tensors)
             grad_metrics, grad_artifacts = compute_gradient_attribution(model, grad_outputs)
             if grad_metrics:
                 grad_batches += 1
@@ -638,6 +665,11 @@ def train_epoch(
                     grad_totals[key] = grad_totals.get(key, 0.0) + value
             if grad_artifacts:
                 batch_gradient_dashboard = grad_artifacts
+            del diagnostic_outputs, diagnostic_aux_tensors, grad_outputs
+
+        outputs = model(eeg, fnirs, targets=targets)
+        aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
+        loss = outputs['loss'] + aux_loss
 
         loss.backward()
 
@@ -1231,6 +1263,10 @@ def main():
         gradient_attribution_cfg = {
             'enabled': bool(config['training'].get('gradient_attribution', {}).get('enabled', False)),
             'max_batches': int(config['training'].get('gradient_attribution', {}).get('max_batches', 1)),
+            'interval_epochs': max(
+                int(config['training'].get('gradient_attribution', {}).get('interval_epochs', 1)),
+                1,
+            ),
         }
         validation_cfg = config['training'].get('validation', {})
         validation_interval = max(int(validation_cfg.get('interval_epochs', 1)), 1)
@@ -1253,6 +1289,16 @@ def main():
 
                 _cuda_synchronize_if_needed(device)
                 train_started_at = time.perf_counter()
+                gradient_interval = int(gradient_attribution_cfg['interval_epochs'])
+                run_gradient_attribution = bool(gradient_attribution_cfg['enabled']) and (
+                    epoch == start_epoch + 1
+                    or epoch == total_epochs
+                    or epoch % gradient_interval == 0
+                )
+                epoch_gradient_attribution_cfg = {
+                    **gradient_attribution_cfg,
+                    'enabled': run_gradient_attribution,
+                }
                 train_metrics, gradient_dashboard = train_epoch(
                     model,
                     train_loader,
@@ -1260,7 +1306,7 @@ def main():
                     config,
                     device,
                     grad_clip,
-                    gradient_attribution_cfg=gradient_attribution_cfg,
+                    gradient_attribution_cfg=epoch_gradient_attribution_cfg,
                     max_batches=max_train_batches,
                 )
                 _cuda_synchronize_if_needed(device)

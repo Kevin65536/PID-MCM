@@ -108,15 +108,20 @@ S2 架构中，token 的语义目标分为两类：
 | **Concentration ratio** | $\frac{\max_j T_{ij}}{\text{mean}_j T_{ij}}$，按行平均 | $> 1.5$（行有明确峰值） | 直接从 coupling_logits 计算 |
 | **Row entropy variance** | $\text{Var}(H(T_{i,:}))$ across rows | $> 0$（不同 source state 有不同的确定性） | 直接从 coupling_logits 计算 |
 | **Cross-modal token predictability** | 给定 EEG source token 和 coupling tensor，预测 fNIRS source token 的 top-1 accuracy | 高于同一 lag/target 分布的 empirical majority baseline；同时报告 $1/K_{src}$ uniform baseline | source token 序列 + coupling tensor |
+| **Lag-balanced empirical audit** | 每个 lag 独立计算 $I(E;F)$、被试内置换基线和 leave-one-subject-out 条件预测增益 | 至少一个 lag 的 MI 高于置换均值 $+2\sigma$，且跨被试条件预测优于 fNIRS marginal baseline | source token 序列 + subject ID |
 | **Coupling matrix visualization** | 按行熵排序的热力图 | 可见块状或带状结构 | 单次 matplotlib 可视化 |
+| **3D tensor projections** | 保留 EEG×fNIRS、EEG×lag、$E[F\mid E,lag]$，并增加 argmax、peak、entropy、KL-to-marginal 投影 | 用于观察结构，不单独作为 gate 指标 | coupling tensor |
 
-**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）；cross-modal token predictability 高于经验 token baseline。
+**通过条件**：row entropy < log(K)/2；concentration ratio > 1.5；row entropy 的方差 > 0（不是所有行相同）；cross-modal token predictability 高于经验 token baseline；至少一个 lag 通过 lag-balanced empirical audit。
 
 **失败处理**：
-- Row entropy ≈ log(K)（接近均匀）→ concentration_weight 太小，增大或检查 coupling_kl_loss 是否正常
+- Row entropy ≈ log(K)（接近均匀）→ mapping 仍接近 fNIRS marginal；检查 pair likelihood、lag evidence 与 token 本身的跨被试条件信息
 - Concentration ratio < 1.5 → concentration prior 未生效，sweep weight
 - 所有行熵相同 → coupling 可能 collapsed 到 trivial solution
 - Cross-modal predictability ≤ empirical baseline → coupling tensor 的结构没有超越 fNIRS token 边际分布，不能视为 EEG→fNIRS 条件映射
+- Lag-balanced audit 在所有 lag 都不超过被试内置换或跨被试 marginal baseline → 数据或 source token 尚未提供可泛化的跨模态条件信息，不应通过增强 coupling 权重制造结构
+
+`Expected fNIRS index given EEG and lag` 仅是三维 coupling tensor 的一阶矩投影。完全均匀的图像表示不同 EEG token/lag 的条件均值相同，但不能单独区分“完整条件分布相同”与“不同分布具有相同期望值”；因此必须与 argmax、peak probability、conditional entropy、KL-to-lag-marginal 及逐 lag slice 联合解释。
 
 ### Gate 4: Representation Utility
 
@@ -246,7 +251,7 @@ Comparison (if applicable)
 | AC (augmentation consistency) | 对 S2 意义不大；HRF target 已提供更强的一致性约束 |
 | BRG (branch responsibility gap) | 依赖 V6 的 smooth_signal common/residual target；在 S2 中无对应概念 |
 | LMIG (lagged MI gain) | 被 coupling concentration metrics (Gate 3) 替代——从 coupling_logits 直接读取 |
-| CKG (conditional KL gain) | 同上；CKG 本质上 = coupling_kl_loss 的 post-hoc 计算，是训练目标回响 |
+| CKG (conditional KL gain) | 由逐 lag KL-to-marginal 与 empirical audit 取代；不再把旧 coupling KL 训练目标的回响当作独立证据 |
 | SUB (shared usage balance) | Dual source codebook 后不再有"共享垄断"问题 |
 | Overlap / token match rate | 旧共识已否定；TokenFlow analysis 确认不应追求 token identity overlap |
 | Gradient diagnostics (Layer E) | 为 V6 的 12-term loss 设计；S2 的 9-term loss 更简洁，不需要此层 |

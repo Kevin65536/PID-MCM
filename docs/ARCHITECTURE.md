@@ -236,9 +236,11 @@ graph LR
 | `observation_loss` (fNIRS) | 0.15 | fNIRS observation decoder → raw fNIRS − clean fNIRS |
 | `observation_loss` (EEG) | 0.15 | EEG observation decoder → raw EEG − clean EEG |
 | `vq_loss` | 1.0 × quantization_strength | Commitment + EMA codebook loss (all 4 quantizers) |
-| `source_coupling_loss` | `coupling.weight` | `lag_focus_loss + 0.2 * joint_smoothness_loss` when coupling prior is enabled |
+| `source_coupling_loss` | `coupling.weight` | Weighted sum of lag focus, joint smoothness, lag-balanced pair likelihood, and conditional-gain lag evidence |
 | `lag_focus_loss` | internal 1.0 | Normalized entropy of the lag marginal $P(\tau \mid z_{eeg})$ |
 | `joint_smoothness_loss` | internal 0.2 | Neighbor JS divergence on $Q(\tau, z_{fnirs} \mid z_{eeg})$ |
+| `pair_likelihood_loss` | optional | Equal-per-lag conditional NLL for observed EEG/fNIRS source-token pairs; active residual mode removes EEG-independent fNIRS marginal bias |
+| `lag_evidence_loss` | optional | Cross-entropy from lag mass to conditional log-likelihood gain over the lag-specific fNIRS marginal |
 | `codebook_balance_loss` | 0.08 | Entropy-based dead-code prevention |
 | `orthogonality_loss` | 0.05 | Cosine similarity penalty: source ⊥ observation |
 
@@ -246,12 +248,14 @@ graph LR
 
 ### Coupling Structure Monitoring
 
-Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupling monitoring therefore focuses on structural priors and matrix geometry:
+Current implementation does not force the two source codebooks to share numeric indices. The optional empirical terms learn a full conditional mapping for every lag, while monitoring covers both tensor geometry and held-out token evidence:
 
 | Loss | Role | Healthy range | Danger signal |
 |------|------|--------------|---------------|
 | `lag_focus_loss` | Delay preference concentration | Below the uniform baseline, but not collapsing to 0 | Near 1.0 → lag structure remains uninformative |
 | `joint_smoothness_loss` | EEG-neighbor consistency in joint delay-response space | Decreasing, then stable | Increasing while lag focus drops → over-constrained or noisy neighborhoods |
+| `pair_likelihood_loss` | EEG-conditioned fNIRS mapping, with every valid lag weighted equally | Below the uniform conditional baseline $\log K$ | Improvement without held-out gain → subject-specific or marginal-frequency fit |
+| `lag_evidence_loss` | Align lag mass with conditional gain over the fNIRS marginal | Decreasing after pair mappings become informative | Lag collapse without empirical gain → focus prior dominates evidence |
 
 ## 5. Component Catalog
 
@@ -268,7 +272,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | `batch_usage_entropy_loss`, `straight_through_assignment_probs`, `orthogonality_loss`, `coupling_lag_focus_loss`, `coupling_eeg_neighbor_smoothness_loss` |
+| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | Codebook health, orthogonality, lag focus, EEG-neighbor smoothness, lag-balanced pair likelihood, and lag-evidence losses |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Spatial & Physiological Priors
@@ -293,7 +297,7 @@ Current implementation does not apply a direct EEG-fNIRS KL matching loss. Coupl
 | [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
 | [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
 | [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
-| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. The base config uses canonical cache roots under `croce_validation/cache/croce_local/highwl_v1/` and writes future runs under `experiments/runs/source_observation/croce_local/highwl_v1/` |
+| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. Active corrected-cache experiments use `croce_validation/cache/croce_local/highwl_v2/` and write under `experiments/runs/source_observation/croce_local/highwl_v2/` |
 
 ## 5. Quantizer Summary
 
@@ -322,8 +326,12 @@ The coupling tensor `coupling_logits` is an `[n_lags, K_src, K_src]` learned par
     should prefer a few delays. This sharpens delay structure without forcing only a few token-lag pairs overall.
 - **Joint smoothness**: nearby EEG tokens in codebook space should have similar joint delay-response distributions $Q_i(\tau, j)$.
     Neighborhoods are computed from detached EEG source codebook geometry rather than raw token indices.
+- **Lag-balanced pair likelihood**: each lag independently fits $P(z_{fnirs,t+\tau}\mid z_{eeg,t},\tau)$ and contributes one equal-weight loss term. Longer overlap at small $\tau$ therefore cannot dominate through sample count alone. With `residualize_fnirs_marginal=true`, the lag-specific empirical $P(z_{fnirs}\mid\tau)$ is a detached baseline and the trainable tensor represents only EEG-conditioned logit deviations. A column preference shared by every EEG token is therefore not accepted as cross-modal coupling.
+- **Conditional-gain lag evidence**: lag mass is supervised by the mapping's log-likelihood gain over the lag-specific fNIRS marginal. The evidence target is detached so the term moves lag mass instead of fabricating evidence by changing token assignments.
 
-**Diagnostics**: Analysis reports all-lag tensor views: EEG×fNIRS marginal, EEG×lag marginal, expected fNIRS index by lag, and per-lag conditional slices. It does not report a best or selected lag as a training objective.
+No diagonal or same-indice constraint is used. EEG token 7 may map to any fNIRS token according to the learned conditional matrix; equal indices are not assigned privileged physiological meaning.
+
+**Diagnostics**: Analysis reports all-lag tensor views: EEG×fNIRS marginal, EEG×lag marginal, expected and argmax fNIRS index by lag, conditional peak/entropy/KL-to-marginal, and per-lag conditional slices. In residual mode, these model projections use column-centered coupling logits so common fNIRS token frequency is not mistaken for EEG-conditioned structure. It also reports equal-per-lag MI against within-subject shuffles and leave-one-subject-out conditional accuracy against the fNIRS marginal baseline. Expected fNIRS index remains a visualization projection, not a standalone metric or training objective.
 
 ## 7. Branch Target Contract
 

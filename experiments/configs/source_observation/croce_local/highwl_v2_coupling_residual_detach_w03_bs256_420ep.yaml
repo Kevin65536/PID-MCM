@@ -1,0 +1,32 @@
+_base_: "./highwl_v2_lag_balanced_evidence_soft_w01_bs256_280ep_lr2e4.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_coupling_residual_detach_w03_bs256_420ep"
+  device: "cuda:0"
+  description: "Residualized EEG-conditioned coupling against the lag-specific fNIRS marginal; mapping-only pair gradients, pair weight 0.30, 420 epochs."
+
+training:
+  epochs: 420
+  min_lr: 0.000025
+  gradient_attribution:
+    enabled: true
+    max_batches: 1
+    interval_epochs: 20
+  early_stopping:
+    enabled: true
+    start_epoch: 81
+    patience: 220
+    metric: "val_loss"
+    mode: "min"
+
+loss:
+  coupling:
+    weight: 0.03
+    lag_focus_weight: 0.25
+    smoothness_weight: 0.05
+    pair_likelihood_weight: 0.30
+    pair_detach_tokens: true
+    pair_temperature: 0.5
+    residualize_fnirs_marginal: true
+    lag_evidence_weight: 0.25
+    lag_evidence_temperature: 0.25

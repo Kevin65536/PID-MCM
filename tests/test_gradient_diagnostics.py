@@ -251,11 +251,9 @@ class GradientDiagnosticsTests(unittest.TestCase):
                 atol=1e-6,
             )
         )
-        self.assertAlmostEqual(
-            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
-            0.7,
-            places=6,
-        )
+        component_weights = comparison_model.get_gradient_component_weights()
+        self.assertAlmostEqual(float(component_weights['source_coupling_lag_focus_loss']), 0.7, places=6)
+        self.assertAlmostEqual(float(component_weights['source_coupling_smoothness_loss']), 0.14, places=6)
 
         comparison_model.set_alignment_scale(0.5)
         with torch.no_grad():
@@ -267,21 +265,17 @@ class GradientDiagnosticsTests(unittest.TestCase):
                 atol=1e-6,
             )
         )
-        self.assertAlmostEqual(
-            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
-            0.35,
-            places=6,
-        )
+        component_weights = comparison_model.get_gradient_component_weights()
+        self.assertAlmostEqual(float(component_weights['source_coupling_lag_focus_loss']), 0.35, places=6)
+        self.assertAlmostEqual(float(component_weights['source_coupling_smoothness_loss']), 0.07, places=6)
 
         comparison_model.set_alignment_scale(0.0)
         with torch.no_grad():
             zero_scale_outputs = comparison_model(eeg, fnirs)
         self.assertTrue(torch.allclose(base_outputs['loss'], zero_scale_outputs['loss'], atol=1e-6))
-        self.assertAlmostEqual(
-            float(comparison_model.get_gradient_component_weights()['source_coupling_loss']),
-            0.0,
-            places=6,
-        )
+        for name, weight in comparison_model.get_gradient_component_weights().items():
+            if name.startswith('source_coupling_'):
+                self.assertAlmostEqual(float(weight), 0.0, places=6)
 
     def test_structural_coupling_loss_updates_coupling_logits(self):
         torch.manual_seed(31)
