@@ -36,6 +36,7 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
                 "pair_mode": "wavelength",
                 "pair_labels": ["highWL", "lowWL"],
                 "bundle_segment_label": "math",
+                "event_window_pre_s": 10.0,
             },
             "per_job_results": [
                 {
@@ -105,6 +106,12 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             self.assertTrue(torch.allclose(item["targets"]["fnirs_source"], torch.full((1, 200), 3.0)))
             self.assertFalse(torch.any(item["fnirs"] == 999.0))
             self.assertEqual(item["fnirs_component"], "highWL")
+            self.assertIn("cache_entry_id", item)
+            self.assertAlmostEqual(float(item["event_window_pre_s"]), 10.0)
+            self.assertAlmostEqual(float(item["crop_start_s"]), 10.0)
+            self.assertAlmostEqual(float(item["event_relative_start_s"]), 0.0)
+            self.assertTrue(torch.equal(item["token_relative_position"], torch.arange(10)))
+            self.assertTrue(torch.allclose(item["token_event_time_s"], torch.arange(1.0, 20.0, 2.0)))
 
             gate0 = dataset.get_gate0_metadata()
             self.assertEqual(gate0["selected_fnirs_component"], "highWL")

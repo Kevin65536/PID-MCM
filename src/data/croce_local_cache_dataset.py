@@ -114,6 +114,7 @@ class CroceCacheEntry:
     label_name: str
     pair_mode: str = "unknown"
     pair_labels: Sequence[str] = ()
+    event_window_pre_s: float = 0.0
     label_id: int = -1
     deterministic_fnirs_start: Optional[int] = None
 
@@ -264,6 +265,7 @@ class CroceLocalCacheDataset(Dataset):
                     or manifest.get("pair_labels")
                     or ("highWL", "lowWL")
                 )
+                event_window_pre_s = float(source.get("event_window_pre_s", config.get("event_window_pre_s", 0.0)))
                 jobs = manifest.get("per_job_results", [])
                 if not isinstance(jobs, Sequence) or isinstance(jobs, (str, bytes)) or not jobs:
                     entries.extend(
@@ -294,6 +296,9 @@ class CroceLocalCacheDataset(Dataset):
                         event_idx = int(event_idx)
                         prefix = f"{prefix}/event_{event_idx:03d}"
                     label_name = _infer_label_name(manifest, job)
+                    job_event_window_pre_s = float(job.get("event_window_pre_s", event_window_pre_s))
+                    deterministic_job = dict(job)
+                    deterministic_job.setdefault("event_window_pre_s", job_event_window_pre_s)
                     if self.split == "train":
                         entries.append(
                             CroceCacheEntry(
@@ -307,10 +312,11 @@ class CroceLocalCacheDataset(Dataset):
                                 label_name=label_name,
                                 pair_mode=pair_mode,
                                 pair_labels=pair_labels,
+                                event_window_pre_s=job_event_window_pre_s,
                             )
                         )
                     else:
-                        for start in self._deterministic_starts(job):
+                        for start in self._deterministic_starts(deterministic_job):
                             entries.append(
                                 CroceCacheEntry(
                                     cache_path=cache_path,
@@ -323,6 +329,7 @@ class CroceLocalCacheDataset(Dataset):
                                     label_name=label_name,
                                     pair_mode=pair_mode,
                                     pair_labels=pair_labels,
+                                    event_window_pre_s=job_event_window_pre_s,
                                     deterministic_fnirs_start=start,
                                 )
                             )
@@ -344,7 +351,7 @@ class CroceLocalCacheDataset(Dataset):
     ) -> List[CroceCacheEntry]:
         label_name = str(source.get("label_name") or _infer_subject_only_label(root, manifest_path, task))
         config = manifest.get("config", {}) if isinstance(manifest.get("config"), Mapping) else {}
-        event_window_pre_s = source.get("event_window_pre_s", config.get("event_window_pre_s"))
+        event_window_pre_s = float(source.get("event_window_pre_s", config.get("event_window_pre_s", 0.0)))
         discovered: List[CroceCacheEntry] = []
 
         with np.load(cache_path, allow_pickle=False) as npz:
@@ -359,8 +366,7 @@ class CroceLocalCacheDataset(Dataset):
                     continue
                 anchor, event_idx = _infer_subject_only_prefix_metadata(prefix)
                 job = {"num_fnirs_steps": int(npz[fnirs_key].shape[0])}
-                if event_window_pre_s is not None:
-                    job["event_window_pre_s"] = float(event_window_pre_s)
+                job["event_window_pre_s"] = event_window_pre_s
                 if self.split == "train":
                     starts = [None]
                 else:
@@ -378,6 +384,7 @@ class CroceLocalCacheDataset(Dataset):
                             label_name=label_name,
                             pair_mode=pair_mode,
                             pair_labels=pair_labels,
+                            event_window_pre_s=event_window_pre_s,
                             deterministic_fnirs_start=start,
                         )
                     )
@@ -455,6 +462,13 @@ class CroceLocalCacheDataset(Dataset):
 
         eeg_raw = eeg_source_model + eeg_obs_model
         fnirs_raw = fnirs_source_model + fnirs_obs_model
+        crop_start_s = float(fnirs_start) / self.fnirs_sample_rate_hz
+        event_relative_start_s = crop_start_s - float(entry.event_window_pre_s)
+        token_count = max(int(round(self.crop_duration_s / 2.0)), 1)
+        token_relative_position = torch.arange(token_count, dtype=torch.long)
+        token_event_time_s = (
+            torch.arange(token_count, dtype=torch.float32) + 0.5
+        ) * (self.crop_duration_s / token_count) + event_relative_start_s
 
         def tensor_tc_to_ct(array: np.ndarray) -> torch.Tensor:
             return torch.from_numpy(np.ascontiguousarray(array.T.astype(np.float32, copy=False)))
@@ -476,11 +490,20 @@ class CroceLocalCacheDataset(Dataset):
             "subject": torch.tensor(entry.subject_id, dtype=torch.long),
             "subject_id": torch.tensor(entry.subject_id, dtype=torch.long),
             "label": torch.tensor(entry.label_id, dtype=torch.long),
+            "label_name": entry.label_name,
             "anchor": entry.anchor,
             "source_name": entry.source_name,
             "source_task": entry.task,
             "event_idx": torch.tensor(-1 if entry.event_idx is None else entry.event_idx, dtype=torch.long),
             "crop_start_fnirs": torch.tensor(fnirs_start, dtype=torch.long),
+            "cache_entry_id": (
+                f"{entry.source_name}|{entry.task}|subject_{entry.subject_id:03d}|{entry.prefix}"
+            ),
+            "event_window_pre_s": torch.tensor(entry.event_window_pre_s, dtype=torch.float32),
+            "crop_start_s": torch.tensor(crop_start_s, dtype=torch.float32),
+            "event_relative_start_s": torch.tensor(event_relative_start_s, dtype=torch.float32),
+            "token_relative_position": token_relative_position,
+            "token_event_time_s": token_event_time_s,
             "fnirs_component": "highWL",
         }
 

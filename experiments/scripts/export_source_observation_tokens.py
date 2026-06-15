@@ -185,6 +185,8 @@ def export_split(
     tensor_store: Dict[str, List[np.ndarray]] = {}
     string_store: Dict[str, List[str]] = {
         "anchor": [],
+        "cache_entry_id": [],
+        "label_name": [],
         "source_name": [],
         "source_task": [],
         "fnirs_component": [],
@@ -224,6 +226,15 @@ def export_split(
         append_tensor(tensor_store, "subject_id", batch["subject_id"][:take])
         append_tensor(tensor_store, "event_idx", batch["event_idx"][:take])
         append_tensor(tensor_store, "crop_start_fnirs", batch["crop_start_fnirs"][:take])
+        for key in [
+            "event_window_pre_s",
+            "crop_start_s",
+            "event_relative_start_s",
+            "token_relative_position",
+            "token_event_time_s",
+        ]:
+            if key in batch:
+                append_tensor(tensor_store, key, batch[key][:take])
 
         if include_latents:
             for key in [
@@ -250,7 +261,9 @@ def export_split(
         arrays["eeg_attention_mask"] = np.ones_like(arrays["eeg_source_tokens"], dtype=np.int64)
         arrays["fnirs_attention_mask"] = np.ones_like(arrays["fnirs_source_tokens"], dtype=np.int64)
         token_count = int(arrays["eeg_source_tokens"].shape[1])
-        arrays["token_time_s"] = np.arange(token_count, dtype=np.float32) * 2.0
+        arrays["token_time_s"] = (
+            np.arange(token_count, dtype=np.float32) + 0.5
+        ) * 2.0
         arrays["token_duration_s"] = np.asarray([2.0], dtype=np.float32)
 
     token_path = output_dir / "tokens" / f"{split_name}_tokens.npz"

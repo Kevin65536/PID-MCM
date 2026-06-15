@@ -553,6 +553,17 @@ def compute_gradient_attribution(
     )
     if group_artifacts is not None:
         gradient_artifacts.update(group_artifacts)
+        group_names = group_artifacts['group_names']
+        group_norms = np.asarray(group_artifacts['component_group_norms'], dtype=np.float32)
+        group_shares = np.asarray(group_artifacts['component_group_shares'], dtype=np.float32)
+        for component_index, component_name in enumerate(component_names):
+            for group_index, group_name in enumerate(group_names):
+                attribution_metrics[
+                    f'grad_group_norm_{component_name}__{group_name}'
+                ] = float(group_norms[component_index, group_index])
+                attribution_metrics[
+                    f'grad_group_share_{component_name}__{group_name}'
+                ] = float(group_shares[component_index, group_index])
 
     return attribution_metrics, gradient_artifacts
 
@@ -924,6 +935,37 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
     if not warm_cfg:
         return
 
+    full_checkpoint = warm_cfg.get('checkpoint')
+    if full_checkpoint:
+        checkpoint = load_checkpoint_file(full_checkpoint, device=device)
+        source_state = checkpoint['model_state_dict']
+        reset_coupling = bool(warm_cfg.get('reset_coupling', False))
+        if reset_coupling:
+            source_state = {
+                key: value
+                for key, value in source_state.items()
+                if key != 'coupling_logits'
+            }
+        incompatible = model.load_state_dict(source_state, strict=False)
+        if incompatible.unexpected_keys:
+            raise RuntimeError(
+                f"Unexpected full warm-start keys from {full_checkpoint}: {incompatible.unexpected_keys}"
+            )
+        allowed_missing = {'coupling_logits'} if reset_coupling else set()
+        disallowed_missing = set(incompatible.missing_keys) - allowed_missing
+        if disallowed_missing:
+            raise RuntimeError(
+                f"Missing full warm-start keys from {full_checkpoint}: {sorted(disallowed_missing)}"
+            )
+        if reset_coupling and hasattr(model, 'coupling_logits'):
+            reset_std = float(warm_cfg.get('coupling_reset_std', 0.02))
+            with torch.no_grad():
+                model.coupling_logits.normal_(mean=0.0, std=reset_std)
+        print(
+            f"Full warm-start: loaded {full_checkpoint}; "
+            f"reset_coupling={reset_coupling}"
+        )
+
     def load_branch(checkpoint_path: str, branch_prefix: str):
         checkpoint = load_checkpoint_file(checkpoint_path, device=device)
         source_state = checkpoint['model_state_dict']
@@ -1082,7 +1124,17 @@ def finalize_training_run(
     if hasattr(model, 'set_alignment_scale'):
         model.set_alignment_scale(1.0)
 
-    test_metrics = validate_epoch(model, test_loader, config, device)
+    validation_cfg = config.get('training', {}).get('validation', {})
+    max_test_batches = _positive_int_or_none(
+        validation_cfg.get('max_test_batches', validation_cfg.get('max_batches'))
+    )
+    test_metrics = validate_epoch(
+        model,
+        test_loader,
+        config,
+        device,
+        max_batches=max_test_batches,
+    )
     final_metrics = {
         'best_epoch': best_epoch,
         'best_monitor': best_monitor,

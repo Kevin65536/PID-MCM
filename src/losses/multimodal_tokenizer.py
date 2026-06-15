@@ -97,13 +97,21 @@ def _conditional_mapping_log_probs(
     fnirs_slice: torch.Tensor,
     *,
     residualize_fnirs_marginal: bool,
+    fixed_eeg_marginal: torch.Tensor | None = None,
+    fixed_fnirs_marginal: torch.Tensor | None = None,
 ) -> torch.Tensor:
     if not residualize_fnirs_marginal:
         return F.log_softmax(coupling_slice, dim=-1)
 
-    eeg_marginal = eeg_slice.mean(dim=(0, 1)).detach().clamp_min(1e-8)
+    eeg_marginal = (
+        eeg_slice.mean(dim=(0, 1)).detach()
+        if fixed_eeg_marginal is None else fixed_eeg_marginal.detach()
+    ).clamp_min(1e-8)
     eeg_marginal = eeg_marginal / eeg_marginal.sum().clamp_min(1e-8)
-    fnirs_marginal = fnirs_slice.mean(dim=(0, 1)).detach().clamp_min(1e-8)
+    fnirs_marginal = (
+        fnirs_slice.mean(dim=(0, 1)).detach()
+        if fixed_fnirs_marginal is None else fixed_fnirs_marginal.detach()
+    ).clamp_min(1e-8)
     fnirs_marginal = fnirs_marginal / fnirs_marginal.sum().clamp_min(1e-8)
 
     # Remove EEG-independent column bias under the observed EEG occupancy. The
@@ -120,8 +128,11 @@ def coupling_pair_likelihood_loss(
     fnirs_assignment_logits: torch.Tensor,
     *,
     temperature: float = 1.0,
-    detach_tokens: bool = True,
+    detach_tokens: bool | None = None,
+    gradient_target: str | None = None,
     residualize_fnirs_marginal: bool = False,
+    fixed_eeg_marginal: torch.Tensor | None = None,
+    fixed_fnirs_marginal: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Lag-balanced conditional NLL of observed EEG/fNIRS source-token pairs.
 
@@ -129,8 +140,10 @@ def coupling_pair_likelihood_loss(
     valid lag contributes one independently averaged loss term, so lag zero
     cannot dominate merely because it contains more in-window pairs.
 
-    ``detach_tokens=True`` trains only the coupling tensor; ``False`` also
-    sends a differentiable signal into the source token assignment logits.
+    ``gradient_target`` controls which source-token assignments receive the
+    pair-likelihood gradient: ``none``, ``eeg``, ``fnirs``, or ``both``.
+    Legacy ``detach_tokens`` values map to ``none``/``both`` when the explicit
+    routing option is omitted.
     """
     if coupling_logits.ndim != 3:
         raise ValueError(
@@ -162,8 +175,18 @@ def coupling_pair_likelihood_loss(
     scale = max(float(temperature), 1e-3)
     eeg_probs = straight_through_assignment_probs(eeg_assignment_logits, scale)
     fnirs_probs = straight_through_assignment_probs(fnirs_assignment_logits, scale)
-    if detach_tokens:
+
+    if gradient_target is None:
+        gradient_target = "none" if detach_tokens is not False else "both"
+    gradient_target = str(gradient_target).lower()
+    if gradient_target not in {"none", "eeg", "fnirs", "both"}:
+        raise ValueError(
+            "gradient_target must be one of 'none', 'eeg', 'fnirs', or 'both', "
+            f"got {gradient_target!r}"
+        )
+    if gradient_target not in {"eeg", "both"}:
         eeg_probs = eeg_probs.detach()
+    if gradient_target not in {"fnirs", "both"}:
         fnirs_probs = fnirs_probs.detach()
 
     max_lag = min(int(n_lags), int(token_count))
@@ -180,6 +203,12 @@ def coupling_pair_likelihood_loss(
             eeg_slice,
             fnirs_slice,
             residualize_fnirs_marginal=residualize_fnirs_marginal,
+            fixed_eeg_marginal=(
+                None if fixed_eeg_marginal is None else fixed_eeg_marginal[lag_index]
+            ),
+            fixed_fnirs_marginal=(
+                None if fixed_fnirs_marginal is None else fixed_fnirs_marginal[lag_index]
+            ),
         )
         expected_log_probability = torch.einsum(
             'bti,if,btf->bt',
@@ -192,6 +221,43 @@ def coupling_pair_likelihood_loss(
     if not per_lag_losses:
         return coupling_logits.new_tensor(0.0)
     return torch.stack(per_lag_losses).mean()
+
+
+def coupling_effective_neighbor_smoothness_loss(
+    coupling_logits: torch.Tensor,
+    eeg_codebook_weight: torch.Tensor,
+    eeg_marginal: torch.Tensor,
+    fnirs_marginal: torch.Tensor,
+    *,
+    n_neighbors: int = 5,
+) -> torch.Tensor:
+    """Smooth effective q(f|e,lag), not raw residual logits, across EEG neighbors."""
+    n_lags, n_eeg_tokens, _ = coupling_logits.shape
+    if n_eeg_tokens <= 1 or n_neighbors <= 0:
+        return coupling_logits.new_zeros(())
+    weights = eeg_marginal / eeg_marginal.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+    bias = torch.einsum('le,lef->lf', weights, coupling_logits)
+    residual = coupling_logits - bias[:, None, :]
+    q = F.softmax(residual + fnirs_marginal.clamp_min(1e-8).log()[:, None, :], dim=-1)
+    normalized_codebook = F.normalize(eeg_codebook_weight.detach(), dim=-1)
+    similarity = normalized_codebook @ normalized_codebook.t()
+    neighbor_count = min(int(n_neighbors), n_eeg_tokens - 1)
+    _, neighbor_indices = similarity.topk(neighbor_count + 1, dim=-1)
+    neighbor_indices = neighbor_indices[:, 1:]
+    by_eeg = q.permute(1, 0, 2)
+    return _pairwise_js_divergence(by_eeg.unsqueeze(1), by_eeg[neighbor_indices]).mean()
+
+
+def coupling_interaction_lag_sparsity_loss(
+    coupling_logits: torch.Tensor,
+    eeg_marginal: torch.Tensor,
+) -> torch.Tensor:
+    """Group-lasso penalty on occupancy-gauged interaction energy per lag."""
+    weights = eeg_marginal / eeg_marginal.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+    bias = torch.einsum('le,lef->lf', weights, coupling_logits)
+    residual = coupling_logits - bias[:, None, :]
+    energy = torch.sqrt(residual.square().mean(dim=(1, 2)) + 1e-8)
+    return energy.mean()
 
 
 def coupling_lag_evidence_loss(
@@ -283,6 +349,8 @@ def coupling_lag_evidence_loss(
 __all__ = [
     'batch_usage_entropy_loss',
     'coupling_eeg_neighbor_smoothness_loss',
+    'coupling_effective_neighbor_smoothness_loss',
+    'coupling_interaction_lag_sparsity_loss',
     'coupling_joint_probabilities',
     'coupling_lag_focus_loss',
     'coupling_lag_evidence_loss',

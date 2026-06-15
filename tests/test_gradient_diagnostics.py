@@ -68,6 +68,8 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertIn('eeg_encoder', artifacts['group_names'])
         self.assertIn('fnirs_source_decoder', artifacts['group_names'])
         self.assertIn('fnirs_observation_decoder', artifacts['group_names'])
+        self.assertTrue(any(key.startswith('grad_group_norm_') for key in metrics))
+        self.assertTrue(any(key.startswith('grad_group_share_') for key in metrics))
 
         component_group_shares = np.asarray(artifacts['component_group_shares'], dtype=np.float32)
         group_component_shares = np.asarray(artifacts['group_component_shares'], dtype=np.float32)

@@ -425,11 +425,12 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
 
     if dataset_id == 'croce_local_cache':
         dataloaders: Dict[str, DataLoader] = {}
+        force_deterministic = bool(data_cfg.get('crop', {}).get('force_deterministic_all_splits', False))
         for split_name in ('train', 'val', 'test'):
             split_cfg = data_cfg.get('split', {})
             subjects = split_cfg.get(f'{split_name}_subjects', split_cfg.get(split_name, []))
             split_data_cfg = dict(data_cfg)
-            split_data_cfg['_split_name'] = split_name
+            split_data_cfg['_split_name'] = 'audit' if force_deterministic else split_name
             dataset = create_multimodal_window_dataset(
                 split_data_cfg,
                 subjects,
@@ -437,12 +438,13 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
                 normalize=normalize,
                 normalization_mode=normalization_mode,
             )
-            loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=(split_name == 'train'))
+            is_train_loader = split_name == 'train' and not force_deterministic
+            loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=is_train_loader)
             dataloaders[split_name] = DataLoader(
                 dataset,
                 batch_size=config['training']['batch_size'],
-                shuffle=(split_name == 'train'),
-                drop_last=_resolve_drop_last(data_cfg, is_train=(split_name == 'train')),
+                shuffle=is_train_loader,
+                drop_last=_resolve_drop_last(data_cfg, is_train=is_train_loader),
                 **loader_kwargs,
             )
         return dataloaders
