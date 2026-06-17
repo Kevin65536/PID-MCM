@@ -121,14 +121,75 @@ def fixed_position_sequences(data: Dict[str, np.ndarray], position: int) -> tupl
     return np.stack([row[:width] for row in eeg_rows]), np.stack([row[:width] for row in fnirs_rows])
 
 
-def counts_by_lag(eeg: np.ndarray, fnirs: np.ndarray, k_eeg: int, k_fnirs: int) -> np.ndarray:
-    table = build_lag_pair_table(eeg, fnirs)
-    counts = np.zeros((eeg.shape[1], k_eeg, k_fnirs), dtype=np.float64)
-    for lag in range(eeg.shape[1]):
+def lag_count_from_max(tokens_per_window: int, max_lag_tokens: int | None) -> int:
+    if max_lag_tokens is None:
+        return int(tokens_per_window)
+    return min(max(int(max_lag_tokens), 0) + 1, int(tokens_per_window))
+
+
+def counts_by_lag(
+    eeg: np.ndarray,
+    fnirs: np.ndarray,
+    k_eeg: int,
+    k_fnirs: int,
+    *,
+    max_lag_tokens: int | None = None,
+) -> np.ndarray:
+    n_lags = lag_count_from_max(eeg.shape[1], max_lag_tokens)
+    table = build_lag_pair_table(eeg, fnirs, n_lags=n_lags)
+    counts = np.zeros((n_lags, k_eeg, k_fnirs), dtype=np.float64)
+    for lag in range(n_lags):
         mask = table.lag == lag
         flat = table.eeg[mask] * k_fnirs + table.fnirs[mask]
         counts[lag] = np.bincount(flat, minlength=k_eeg * k_fnirs).reshape(k_eeg, k_fnirs)
     return counts
+
+
+def equal_support_counts_by_lag(
+    eeg: np.ndarray,
+    fnirs: np.ndarray,
+    k_eeg: int,
+    k_fnirs: int,
+    *,
+    max_lag_tokens: int | None = None,
+) -> np.ndarray:
+    eeg = np.asarray(eeg, dtype=np.int64)
+    fnirs = np.asarray(fnirs, dtype=np.int64)
+    n_lags = lag_count_from_max(eeg.shape[1], max_lag_tokens)
+    support = eeg.shape[1] - n_lags + 1
+    if support <= 0:
+        raise ValueError("max_lag_tokens leaves no equal-support token pairs")
+    counts = np.zeros((n_lags, k_eeg, k_fnirs), dtype=np.float64)
+    for lag in range(n_lags):
+        flat = eeg[:, :support].reshape(-1) * k_fnirs + fnirs[:, lag:lag + support].reshape(-1)
+        counts[lag] = np.bincount(flat, minlength=k_eeg * k_fnirs).reshape(k_eeg, k_fnirs)
+    return counts
+
+
+def mutual_information_from_counts(counts: np.ndarray) -> float:
+    total = float(counts.sum())
+    if total <= 0:
+        return 0.0
+    joint = counts / total
+    expected = joint.sum(axis=1, keepdims=True) * joint.sum(axis=0, keepdims=True)
+    mask = joint > 0
+    return float(np.sum(joint[mask] * np.log(joint[mask] / np.maximum(expected[mask], 1e-12))))
+
+
+def equal_support_lag_mi(
+    eeg: np.ndarray,
+    fnirs: np.ndarray,
+    *,
+    k_eeg: int,
+    k_fnirs: int,
+    max_lag_tokens: int | None = None,
+) -> np.ndarray:
+    return np.asarray([
+        mutual_information_from_counts(counts)
+        for counts in equal_support_counts_by_lag(
+            eeg, fnirs, k_eeg, k_fnirs, max_lag_tokens=max_lag_tokens,
+        )
+    ])
 
 
 def evaluate_nll_by_subject(
@@ -144,7 +205,7 @@ def evaluate_nll_by_subject(
     for subject in np.unique(subjects):
         indices = subjects == subject
         losses = []
-        for lag in range(eeg.shape[1]):
+        for lag in range(probabilities.shape[0]):
             valid = eeg.shape[1] - lag
             if marginal:
                 logp = np.log(np.maximum(probabilities[lag, fnirs[indices, lag:]], 1e-12))
@@ -165,6 +226,7 @@ def permutation_max_mi(
     k_fnirs: int,
     n_permutations: int,
     seed: int,
+    max_lag_tokens: int | None = None,
 ) -> Dict[str, Any]:
     rng = np.random.default_rng(seed)
     eeg = data["eeg_source_tokens"].astype(np.int64)
@@ -186,6 +248,7 @@ def permutation_max_mi(
                 permuted_eeg[indices] = eeg[rng.permutation(indices)]
         null_max[permutation] = float(lag_mutual_information(
             permuted_eeg, fnirs, k_eeg=k_eeg, k_fnirs=k_fnirs,
+            n_lags=lag_count_from_max(eeg.shape[1], max_lag_tokens),
         ).max())
     corrected_p = [float((1 + np.sum(null_max >= value)) / (len(null_max) + 1)) for value in observed]
     return {
@@ -336,6 +399,7 @@ def main() -> None:
     parser.add_argument("--permutations", type=int, default=500)
     parser.add_argument("--bootstraps", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20260615)
+    parser.add_argument("--max-lag-tokens", type=int, default=None)
     args = parser.parse_args()
     export_dir = Path(args.export_dir).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -371,23 +435,33 @@ def main() -> None:
     )
 
     test = splits["test"]
+    n_lags = lag_count_from_max(test["eeg_source_tokens"].shape[1], args.max_lag_tokens)
     observed_mi = lag_mutual_information(
-        test["eeg_source_tokens"], test["fnirs_source_tokens"], k_eeg=k_eeg, k_fnirs=k_fnirs,
+        test["eeg_source_tokens"], test["fnirs_source_tokens"],
+        k_eeg=k_eeg, k_fnirs=k_fnirs, n_lags=n_lags,
+    )
+    equal_support_mi = equal_support_lag_mi(
+        test["eeg_source_tokens"], test["fnirs_source_tokens"],
+        k_eeg=k_eeg, k_fnirs=k_fnirs, max_lag_tokens=args.max_lag_tokens,
     )
     fixed_mi = {}
     for position in (0, 5, 9):
         eeg_fixed, fnirs_fixed = fixed_position_sequences(test, position)
-        fixed_mi[str(position)] = (
-            lag_mutual_information(eeg_fixed, fnirs_fixed, k_eeg=k_eeg, k_fnirs=k_fnirs).tolist()
-            if eeg_fixed.size else []
-        )
+        if eeg_fixed.size:
+            fixed_n_lags = lag_count_from_max(eeg_fixed.shape[1], args.max_lag_tokens)
+            fixed_mi[str(position)] = lag_mutual_information(
+                eeg_fixed, fnirs_fixed, k_eeg=k_eeg, k_fnirs=k_fnirs, n_lags=fixed_n_lags,
+            ).tolist()
+        else:
+            fixed_mi[str(position)] = []
     permutation = permutation_max_mi(
         test, observed_mi, k_eeg=k_eeg, k_fnirs=k_fnirs,
-        n_permutations=args.permutations, seed=args.seed,
+        n_permutations=args.permutations, seed=args.seed, max_lag_tokens=args.max_lag_tokens,
     )
 
     train_counts = counts_by_lag(
         splits["train"]["eeg_source_tokens"], splits["train"]["fnirs_source_tokens"], k_eeg, k_fnirs,
+        max_lag_tokens=args.max_lag_tokens,
     )
     conditional = conditional_probabilities_from_counts(train_counts, alpha=0.5)
     marginal = (train_counts.sum(axis=1) + 0.5)
@@ -410,13 +484,20 @@ def main() -> None:
         domain_mi = lag_mutual_information(
             test_subset["eeg_source_tokens"], test_subset["fnirs_source_tokens"],
             k_eeg=k_eeg, k_fnirs=k_fnirs,
+            n_lags=lag_count_from_max(test_subset["eeg_source_tokens"].shape[1], args.max_lag_tokens),
+        )
+        domain_equal_support_mi = equal_support_lag_mi(
+            test_subset["eeg_source_tokens"], test_subset["fnirs_source_tokens"],
+            k_eeg=k_eeg, k_fnirs=k_fnirs, max_lag_tokens=args.max_lag_tokens,
         )
         domain_permutation = permutation_max_mi(
             test_subset, domain_mi, k_eeg=k_eeg, k_fnirs=k_fnirs,
             n_permutations=args.permutations, seed=args.seed + len(domain_lag_audit),
+            max_lag_tokens=args.max_lag_tokens,
         )
         domain_counts = counts_by_lag(
             train_subset["eeg_source_tokens"], train_subset["fnirs_source_tokens"], k_eeg, k_fnirs,
+            max_lag_tokens=args.max_lag_tokens,
         )
         domain_conditional = conditional_probabilities_from_counts(domain_counts, alpha=0.5)
         domain_marginal = domain_counts.sum(axis=1) + 0.5
@@ -425,6 +506,7 @@ def main() -> None:
         domain_marginal_nll = evaluate_nll_by_subject(domain_marginal, test_subset, marginal=True)
         domain_lag_audit[domain] = {
             "mi": domain_mi.tolist(),
+            "equal_support_mi": domain_equal_support_mi.tolist(),
             "max_over_lag_permutation": domain_permutation,
             "subject_bootstrap_nll_gain": subject_block_bootstrap_gain(
                 domain_model_nll, domain_marginal_nll,
@@ -435,6 +517,8 @@ def main() -> None:
     position_report = {
         "k_eeg": k_eeg,
         "k_fnirs": k_fnirs,
+        "max_lag_tokens": args.max_lag_tokens,
+        "n_lags": n_lags,
         "position_labels": labels,
         "position_token_distributions": position_distributions.tolist(),
         "position_js_divergence": position_js.tolist(),
@@ -446,6 +530,7 @@ def main() -> None:
         "task_labels": task_labels,
         "task_token_distributions": task_distributions.tolist(),
         "ordinary_window_mi": observed_mi.tolist(),
+        "equal_support_window_mi": equal_support_mi.tolist(),
         "fixed_position_cross_window_mi": fixed_mi,
         "max_over_lag_permutation": permutation,
         "test_conditional_nll_by_subject": model_nll,

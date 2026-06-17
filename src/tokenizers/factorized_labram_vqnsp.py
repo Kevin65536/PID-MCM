@@ -90,6 +90,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         coupling_residualize_fnirs_marginal: bool = False,
         coupling_lag_evidence_weight: float = 0.0,
         coupling_lag_evidence_temperature: float = 0.25,
+        coupling_max_lag_tokens: Optional[int] = None,
         coupling_fixed_eeg_marginal: Optional[Sequence[Sequence[float]]] = None,
         coupling_fixed_fnirs_marginal: Optional[Sequence[Sequence[float]]] = None,
         coupling_effective_smoothness_weight: float = 0.0,
@@ -235,7 +236,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.observation_balance_temperature = float(
             assignment_temperature if observation_balance_temperature is None else observation_balance_temperature
         )
-        self.coupling_lags = list(range(max(int(self.n_patches), 1)))
+        if coupling_max_lag_tokens is None:
+            n_coupling_lags = max(int(self.n_patches), 1)
+        else:
+            max_lag = max(int(coupling_max_lag_tokens), 0)
+            n_coupling_lags = min(max_lag + 1, max(int(self.n_patches), 1))
+        self.coupling_lags = list(range(n_coupling_lags))
         self.n_coupling_lags = len(self.coupling_lags)
         if fixed_eeg.numel() and tuple(fixed_eeg.shape) != (self.n_coupling_lags, source_codebook_size):
             raise ValueError(
@@ -561,6 +567,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             coupling_residualize_fnirs_marginal=coupling_cfg.get('residualize_fnirs_marginal', False),
             coupling_lag_evidence_weight=coupling_cfg.get('lag_evidence_weight', 0.0),
             coupling_lag_evidence_temperature=coupling_cfg.get('lag_evidence_temperature', 0.25),
+            coupling_max_lag_tokens=coupling_cfg.get('max_lag_tokens'),
             coupling_fixed_eeg_marginal=coupling_cfg.get('fixed_eeg_marginal'),
             coupling_fixed_fnirs_marginal=coupling_cfg.get('fixed_fnirs_marginal'),
             coupling_effective_smoothness_weight=coupling_cfg.get('effective_smoothness_weight', 0.0),

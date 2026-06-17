@@ -50,6 +50,17 @@ class GradientDiagnosticsTests(unittest.TestCase):
         params.update(overrides)
         return SourceObservationLaBraMVQNSP(**params)
 
+    def test_coupling_max_lag_tokens_limits_tensor_support(self):
+        model = self._build_tiny_model(coupling_max_lag_tokens=0)
+
+        self.assertEqual(model.n_coupling_lags, 1)
+        self.assertEqual(model.coupling_lags, [0])
+        self.assertEqual(tuple(model.coupling_logits.shape), (1, 4, 4))
+
+        clamped = self._build_tiny_model(coupling_max_lag_tokens=99)
+        self.assertEqual(clamped.n_coupling_lags, clamped.n_patches)
+        self.assertEqual(tuple(clamped.coupling_logits.shape), (clamped.n_patches, 4, 4))
+
     def test_component_group_attribution_matches_architecture_groups(self):
         torch.manual_seed(7)
         model = self._build_tiny_model()

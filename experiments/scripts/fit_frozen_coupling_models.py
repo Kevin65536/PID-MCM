@@ -56,11 +56,24 @@ def filter_domain(data: Dict[str, np.ndarray], domain: str) -> Dict[str, np.ndar
     return {key: value[mask] for key, value in data.items()}
 
 
-def lag_counts(data: Dict[str, np.ndarray], k_eeg: int, k_fnirs: int) -> np.ndarray:
+def lag_count_from_max(tokens_per_window: int, max_lag_tokens: int | None) -> int:
+    if max_lag_tokens is None:
+        return int(tokens_per_window)
+    return min(max(int(max_lag_tokens), 0) + 1, int(tokens_per_window))
+
+
+def lag_counts(
+    data: Dict[str, np.ndarray],
+    k_eeg: int,
+    k_fnirs: int,
+    *,
+    max_lag_tokens: int | None = None,
+) -> np.ndarray:
     eeg = data["eeg_source_tokens"].astype(np.int64)
     fnirs = data["fnirs_source_tokens"].astype(np.int64)
-    counts = np.zeros((eeg.shape[1], k_eeg, k_fnirs), dtype=np.float64)
-    for lag in range(eeg.shape[1]):
+    n_lags = lag_count_from_max(eeg.shape[1], max_lag_tokens)
+    counts = np.zeros((n_lags, k_eeg, k_fnirs), dtype=np.float64)
+    for lag in range(n_lags):
         valid = eeg.shape[1] - lag
         flat = eeg[:, :valid].reshape(-1) * k_fnirs + fnirs[:, lag:].reshape(-1)
         counts[lag] = np.bincount(flat, minlength=k_eeg * k_fnirs).reshape(k_eeg, k_fnirs)
@@ -95,7 +108,12 @@ def per_subject_nll(probabilities: np.ndarray, data: Dict[str, np.ndarray]) -> D
     result = {}
     for subject in np.unique(data["subject_id"]):
         subset = {key: value[data["subject_id"] == subject] for key, value in data.items()}
-        counts = lag_counts(subset, probabilities.shape[1], probabilities.shape[2])
+        counts = lag_counts(
+            subset,
+            probabilities.shape[1],
+            probabilities.shape[2],
+            max_lag_tokens=probabilities.shape[0] - 1,
+        )
         result[int(subject)] = conditional_nll(probabilities, counts)
     return result
 
@@ -150,7 +168,7 @@ def nuisance_and_model_nll_by_subject(
     for subject in np.unique(data["subject_id"]):
         indices = np.flatnonzero(data["subject_id"] == subject)
         model_lags, nuisance_lags = [], []
-        for lag in range(eeg.shape[1]):
+        for lag in range(probabilities.shape[0]):
             valid = eeg.shape[1] - lag
             eeg_values = eeg[indices, :valid]
             fnirs_values = fnirs[indices, lag:]
@@ -212,6 +230,7 @@ def fit_logits(
     regularization_weight: float,
     seed: int,
     steps: int,
+    max_lag_tokens: int | None,
 ) -> tuple[np.ndarray, np.ndarray, float]:
     torch.manual_seed(seed)
     device = torch.device("cpu")
@@ -223,6 +242,7 @@ def fit_logits(
                 {key: value[val_data["subject_id"] == subject] for key, value in val_data.items()},
                 val_counts.shape[1],
                 val_counts.shape[2],
+                max_lag_tokens=max_lag_tokens,
             ),
             dtype=torch.float32,
             device=device,
@@ -249,7 +269,12 @@ def fit_logits(
             sample_count = len(train_data["subject_id"])
             selected = rng.choice(sample_count, min(256, sample_count), replace=False)
             batch_data = {key: value[selected] for key, value in train_data.items()}
-            batch_counts_np = lag_counts(batch_data, train_counts.shape[1], train_counts.shape[2])
+            batch_counts_np = lag_counts(
+                batch_data,
+                train_counts.shape[1],
+                train_counts.shape[2],
+                max_lag_tokens=max_lag_tokens,
+            )
             active_counts = torch.tensor(batch_counts_np, dtype=torch.float32, device=device)
             active_prior = torch.tensor(lag_prior(batch_counts_np), dtype=torch.float32, device=device)
             active_occupancy = torch.tensor(occupancy(batch_counts_np), dtype=torch.float32, device=device)
@@ -280,6 +305,73 @@ def fit_logits(
     return best_q, best_logits, best_nll
 
 
+def factorized_residual_logits(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
+    return torch.einsum("ler,lfr->lef", left, right) / math.sqrt(max(int(left.shape[-1]), 1))
+
+
+def fit_factorized_logits(
+    train_counts: np.ndarray,
+    val_counts: np.ndarray,
+    val_data: Dict[str, np.ndarray],
+    *,
+    rank: int,
+    seed: int,
+    steps: int,
+    max_lag_tokens: int | None,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    torch.manual_seed(seed)
+    device = torch.device("cpu")
+    counts = torch.tensor(train_counts, dtype=torch.float32, device=device)
+    validation_subject_counts = torch.stack([
+        torch.tensor(
+            lag_counts(
+                {key: value[val_data["subject_id"] == subject] for key, value in val_data.items()},
+                val_counts.shape[1],
+                val_counts.shape[2],
+                max_lag_tokens=max_lag_tokens,
+            ),
+            dtype=torch.float32,
+            device=device,
+        )
+        for subject in np.unique(val_data["subject_id"])
+    ])
+    prior = torch.tensor(lag_prior(train_counts), dtype=torch.float32, device=device)
+    eeg_occupancy = torch.tensor(occupancy(train_counts), dtype=torch.float32, device=device)
+    left = torch.nn.Parameter(0.02 * torch.randn(
+        train_counts.shape[0], train_counts.shape[1], int(rank), device=device,
+    ))
+    right = torch.nn.Parameter(0.02 * torch.randn(
+        train_counts.shape[0], train_counts.shape[2], int(rank), device=device,
+    ))
+    optimizer = torch.optim.Adam([left, right], lr=0.05)
+    best_nll = float("inf")
+    best_q = None
+    best_logits = None
+    for _ in range(steps):
+        optimizer.zero_grad(set_to_none=True)
+        logits = factorized_residual_logits(left, right)
+        q = effective_q(logits, prior, eeg_occupancy, residual=True)
+        totals = counts.sum(dim=(1, 2)).clamp_min(1.0)
+        loss = -((counts * q.clamp_min(1e-8).log()).sum(dim=(1, 2)) / totals).mean()
+        loss.backward()
+        optimizer.step()
+        with torch.no_grad():
+            logits_validation = factorized_residual_logits(left, right)
+            q_validation = effective_q(logits_validation, prior, eeg_occupancy, residual=True)
+            val_totals = validation_subject_counts.sum(dim=(2, 3)).clamp_min(1.0)
+            val_by_subject_lag = -(
+                validation_subject_counts * q_validation.clamp_min(1e-8).log().unsqueeze(0)
+            ).sum(dim=(2, 3)) / val_totals
+            val_nll = float(val_by_subject_lag.mean())
+            if val_nll < best_nll:
+                best_nll = val_nll
+                best_q = q_validation.detach().cpu().numpy().copy()
+                best_logits = logits_validation.detach().cpu().numpy().copy()
+    if best_q is None:
+        raise RuntimeError("Frozen factorized coupling optimization failed")
+    return best_q, best_logits, best_nll
+
+
 def mean_pairwise_js(probabilities: Iterable[np.ndarray]) -> float:
     values = list(probabilities)
     scores = []
@@ -293,6 +385,101 @@ def mean_pairwise_js(probabilities: Iterable[np.ndarray]) -> float:
     return float(np.mean(scores)) if scores else 0.0
 
 
+def evaluate_candidates(
+    candidates: Dict[str, list[np.ndarray]],
+    hyperparameters: Dict[str, Any],
+    *,
+    train_domain: str,
+    train_counts: np.ndarray,
+    prior: np.ndarray,
+    splits: Dict[str, Dict[str, np.ndarray]],
+    k_eeg: int,
+    k_fnirs: int,
+    nuisance_marginal: Dict[str, np.ndarray],
+    bootstraps: int,
+    max_lag_tokens: int | None,
+    output_dir: Path,
+    rows: list[Dict[str, Any]],
+) -> Dict[str, Any]:
+    domain_results: Dict[str, Any] = {}
+    for model_id, distributions in candidates.items():
+        probability = np.mean(distributions, axis=0)
+        test_matrix = {}
+        for test_domain in DOMAINS:
+            test = filter_domain(splits["test"], test_domain)
+            if len(test["subject_id"]) == 0:
+                continue
+            test_counts = lag_counts(test, k_eeg, k_fnirs, max_lag_tokens=max_lag_tokens)
+            if model_id == "F3":
+                mean_logits = np.mean(hyperparameters[model_id]["fitted_logits"], axis=0)
+                probability = effective_q(
+                    torch.tensor(mean_logits, dtype=torch.float32),
+                    torch.tensor(lag_prior(test_counts), dtype=torch.float32),
+                    torch.tensor(occupancy(test_counts), dtype=torch.float32),
+                    residual=True,
+                ).detach().cpu().numpy()
+            model_subject = per_subject_nll(probability, test)
+            baseline_probability = np.broadcast_to(prior[:, None, :], probability.shape)
+            baseline_subject = per_subject_nll(baseline_probability, test)
+            nll = float(np.mean(list(model_subject.values())))
+            baseline = float(np.mean(list(baseline_subject.values())))
+            bootstrap = subject_block_bootstrap_gain(
+                model_subject, baseline_subject,
+                n_bootstrap=bootstraps, seed=20260615,
+            )
+            nuisance_model_subject, nuisance_subject = nuisance_and_model_nll_by_subject(
+                probability, test, nuisance_marginal,
+            )
+            nuisance_bootstrap = subject_block_bootstrap_gain(
+                nuisance_model_subject, nuisance_subject,
+                n_bootstrap=bootstraps, seed=20260615,
+            )
+            nuisance_nll = float(np.mean(list(nuisance_subject.values())))
+            nuisance_model_nll = float(np.mean(list(nuisance_model_subject.values())))
+            test_matrix[test_domain] = {
+                "nll": nll,
+                "marginal_nll": baseline,
+                "nll_gain": baseline - nll,
+                "subject_bootstrap_gain": bootstrap,
+                "nuisance_marginal_nll": nuisance_nll,
+                "nuisance_adjusted_model_nll": nuisance_model_nll,
+                "nuisance_adjusted_nll_gain": nuisance_nll - nuisance_model_nll,
+                "nuisance_subject_bootstrap_gain": nuisance_bootstrap,
+            }
+            rows.append({
+                "train_domain": train_domain,
+                "test_domain": test_domain,
+                "model": model_id,
+                "nll": nll,
+                "marginal_nll": baseline,
+                "nll_gain": baseline - nll,
+                "bootstrap_ci_low": bootstrap["ci_low"],
+                "nuisance_adjusted_gain": nuisance_nll - nuisance_model_nll,
+                "nuisance_bootstrap_ci_low": nuisance_bootstrap["ci_low"],
+                "initialization_js": hyperparameters[model_id].get("initialization_js", 0.0),
+            })
+        domain_results[model_id] = {
+            "hyperparameters": {
+                key: value for key, value in hyperparameters[model_id].items()
+                if key != "fitted_logits"
+            },
+            "test_matrix": test_matrix,
+        }
+        np.save(output_dir / f"{train_domain}_{model_id}_probabilities.npy", probability)
+        if model_id == "F6":
+            residual = np.log(np.maximum(probability, 1e-12)) - np.log(np.maximum(prior[:, None, :], 1e-12))
+            eeg_occupancy = occupancy(train_counts)
+            residual -= np.einsum("le,lef->lf", eeg_occupancy, residual)[:, None, :]
+            np.savez(
+                output_dir / f"{train_domain}_F6_parameters.npz",
+                probabilities=probability,
+                residual_logits=residual,
+                fnirs_prior=prior,
+                eeg_occupancy=eeg_occupancy,
+            )
+    return domain_results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--export-dir", required=True)
@@ -300,6 +487,9 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--bootstraps", type=int, default=1000)
     parser.add_argument("--position-audit")
+    parser.add_argument("--max-lag-tokens", type=int, default=None)
+    parser.add_argument("--factorized-only", action="store_true")
+    parser.add_argument("--factorized-ranks", nargs="+", type=int, default=[16, 32])
     args = parser.parse_args()
     export_dir = Path(args.export_dir).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -318,13 +508,56 @@ def main() -> None:
         val = filter_domain(splits["val"], train_domain)
         if len(train["subject_id"]) == 0 or len(val["subject_id"]) == 0:
             continue
-        train_counts = lag_counts(train, k_eeg, k_fnirs)
-        val_counts = lag_counts(val, k_eeg, k_fnirs)
+        train_counts = lag_counts(train, k_eeg, k_fnirs, max_lag_tokens=args.max_lag_tokens)
+        val_counts = lag_counts(val, k_eeg, k_fnirs, max_lag_tokens=args.max_lag_tokens)
         prior = lag_prior(train_counts)
         nuisance_marginal = fit_nuisance_marginal(train, k_fnirs)
         domain_results: Dict[str, Any] = {}
 
         f0 = np.broadcast_to(prior[:, None, :], train_counts.shape).copy()
+        if args.factorized_only:
+            candidates = {"F0": [f0]}
+            hyperparameters: Dict[str, Any] = {"F0": {}}
+            for rank in args.factorized_ranks:
+                distributions, logits_by_seed, scores = [], [], []
+                for seed in seeds:
+                    distribution, fitted_logits, score = fit_factorized_logits(
+                        train_counts,
+                        val_counts,
+                        val,
+                        rank=rank,
+                        seed=seed,
+                        steps=args.steps,
+                        max_lag_tokens=args.max_lag_tokens,
+                    )
+                    distributions.append(distribution)
+                    logits_by_seed.append(fitted_logits)
+                    scores.append(score)
+                model_id = f"LR{int(rank)}"
+                candidates[model_id] = distributions
+                hyperparameters[model_id] = {
+                    "rank": int(rank),
+                    "validation_nll": float(np.mean(scores)),
+                    "initialization_js": mean_pairwise_js(distributions),
+                    "fitted_logits": logits_by_seed,
+                }
+            results[train_domain] = evaluate_candidates(
+                candidates,
+                hyperparameters,
+                train_domain=train_domain,
+                train_counts=train_counts,
+                prior=prior,
+                splits=splits,
+                k_eeg=k_eeg,
+                k_fnirs=k_fnirs,
+                nuisance_marginal=nuisance_marginal,
+                bootstraps=args.bootstraps,
+                max_lag_tokens=args.max_lag_tokens,
+                output_dir=output_dir,
+                rows=rows,
+            )
+            continue
+
         alpha_scores = {}
         for alpha in alpha_grid:
             candidate = conditional_probabilities_from_counts(train_counts, alpha=alpha, prior=prior)
@@ -349,6 +582,7 @@ def main() -> None:
                         model_id, train_counts, val_counts,
                         train, val,
                         regularization_weight=weight, seed=seed, steps=args.steps,
+                        max_lag_tokens=args.max_lag_tokens,
                     )
                     distributions.append(distribution)
                     logits_by_seed.append(fitted_logits)
@@ -374,7 +608,7 @@ def main() -> None:
                 test = filter_domain(splits["test"], test_domain)
                 if len(test["subject_id"]) == 0:
                     continue
-                test_counts = lag_counts(test, k_eeg, k_fnirs)
+                test_counts = lag_counts(test, k_eeg, k_fnirs, max_lag_tokens=args.max_lag_tokens)
                 if model_id == "F3":
                     mean_logits = np.mean(hyperparameters[model_id]["fitted_logits"], axis=0)
                     probability = effective_q(
