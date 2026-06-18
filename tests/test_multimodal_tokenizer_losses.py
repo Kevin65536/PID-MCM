@@ -8,6 +8,7 @@ from src.losses.multimodal_tokenizer import (
     coupling_lag_evidence_loss,
     coupling_lag_focus_loss,
     coupling_pair_likelihood_loss,
+    local_residual_coupling_loss,
     straight_through_assignment_probs,
 )
 
@@ -160,6 +161,41 @@ class MultimodalTokenizerLossTests(unittest.TestCase):
         self.assertGreater(float(coupling_logits.grad.abs().sum().item()), 0.0)
         self.assertGreater(float(eeg_logits.grad.abs().sum().item()), 0.0)
         self.assertGreater(float(fnirs_logits.grad.abs().sum().item()), 0.0)
+
+    def test_local_residual_coupling_gradient_routing(self):
+        for target, expect_eeg, expect_fnirs in (
+            ("eeg", True, False),
+            ("fnirs", False, True),
+            ("both", True, True),
+        ):
+            eeg_logits = torch.randn(3, 4, 5, requires_grad=True)
+            fnirs_logits = torch.randn(3, 4, 5, requires_grad=True)
+            loss, components = local_residual_coupling_loss(
+                eeg_logits,
+                fnirs_logits,
+                n_lags=3,
+                gradient_target=target,
+                pair_weight=1.0,
+                effective_smoothness_weight=0.1,
+                interaction_lag_sparsity_weight=0.1,
+                eeg_codebook_weight=torch.randn(5, 4),
+            )
+            loss.backward()
+            self.assertGreater(float(components['pair_likelihood'].detach().item()), 0.0)
+            self.assertEqual(eeg_logits.grad is not None and bool(torch.any(eeg_logits.grad != 0)), expect_eeg)
+            self.assertEqual(fnirs_logits.grad is not None and bool(torch.any(fnirs_logits.grad != 0)), expect_fnirs)
+
+    def test_local_residual_coupling_none_is_detached_negative_control(self):
+        eeg_logits = torch.randn(2, 3, 4, requires_grad=True)
+        fnirs_logits = torch.randn(2, 3, 4, requires_grad=True)
+        loss, _ = local_residual_coupling_loss(
+            eeg_logits,
+            fnirs_logits,
+            n_lags=2,
+            gradient_target="none",
+        )
+
+        self.assertFalse(loss.requires_grad)
 
     def test_coupling_pair_likelihood_weights_each_lag_equally(self):
         eeg_logits = torch.tensor(

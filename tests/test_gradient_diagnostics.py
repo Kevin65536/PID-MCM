@@ -316,6 +316,45 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertIsNotNone(model.coupling_logits.grad)
         self.assertGreater(float(model.coupling_logits.grad.abs().sum().item()), 0.0)
 
+    def test_local_residual_coupling_updates_only_selected_assignment_side(self):
+        torch.manual_seed(37)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        model = self._build_tiny_model(
+            coupling_weight=0.2,
+            coupling_lag_focus_weight=0.0,
+            coupling_smoothness_weight=0.0,
+            coupling_pair_likelihood_weight=0.0,
+            coupling_local_residual_enabled=True,
+            coupling_pair_gradient_target="eeg",
+            coupling_effective_smoothness_weight=0.0,
+            coupling_interaction_lag_sparsity_weight=0.0,
+        )
+        outputs = model(eeg, fnirs)
+
+        self.assertGreater(float(outputs['source_coupling_local_residual_loss'].item()), 0.0)
+        outputs['loss'].backward()
+        eeg_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in model.named_parameters()
+            if name.startswith('eeg_source_proj') and param.grad is not None
+        )
+        fnirs_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in model.named_parameters()
+            if name.startswith('fnirs_source_proj') and param.grad is not None
+        )
+        self.assertGreater(eeg_grad, 0.0)
+        self.assertGreaterEqual(fnirs_grad, 0.0)
+
+    def test_interaction_auxiliary_loss_is_configurable(self):
+        torch.manual_seed(41)
+        model = self._build_tiny_model(interaction_aux_weight=0.3)
+        outputs = model(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+
+        self.assertGreater(float(outputs['interaction_aux_loss'].item()), 0.0)
+        self.assertAlmostEqual(model.get_gradient_component_weights()['interaction_aux_loss'], 0.3)
+
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)
         model = self._build_tiny_model(

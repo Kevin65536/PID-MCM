@@ -952,6 +952,18 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
                 f"Unexpected full warm-start keys from {full_checkpoint}: {incompatible.unexpected_keys}"
             )
         allowed_missing = {'coupling_logits'} if reset_coupling else set()
+        # New auxiliary probes are intentionally initialized from scratch when
+        # branching from older tokenizer checkpoints.
+        warm_start_compatible_prefixes = (
+            'eeg_to_fnirs_source_predictor.',
+            'fnirs_to_eeg_source_predictor.',
+            'eeg_shared_state_proj.',
+            'fnirs_shared_state_proj.',
+        )
+        allowed_missing.update(
+            key for key in incompatible.missing_keys
+            if key.startswith(warm_start_compatible_prefixes)
+        )
         disallowed_missing = set(incompatible.missing_keys) - allowed_missing
         if disallowed_missing:
             raise RuntimeError(

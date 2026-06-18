@@ -23,6 +23,7 @@ from src.losses.multimodal_tokenizer import (
     coupling_lag_evidence_loss,
     coupling_lag_focus_loss,
     coupling_pair_likelihood_loss,
+    local_residual_coupling_loss,
     orthogonality_loss,
     straight_through_assignment_probs,
 )
@@ -95,6 +96,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         coupling_fixed_fnirs_marginal: Optional[Sequence[Sequence[float]]] = None,
         coupling_effective_smoothness_weight: float = 0.0,
         coupling_interaction_lag_sparsity_weight: float = 0.0,
+        coupling_local_residual_enabled: bool = False,
+        coupling_local_residual_pair_weight: float = 1.0,
+        coupling_local_residual_alpha: float = 0.5,
+        interaction_aux_weight: float = 0.0,
+        interaction_aux_direction: str = 'eeg_to_fnirs',
+        interaction_aux_stop_gradient: bool = True,
+        shared_state_bottleneck_weight: float = 0.0,
+        shared_state_bottleneck_dim: int = 32,
         source_target_weight: float = 0.0,
         eeg_source_aux_weight: float = 0.5,
         source_target_correlation_weight: float = 0.0,
@@ -213,6 +222,19 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.coupling_lag_evidence_temperature = max(float(coupling_lag_evidence_temperature), 1e-3)
         self.coupling_effective_smoothness_weight = max(float(coupling_effective_smoothness_weight), 0.0)
         self.coupling_interaction_lag_sparsity_weight = max(float(coupling_interaction_lag_sparsity_weight), 0.0)
+        self.coupling_local_residual_enabled = bool(coupling_local_residual_enabled)
+        self.coupling_local_residual_pair_weight = max(float(coupling_local_residual_pair_weight), 0.0)
+        self.coupling_local_residual_alpha = max(float(coupling_local_residual_alpha), 1e-6)
+        self.interaction_aux_weight = max(float(interaction_aux_weight), 0.0)
+        self.interaction_aux_direction = str(interaction_aux_direction).lower()
+        if self.interaction_aux_direction not in {'eeg_to_fnirs', 'fnirs_to_eeg', 'bidirectional'}:
+            raise ValueError(
+                "interaction_aux_direction must be eeg_to_fnirs/fnirs_to_eeg/bidirectional, "
+                f"got {self.interaction_aux_direction!r}"
+            )
+        self.interaction_aux_stop_gradient = bool(interaction_aux_stop_gradient)
+        self.shared_state_bottleneck_weight = max(float(shared_state_bottleneck_weight), 0.0)
+        self.shared_state_bottleneck_dim = max(int(shared_state_bottleneck_dim), 1)
         fixed_eeg = torch.as_tensor(coupling_fixed_eeg_marginal or [], dtype=torch.float32)
         fixed_fnirs = torch.as_tensor(coupling_fixed_fnirs_marginal or [], dtype=torch.float32)
         self.register_buffer('coupling_fixed_eeg_marginal', fixed_eeg, persistent=False)
@@ -425,6 +447,22 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             torch.zeros(self.n_coupling_lags, source_codebook_size, source_codebook_size)
         )
         nn.init.trunc_normal_(self.coupling_logits, std=0.02)
+        self.eeg_to_fnirs_source_predictor = nn.Sequential(
+            nn.LayerNorm(eeg_source_codebook_dim),
+            nn.Linear(eeg_source_codebook_dim, fnirs_source_codebook_dim),
+        )
+        self.fnirs_to_eeg_source_predictor = nn.Sequential(
+            nn.LayerNorm(fnirs_source_codebook_dim),
+            nn.Linear(fnirs_source_codebook_dim, eeg_source_codebook_dim),
+        )
+        self.eeg_shared_state_proj = nn.Sequential(
+            nn.LayerNorm(eeg_source_codebook_dim),
+            nn.Linear(eeg_source_codebook_dim, self.shared_state_bottleneck_dim),
+        )
+        self.fnirs_shared_state_proj = nn.Sequential(
+            nn.LayerNorm(fnirs_source_codebook_dim),
+            nn.Linear(fnirs_source_codebook_dim, self.shared_state_bottleneck_dim),
+        )
 
         self.eeg_source_decode_input_proj = nn.Linear(
             eeg_source_codebook_dim,
@@ -572,6 +610,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             coupling_fixed_fnirs_marginal=coupling_cfg.get('fixed_fnirs_marginal'),
             coupling_effective_smoothness_weight=coupling_cfg.get('effective_smoothness_weight', 0.0),
             coupling_interaction_lag_sparsity_weight=coupling_cfg.get('interaction_lag_sparsity_weight', 0.0),
+            coupling_local_residual_enabled=coupling_cfg.get('local_residual_enabled', False),
+            coupling_local_residual_pair_weight=coupling_cfg.get('local_residual_pair_weight', 1.0),
+            coupling_local_residual_alpha=coupling_cfg.get('local_residual_alpha', 0.5),
+            interaction_aux_weight=loss_cfg.get('interaction_aux', {}).get('weight', 0.0),
+            interaction_aux_direction=loss_cfg.get('interaction_aux', {}).get('direction', 'eeg_to_fnirs'),
+            interaction_aux_stop_gradient=loss_cfg.get('interaction_aux', {}).get('stop_gradient', True),
+            shared_state_bottleneck_weight=loss_cfg.get('shared_state_bottleneck', {}).get('weight', 0.0),
+            shared_state_bottleneck_dim=loss_cfg.get('shared_state_bottleneck', {}).get('dim', 32),
             source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
             eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
             source_target_correlation_weight=source_target_cfg.get(
@@ -1049,13 +1095,38 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         else:
             effective_smoothness_loss = self.coupling_logits.new_zeros(())
             interaction_lag_sparsity_loss = self.coupling_logits.new_zeros(())
+        if self.coupling_local_residual_enabled:
+            local_residual_loss, local_components = local_residual_coupling_loss(
+                eeg_source_logits,
+                fnirs_source_logits,
+                n_lags=self.n_coupling_lags,
+                temperature=(
+                    self.source_balance_temperature
+                    if self.coupling_pair_temperature is None else self.coupling_pair_temperature
+                ),
+                gradient_target=self.coupling_pair_gradient_target,
+                alpha=self.coupling_local_residual_alpha,
+                pair_weight=self.coupling_local_residual_pair_weight,
+                effective_smoothness_weight=self.coupling_effective_smoothness_weight,
+                interaction_lag_sparsity_weight=self.coupling_interaction_lag_sparsity_weight,
+                eeg_codebook_weight=self.eeg_source_quantizer.get_codebook_weight(),
+                n_neighbors=self.coupling_smoothness_neighbors,
+            )
+        else:
+            local_residual_loss = self.coupling_logits.new_zeros(())
+            local_components = {
+                'pair_likelihood': self.coupling_logits.new_zeros(()),
+                'effective_smoothness': self.coupling_logits.new_zeros(()),
+                'interaction_lag_sparsity': self.coupling_logits.new_zeros(()),
+            }
         source_coupling_loss = (
             self.coupling_lag_focus_weight * lag_focus_loss +
             self.coupling_smoothness_weight * smoothness_loss +
             self.coupling_pair_likelihood_weight * pair_likelihood_loss +
             self.coupling_lag_evidence_weight * lag_evidence_loss +
             self.coupling_effective_smoothness_weight * effective_smoothness_loss +
-            self.coupling_interaction_lag_sparsity_weight * interaction_lag_sparsity_loss
+            self.coupling_interaction_lag_sparsity_weight * interaction_lag_sparsity_loss +
+            local_residual_loss
         )
 
         coupling_lag_count = eeg_source_logits.new_tensor(float(self.n_coupling_lags))
@@ -1068,6 +1139,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_lag_evidence_loss': lag_evidence_loss,
             'source_coupling_effective_smoothness_loss': effective_smoothness_loss,
             'source_coupling_interaction_lag_sparsity_loss': interaction_lag_sparsity_loss,
+            'source_coupling_local_residual_loss': local_residual_loss,
+            'source_coupling_local_pair_likelihood_loss': local_components['pair_likelihood'],
+            'source_coupling_local_effective_smoothness_loss': local_components['effective_smoothness'],
+            'source_coupling_local_interaction_lag_sparsity_loss': local_components['interaction_lag_sparsity'],
             'coupling_lag_count': coupling_lag_count,
         }
 
@@ -1223,6 +1298,36 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                     device=self.coupling_logits.device,
                 )
             )
+
+        if strict and isinstance(state_dict, dict):
+            compatibility_prefixes = (
+                'eeg_to_fnirs_source_predictor.',
+                'fnirs_to_eeg_source_predictor.',
+                'eeg_shared_state_proj.',
+                'fnirs_shared_state_proj.',
+            )
+            own_keys = set(self.state_dict().keys())
+            state_keys = set(state_dict.keys())
+            has_compatibility_gap = any(
+                key not in state_keys and key.startswith(compatibility_prefixes)
+                for key in own_keys
+            )
+            if has_compatibility_gap:
+                result = super().load_state_dict(state_dict, strict=False, assign=assign)
+                unexpected = list(getattr(result, 'unexpected_keys', []))
+                missing = [
+                    key for key in getattr(result, 'missing_keys', [])
+                    if not key.startswith(compatibility_prefixes)
+                ]
+                if unexpected or missing:
+                    details = []
+                    if missing:
+                        details.append(f'Missing key(s): {missing}')
+                    if unexpected:
+                        details.append(f'Unexpected key(s): {unexpected}')
+                    raise RuntimeError('Error(s) in loading state_dict for SourceObservationLaBraMVQNSP:\n\t' + '\n\t'.join(details))
+                return result
+
         return super().load_state_dict(state_dict, strict=strict, assign=assign)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
@@ -1344,6 +1449,14 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_coupling_lag_evidence_loss = source_alignment['source_coupling_lag_evidence_loss']
         source_coupling_effective_smoothness_loss = source_alignment['source_coupling_effective_smoothness_loss']
         source_coupling_interaction_lag_sparsity_loss = source_alignment['source_coupling_interaction_lag_sparsity_loss']
+        source_coupling_local_residual_loss = source_alignment['source_coupling_local_residual_loss']
+        source_coupling_local_pair_likelihood_loss = source_alignment['source_coupling_local_pair_likelihood_loss']
+        source_coupling_local_effective_smoothness_loss = source_alignment[
+            'source_coupling_local_effective_smoothness_loss'
+        ]
+        source_coupling_local_interaction_lag_sparsity_loss = source_alignment[
+            'source_coupling_local_interaction_lag_sparsity_loss'
+        ]
         coupling_lag_count = source_alignment['coupling_lag_count']
 
         source_balance_temperature = max(float(self.source_balance_temperature), 1e-3)
@@ -1470,6 +1583,31 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         if self.fnirs_observation_branch_enabled:
             branch_orthogonality_loss = branch_orthogonality_loss + orthogonality_loss(fnirs_source, fnirs_observation)
 
+        interaction_aux_loss = zero_scalar
+        if self.interaction_aux_weight > 0.0:
+            if self.interaction_aux_direction in {'eeg_to_fnirs', 'bidirectional'}:
+                target = fnirs_source.detach() if self.interaction_aux_stop_gradient else fnirs_source
+                prediction = self.eeg_to_fnirs_source_predictor(eeg_source)
+                interaction_aux_loss = interaction_aux_loss + self.loss_fn(
+                    F.normalize(prediction, dim=-1),
+                    F.normalize(target, dim=-1),
+                )
+            if self.interaction_aux_direction in {'fnirs_to_eeg', 'bidirectional'}:
+                target = eeg_source.detach() if self.interaction_aux_stop_gradient else eeg_source
+                prediction = self.fnirs_to_eeg_source_predictor(fnirs_source)
+                interaction_aux_loss = interaction_aux_loss + self.loss_fn(
+                    F.normalize(prediction, dim=-1),
+                    F.normalize(target, dim=-1),
+                )
+            if self.interaction_aux_direction == 'bidirectional':
+                interaction_aux_loss = 0.5 * interaction_aux_loss
+
+        shared_state_bottleneck_loss = zero_scalar
+        if self.shared_state_bottleneck_weight > 0.0:
+            eeg_shared = F.normalize(self.eeg_shared_state_proj(eeg_source), dim=-1)
+            fnirs_shared = F.normalize(self.fnirs_shared_state_proj(fnirs_source), dim=-1)
+            shared_state_bottleneck_loss = self.loss_fn(eeg_shared, fnirs_shared.detach())
+
         vq_source_loss = (
             eeg_source_info['vq_loss'] + fnirs_source_info['vq_loss']
             if self.source_branch_enabled else zero_scalar
@@ -1491,6 +1629,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             (self.eeg_source_aux_correlation_weight * self.source_target_scale) * eeg_source_aux_corr_loss +
             (self.observation_target_weight * self.observation_target_scale) * observation_loss +
             (self.coupling_weight * self.alignment_scale) * source_coupling_loss +
+            self.interaction_aux_weight * interaction_aux_loss +
+            self.shared_state_bottleneck_weight * shared_state_bottleneck_loss +
             self.codebook_balance_weight * codebook_balance_loss +
             self.orthogonality_weight * branch_orthogonality_loss
         )
@@ -1527,7 +1667,13 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_lag_evidence_loss': source_coupling_lag_evidence_loss,
             'source_coupling_effective_smoothness_loss': source_coupling_effective_smoothness_loss,
             'source_coupling_interaction_lag_sparsity_loss': source_coupling_interaction_lag_sparsity_loss,
+            'source_coupling_local_residual_loss': source_coupling_local_residual_loss,
+            'source_coupling_local_pair_likelihood_loss': source_coupling_local_pair_likelihood_loss,
+            'source_coupling_local_effective_smoothness_loss': source_coupling_local_effective_smoothness_loss,
+            'source_coupling_local_interaction_lag_sparsity_loss': source_coupling_local_interaction_lag_sparsity_loss,
             'coupling_lag_count': coupling_lag_count,
+            'interaction_aux_loss': interaction_aux_loss,
+            'shared_state_bottleneck_loss': shared_state_bottleneck_loss,
             'codebook_balance_loss': codebook_balance_loss,
             'source_balance_loss': source_balance_loss,
             'observation_balance_loss': observation_balance_loss,
@@ -1684,6 +1830,11 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_interaction_lag_sparsity_loss': (
                 self.coupling_weight * self.coupling_interaction_lag_sparsity_weight * alignment_scale
             ),
+            'source_coupling_local_residual_loss': (
+                self.coupling_weight * alignment_scale
+            ),
+            'interaction_aux_loss': self.interaction_aux_weight,
+            'shared_state_bottleneck_loss': self.shared_state_bottleneck_weight,
             'codebook_balance_loss': self.codebook_balance_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }
@@ -1703,6 +1854,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             {'name': 'eeg_observation_proj', 'label': 'EEG Obs Proj', 'prefixes': ('eeg_observation_proj.',)},
             {'name': 'fnirs_source_proj', 'label': 'fNIRS Source Proj', 'prefixes': ('fnirs_source_proj.',)},
             {'name': 'fnirs_observation_proj', 'label': 'fNIRS Obs Proj', 'prefixes': ('fnirs_observation_proj.',)},
+            {'name': 'source_interaction_aux', 'label': 'Source Interaction Aux', 'prefixes': (
+                'eeg_to_fnirs_source_predictor.',
+                'fnirs_to_eeg_source_predictor.',
+                'eeg_shared_state_proj.',
+                'fnirs_shared_state_proj.',
+            )},
             {'name': 'eeg_source_quantizer', 'label': 'EEG Source Quant', 'prefixes': ('eeg_source_quantizer.',)},
             {'name': 'fnirs_source_quantizer', 'label': 'fNIRS Source Quant', 'prefixes': ('fnirs_source_quantizer.',)},
             {'name': 'eeg_observation_quantizer', 'label': 'EEG Obs Quant', 'prefixes': ('eeg_observation_quantizer.',)},
