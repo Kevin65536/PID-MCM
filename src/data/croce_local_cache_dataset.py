@@ -61,6 +61,19 @@ def _as_pair_labels(value: Any) -> Sequence[str]:
     return ()
 
 
+def _normalize_filter_values(value: Any) -> Optional[set[str]]:
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)):
+        values = [value]
+    elif isinstance(value, Sequence):
+        values = list(value)
+    else:
+        values = [value]
+    normalized = {str(item).strip().lower() for item in values if str(item).strip()}
+    return normalized or None
+
+
 def _is_subject_dir_name(value: str) -> bool:
     return re.fullmatch(r"subject[_-]?0*\d+", str(value)) is not None
 
@@ -142,6 +155,7 @@ class CroceLocalCacheDataset(Dataset):
         cache_npz_handles: bool = True,
         max_npz_cache_size: int = 128,
         normalization: Optional[Mapping[str, Any]] = None,
+        entry_filters: Optional[Mapping[str, Any]] = None,
     ):
         if crop_duration_s <= 0:
             raise ValueError("crop_duration_s must be positive")
@@ -161,6 +175,10 @@ class CroceLocalCacheDataset(Dataset):
         self.cache_npz_handles = bool(cache_npz_handles)
         self.max_npz_cache_size = max(int(max_npz_cache_size), 1)
         self.normalization_cfg = dict(normalization or {})
+        self.entry_filters = dict(entry_filters or {})
+        self.include_source_names = _normalize_filter_values(self.entry_filters.get("include_source_names"))
+        self.include_source_tasks = _normalize_filter_values(self.entry_filters.get("include_source_tasks"))
+        self.include_label_names = _normalize_filter_values(self.entry_filters.get("include_label_names"))
         self.normalization_enabled = bool(self.normalization_cfg.get("enabled", False))
         self.normalization_eps = float(self.normalization_cfg.get("eps", 1e-6))
         self.normalization_estimator = str(self.normalization_cfg.get("estimator", "std"))
@@ -170,7 +188,7 @@ class CroceLocalCacheDataset(Dataset):
         self._npz_cache: Dict[Path, Any] = {}
         self.cache_sources = [self._normalize_source(source, index) for index, source in enumerate(cache_sources)]
 
-        discovered = self._discover_entries()
+        discovered = self._apply_entry_filters(self._discover_entries())
         label_to_id = {label: index for index, label in enumerate(sorted({entry.label_name for entry in discovered}))}
         self.entries: List[CroceCacheEntry] = [
             CroceCacheEntry(**{**entry.__dict__, "label_id": label_to_id[entry.label_name]})
@@ -181,6 +199,20 @@ class CroceLocalCacheDataset(Dataset):
             raise ValueError(
                 f"No Croce cache samples found for split={self.split!r} and subjects={sorted(self.subject_ids or [])}."
             )
+
+    def _entry_matches_filters(self, entry: CroceCacheEntry) -> bool:
+        if self.include_source_names is not None and entry.source_name.lower() not in self.include_source_names:
+            return False
+        if self.include_source_tasks is not None and entry.task.lower() not in self.include_source_tasks:
+            return False
+        if self.include_label_names is not None and entry.label_name.lower() not in self.include_label_names:
+            return False
+        return True
+
+    def _apply_entry_filters(self, entries: List[CroceCacheEntry]) -> List[CroceCacheEntry]:
+        if not (self.include_source_names or self.include_source_tasks or self.include_label_names):
+            return entries
+        return [entry for entry in entries if self._entry_matches_filters(entry)]
 
     def __getstate__(self) -> Dict[str, Any]:
         state = dict(self.__dict__)

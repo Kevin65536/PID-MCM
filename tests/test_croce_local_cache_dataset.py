@@ -51,8 +51,8 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
         (subject_dir / "cache_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         return subject_dir
 
-    def _write_subject_only_cache(self, root: Path) -> Path:
-        subject_dir = root / "wg" / "subject_001"
+    def _write_subject_only_cache(self, root: Path, label: str = "wg", subject_id: int = 1) -> Path:
+        subject_dir = root / label / f"subject_{subject_id:03d}"
         subject_dir.mkdir(parents=True, exist_ok=True)
         eeg_steps = 10_000
         fnirs_steps = 500
@@ -69,7 +69,7 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
                     f"{prefix}/obs_fnirs_optical_channel_1": np.full((fnirs_steps, 1), -999.0, dtype=np.float32),
                 }
             )
-        cache_path = subject_dir / "subject_001_cache.npz"
+        cache_path = subject_dir / f"subject_{subject_id:03d}_cache.npz"
         np.savez(cache_path, **arrays)
 
         manifest = {
@@ -77,6 +77,7 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             "cache_size_mb": 1.0,
             "n_events": 1,
             "n_keys": len(arrays),
+            "config": {"subject_id": subject_id},
             "events": ["event_000"],
         }
         (subject_dir / "cache_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -119,6 +120,38 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             self.assertEqual(gate0["pair_mode"], "wavelength")
             self.assertEqual(gate0["pair_labels"], ["highWL", "lowWL"])
             self.assertEqual(gate0["fnirs_channels"], 1)
+
+    def test_entry_filters_keep_only_requested_source_task_and_labels(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "simultaneous_cognitive"
+            self._write_subject_only_cache(root, label="nback", subject_id=1)
+            self._write_subject_only_cache(root, label="wg", subject_id=1)
+            self._write_subject_only_cache(root, label="dsr", subject_id=1)
+
+            dataset = CroceLocalCacheDataset(
+                cache_sources=[
+                    {
+                        "name": "simultaneous_cognitive",
+                        "root": str(root),
+                        "task": "cognitive",
+                        "event_window_pre_s": 10.0,
+                    }
+                ],
+                subject_ids=[1],
+                split="val",
+                crop_duration_s=20.0,
+                eval_event_offsets_s=[0.0],
+                entry_filters={
+                    "include_source_names": ["simultaneous_cognitive"],
+                    "include_source_tasks": ["cognitive"],
+                    "include_label_names": ["nback", "wg"],
+                },
+            )
+
+            self.assertEqual(dataset.label_to_id, {"nback": 0, "wg": 1})
+            self.assertEqual(len(dataset), 4)
+            labels = {dataset[index]["label_name"] for index in range(len(dataset))}
+            self.assertEqual(labels, {"nback", "wg"})
 
     def test_dataset_reuses_npz_handles_when_cache_enabled(self):
         with tempfile.TemporaryDirectory() as tmpdir:

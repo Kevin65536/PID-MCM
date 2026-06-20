@@ -298,6 +298,7 @@ def create_multimodal_window_dataset(
             cache_npz_handles=bool(data_cfg.get('cache_npz_handles', params.get('cache_npz_handles', True))),
             max_npz_cache_size=int(data_cfg.get('max_npz_cache_size', params.get('max_npz_cache_size', 128))),
             normalization=data_cfg.get('normalization', {}),
+            entry_filters=data_cfg.get('entry_filters', {}),
         )
 
     if dataset_id == 'eeg_fnirs_single_trial':

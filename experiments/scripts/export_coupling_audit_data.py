@@ -213,6 +213,11 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--max-batches", type=int)
     parser.add_argument("--shard-batches", type=int, default=16)
+    parser.add_argument(
+        "--clear-entry-filters",
+        action="store_true",
+        help="Ignore data.entry_filters stored in the tokenizer checkpoint during audit export",
+    )
     args = parser.parse_args()
 
     checkpoint_path = Path(args.checkpoint).resolve()
@@ -220,6 +225,8 @@ def main() -> None:
     device = torch.device(args.device)
     checkpoint = load_checkpoint_file(checkpoint_path, device="cpu")
     config = checkpoint["config"]
+    if args.clear_entry_filters:
+        config.get("data", {}).pop("entry_filters", None)
     config["training"]["batch_size"] = int(args.batch_size)
     config["data"]["num_workers"] = int(args.num_workers)
     config["data"].setdefault("crop", {})["train_random"] = False

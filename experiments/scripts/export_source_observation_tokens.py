@@ -145,10 +145,13 @@ def prepare_export_config(
     num_workers: int,
     seed: int,
     train_random_crop: bool,
+    clear_entry_filters: bool = False,
 ) -> Dict[str, Any]:
     config = copy.deepcopy(tokenizer_config)
     config.setdefault("training", {})["batch_size"] = int(batch_size)
     data_cfg = config.setdefault("data", {})
+    if clear_entry_filters:
+        data_cfg.pop("entry_filters", None)
     data_cfg["seed"] = int(seed)
     data_cfg["num_workers"] = int(num_workers)
     data_cfg.setdefault("crop", {})["train_random"] = bool(train_random_crop)
@@ -319,6 +322,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-latents", action="store_true", help="Also save quantized latent vectors")
     parser.add_argument("--no-compress", action="store_true", help="Use np.savez instead of np.savez_compressed")
     parser.add_argument("--train-random-crop", action="store_true", help="Keep random train crops enabled")
+    parser.add_argument(
+        "--clear-entry-filters",
+        action="store_true",
+        help="Ignore data.entry_filters stored in the tokenizer checkpoint during export",
+    )
     parser.add_argument("--seed", type=int, default=None, help="Export RNG seed")
     return parser.parse_args()
 
@@ -365,6 +373,7 @@ def main() -> None:
         num_workers=num_workers,
         seed=seed,
         train_random_crop=train_random_crop,
+        clear_entry_filters=bool(args.clear_entry_filters or data_cfg.get("clear_entry_filters", False)),
     )
     if isinstance(data_cfg.get("config_overrides"), dict):
         export_data_config = deep_update(export_data_config, data_cfg["config_overrides"])
@@ -418,6 +427,7 @@ def main() -> None:
         "batch_size": batch_size,
         "num_workers": num_workers,
         "train_random_crop": train_random_crop,
+        "clear_entry_filters": bool(args.clear_entry_filters or data_cfg.get("clear_entry_filters", False)),
         "token_semantics": {
             "token_duration_s": 2.0,
             "tokens_per_20s_window": int(tokenizer_config.get("model", {}).get("eeg", {}).get("seq_length", 4000))
