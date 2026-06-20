@@ -54,20 +54,49 @@ def event_phase(times: np.ndarray) -> np.ndarray:
 
 
 def cca_loso(x: np.ndarray, y: np.ndarray, subjects: np.ndarray) -> float:
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    subjects = np.asarray(subjects)
+    finite_rows = np.isfinite(x).all(axis=1) & np.isfinite(y).all(axis=1)
+    x = x[finite_rows]
+    y = y[finite_rows]
+    subjects = subjects[finite_rows]
     scores = []
     for subject in np.unique(subjects):
         train = subjects != subject
         test = ~train
         if train.sum() < 10 or test.sum() < 2:
             continue
-        xs = StandardScaler().fit(x[train])
-        ys = StandardScaler().fit(y[train])
-        components = min(3, x.shape[1], y.shape[1])
-        model = CCA(n_components=components, max_iter=500)
-        model.fit(xs.transform(x[train]), ys.transform(y[train]))
-        x_proj, y_proj = model.transform(xs.transform(x[test]), ys.transform(y[test]))
-        correlations = [np.corrcoef(x_proj[:, i], y_proj[:, i])[0, 1] for i in range(components)]
-        scores.append(float(np.nanmean(correlations)))
+        x_train = x[train]
+        y_train = y[train]
+        x_keep = np.nanstd(x_train, axis=0) > 1e-8
+        y_keep = np.nanstd(y_train, axis=0) > 1e-8
+        if not x_keep.any() or not y_keep.any():
+            continue
+        x_train = x_train[:, x_keep]
+        y_train = y_train[:, y_keep]
+        x_test = x[test][:, x_keep]
+        y_test = y[test][:, y_keep]
+        components = min(3, x_train.shape[1], y_train.shape[1], train.sum() - 1, test.sum())
+        if components < 1:
+            continue
+        try:
+            xs = StandardScaler().fit(x_train)
+            ys = StandardScaler().fit(y_train)
+            model = CCA(n_components=components, max_iter=1000)
+            model.fit(xs.transform(x_train), ys.transform(y_train))
+            x_proj, y_proj = model.transform(xs.transform(x_test), ys.transform(y_test))
+        except Exception:
+            continue
+        correlations = []
+        for i in range(components):
+            if np.nanstd(x_proj[:, i]) <= 1e-8 or np.nanstd(y_proj[:, i]) <= 1e-8:
+                continue
+            corr = np.corrcoef(x_proj[:, i], y_proj[:, i])[0, 1]
+            if np.isfinite(corr):
+                correlations.append(float(corr))
+        if correlations:
+            scores.append(float(np.nanmean(correlations)))
     return float(np.nanmean(scores)) if scores else float("nan")
 
 

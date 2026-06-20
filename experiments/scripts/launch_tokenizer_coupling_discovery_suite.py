@@ -146,6 +146,13 @@ def training_config(
             },
             "validation": {"interval_epochs": 1 if smoke else 2, "start_epoch": 1, "max_batches": 1 if smoke else None},
             "checkpoint": {"save_every": 1 if smoke else 20},
+            "early_stopping": {
+                "enabled": True,
+                "patience": 40,
+                "metric": "val_primary_loss",
+                "mode": "min",
+                "start_epoch": 1,
+            },
         },
     }
     if smoke:
@@ -221,6 +228,7 @@ def audit_commands(suite_dir: Path) -> list[str]:
                 f"--max-lag-tokens {MAX_LAG_TOKENS}"
             )
     commands.append(f".venv/bin/python experiments/scripts/finalize_tokenizer_coupling_capacity_suite.py --suite-dir {q(PREVIOUS_SUITE)}")
+    commands.append(f".venv/bin/python experiments/scripts/finalize_tokenizer_coupling_discovery_suite.py --suite-dir {q(suite_dir)}")
     return commands
 
 

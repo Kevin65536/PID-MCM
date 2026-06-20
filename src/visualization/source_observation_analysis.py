@@ -2516,6 +2516,22 @@ def _build_gate_1(
     notes: List[str] = []
     if reconstruction_converged is None:
         notes.append('Reconstruction convergence trend is unavailable from metrics.json.')
+    elif reconstruction_converged is False:
+        failed_modalities = []
+        if eeg_convergence.get('available', False) and not bool(eeg_convergence.get('improved', False)):
+            failed_modalities.append('EEG reconstruction trend')
+        if fnirs_convergence.get('available', False) and not bool(fnirs_convergence.get('improved', False)):
+            failed_modalities.append('fNIRS reconstruction trend')
+        if failed_modalities:
+            notes.append('Gate1 reconstruction convergence checks failed: ' + ', '.join(failed_modalities) + '.')
+    if not codebook_pass:
+        failed_codebooks = [
+            name
+            for name, summary in codebooks.items()
+            if not bool(summary.get('passes_thresholds', False))
+        ]
+        if failed_codebooks:
+            notes.append('Gate1 codebook health checks failed: ' + ', '.join(failed_codebooks) + '.')
     ignored_branches = list((branch_policy or {}).get('ignored_branches', []))
     if ignored_branches:
         notes.append(f"Ignored branches for gate review: {', '.join(ignored_branches)}.")
