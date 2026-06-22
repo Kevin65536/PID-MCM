@@ -76,6 +76,7 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertIn('component_group_shares', artifacts)
         self.assertIn('group_component_shares', artifacts)
         self.assertIn('coupling_logits', artifacts['group_names'])
+        self.assertIn('context_coupling', artifacts['group_names'])
         self.assertIn('eeg_encoder', artifacts['group_names'])
         self.assertIn('fnirs_source_decoder', artifacts['group_names'])
         self.assertIn('fnirs_observation_decoder', artifacts['group_names'])
@@ -346,6 +347,46 @@ class GradientDiagnosticsTests(unittest.TestCase):
         )
         self.assertGreater(eeg_grad, 0.0)
         self.assertGreaterEqual(fnirs_grad, 0.0)
+
+    def test_context_residual_coupling_outputs_and_gradients_are_exposed(self):
+        torch.manual_seed(39)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        model = self._build_tiny_model(
+            coupling_weight=0.2,
+            coupling_lag_focus_weight=0.0,
+            coupling_smoothness_weight=0.0,
+            coupling_pair_likelihood_weight=0.0,
+            coupling_context_residual_enabled=True,
+            coupling_context_states=4,
+            coupling_context_rank=2,
+            coupling_context_gradient_target="fnirs",
+        )
+
+        self.assertEqual(tuple(model.context_coupling_eeg_factors.shape), (4, model.n_coupling_lags, 4, 2))
+        self.assertEqual(tuple(model.context_coupling_fnirs_factors.shape), (4, model.n_coupling_lags, 4, 2))
+        self.assertIsNotNone(model.context_coupling_router)
+
+        outputs = model(eeg, fnirs)
+
+        self.assertGreater(float(outputs['source_coupling_context_residual_loss'].item()), 0.0)
+        self.assertGreaterEqual(float(outputs['source_coupling_context_pair_likelihood_loss'].item()), 0.0)
+        self.assertIn('source_coupling_context_entropy_loss', outputs)
+        self.assertIn('source_coupling_context_balance_loss', outputs)
+        self.assertIn('source_coupling_context_residual_l1_loss', outputs)
+        self.assertIn('source_coupling_context_residual_loss', model.get_gradient_component_weights())
+
+        outputs['loss'].backward()
+        self.assertIsNotNone(model.context_coupling_eeg_factors.grad)
+        self.assertIsNotNone(model.context_coupling_fnirs_factors.grad)
+        self.assertGreater(float(model.context_coupling_eeg_factors.grad.abs().sum().item()), 0.0)
+        self.assertGreater(float(model.context_coupling_fnirs_factors.grad.abs().sum().item()), 0.0)
+        router_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in model.named_parameters()
+            if name.startswith('context_coupling_router') and param.grad is not None
+        )
+        self.assertGreater(router_grad, 0.0)
 
     def test_interaction_auxiliary_loss_is_configurable(self):
         torch.manual_seed(41)

@@ -347,6 +347,149 @@ def local_residual_coupling_loss(
     }
 
 
+def _normalized_context_probs(context_probs: torch.Tensor, batch_size: int) -> torch.Tensor:
+    if context_probs.ndim == 3:
+        context_probs = context_probs.mean(dim=1)
+    if context_probs.ndim != 2:
+        raise ValueError('context_probs must have shape [batch, contexts] or [batch, tokens, contexts]')
+    if context_probs.shape[0] != batch_size:
+        raise ValueError(
+            f'context_probs batch size {context_probs.shape[0]} does not match assignments {batch_size}'
+        )
+    context_probs = context_probs.clamp_min(1e-8)
+    return context_probs / context_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+
+
+def context_residual_coupling_loss(
+    context_eeg_factors: torch.Tensor,
+    context_fnirs_factors: torch.Tensor,
+    eeg_assignment_logits: torch.Tensor,
+    fnirs_assignment_logits: torch.Tensor,
+    context_probs: torch.Tensor,
+    *,
+    temperature: float = 1.0,
+    gradient_target: str = "none",
+    pair_weight: float = 1.0,
+    entropy_weight: float = 0.0,
+    balance_weight: float = 0.0,
+    residual_l1_weight: float = 0.0,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Context-conditioned residual ``P(fNIRS | EEG, lag, z)`` loss.
+
+    The residual map is parameterized as a low-rank tensor
+    ``R[z, lag, eeg, fnirs] = U[z, lag, eeg] @ V[z, lag, fnirs]``.  For each
+    context/lag slice, the EEG-independent column bias is removed and a
+    context-local fNIRS marginal baseline is added before the conditional
+    softmax.  This keeps the trainable residual focused on EEG-conditioned
+    deviations rather than common fNIRS token frequency.
+    """
+    if context_eeg_factors.ndim != 4 or context_fnirs_factors.ndim != 4:
+        raise ValueError(
+            'context factors must have shapes [contexts, lags, tokens, rank]'
+        )
+    if eeg_assignment_logits.ndim != 3 or fnirs_assignment_logits.ndim != 3:
+        raise ValueError('assignment logits must have shape [batch, tokens, codebook]')
+    if eeg_assignment_logits.shape[:2] != fnirs_assignment_logits.shape[:2]:
+        raise ValueError('EEG and fNIRS source assignment logits must share batch/token dimensions')
+
+    n_contexts, n_lags, n_eeg_tokens, rank = context_eeg_factors.shape
+    factor_contexts, factor_lags, n_fnirs_tokens, fnirs_rank = context_fnirs_factors.shape
+    if (factor_contexts, factor_lags, fnirs_rank) != (n_contexts, n_lags, rank):
+        raise ValueError('context_eeg_factors and context_fnirs_factors have incompatible shapes')
+    if eeg_assignment_logits.shape[-1] != n_eeg_tokens:
+        raise ValueError('EEG assignment codebook size does not match context coupling factors')
+    if fnirs_assignment_logits.shape[-1] != n_fnirs_tokens:
+        raise ValueError('fNIRS assignment codebook size does not match context coupling factors')
+
+    gradient_target = str(gradient_target).lower()
+    if gradient_target not in {"none", "eeg", "fnirs", "both"}:
+        raise ValueError(
+            "gradient_target must be one of 'none', 'eeg', 'fnirs', or 'both', "
+            f"got {gradient_target!r}"
+        )
+
+    scale = max(float(temperature), 1e-3)
+    eeg_probs = straight_through_assignment_probs(eeg_assignment_logits, scale)
+    fnirs_probs = straight_through_assignment_probs(fnirs_assignment_logits, scale)
+    if gradient_target not in {"eeg", "both"}:
+        eeg_probs = eeg_probs.detach()
+    if gradient_target not in {"fnirs", "both"}:
+        fnirs_probs = fnirs_probs.detach()
+
+    context_probs = _normalized_context_probs(context_probs, eeg_probs.shape[0])
+    if context_probs.shape[-1] != n_contexts:
+        raise ValueError(
+            f'context_probs has {context_probs.shape[-1]} contexts, expected {n_contexts}'
+        )
+
+    residual_logits = torch.einsum(
+        'cler,clfr->clef',
+        context_eeg_factors,
+        context_fnirs_factors,
+    ) / math.sqrt(max(float(rank), 1.0))
+
+    token_count = eeg_probs.shape[1]
+    max_lag = min(int(n_lags), int(token_count))
+    per_lag_losses = []
+    for lag_index in range(max_lag):
+        valid_count = token_count - lag_index
+        if valid_count <= 0:
+            continue
+        eeg_slice = eeg_probs[:, :valid_count, :]
+        fnirs_slice = fnirs_probs[:, lag_index:lag_index + valid_count, :]
+
+        context_pair_weights = context_probs.detach().unsqueeze(1).expand(-1, valid_count, -1)
+        denom = context_pair_weights.sum(dim=(0, 1)).clamp_min(1e-8)
+        eeg_marginal = torch.einsum('btc,bte->ce', context_pair_weights, eeg_slice.detach()) / denom[:, None]
+        fnirs_marginal = torch.einsum('btc,btf->cf', context_pair_weights, fnirs_slice.detach()) / denom[:, None]
+        eeg_marginal = eeg_marginal.clamp_min(1e-8)
+        eeg_marginal = eeg_marginal / eeg_marginal.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+        fnirs_marginal = fnirs_marginal.clamp_min(1e-8)
+        fnirs_marginal = fnirs_marginal / fnirs_marginal.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+
+        lag_residual = residual_logits[:, lag_index, :, :]
+        column_bias = torch.einsum('ce,cef->cf', eeg_marginal, lag_residual)
+        lag_log_probs = F.log_softmax(
+            lag_residual - column_bias[:, None, :] + fnirs_marginal.log()[:, None, :],
+            dim=-1,
+        )
+        expected_log_probability = torch.einsum(
+            'bte,cef,btf->btc',
+            eeg_slice,
+            lag_log_probs,
+            fnirs_slice,
+        )
+        per_lag_losses.append(-(expected_log_probability * context_probs[:, None, :]).sum(dim=-1).mean())
+
+    pair_loss = torch.stack(per_lag_losses).mean() if per_lag_losses else eeg_probs.new_zeros(())
+
+    if n_contexts <= 1:
+        entropy_loss = pair_loss.new_zeros(())
+        balance_loss = pair_loss.new_zeros(())
+    else:
+        normalized_max_entropy = math.log(float(n_contexts))
+        per_window_entropy = -(context_probs * context_probs.clamp_min(1e-8).log()).sum(dim=-1)
+        entropy_loss = per_window_entropy.mean() / max(normalized_max_entropy, 1e-8)
+        marginal_context = context_probs.mean(dim=0).clamp_min(1e-8)
+        marginal_context = marginal_context / marginal_context.sum().clamp_min(1e-8)
+        marginal_entropy = -(marginal_context * marginal_context.log()).sum()
+        balance_loss = 1.0 - marginal_entropy / max(normalized_max_entropy, 1e-8)
+    residual_l1 = residual_logits.abs().mean()
+
+    total = (
+        float(pair_weight) * pair_loss +
+        float(entropy_weight) * entropy_loss +
+        float(balance_weight) * balance_loss +
+        float(residual_l1_weight) * residual_l1
+    )
+    return total, {
+        'pair_likelihood': pair_loss,
+        'entropy': entropy_loss,
+        'balance': balance_loss,
+        'residual_l1': residual_l1,
+    }
+
+
 def coupling_effective_neighbor_smoothness_loss(
     coupling_logits: torch.Tensor,
     eeg_codebook_weight: torch.Tensor,
@@ -479,6 +622,7 @@ __all__ = [
     'coupling_lag_focus_loss',
     'coupling_lag_evidence_loss',
     'coupling_pair_likelihood_loss',
+    'context_residual_coupling_loss',
     'local_residual_coupling_loss',
     'orthogonality_loss',
     'straight_through_assignment_probs',

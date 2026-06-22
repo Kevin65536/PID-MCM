@@ -8,6 +8,7 @@ from src.losses.multimodal_tokenizer import (
     coupling_lag_evidence_loss,
     coupling_lag_focus_loss,
     coupling_pair_likelihood_loss,
+    context_residual_coupling_loss,
     local_residual_coupling_loss,
     straight_through_assignment_probs,
 )
@@ -290,6 +291,109 @@ class MultimodalTokenizerLossTests(unittest.TestCase):
         )
 
         self.assertGreater(float(wrong_loss.item()), float(correct_loss.item()))
+
+    def test_context_residual_coupling_c1_matches_global_residual_pair_likelihood(self):
+        eeg_logits = torch.tensor(
+            [[[5.0, 0.0], [0.0, 5.0], [5.0, 0.0]]],
+            dtype=torch.float32,
+        )
+        fnirs_logits = torch.tensor(
+            [[[0.0, 5.0], [5.0, 0.0], [0.0, 5.0]]],
+            dtype=torch.float32,
+        )
+        coupling_logits = torch.tensor(
+            [
+                [[0.5, -0.2], [-0.3, 0.4]],
+                [[-0.1, 0.6], [0.7, -0.5]],
+            ],
+            dtype=torch.float32,
+        )
+        eeg_factors = coupling_logits.unsqueeze(0) * torch.sqrt(torch.tensor(2.0))
+        fnirs_factors = torch.eye(2, dtype=torch.float32).unsqueeze(0).unsqueeze(0).expand(1, 2, 2, 2)
+        context_probs = torch.ones(1, 1, dtype=torch.float32)
+
+        context_loss, components = context_residual_coupling_loss(
+            eeg_factors,
+            fnirs_factors,
+            eeg_logits,
+            fnirs_logits,
+            context_probs,
+            gradient_target="none",
+        )
+        global_loss = coupling_pair_likelihood_loss(
+            coupling_logits,
+            eeg_logits,
+            fnirs_logits,
+            gradient_target="none",
+            residualize_fnirs_marginal=True,
+        )
+
+        self.assertTrue(torch.allclose(context_loss, global_loss, atol=1e-6))
+        self.assertTrue(torch.allclose(components['pair_likelihood'], global_loss, atol=1e-6))
+
+    def test_context_residual_coupling_residualizes_fnirs_marginal_bias(self):
+        eeg_logits = torch.tensor(
+            [[[5.0, 0.0], [0.0, 5.0], [5.0, 0.0], [0.0, 5.0]]],
+            dtype=torch.float32,
+        )
+        fnirs_logits = torch.tensor(
+            [[[5.0, 0.0], [5.0, 0.0], [5.0, 0.0], [0.0, 5.0]]],
+            dtype=torch.float32,
+        )
+        uniform = torch.zeros(1, 1, 2, 1, dtype=torch.float32)
+        biased = torch.ones(1, 1, 2, 1, dtype=torch.float32)
+        factors_v = torch.tensor([[[[1.0], [0.0]]]], dtype=torch.float32)
+        context_probs = torch.ones(1, 1, dtype=torch.float32)
+
+        uniform_loss, _ = context_residual_coupling_loss(
+            uniform,
+            factors_v,
+            eeg_logits,
+            fnirs_logits,
+            context_probs,
+        )
+        biased_loss, _ = context_residual_coupling_loss(
+            biased,
+            factors_v,
+            eeg_logits,
+            fnirs_logits,
+            context_probs,
+        )
+
+        self.assertTrue(torch.allclose(uniform_loss, biased_loss, atol=1e-6))
+
+    def test_context_residual_coupling_gradient_routing_and_context_regularizers(self):
+        for target, expect_eeg, expect_fnirs in (
+            ("none", False, False),
+            ("fnirs", False, True),
+            ("both", True, True),
+        ):
+            eeg_logits = torch.randn(3, 4, 5, requires_grad=True)
+            fnirs_logits = torch.randn(3, 4, 5, requires_grad=True)
+            context_logits = torch.randn(3, 4, requires_grad=True)
+            eeg_factors = torch.randn(4, 3, 5, 2, requires_grad=True)
+            fnirs_factors = torch.randn(4, 3, 5, 2, requires_grad=True)
+            loss, components = context_residual_coupling_loss(
+                eeg_factors,
+                fnirs_factors,
+                eeg_logits,
+                fnirs_logits,
+                torch.softmax(context_logits, dim=-1),
+                gradient_target=target,
+                entropy_weight=0.01,
+                balance_weight=0.01,
+                residual_l1_weight=0.001,
+            )
+            loss.backward()
+
+            self.assertGreater(float(components['pair_likelihood'].detach().item()), 0.0)
+            self.assertGreaterEqual(float(components['entropy'].detach().item()), 0.0)
+            self.assertGreaterEqual(float(components['balance'].detach().item()), 0.0)
+            self.assertIsNotNone(eeg_factors.grad)
+            self.assertIsNotNone(fnirs_factors.grad)
+            self.assertIsNotNone(context_logits.grad)
+            self.assertEqual(eeg_logits.grad is not None and bool(torch.any(eeg_logits.grad != 0)), expect_eeg)
+            self.assertEqual(fnirs_logits.grad is not None and bool(torch.any(fnirs_logits.grad != 0)), expect_fnirs)
 
 
 if __name__ == '__main__':

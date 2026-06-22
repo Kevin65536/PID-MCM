@@ -35,6 +35,11 @@ DEFAULT_PARAMETER_GROUP_SPECS: List[Dict[str, Any]] = [
     {'name': 'eeg_observation_quantizer', 'label': 'EEG Obs Quant', 'prefixes': ('eeg_observation_quantizer.',)},
     {'name': 'fnirs_observation_quantizer', 'label': 'fNIRS Obs Quant', 'prefixes': ('fnirs_observation_quantizer.',)},
     {'name': 'coupling_logits', 'label': 'Coupling', 'prefixes': ('coupling_logits',)},
+    {'name': 'context_coupling', 'label': 'Context Coupling', 'prefixes': (
+        'context_coupling_eeg_factors',
+        'context_coupling_fnirs_factors',
+        'context_coupling_router.',
+    )},
     {'name': 'eeg_decode_input_proj', 'label': 'EEG Decode In', 'prefixes': ('eeg_decode_input_proj.',)},
     {'name': 'fnirs_decode_input_proj', 'label': 'fNIRS Decode In', 'prefixes': ('fnirs_decode_input_proj.',)},
     {'name': 'eeg_decoder', 'label': 'EEG Decoder', 'prefixes': ('eeg_decoder.',)},

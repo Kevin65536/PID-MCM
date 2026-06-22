@@ -972,10 +972,15 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
             'fnirs_to_eeg_source_predictor.',
             'eeg_shared_state_proj.',
             'fnirs_shared_state_proj.',
+            'context_coupling_router.',
         )
         allowed_missing.update(
             key for key in incompatible.missing_keys
             if key.startswith(warm_start_compatible_prefixes)
+        )
+        allowed_missing.update(
+            key for key in incompatible.missing_keys
+            if key in {'context_coupling_eeg_factors', 'context_coupling_fnirs_factors'}
         )
         disallowed_missing = set(incompatible.missing_keys) - allowed_missing
         if disallowed_missing:
@@ -1029,6 +1034,22 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
         load_branch(eeg_checkpoint, 'eeg')
     if fnirs_checkpoint:
         load_branch(fnirs_checkpoint, 'fnirs')
+
+
+def maybe_restrict_trainable_parameters(model, config: dict) -> list[str]:
+    prefixes = config.get('training', {}).get('trainable_parameter_prefixes')
+    if prefixes is None:
+        return [name for name, _ in model.named_parameters()]
+    prefixes = tuple(str(prefix) for prefix in prefixes)
+    trainable = []
+    for name, param in model.named_parameters():
+        enabled = any(name == prefix or name.startswith(prefix) for prefix in prefixes)
+        param.requires_grad_(enabled)
+        if enabled:
+            trainable.append(name)
+    if not trainable:
+        raise RuntimeError(f"trainable_parameter_prefixes matched no model parameters: {prefixes}")
+    return trainable
 
 
 def build_checkpoint_payload(
@@ -1291,6 +1312,12 @@ def main():
         print(f"Model: {model.__class__.__name__}")
         print(f"Source codebook size: {model.get_codebook_size()}")
         maybe_apply_warm_start(model, config, device)
+        trainable_parameters = maybe_restrict_trainable_parameters(model, config)
+        print(f"Trainable parameter tensors: {len(trainable_parameters)}")
+        if len(trainable_parameters) <= 12:
+            print("Trainable parameters:")
+            for name in trainable_parameters:
+                print(f"  - {name}")
         model = maybe_compile_model_forward(model, config, device)
         analysis_type = getattr(model, 'get_analysis_type', lambda: 'source_observation_alignment')()
         write_run_manifest(
@@ -1301,7 +1328,7 @@ def main():
         )
 
         optimizer = torch.optim.AdamW(
-            model.parameters(),
+            [param for param in model.parameters() if param.requires_grad],
             lr=config['training'].get('learning_rate', 1e-4),
             weight_decay=config['training'].get('weight_decay', 0.01),
         )
