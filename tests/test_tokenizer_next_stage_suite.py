@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from experiments.scripts.export_source_observation_tokens import prepare_export_config
+from experiments.scripts.finalize_tokenizer_next_stage_suite import select_dim
 from experiments.scripts.launch_tokenizer_next_stage_suite import training_config
 from experiments.scripts.run_source_observation_token_downstream_probe import run_probe
 
@@ -30,7 +31,7 @@ class TokenizerNextStageSuiteTests(unittest.TestCase):
     def test_cognitive_config_filters_nback_wg(self):
         config = training_config(
             "toy_suite",
-            dim=96,
+            dim=128,
             seed=20260625,
             device="cuda:0",
             smoke=False,
@@ -38,8 +39,15 @@ class TokenizerNextStageSuiteTests(unittest.TestCase):
         )
 
         filters = config["data"]["entry_filters"]
+        self.assertEqual(config["model"]["source"]["codebook_dim"], 128)
         self.assertEqual(filters["include_source_names"], ["simultaneous_cognitive"])
         self.assertEqual(filters["include_label_names"], ["nback", "wg"])
+
+    def test_dim_selection_defaults_to_128(self):
+        selection = select_dim([])
+
+        self.assertEqual(selection["selected_dim"], 128)
+        self.assertEqual(selection["reason"], "default_dim128_after_vector_dim_sweep")
 
     def test_export_config_can_clear_checkpoint_entry_filters(self):
         config = {

@@ -115,15 +115,15 @@ def mean_by_dim(rows: list[Dict[str, Any]]) -> Dict[int, float]:
 
 def select_dim(rows: list[Dict[str, Any]]) -> Dict[str, Any]:
     means = mean_by_dim(rows)
-    selected = 96
-    reason = "default_dim96_until_vector_dim_sweep_has_clear_evidence"
+    selected = 128
+    reason = "default_dim128_after_vector_dim_sweep"
     if 96 in means and 128 in means:
         improvement = (means[96] - means[128]) / max(abs(means[96]), 1e-8)
         if improvement >= 0.02:
             selected = 128
             reason = "dim128_improved_mean_val_primary_loss_by_at_least_2_percent_over_dim96"
         else:
-            reason = "dim128_did_not_clear_2_percent_margin_over_dim96"
+            reason = "dim128_default_retained_without_2_percent_margin_over_dim96"
     elif 128 in means and 96 not in means:
         selected = 128
         reason = "only_dim128_completed"

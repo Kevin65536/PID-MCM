@@ -10,6 +10,8 @@
 
 > **Current training contract**: the active tokenizer dataset is `croce_local_cache`. Each sample is one fNIRS spatial anchor, its six-channel local EEG neighbourhood, and explicit source/observation targets from the generated Croce cache. fNIRS uses only `highWL` (`source_fnirs_optical_channel_0` / `obs_fnirs_optical_channel_0`) as an optical measurement-space, HbO-sensitive proxy; `lowWL` remains in cache metadata but is ignored by the current model input.
 
+> **Current source vector default**: source codebooks use `codebook_dim=128` for both EEG and fNIRS. Observation codebook dimensions remain branch-specific. Codebook size `K` is config-dependent; the Croce highWL v2 base config still defines the structural source size, while capacity/transfer suites can override `K` explicitly.
+
 ---
 
 ## 1. Architecture Contract
@@ -54,15 +56,15 @@ graph TB
     end
 
     subgraph Projection["Projection Heads (4×)"]
-        E_SP["eeg_source_proj<br/>256→48"]
+        E_SP["eeg_source_proj<br/>256→128"]
         E_OP["eeg_observation_proj<br/>256→64"]
-        F_SP["fnirs_source_proj<br/>160→48"]
+        F_SP["fnirs_source_proj<br/>160→128"]
         F_OP["fnirs_observation_proj<br/>160→48"]
     end
 
     subgraph Quantizers["Quantizers (4× NormEMAVectorQuantizer)"]
-        E_SQ["eeg_source_quantizer<br/>K=32 D=48"]
-        F_SQ["fnirs_source_quantizer<br/>K=32 D=48"]
+        E_SQ["eeg_source_quantizer<br/>K=config D=128"]
+        F_SQ["fnirs_source_quantizer<br/>K=config D=128"]
         E_OQ["eeg_observation_quantizer<br/>K=64 D=64"]
         F_OQ["fnirs_observation_quantizer<br/>K=32 base / 64 sweep D=48"]
     end

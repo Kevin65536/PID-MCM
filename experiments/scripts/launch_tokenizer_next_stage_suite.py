@@ -205,13 +205,13 @@ def initialize_suite(suite_dir: Path) -> Dict[str, Any]:
             vector_by_gpu[gpu].append(training_command(config_path, run_name, smoke=False))
             smoke_by_gpu[gpu].append(training_command(smoke_config_path, run_name, smoke=True))
 
-    cognitive_smoke_name = cognitive_run_name(96, COGNITIVE_SMOKE_SEED)
+    cognitive_smoke_name = cognitive_run_name(128, COGNITIVE_SMOKE_SEED)
     cognitive_smoke_cfg = suite_dir / "smoke" / "configs" / f"{cognitive_smoke_name}.yaml"
     write_yaml(
         cognitive_smoke_cfg,
         training_config(
             suite_name,
-            dim=96,
+            dim=128,
             seed=COGNITIVE_SMOKE_SEED,
             device="cuda:0",
             smoke=True,

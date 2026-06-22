@@ -52,6 +52,7 @@ model:
     component_labels: ["highWL"]
   source:
     codebook_size: 32
+    codebook_dim: 128
   eeg_observation:
     codebook_size: 64
   fnirs_observation:

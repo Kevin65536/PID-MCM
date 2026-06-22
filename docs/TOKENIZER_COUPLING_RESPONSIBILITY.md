@@ -11,6 +11,12 @@ The tokenizer stage should provide:
 - controlled codebook usage without excessive dead codes,
 - no material increase in subject, task, event-phase, or position leakage.
 
+Current operational default:
+
+- source codebook vector dim is `128` for both EEG source and fNIRS source,
+- observation codebook dims remain branch-specific and are not changed by this default,
+- the K128 vector-dim sweep supports `D=128` as the capacity default, but does not show that hard-token cross-modal coupling is solved.
+
 The tokenizer stage should not currently require:
 
 - a task-aware coupling tensor as a default training prior,
