@@ -1235,6 +1235,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             context_residual_loss = self.coupling_logits.new_zeros(())
             context_components = {
                 'pair_likelihood': self.coupling_logits.new_zeros(()),
+                'entropy_loss': self.coupling_logits.new_zeros(()),
                 'entropy': self.coupling_logits.new_zeros(()),
                 'balance': self.coupling_logits.new_zeros(()),
                 'residual_l1': self.coupling_logits.new_zeros(()),
@@ -1268,11 +1269,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_local_interaction_lag_sparsity_loss': local_components['interaction_lag_sparsity'],
             'source_coupling_context_residual_loss': context_residual_loss,
             'source_coupling_context_pair_likelihood_loss': context_components['pair_likelihood'],
-            'source_coupling_context_entropy_loss': context_components['entropy'],
+            'source_coupling_context_entropy_loss': context_components.get(
+                'entropy_loss',
+                context_components['entropy'],
+            ),
             'source_coupling_context_balance_loss': context_components['balance'],
             'source_coupling_context_residual_l1_loss': context_components['residual_l1'],
             'source_coupling_context_entropy': context_entropy,
             'source_coupling_context_max_prob': context_max_prob,
+            'source_coupling_context_probs': (
+                context_probs if context_probs is not None
+                else self.coupling_logits.new_ones((eeg_source_logits.shape[0], 1))
+            ),
             'coupling_lag_count': coupling_lag_count,
         }
 
@@ -1596,6 +1604,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_coupling_context_residual_l1_loss = source_alignment['source_coupling_context_residual_l1_loss']
         source_coupling_context_entropy = source_alignment['source_coupling_context_entropy']
         source_coupling_context_max_prob = source_alignment['source_coupling_context_max_prob']
+        source_coupling_context_probs = source_alignment['source_coupling_context_probs']
         coupling_lag_count = source_alignment['coupling_lag_count']
 
         source_balance_temperature = max(float(self.source_balance_temperature), 1e-3)
@@ -1758,6 +1767,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             vq_observation_loss = vq_observation_loss + fnirs_observation_info['vq_loss']
         vq_loss = vq_source_loss + vq_observation_loss
 
+        source_coupling_weighted_loss = (
+            self.coupling_weight * self.alignment_scale
+        ) * source_coupling_loss
+
         total_loss = (
             eeg_rec_loss +
             fnirs_rec_loss +
@@ -1767,7 +1780,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             (self.source_target_correlation_weight * self.source_target_scale) * source_target_corr_loss +
             (self.eeg_source_aux_correlation_weight * self.source_target_scale) * eeg_source_aux_corr_loss +
             (self.observation_target_weight * self.observation_target_scale) * observation_loss +
-            (self.coupling_weight * self.alignment_scale) * source_coupling_loss +
+            source_coupling_weighted_loss +
             self.interaction_aux_weight * interaction_aux_loss +
             self.shared_state_bottleneck_weight * shared_state_bottleneck_loss +
             self.codebook_balance_weight * codebook_balance_loss +
@@ -1800,6 +1813,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'fnirs_observation_loss': fnirs_observation_loss,
             'observation_loss': observation_loss,
             'source_coupling_loss': source_coupling_loss,
+            'source_coupling_weighted_loss': source_coupling_weighted_loss,
             'source_coupling_lag_focus_loss': source_coupling_lag_focus_loss,
             'source_coupling_smoothness_loss': source_coupling_smoothness_loss,
             'source_coupling_pair_likelihood_loss': source_coupling_pair_likelihood_loss,
@@ -1817,6 +1831,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_context_residual_l1_loss': source_coupling_context_residual_l1_loss,
             'source_coupling_context_entropy': source_coupling_context_entropy,
             'source_coupling_context_max_prob': source_coupling_context_max_prob,
+            'source_coupling_context_probs': source_coupling_context_probs,
             'coupling_lag_count': coupling_lag_count,
             'interaction_aux_loss': interaction_aux_loss,
             'shared_state_bottleneck_loss': shared_state_bottleneck_loss,

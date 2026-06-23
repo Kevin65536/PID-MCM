@@ -125,6 +125,11 @@ def training_config(
     seed_index: int,
     smoke: bool,
     device: str,
+    formal_epochs: int = 80,
+    checkpoint_save_every: int = 20,
+    early_metric: str = "val_loss",
+    context_entropy_weight: float = 0.0,
+    context_balance_weight: float = 0.1,
 ) -> tuple[str, dict[str, Any]]:
     base = training_base_for(k, seed_index)
     run_name = f"{k.lower()}_{condition.key.lower()}_context_residual_coupling_seed{seed}"
@@ -160,8 +165,8 @@ def training_config(
                 "context_rank": 16,
                 "context_router_type": condition.router_type,
                 "context_pair_weight": 1.0,
-                "context_entropy_weight": 0.01,
-                "context_balance_weight": 0.01,
+                "context_entropy_weight": context_entropy_weight,
+                "context_balance_weight": context_balance_weight,
                 "context_residual_l1_weight": 0.001,
                 "context_gradient_target": condition.gradient_target,
             },
@@ -172,7 +177,7 @@ def training_config(
             "batch_size": 256,
             "learning_rate": 1e-4,
             "min_lr": 2.5e-5,
-            "epochs": 2 if smoke else 80,
+            "epochs": 2 if smoke else int(formal_epochs),
             "alignment_warmup": {
                 "enabled": True,
                 "start_epoch": 1,
@@ -181,11 +186,11 @@ def training_config(
                 "end_scale": 1.0,
             },
             "validation": {"interval_epochs": 1 if smoke else 2, "start_epoch": 1, "max_batches": 1 if smoke else None},
-            "checkpoint": {"save_every": 1 if smoke else 20},
+            "checkpoint": {"save_every": 1 if smoke else int(checkpoint_save_every)},
             "early_stopping": {
                 "enabled": True,
                 "patience": 40,
-                "metric": "val_primary_loss",
+                "metric": early_metric,
                 "mode": "min",
                 "start_epoch": 1,
             },
@@ -229,11 +234,27 @@ def write_queue(path: Path, commands: list[str], done_file: Path) -> None:
     path.chmod(0o755)
 
 
-def initialize_suite(suite_dir: Path) -> dict[str, Any]:
+def initialize_suite(
+    suite_dir: Path,
+    *,
+    condition_keys: set[str] | None = None,
+    formal_epochs: int = 80,
+    checkpoint_save_every: int = 20,
+    early_metric: str = "val_loss",
+    context_entropy_weight: float = 0.0,
+    context_balance_weight: float = 0.1,
+) -> dict[str, Any]:
     suite_dir.mkdir(parents=True, exist_ok=True)
     suite_name = suite_dir.name
     for name in ("tokenizer_interventions", "gated_k128_configs", "queue_logs", "smoke"):
         (suite_dir / name).mkdir(parents=True, exist_ok=True)
+
+    selected_conditions = tuple(
+        condition for condition in CONDITIONS
+        if condition_keys is None or condition.key in condition_keys
+    )
+    if not selected_conditions:
+        raise ValueError(f"No context coupling conditions selected from {sorted(condition_keys or [])}")
 
     formal_by_gpu = {0: [], 1: []}
     smoke_by_gpu = {0: [], 1: []}
@@ -241,7 +262,7 @@ def initialize_suite(suite_dir: Path) -> dict[str, Any]:
     for seed_index, seed in enumerate((20260631, 20260632)):
         gpu = seed_index % 2
         device = f"cuda:{gpu}"
-        for condition in CONDITIONS:
+        for condition in selected_conditions:
             run_name, cfg = training_config(
                 suite_name,
                 condition,
@@ -250,6 +271,11 @@ def initialize_suite(suite_dir: Path) -> dict[str, Any]:
                 seed_index=seed_index,
                 smoke=False,
                 device=device,
+                formal_epochs=formal_epochs,
+                checkpoint_save_every=checkpoint_save_every,
+                early_metric=early_metric,
+                context_entropy_weight=context_entropy_weight,
+                context_balance_weight=context_balance_weight,
             )
             path = suite_dir / "tokenizer_interventions/configs" / f"{run_name}.yaml"
             write_yaml(path, cfg)
@@ -265,6 +291,11 @@ def initialize_suite(suite_dir: Path) -> dict[str, Any]:
                 seed_index=seed_index,
                 smoke=True,
                 device=device,
+                formal_epochs=formal_epochs,
+                checkpoint_save_every=checkpoint_save_every,
+                early_metric=early_metric,
+                context_entropy_weight=context_entropy_weight,
+                context_balance_weight=context_balance_weight,
             )
             smoke_path = suite_dir / "smoke/configs" / f"{smoke_name}.yaml"
             write_yaml(smoke_path, smoke_cfg)
@@ -279,6 +310,11 @@ def initialize_suite(suite_dir: Path) -> dict[str, Any]:
                 seed_index=seed_index,
                 smoke=False,
                 device=device,
+                formal_epochs=formal_epochs,
+                checkpoint_save_every=checkpoint_save_every,
+                early_metric=early_metric,
+                context_entropy_weight=context_entropy_weight,
+                context_balance_weight=context_balance_weight,
             )
             gated_path = suite_dir / "gated_k128_configs" / f"{gated_name}.yaml"
             write_yaml(gated_path, gated_cfg)
@@ -303,9 +339,14 @@ def initialize_suite(suite_dir: Path) -> dict[str, Any]:
         "git_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=project_root, text=True).strip()),
         "previous_capacity_suite": str(PREVIOUS_SUITE),
         "max_lag_tokens": MAX_LAG_TOKENS,
-        "conditions": [condition.__dict__ for condition in CONDITIONS],
+        "conditions": [condition.__dict__ for condition in selected_conditions],
         "default_training_k": "K64",
         "gated_training_k": "K128",
+        "formal_epochs": int(formal_epochs),
+        "checkpoint_save_every": int(checkpoint_save_every),
+        "early_metric": early_metric,
+        "context_entropy_weight": float(context_entropy_weight),
+        "context_balance_weight": float(context_balance_weight),
         "queues": {
             "smoke_gpu0": str(suite_dir / "queue_logs/smoke_gpu0.sh"),
             "smoke_gpu1": str(suite_dir / "queue_logs/smoke_gpu1.sh"),
@@ -352,12 +393,31 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--suite-dir")
     parser.add_argument("--mode", choices=("initialize", "smoke", "launch", "all"), default="initialize")
+    parser.add_argument("--conditions", default="C0,C1,C2,C3,C4,C5")
+    parser.add_argument("--formal-epochs", type=int, default=80)
+    parser.add_argument("--checkpoint-save-every", type=int, default=20)
+    parser.add_argument("--early-metric", default="val_loss")
+    parser.add_argument("--context-entropy-weight", type=float, default=0.0)
+    parser.add_argument("--context-balance-weight", type=float, default=0.1)
     args = parser.parse_args()
     suite_dir = Path(args.suite_dir).resolve() if args.suite_dir else (
         SUITE_PARENT / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_context_residual_coupling_v1"
     )
+    condition_keys = {
+        item.strip().upper()
+        for item in str(args.conditions).split(",")
+        if item.strip()
+    }
     if args.mode in {"initialize", "all"}:
-        initialize_suite(suite_dir)
+        initialize_suite(
+            suite_dir,
+            condition_keys=condition_keys,
+            formal_epochs=args.formal_epochs,
+            checkpoint_save_every=args.checkpoint_save_every,
+            early_metric=args.early_metric,
+            context_entropy_weight=args.context_entropy_weight,
+            context_balance_weight=args.context_balance_weight,
+        )
     pids: dict[str, int] = {}
     if args.mode in {"smoke", "all"}:
         for gpu in (0, 1):

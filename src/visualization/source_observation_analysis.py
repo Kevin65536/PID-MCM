@@ -953,6 +953,135 @@ def _compute_coupling_structure(
     }
 
 
+def _compute_context_local_empirical_audit(
+    eeg_tokens: np.ndarray,
+    fnirs_tokens: np.ndarray,
+    context_probs: Optional[np.ndarray],
+    *,
+    n_eeg_tokens: int,
+    n_fnirs_tokens: int,
+    n_lags: int,
+) -> Tuple[Dict[str, object], Optional[np.ndarray]]:
+    if context_probs is None:
+        return {'available': False, 'reason': 'missing_context_probs'}, None
+    context_probs = np.asarray(context_probs, dtype=np.float64)
+    if context_probs.ndim != 2 or context_probs.shape[0] != int(eeg_tokens.shape[0]):
+        return {'available': False, 'reason': 'invalid_context_probs_shape'}, None
+    if context_probs.shape[1] <= 1:
+        return {'available': False, 'reason': 'single_context_router'}, None
+
+    row_sums = np.clip(context_probs.sum(axis=-1, keepdims=True), 1e-12, None)
+    context_probs = context_probs / row_sums
+    n_contexts = int(context_probs.shape[1])
+    n_lags = min(int(n_lags), int(eeg_tokens.shape[1]), int(fnirs_tokens.shape[1]))
+    deltas = np.zeros((n_contexts, n_lags, n_eeg_tokens, n_fnirs_tokens), dtype=np.float32)
+    occupancy = context_probs.mean(axis=0)
+    occupancy = occupancy / np.clip(occupancy.sum(), 1e-12, None)
+    context_entropy = float(
+        -(occupancy * np.log(np.clip(occupancy, 1e-12, None))).sum() / max(math.log(float(n_contexts)), 1e-12)
+    )
+    hard_context = np.argmax(context_probs, axis=-1)
+    hard_counts = np.bincount(hard_context, minlength=n_contexts).astype(np.float64)
+    hard_fraction = hard_counts / max(float(hard_counts.sum()), 1.0)
+
+    per_context: List[Dict[str, object]] = []
+    best_mean_abs_delta = -1.0
+    best_context = None
+    best_lag = None
+    for context_index in range(n_contexts):
+        context_payload: Dict[str, object] = {
+            'context': int(context_index),
+            'soft_occupancy': float(occupancy[context_index]),
+            'hard_fraction': float(hard_fraction[context_index]),
+            'per_lag': [],
+        }
+        for lag_index in range(n_lags):
+            valid_count = min(int(eeg_tokens.shape[1]), int(fnirs_tokens.shape[1]) - lag_index)
+            if valid_count <= 0:
+                continue
+            aligned_eeg = eeg_tokens[:, :valid_count].reshape(-1)
+            aligned_fnirs = fnirs_tokens[:, lag_index:lag_index + valid_count].reshape(-1)
+            weights = np.repeat(context_probs[:, context_index], valid_count)
+            joint = np.zeros((n_eeg_tokens, n_fnirs_tokens), dtype=np.float64)
+            np.add.at(joint, (aligned_eeg, aligned_fnirs), weights)
+            eeg_weight = joint.sum(axis=1, keepdims=True)
+            fnirs_weight = joint.sum(axis=0)
+            total_weight = float(fnirs_weight.sum())
+            if total_weight <= 1e-12:
+                delta = np.zeros_like(joint, dtype=np.float64)
+            else:
+                conditional = joint / np.clip(eeg_weight, 1e-12, None)
+                marginal = fnirs_weight / total_weight
+                delta = conditional - marginal[None, :]
+            deltas[context_index, lag_index] = delta.astype(np.float32, copy=False)
+            mean_abs_delta = float(np.mean(np.abs(delta)))
+            max_abs_delta = float(np.max(np.abs(delta)))
+            if mean_abs_delta > best_mean_abs_delta:
+                best_mean_abs_delta = mean_abs_delta
+                best_context = int(context_index)
+                best_lag = int(lag_index)
+            context_payload['per_lag'].append({
+                'lag': int(lag_index),
+                'pair_weight': total_weight,
+                'mean_abs_delta': mean_abs_delta,
+                'max_abs_delta': max_abs_delta,
+            })
+        per_context.append(context_payload)
+
+    return {
+        'available': True,
+        'context_count': n_contexts,
+        'lag_count': n_lags,
+        'soft_occupancy': occupancy.tolist(),
+        'hard_fraction': hard_fraction.tolist(),
+        'occupancy_entropy_ratio': context_entropy,
+        'mean_max_context_probability': float(context_probs.max(axis=-1).mean()),
+        'best_mean_abs_delta': float(max(best_mean_abs_delta, 0.0)),
+        'best_context': best_context,
+        'best_lag': best_lag,
+        'per_context': per_context,
+    }, deltas
+
+
+def _plot_context_local_empirical_audit(
+    audit: Dict[str, object],
+    deltas: Optional[np.ndarray],
+    output_path: Path,
+) -> Optional[str]:
+    if not HAS_MATPLOTLIB or not audit.get('available', False) or deltas is None:
+        return None
+    n_contexts = int(deltas.shape[0])
+    if n_contexts <= 0:
+        return None
+    fig, axes = plt.subplots(n_contexts, 1, figsize=(6.0, max(2.4, 2.2 * n_contexts)), squeeze=False)
+    scale = float(np.percentile(np.abs(deltas), 99)) if deltas.size else 0.0
+    scale = max(scale, 1e-6)
+    per_context = audit.get('per_context', [])
+    for context_index in range(n_contexts):
+        lag_payloads = per_context[context_index].get('per_lag', []) if context_index < len(per_context) else []
+        if lag_payloads:
+            lag_index = int(max(lag_payloads, key=lambda item: float(item.get('mean_abs_delta', 0.0)))['lag'])
+        else:
+            lag_index = 0
+        ax = axes[context_index, 0]
+        im = ax.imshow(
+            deltas[context_index, lag_index],
+            aspect='auto',
+            cmap='coolwarm',
+            vmin=-scale,
+            vmax=scale,
+        )
+        ax.set_title(f"Context {context_index}, lag {lag_index}: P(F|E,z)-P(F|z)")
+        ax.set_ylabel('EEG token')
+        ax.set_xlabel('fNIRS token')
+        fig.colorbar(im, ax=ax, fraction=0.026, pad=0.02)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+    return str(output_path)
+
+
 def _plot_coupling_heatmap(coupling: Dict[str, object], output_path: Path) -> Optional[str]:
     if not HAS_MATPLOTLIB or not coupling.get('available', False):
         return None
@@ -2105,6 +2234,7 @@ def _collect_split_statistics(
     label_id_chunks: List[np.ndarray] = []
     source_name_chunks: List[np.ndarray] = []
     source_task_chunks: List[np.ndarray] = []
+    context_prob_chunks: List[np.ndarray] = []
     batch_count = 0
     capture_reconstructions = bool(reconstruction_viz_cfg.get('enabled', False))
     reconstruction_limit = int(reconstruction_viz_cfg.get('max_samples', 0)) if capture_reconstructions else 0
@@ -2170,6 +2300,11 @@ def _collect_split_statistics(
                 fnirs_source_tokens = outputs['fnirs_source_indices'].detach().cpu().numpy().astype(np.int64, copy=False)
                 eeg_observation_tokens = outputs['eeg_observation_indices'].detach().cpu().numpy().astype(np.int64, copy=False)
                 fnirs_observation_tokens = outputs['fnirs_observation_indices'].detach().cpu().numpy().astype(np.int64, copy=False)
+                context_probs = outputs.get('source_coupling_context_probs')
+                if isinstance(context_probs, torch.Tensor):
+                    context_prob_chunks.append(
+                        context_probs.detach().float().cpu().numpy().astype(np.float64, copy=False)
+                    )
 
                 index_bank['eeg_source_indices'].append(eeg_source_tokens)
                 index_bank['fnirs_source_indices'].append(fnirs_source_tokens)
@@ -2345,6 +2480,8 @@ def _collect_split_statistics(
             'fnirs_observation': _codebook_summary(index_bank['fnirs_observation_indices'], fnirs_observation_codebook_size),
         },
     }
+    if context_prob_chunks:
+        result['source_coupling_context_probs'] = np.concatenate(context_prob_chunks, axis=0)
     if gate0_contract is not None:
         result['gate0_contract'] = gate0_contract
 
@@ -2930,6 +3067,19 @@ def _build_split_gate_summary(
         empirical_conditional_deltas,
         analysis_root / f"{split_name}_lag_balanced_empirical_coupling_audit.png",
     )
+    context_local_audit, context_local_deltas = _compute_context_local_empirical_audit(
+        split_stats['eeg_source_tokens'],
+        split_stats['fnirs_source_tokens'],
+        split_stats.get('source_coupling_context_probs'),
+        n_eeg_tokens=int(split_stats['codebook_sizes']['source']),
+        n_fnirs_tokens=int(split_stats['codebook_sizes']['source']),
+        n_lags=int(coupling.get('tensor_summary', {}).get('n_lags', 1)),
+    )
+    context_local_audit_path = _plot_context_local_empirical_audit(
+        context_local_audit,
+        context_local_deltas,
+        analysis_root / f"{split_name}_context_local_empirical_coupling_audit.png",
+    )
     stratified_audits = {
         'source_name': _compute_stratified_empirical_audits(
             split_stats['eeg_source_tokens'],
@@ -2972,6 +3122,9 @@ def _build_split_gate_summary(
         stratified_audit_paths=stratified_audit_paths,
         predictability=predictability,
     )
+    gate_3['metrics']['context_local_empirical_audit'] = context_local_audit
+    gate_3['metrics']['context_local_empirical_audit_path'] = context_local_audit_path
+    gate_3['artifacts']['context_local_empirical_audit_path'] = context_local_audit_path
     gate_3['artifacts']['raw_tensor_overview_path'] = raw_tensor_overview_path
     gate_3['metrics']['raw_tensor_overview_path'] = raw_tensor_overview_path
     gate_4 = _build_gate_4(split_stats)

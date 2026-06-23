@@ -42,6 +42,20 @@ def gate3_metrics(payload: dict[str, Any]) -> dict[str, Any]:
     return gates.get("gate3", {}).get("metrics", {})
 
 
+def best_empirical_value(empirical: dict[str, Any], key: str) -> float | None:
+    per_lag = empirical.get("per_lag", [])
+    values: list[float] = []
+    for item in per_lag:
+        if key == "loso_gain":
+            loso = item.get("leave_one_subject_out", {})
+            value = loso.get("accuracy_gain")
+        else:
+            value = item.get(key)
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+    return max(values) if values else None
+
+
 def condition_key(run_name: str) -> str:
     for part in run_name.split("_"):
         if part.startswith("c") and part[1:].isdigit():
@@ -59,6 +73,7 @@ def row_for_run(run_dir: Path) -> dict[str, Any]:
     g3 = gate3_metrics(gates)
     predictability = g3.get("cross_modal_token_predictability", {})
     empirical = g3.get("lag_balanced_empirical_audit", {})
+    context_local = g3.get("context_local_empirical_audit", {})
     verdicts = gate_verdicts(gates)
     return {
         "run": run_dir.name,
@@ -88,8 +103,21 @@ def row_for_run(run_dir: Path) -> dict[str, Any]:
         "gate3_accuracy": predictability.get("accuracy"),
         "gate3_uniform_chance": predictability.get("uniform_chance_accuracy"),
         "gate3_weighted_true_probability": predictability.get("model_weighted_true_token_probability"),
-        "gate3_best_loso_gain": empirical.get("best_lag_loso_gain"),
-        "gate3_best_mi_above_shuffle": empirical.get("best_mi_above_shuffle"),
+        "gate3_best_loso_gain": (
+            empirical.get("best_lag_loso_gain")
+            if empirical.get("best_lag_loso_gain") is not None
+            else best_empirical_value(empirical, "loso_gain")
+        ),
+        "gate3_best_mi_above_shuffle": (
+            empirical.get("best_mi_above_shuffle")
+            if empirical.get("best_mi_above_shuffle") is not None
+            else best_empirical_value(empirical, "mi_above_shuffle")
+        ),
+        "context_local_occupancy_entropy_ratio": context_local.get("occupancy_entropy_ratio"),
+        "context_local_mean_max_prob": context_local.get("mean_max_context_probability"),
+        "context_local_best_mean_abs_delta": context_local.get("best_mean_abs_delta"),
+        "context_local_best_context": context_local.get("best_context"),
+        "context_local_best_lag": context_local.get("best_lag"),
     }
 
 
@@ -110,6 +138,9 @@ def aggregate_conditions(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
         "val_context_max_prob",
         "gate3_best_loso_gain",
         "gate3_best_mi_above_shuffle",
+        "context_local_occupancy_entropy_ratio",
+        "context_local_mean_max_prob",
+        "context_local_best_mean_abs_delta",
     ]
     by_condition: dict[str, dict[str, Any]] = {}
     for condition in sorted({row["condition"] for row in rows}):
@@ -197,6 +228,7 @@ def main() -> None:
             f"context_pair={payload.get('val_context_pair_likelihood_loss_mean')}, "
             f"best_LOSO={payload.get('gate3_best_loso_gain_mean')}, "
             f"best_MI_above_shuffle={payload.get('gate3_best_mi_above_shuffle_mean')}, "
+            f"context_local_delta={payload.get('context_local_best_mean_abs_delta_mean')}, "
             f"Gate4 passes={payload.get('gate4_pass_count')}/{payload.get('n')}"
         )
     (suite_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

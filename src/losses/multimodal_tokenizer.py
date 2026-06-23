@@ -469,7 +469,8 @@ def context_residual_coupling_loss(
     else:
         normalized_max_entropy = math.log(float(n_contexts))
         per_window_entropy = -(context_probs * context_probs.clamp_min(1e-8).log()).sum(dim=-1)
-        entropy_loss = per_window_entropy.mean() / max(normalized_max_entropy, 1e-8)
+        entropy_ratio = per_window_entropy.mean() / max(normalized_max_entropy, 1e-8)
+        entropy_loss = 1.0 - entropy_ratio
         marginal_context = context_probs.mean(dim=0).clamp_min(1e-8)
         marginal_context = marginal_context / marginal_context.sum().clamp_min(1e-8)
         marginal_entropy = -(marginal_context * marginal_context.log()).sum()
@@ -484,7 +485,8 @@ def context_residual_coupling_loss(
     )
     return total, {
         'pair_likelihood': pair_loss,
-        'entropy': entropy_loss,
+        'entropy_loss': entropy_loss,
+        'entropy': entropy_ratio if n_contexts > 1 else pair_loss.new_zeros(()),
         'balance': balance_loss,
         'residual_l1': residual_l1,
     }

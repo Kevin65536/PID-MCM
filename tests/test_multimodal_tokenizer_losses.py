@@ -387,6 +387,7 @@ class MultimodalTokenizerLossTests(unittest.TestCase):
             loss.backward()
 
             self.assertGreater(float(components['pair_likelihood'].detach().item()), 0.0)
+            self.assertGreaterEqual(float(components['entropy_loss'].detach().item()), 0.0)
             self.assertGreaterEqual(float(components['entropy'].detach().item()), 0.0)
             self.assertGreaterEqual(float(components['balance'].detach().item()), 0.0)
             self.assertIsNotNone(eeg_factors.grad)

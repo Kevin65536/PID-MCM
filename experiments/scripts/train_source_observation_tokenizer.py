@@ -684,7 +684,10 @@ def train_epoch(
         coupling_objective = outputs.get('source_coupling_loss')
         if not torch.is_tensor(coupling_objective):
             coupling_objective = loss.new_zeros(())
-        primary_loss = loss - coupling_objective
+        weighted_coupling_objective = outputs.get('source_coupling_weighted_loss')
+        if not torch.is_tensor(weighted_coupling_objective):
+            weighted_coupling_objective = loss.new_zeros(())
+        primary_loss = loss - weighted_coupling_objective
 
         loss.backward()
 
@@ -712,6 +715,7 @@ def train_epoch(
         _accumulate_metric(totals, 'loss', loss.detach())
         _accumulate_metric(totals, 'primary_loss', primary_loss.detach())
         _accumulate_metric(totals, 'coupling_objective_loss', coupling_objective.detach())
+        _accumulate_metric(totals, 'weighted_coupling_objective_loss', weighted_coupling_objective.detach())
         for key, value in outputs.items():
             if key == 'loss':
                 continue
@@ -756,12 +760,16 @@ def validate_epoch(
         coupling_objective = outputs.get('source_coupling_loss')
         if not torch.is_tensor(coupling_objective):
             coupling_objective = total_loss.new_zeros(())
-        primary_loss = total_loss - coupling_objective
+        weighted_coupling_objective = outputs.get('source_coupling_weighted_loss')
+        if not torch.is_tensor(weighted_coupling_objective):
+            weighted_coupling_objective = total_loss.new_zeros(())
+        primary_loss = total_loss - weighted_coupling_objective
         total_batches += 1
 
         _accumulate_metric(totals, 'val_loss', total_loss.detach())
         _accumulate_metric(totals, 'val_primary_loss', primary_loss.detach())
         _accumulate_metric(totals, 'val_coupling_objective_loss', coupling_objective.detach())
+        _accumulate_metric(totals, 'val_weighted_coupling_objective_loss', weighted_coupling_objective.detach())
         for key, value in outputs.items():
             if key == 'loss':
                 continue

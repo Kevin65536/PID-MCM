@@ -260,6 +260,13 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertFalse(torch.allclose(base_outputs['loss'], comparison_outputs['loss'], atol=1e-6))
         self.assertTrue(
             torch.allclose(
+                comparison_outputs['source_coupling_weighted_loss'],
+                0.7 * comparison_outputs['source_coupling_loss'],
+                atol=1e-6,
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
                 comparison_outputs['loss'] - base_outputs['loss'],
                 0.7 * comparison_outputs['source_coupling_loss'],
                 atol=1e-6,
@@ -370,6 +377,7 @@ class GradientDiagnosticsTests(unittest.TestCase):
         outputs = model(eeg, fnirs)
 
         self.assertGreater(float(outputs['source_coupling_context_residual_loss'].item()), 0.0)
+        self.assertEqual(tuple(outputs['source_coupling_context_probs'].shape), (2, 4))
         self.assertGreaterEqual(float(outputs['source_coupling_context_pair_likelihood_loss'].item()), 0.0)
         self.assertIn('source_coupling_context_entropy_loss', outputs)
         self.assertIn('source_coupling_context_balance_loss', outputs)
