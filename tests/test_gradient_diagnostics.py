@@ -250,6 +250,7 @@ class GradientDiagnosticsTests(unittest.TestCase):
             comparison_outputs = comparison_model(eeg, fnirs)
 
         self.assertGreater(float(base_outputs['source_coupling_loss'].item()), 0.0)
+        self.assertIn('source_coupling_joint_entropy_loss', base_outputs)
         self.assertTrue(
             torch.allclose(
                 base_outputs['source_coupling_loss'],
@@ -274,6 +275,7 @@ class GradientDiagnosticsTests(unittest.TestCase):
         )
         component_weights = comparison_model.get_gradient_component_weights()
         self.assertAlmostEqual(float(component_weights['source_coupling_lag_focus_loss']), 0.7, places=6)
+        self.assertIn('source_coupling_joint_entropy_loss', component_weights)
         self.assertAlmostEqual(float(component_weights['source_coupling_smoothness_loss']), 0.14, places=6)
 
         comparison_model.set_alignment_scale(0.5)

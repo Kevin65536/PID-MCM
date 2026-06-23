@@ -5,6 +5,7 @@ import torch
 from src.losses.multimodal_tokenizer import (
     batch_usage_entropy_loss,
     coupling_eeg_neighbor_smoothness_loss,
+    coupling_joint_entropy_loss,
     coupling_lag_evidence_loss,
     coupling_lag_focus_loss,
     coupling_pair_likelihood_loss,
@@ -58,6 +59,17 @@ class MultimodalTokenizerLossTests(unittest.TestCase):
 
         diffuse_loss = coupling_lag_focus_loss(diffuse_logits)
         focused_loss = coupling_lag_focus_loss(focused_logits)
+
+        self.assertGreater(float(diffuse_loss.item()), float(focused_loss.item()))
+        self.assertGreater(float(diffuse_loss.item()), 0.9)
+
+    def test_coupling_joint_entropy_loss_penalizes_diffuse_lag_token_rows(self):
+        diffuse_logits = torch.zeros(3, 2, 2)
+        focused_logits = torch.full((3, 2, 2), -4.0)
+        focused_logits[1, :, 0] = 4.0
+
+        diffuse_loss = coupling_joint_entropy_loss(diffuse_logits)
+        focused_loss = coupling_joint_entropy_loss(focused_logits)
 
         self.assertGreater(float(diffuse_loss.item()), float(focused_loss.item()))
         self.assertGreater(float(diffuse_loss.item()), 0.9)

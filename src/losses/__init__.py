@@ -5,6 +5,7 @@ from .classification import LabelSmoothingCrossEntropy
 from .multimodal_tokenizer import (
     batch_usage_entropy_loss,
     coupling_eeg_neighbor_smoothness_loss,
+    coupling_joint_entropy_loss,
     coupling_joint_probabilities,
     coupling_lag_focus_loss,
     orthogonality_loss,
@@ -21,6 +22,7 @@ __all__ = [
     'LabelSmoothingCrossEntropy',
     'batch_usage_entropy_loss',
     'coupling_eeg_neighbor_smoothness_loss',
+    'coupling_joint_entropy_loss',
     'coupling_joint_probabilities',
     'coupling_lag_focus_loss',
     'compute_band_power_loss',

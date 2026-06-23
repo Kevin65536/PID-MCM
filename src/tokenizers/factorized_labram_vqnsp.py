@@ -20,6 +20,7 @@ from src.losses.multimodal_tokenizer import (
     coupling_eeg_neighbor_smoothness_loss,
     coupling_effective_neighbor_smoothness_loss,
     coupling_interaction_lag_sparsity_loss,
+    coupling_joint_entropy_loss,
     coupling_lag_evidence_loss,
     coupling_lag_focus_loss,
     coupling_pair_likelihood_loss,
@@ -83,6 +84,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_time_weight: float = 1.0,
         coupling_weight: float = 0.0,
         coupling_lag_focus_weight: float = 1.0,
+        coupling_joint_entropy_weight: float = 0.0,
         coupling_smoothness_weight: float = 0.2,
         coupling_smoothness_neighbors: int = 5,
         coupling_pair_likelihood_weight: float = 0.0,
@@ -212,6 +214,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.fnirs_time_weight = fnirs_time_weight
         self.coupling_weight = coupling_weight
         self.coupling_lag_focus_weight = max(float(coupling_lag_focus_weight), 0.0)
+        self.coupling_joint_entropy_weight = max(float(coupling_joint_entropy_weight), 0.0)
         self.coupling_smoothness_weight = max(float(coupling_smoothness_weight), 0.0)
         self.coupling_smoothness_neighbors = max(int(coupling_smoothness_neighbors), 0)
         self.coupling_pair_likelihood_weight = max(float(coupling_pair_likelihood_weight), 0.0)
@@ -659,6 +662,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             fnirs_time_weight=reconstruction_cfg.get('fnirs_time_weight', 1.0),
             coupling_weight=coupling_cfg.get('weight', 0.0),
             coupling_lag_focus_weight=coupling_cfg.get('lag_focus_weight', 1.0),
+            coupling_joint_entropy_weight=coupling_cfg.get('joint_entropy_weight', 0.0),
             coupling_smoothness_weight=coupling_cfg.get('smoothness_weight', 0.2),
             coupling_smoothness_neighbors=coupling_cfg.get('smoothness_neighbors', 5),
             coupling_pair_likelihood_weight=coupling_cfg.get('pair_likelihood_weight', 0.0),
@@ -1135,6 +1139,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_source_logits: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
         lag_focus_loss = coupling_lag_focus_loss(self.coupling_logits)
+        joint_entropy_loss = coupling_joint_entropy_loss(self.coupling_logits)
         smoothness_loss = coupling_eeg_neighbor_smoothness_loss(
             self.coupling_logits,
             self.eeg_source_quantizer.get_codebook_weight(),
@@ -1244,6 +1249,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             context_max_prob = self.coupling_logits.new_zeros(())
         source_coupling_loss = (
             self.coupling_lag_focus_weight * lag_focus_loss +
+            self.coupling_joint_entropy_weight * joint_entropy_loss +
             self.coupling_smoothness_weight * smoothness_loss +
             self.coupling_pair_likelihood_weight * pair_likelihood_loss +
             self.coupling_lag_evidence_weight * lag_evidence_loss +
@@ -1258,6 +1264,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         return {
             'source_coupling_loss': source_coupling_loss,
             'source_coupling_lag_focus_loss': lag_focus_loss,
+            'source_coupling_joint_entropy_loss': joint_entropy_loss,
             'source_coupling_smoothness_loss': smoothness_loss,
             'source_coupling_pair_likelihood_loss': pair_likelihood_loss,
             'source_coupling_lag_evidence_loss': lag_evidence_loss,
@@ -1582,6 +1589,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_alignment = self._compute_source_alignment_state(eeg_source_logits, fnirs_source_logits)
         source_coupling_loss = source_alignment['source_coupling_loss']
         source_coupling_lag_focus_loss = source_alignment['source_coupling_lag_focus_loss']
+        source_coupling_joint_entropy_loss = source_alignment['source_coupling_joint_entropy_loss']
         source_coupling_smoothness_loss = source_alignment['source_coupling_smoothness_loss']
         source_coupling_pair_likelihood_loss = source_alignment['source_coupling_pair_likelihood_loss']
         source_coupling_lag_evidence_loss = source_alignment['source_coupling_lag_evidence_loss']
@@ -1815,6 +1823,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'source_coupling_loss': source_coupling_loss,
             'source_coupling_weighted_loss': source_coupling_weighted_loss,
             'source_coupling_lag_focus_loss': source_coupling_lag_focus_loss,
+            'source_coupling_joint_entropy_loss': source_coupling_joint_entropy_loss,
             'source_coupling_smoothness_loss': source_coupling_smoothness_loss,
             'source_coupling_pair_likelihood_loss': source_coupling_pair_likelihood_loss,
             'source_coupling_lag_evidence_loss': source_coupling_lag_evidence_loss,
@@ -1975,6 +1984,9 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'observation_loss': self.observation_target_weight * float(self.get_observation_target_scale()),
             'source_coupling_lag_focus_loss': (
                 self.coupling_weight * self.coupling_lag_focus_weight * alignment_scale
+            ),
+            'source_coupling_joint_entropy_loss': (
+                self.coupling_weight * self.coupling_joint_entropy_weight * alignment_scale
             ),
             'source_coupling_smoothness_loss': (
                 self.coupling_weight * self.coupling_smoothness_weight * alignment_scale

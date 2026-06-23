@@ -60,6 +60,21 @@ def coupling_lag_focus_loss(coupling_logits: torch.Tensor) -> torch.Tensor:
     return entropy.mean() / max(max_entropy, 1e-8)
 
 
+def coupling_joint_entropy_loss(coupling_logits: torch.Tensor) -> torch.Tensor:
+    """Normalized entropy of ``P(lag, fNIRS token | EEG token)`` rows.
+
+    Minimizing this term forces each EEG source token to concentrate its coupling
+    mass into a small number of lag/fNIRS-token cells.  It is intentionally a
+    sharp structural prior and is best used for stress tests rather than as a
+    default training objective.
+    """
+    joint_probs = coupling_joint_probabilities(coupling_logits)
+    flat_probs = joint_probs.reshape(joint_probs.shape[0], -1).clamp_min(1e-8)
+    entropy = -(flat_probs * flat_probs.log()).sum(dim=-1)
+    max_entropy = math.log(float(flat_probs.shape[-1])) if flat_probs.shape[-1] > 1 else 1.0
+    return entropy.mean() / max(max_entropy, 1e-8)
+
+
 def _pairwise_js_divergence(anchor: torch.Tensor, neighbor: torch.Tensor) -> torch.Tensor:
     anchor = anchor.clamp_min(1e-8)
     neighbor = neighbor.clamp_min(1e-8)
@@ -622,6 +637,7 @@ __all__ = [
     'coupling_interaction_lag_sparsity_loss',
     'coupling_joint_probabilities',
     'coupling_lag_focus_loss',
+    'coupling_joint_entropy_loss',
     'coupling_lag_evidence_loss',
     'coupling_pair_likelihood_loss',
     'context_residual_coupling_loss',
