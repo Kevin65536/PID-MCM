@@ -473,7 +473,13 @@ def compute_gradient_attribution(
 
     for name, weight in component_specs.items():
         term = outputs.get(name)
-        if term is None or not torch.is_tensor(term) or term.ndim != 0 or abs(weight) <= 0.0:
+        if (
+            term is None
+            or not torch.is_tensor(term)
+            or term.ndim != 0
+            or abs(weight) <= 0.0
+            or not term.requires_grad
+        ):
             continue
         grads = torch.autograd.grad(weight * term, params, retain_graph=True, allow_unused=True)
         grad_tensors: List[Optional[torch.Tensor]] = []
