@@ -1,0 +1,54 @@
+experiment:
+  name: source_observation_foundation_task_type_short
+  output_dir: experiments/runs/downstream/source_observation_foundation/20260623_k128_dim128_task_type_v1/short_formal
+  seed: 20260623
+  device: cuda:1
+
+data:
+  token_run_dir: experiments/runs/downstream/source_observation_task_type_tokens/20260623_k128_dim128_cognitive_nback_wg_seed20260625
+  num_workers: 0
+
+linear_probe_baseline:
+  summary_path: experiments/runs/downstream/source_observation_task_type_probe/20260623_k128_dim128_cognitive_nback_wg_seed20260625/summary.json
+
+model:
+  hidden_dim: 256
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.1
+
+optimization:
+  batch_size: 512
+  eval_batch_size: 512
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  grad_clip_norm: 1.0
+
+pretraining:
+  enabled: true
+  epochs: 20
+  patience: 5
+  span_mask_ratio: 0.25
+  min_span: 2
+  max_span: 4
+  contrastive_weight: 0.1
+  temperature: 0.07
+  max_train_batches:
+  max_eval_batches:
+
+finetuning:
+  run_scratch: true
+  run_pretrained: true
+  epochs: 30
+  patience: 8
+  class_weighted_loss: true
+  max_train_batches:
+  max_eval_batches:
+  tasks:
+    - nback_load_0_vs_2_3
+    - wg_bl_vs_wg
+    - nback_vs_wg
+    - cognitive_task_type_5way
+    - mental_arithmetic_bl_vs_ma
+    - motor_lmi_vs_rmi
+    - croce_label_6way

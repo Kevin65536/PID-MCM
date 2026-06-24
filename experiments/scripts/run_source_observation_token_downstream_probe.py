@@ -23,6 +23,31 @@ BRANCHES = (
 )
 
 TASKS = {
+    "croce_label_6way": {
+        "source_task": None,
+        "label_names": ("BL", "MA", "LMI", "RMI", "nback", "wg"),
+    },
+    "cognitive_task_type_5way": {
+        "source_task": "cognitive",
+        "label_field": "task_type_label_name",
+        "label_names": ("0-back", "2-back", "3-back", "BL", "WG"),
+    },
+    "nback_load_0_vs_2_vs_3": {
+        "source_task": "cognitive",
+        "label_field": "task_type_label_name",
+        "label_names": ("0-back", "2-back", "3-back"),
+    },
+    "nback_load_0_vs_2_3": {
+        "source_task": "cognitive",
+        "label_field": "task_type_label_name",
+        "label_names": ("0-back", "2/3-back"),
+        "label_aliases": {"2-back": "2/3-back", "3-back": "2/3-back"},
+    },
+    "wg_bl_vs_wg": {
+        "source_task": "cognitive",
+        "label_field": "task_type_label_name",
+        "label_names": ("BL", "WG"),
+    },
     "nback_vs_wg": {
         "source_task": None,
         "label_names": ("nback", "wg"),
@@ -80,8 +105,13 @@ def vocab_sizes(run_dir: Path, splits: Mapping[str, Mapping[str, np.ndarray]]) -
 
 def task_mask(data: Mapping[str, np.ndarray], task_name: str) -> np.ndarray:
     spec = TASKS[task_name]
-    labels = np.asarray(data["label_name"]).astype(str)
-    mask = np.isin(labels, np.asarray(spec["label_names"], dtype=str))
+    label_field = str(spec.get("label_field", "label_name"))
+    if label_field not in data:
+        return np.zeros(np.asarray(data["label_name"]).shape[0], dtype=bool)
+    labels = np.asarray(data[label_field]).astype(str)
+    label_aliases = {str(key): str(value) for key, value in spec.get("label_aliases", {}).items()}
+    accepted_labels = set(str(label) for label in spec["label_names"]) | set(label_aliases)
+    mask = np.isin(labels, np.asarray(sorted(accepted_labels), dtype=str))
     source_task = spec["source_task"]
     if source_task is not None:
         tasks = np.asarray(data["source_task"]).astype(str)
@@ -90,7 +120,10 @@ def task_mask(data: Mapping[str, np.ndarray], task_name: str) -> np.ndarray:
 
 
 def label_vector(data: Mapping[str, np.ndarray], task_name: str, mask: np.ndarray) -> tuple[np.ndarray, list[str]]:
-    labels = np.asarray(data["label_name"]).astype(str)[mask]
+    label_field = str(TASKS[task_name].get("label_field", "label_name"))
+    labels = np.asarray(data[label_field]).astype(str)[mask]
+    label_aliases = {str(key): str(value) for key, value in TASKS[task_name].get("label_aliases", {}).items()}
+    labels = np.asarray([label_aliases.get(str(label), str(label)) for label in labels], dtype=str)
     classes = list(TASKS[task_name]["label_names"])
     class_to_id = {label: index for index, label in enumerate(classes)}
     return np.asarray([class_to_id[label] for label in labels], dtype=np.int64), classes

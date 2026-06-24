@@ -31,6 +31,14 @@ Supported tasks:
     Script: experiments/scripts/train_foundation_interface.py
     Args: [--config PATH]
 
+  wholebrain-foundation
+    Script: experiments/scripts/train_wholebrain_foundation.py
+    Args: [--config PATH]
+
+  wholebrain-pretrain
+    Script: experiments/scripts/train_wholebrain_pretrain.py
+    Args: [--config PATH] [--dry-run]
+
 Examples:
   bash experiments/scripts/launch_training_nohup.sh --task source-observation-tokenizer --config debug/simultaneous_nback_short_train.yaml --run-name smoke_run
   bash experiments/scripts/launch_training_nohup.sh --task tokenizer --config phase0plus/eeg_labram_vqnsp.yaml
@@ -59,6 +67,12 @@ resolve_script() {
             ;;
         foundation-interface)
             echo "experiments/scripts/train_foundation_interface.py"
+            ;;
+        wholebrain-foundation)
+            echo "experiments/scripts/train_wholebrain_foundation.py"
+            ;;
+        wholebrain-pretrain)
+            echo "experiments/scripts/train_wholebrain_pretrain.py"
             ;;
         *)
             echo "Unknown task: $1" >&2

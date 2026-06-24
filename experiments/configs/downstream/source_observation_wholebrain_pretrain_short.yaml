@@ -1,0 +1,47 @@
+experiment:
+  name: source_observation_wholebrain_pretrain_short
+  output_dir: experiments/runs/downstream/source_observation_wholebrain_pretrain/20260624_k128_dim128_wholebrain_mlm_v1/short_formal
+  seed: 20260624
+  device: cuda:1
+
+data:
+  wholebrain_token_dir: experiments/runs/downstream/source_observation_wholebrain_tokens/20260624_k128_dim128_task_type_v1
+  num_workers: 0
+
+model:
+  hidden_dim: 192
+  num_heads: 6
+  temporal_layers: 1
+  spatial_layers: 3
+  dropout: 0.25
+
+optimization:
+  batch_size: 128
+  learning_rate: 0.0002
+  weight_decay: 0.05
+  grad_clip_norm: 1.0
+
+pretraining:
+  epochs: 20
+  patience: 5
+  batch_size: 128
+  learning_rate: 0.0002
+  mask_ratio: 0.25
+  span_min: 2
+  span_max: 4
+  contrastive_weight: 0.1
+  contrastive_temperature: 0.1
+
+finetuning:
+  epochs: 30
+  patience: 8
+  batch_size: 128
+  learning_rate: 0.0002
+  tasks:
+    - nback_load_0_vs_2_3
+    - wg_bl_vs_wg
+    - nback_vs_wg
+    - cognitive_task_type_5way
+    - mental_arithmetic_bl_vs_ma
+    - motor_lmi_vs_rmi
+    - croce_label_6way
