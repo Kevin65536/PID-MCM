@@ -406,6 +406,55 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertGreater(float(outputs['interaction_aux_loss'].item()), 0.0)
         self.assertAlmostEqual(model.get_gradient_component_weights()['interaction_aux_loss'], 0.3)
 
+    def test_interaction_auxiliary_direct_gradient_reaches_both_source_paths(self):
+        torch.manual_seed(43)
+        model = self._build_tiny_model(
+            interaction_aux_weight=0.3,
+            interaction_aux_direction='eeg_to_fnirs',
+            interaction_aux_stop_gradient=False,
+        )
+        outputs = model(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+        outputs['interaction_aux_loss'].backward()
+
+        eeg_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in model.named_parameters()
+            if name.startswith('eeg_source_proj') and param.grad is not None
+        )
+        fnirs_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in model.named_parameters()
+            if name.startswith('fnirs_source_proj') and param.grad is not None
+        )
+        self.assertGreater(eeg_grad, 0.0)
+        self.assertGreater(fnirs_grad, 0.0)
+
+    def test_shared_state_bottleneck_stop_gradient_default_preserves_old_behavior(self):
+        torch.manual_seed(47)
+        detached = self._build_tiny_model(shared_state_bottleneck_weight=0.3)
+        outputs = detached(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+        outputs['shared_state_bottleneck_loss'].backward()
+        detached_fnirs_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in detached.named_parameters()
+            if name.startswith('fnirs_shared_state_proj') and param.grad is not None
+        )
+
+        direct = self._build_tiny_model(
+            shared_state_bottleneck_weight=0.3,
+            shared_state_bottleneck_stop_gradient=False,
+        )
+        outputs = direct(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+        outputs['shared_state_bottleneck_loss'].backward()
+        direct_fnirs_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in direct.named_parameters()
+            if name.startswith('fnirs_shared_state_proj') and param.grad is not None
+        )
+
+        self.assertAlmostEqual(detached_fnirs_grad, 0.0, places=6)
+        self.assertGreater(direct_fnirs_grad, 0.0)
+
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)
         model = self._build_tiny_model(

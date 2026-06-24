@@ -116,6 +116,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         interaction_aux_stop_gradient: bool = True,
         shared_state_bottleneck_weight: float = 0.0,
         shared_state_bottleneck_dim: int = 32,
+        shared_state_bottleneck_stop_gradient: bool = True,
         source_target_weight: float = 0.0,
         eeg_source_aux_weight: float = 0.5,
         source_target_correlation_weight: float = 0.0,
@@ -276,6 +277,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.interaction_aux_stop_gradient = bool(interaction_aux_stop_gradient)
         self.shared_state_bottleneck_weight = max(float(shared_state_bottleneck_weight), 0.0)
         self.shared_state_bottleneck_dim = max(int(shared_state_bottleneck_dim), 1)
+        self.shared_state_bottleneck_stop_gradient = bool(shared_state_bottleneck_stop_gradient)
         fixed_eeg = torch.as_tensor(coupling_fixed_eeg_marginal or [], dtype=torch.float32)
         fixed_fnirs = torch.as_tensor(coupling_fixed_fnirs_marginal or [], dtype=torch.float32)
         self.register_buffer('coupling_fixed_eeg_marginal', fixed_eeg, persistent=False)
@@ -694,6 +696,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             interaction_aux_stop_gradient=loss_cfg.get('interaction_aux', {}).get('stop_gradient', True),
             shared_state_bottleneck_weight=loss_cfg.get('shared_state_bottleneck', {}).get('weight', 0.0),
             shared_state_bottleneck_dim=loss_cfg.get('shared_state_bottleneck', {}).get('dim', 32),
+            shared_state_bottleneck_stop_gradient=loss_cfg.get('shared_state_bottleneck', {}).get('stop_gradient', True),
             source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
             eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
             source_target_correlation_weight=source_target_cfg.get(
@@ -1762,7 +1765,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         if self.shared_state_bottleneck_weight > 0.0:
             eeg_shared = F.normalize(self.eeg_shared_state_proj(eeg_source), dim=-1)
             fnirs_shared = F.normalize(self.fnirs_shared_state_proj(fnirs_source), dim=-1)
-            shared_state_bottleneck_loss = self.loss_fn(eeg_shared, fnirs_shared.detach())
+            target_shared = fnirs_shared.detach() if self.shared_state_bottleneck_stop_gradient else fnirs_shared
+            shared_state_bottleneck_loss = self.loss_fn(eeg_shared, target_shared)
 
         vq_source_loss = (
             eeg_source_info['vq_loss'] + fnirs_source_info['vq_loss']
