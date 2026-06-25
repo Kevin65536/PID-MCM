@@ -1,0 +1,256 @@
+% =============================================================================
+% Bibliography: Tokenizer Alignment Discussion — ARS Academic DeepResearch
+% Date: 2026-06-24
+% Session: e0b2f6b5-82f7-41a0-b0fc-e3adb77916c7
+% Total unique papers: 23
+% =============================================================================
+
+% ---------------------------------------------------------------------------
+% 1. Vector Quantization / Codebook Methods (核心相关)
+% ---------------------------------------------------------------------------
+
+@inproceedings{huh2023straightening,
+  title     = {Straightening Out the Straight-Through Estimator: Overcoming Optimization Challenges in Vector Quantized Networks},
+  author    = {Minyoung Huh and Brian Cheung and Pulkit Agrawal and Phillip Isola},
+  booktitle = {Proceedings of the 40th International Conference on Machine Learning (ICML)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {202},
+  pages     = {14009--14030},
+  year      = {2023},
+  url       = {https://proceedings.mlr.press/v202/huh23a/huh23a.pdf},
+  eprint    = {2305.08842},
+  archivePrefix = {arXiv},
+  note      = {Codebook gradient sparsity; affine re-parameterization of code vectors; alternating optimization for STE error reduction}
+}
+
+@inproceedings{mentzer2023finite,
+  title     = {Finite Scalar Quantization: {VQ-VAE} Made Simple},
+  author    = {Fabian Mentzer and David Minnen and Eirikur Agustsson and Michael Tschannen},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  eprint    = {2309.15505},
+  archivePrefix = {arXiv},
+  note      = {Replaces vector quantization with scalar quantization in VQ-VAE latent space; simpler, no codebook collapse}
+}
+
+@inproceedings{takida2022sqvae,
+  title     = {{SQ-VAE}: Variational {B}ayes on Discrete Representation with Self-annealed Stochastic Quantization},
+  author    = {Yuhta Takida and Takashi Shibuya and WeiHsiang Liao and Chieh-Hsin Lai and Junki Ohmura and Toshimitsu Uesaka and Naoki Murata and Shusuke Takahashi and Toshiyuki Kumakura and Yuki Mitsufuji},
+  booktitle = {Proceedings of the 39th International Conference on Machine Learning (ICML)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {162},
+  pages     = {20987--21012},
+  year      = {2022},
+  url       = {https://proceedings.mlr.press/v162/takida22a/takida22a.pdf},
+  note      = {Self-annealed stochastic quantization; replaces STE with proper variational Bayes on discrete latent variables}
+}
+
+@article{lu2026pcavae,
+  title     = {{PCA-VAE}: Differentiable Subspace Quantization without Codebook Collapse},
+  author    = {Hao Lu and Onur C. Koyun and Yongxin Guo and Zhengjie Zhu and Abbas Alili and Metin Nafi Gurcan},
+  journal   = {arXiv preprint},
+  year      = {2026},
+  eprint    = {2602.18904},
+  archivePrefix = {arXiv},
+  note      = {Differentiable subspace quantization using PCA basis; avoids codebook collapse via subspace parameterization}
+}
+
+@article{zhao2026continuous,
+  title     = {Continuous First, Discrete Later: {VQ-VAEs} Without Dimensional Collapse},
+  author    = {Xinyu Zhao and Nikita Karagodin and Hamed Hassani and Sinan Hersek and Paul Pu Liang},
+  journal   = {arXiv preprint},
+  year      = {2026},
+  eprint    = {2605.06870},
+  archivePrefix = {arXiv},
+  note      = {Two-phase training: continuous latent pre-training then discrete quantization; prevents dimensional collapse}
+}
+
+@inproceedings{vali2023stochastic,
+  title     = {Stochastic Optimization of Vector Quantization Methods in Application to Speech and Image Processing},
+  author    = {Mohammadhassan Vali and Tom B{\"a}ckstr{\"o}m},
+  booktitle = {IEEE International Conference on Acoustics, Speech, and Signal Processing (ICASSP)},
+  year      = {2023},
+  doi       = {10.1109/ICASSP49357.2023.10096204},
+  note      = {Stochastic optimization approach for VQ training in speech/image domains}
+}
+
+@inproceedings{song2026dualtoken,
+  title     = {{DualToken}: Towards Unifying Visual Understanding and Generation with Dual Visual Vocabularies},
+  author    = {Wei Song and Yuran Wang and Zijia Song and Yadong Li and Zenan Zhou and Long Chen and Jianhua Xu and Jiaqi Wang and Kaicheng Yu},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2026},
+  note      = {Dual codebook design for unified visual understanding and generation; ICLR 2026}
+}
+
+@article{guo2023codebook,
+  title     = {Augmenting Vision Language Pretraining by Learning Codebook with Visual Semantics},
+  author    = {Xiaoyuan Guo and Jiali Duan and C.-C. Jay Kuo and Judy Wawira Gichoya and Imon Banerjee},
+  journal   = {arXiv preprint},
+  year      = {2023},
+  note      = {Learns codebook with visual semantic information for vision-language pretraining}
+}
+
+% ---------------------------------------------------------------------------
+% 2. Cross-Modal Discrete Representation Learning (跨模态离散表示)
+% ---------------------------------------------------------------------------
+
+@inproceedings{liu2021crossmodal,
+  title     = {Cross-Modal Discrete Representation Learning},
+  author    = {Alexander H. Liu and SouYoung Jin and Cheng-I Jeff Lai and Andrew Rouditchenko and Aude Oliva and James Glass},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year      = {2021},
+  eprint    = {2106.05438},
+  archivePrefix = {arXiv},
+  note      = {Cross-modal discrete representation via shared codebook across audio/video modalities}
+}
+
+@article{huang2024semantic,
+  title     = {Semantic Residual for Multimodal Unified Discrete Representation},
+  author    = {Hai Huang and Shulei Wang and Yan Xia},
+  journal   = {arXiv preprint},
+  year      = {2024},
+  eprint    = {2412.19128},
+  archivePrefix = {arXiv},
+  note      = {Semantic residual connection design for multimodal unified discrete token representations}
+}
+
+@article{anonymous2025advancing,
+  title     = {Advancing Multimodal Unified Discrete Representations},
+  author    = {Anonymous},
+  journal   = {Under review at ICLR 2025},
+  year      = {2025},
+  note      = {Anonymous submission; multimodal unified discrete representation learning}
+}
+
+@article{lei2024m3jepa,
+  title     = {{M3-Jepa}: Multimodal Alignment via Multi-directional {MoE} based on the {JEPA} Framework},
+  author    = {Hongyang Lei and Xiaolong Cheng and Qi Qin and Dan Wang and Fan Kun and Huazhen Huang and Yetao Wu and Qingqing Gu and Zhonglin Jiang and Yong Chen and Luo Ji},
+  journal   = {arXiv preprint},
+  year      = {2024},
+  eprint    = {2409.05929},
+  archivePrefix = {arXiv},
+  note      = {Multimodal alignment using Mixture-of-Experts on JEPA framework; multi-directional cross-modal prediction}
+}
+
+% ---------------------------------------------------------------------------
+% 3. Biosignal / Neuro Tokenization (神经信号tokenization)
+% ---------------------------------------------------------------------------
+
+@article{barmpas2026neurorvq,
+  title     = {{NeuroRVQ}: Multi-Scale Biosignal Tokenization for Generative Foundation Models},
+  author    = {Konstantinos Barmpas and Dimitrios Chalatsis and Na Lee and others},
+  journal   = {arXiv preprint},
+  year      = {2026},
+  eprint    = {2510.13068},
+  archivePrefix = {arXiv},
+  note      = {Multi-scale residual VQ for biosignal tokenization; EEG/MEG/ECoG foundation model pretraining; ARNI group}
+}
+
+@article{cui2026compact,
+  title     = {Compact Latent Manifold Translation: A Parameter-Efficient Foundation Model for Cross-Modal and Cross-Frequency Physiological Signal Synthesis},
+  author    = {Bo Cui and Xiaowen Song and others},
+  journal   = {arXiv preprint},
+  year      = {2026},
+  eprint    = {2605.13248},
+  archivePrefix = {arXiv},
+  note      = {Latent manifold translation between EEG and fNIRS; cross-modal physiological signal synthesis}
+}
+
+@inproceedings{baevski2020wav2vec2,
+  title     = {wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations},
+  author    = {Alexei Baevski and Henry Zhou and Abdelrahman Mohamed and Michael Auli},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {33},
+  pages     = {12449--12460},
+  year      = {2020},
+  eprint    = {2006.11477},
+  archivePrefix = {arXiv},
+  note      = {Foundational discrete speech tokenization via quantization of latent speech representations; Gumbel-softmax + contrastive learning}
+}
+
+% ---------------------------------------------------------------------------
+% 4. Causal Discovery / Hawkes Processes (因果发现, 用于生理耦合分析)
+% ---------------------------------------------------------------------------
+
+@inproceedings{qiao2023structural,
+  title     = {Structural {H}awkes Processes for Learning Causal Structure from Discrete-Time Event Sequences},
+  author    = {Jie Qiao and Ruichu Cai and Siyu Wu and Yu Xiang and Keli Zhang and Zhifeng Hao},
+  booktitle = {Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence (IJCAI-23)},
+  year      = {2023},
+  eprint    = {2305.05986},
+  archivePrefix = {arXiv},
+  note      = {Learns causal graph from discrete-time event sequences via structural Hawkes process; applicable to token co-occurrence analysis}
+}
+
+@article{wu2024granger,
+  title     = {Learning {G}ranger Causality from Instance-wise Self-attentive {H}awkes Processes},
+  author    = {Dongxia Wu and Tsuyoshi Id{\'e} and Aur{\'e}lie Lozano and Georgios Kollias and Ji{\v{r}}{\'i} Navr{\'a}til and Naoki Abe and Yi-An Ma and Rose Yu},
+  journal   = {arXiv preprint},
+  year      = {2024},
+  eprint    = {2402.03726},
+  archivePrefix = {arXiv},
+  note      = {Instance-wise self-attention for Granger causal discovery in Hawkes processes; IBM Research collaboration}
+}
+
+@inproceedings{shou2023influence,
+  title     = {Influence-Aware Attention for Multivariate Temporal Point Processes},
+  author    = {Xiao Shou and Tian Gao and Dharmashankar Subramanian and Debarun Bhattacharjya and Kristin P. Bennett},
+  booktitle = {Proceedings of the 2nd Conference on Causal Learning and Reasoning (CLeaR)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {213},
+  pages     = {1--19},
+  year      = {2023},
+  note      = {Attention mechanism aware of causal influence structure for temporal point processes}
+}
+
+@incollection{ide2019cardinality,
+  title     = {Cardinality-Regularized {H}awkes-{G}ranger Model},
+  author    = {Tsuyoshi Id{\'e} and Georgios Kollias and Dzung T. Phan and Naoki Abe},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2019},
+  note      = {Hawkes-Granger model with cardinality regularization for sparse causal discovery in event sequences; IBM Research}
+}
+
+@inproceedings{zennaro2023quantifying,
+  title     = {Quantifying Consistency and Information Loss for Causal Abstraction Learning},
+  author    = {Fabio Massimo Zennaro and Paolo Turrini and Theodoros Damoulas},
+  booktitle = {Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence (IJCAI-23)},
+  year      = {2023},
+  note      = {Information-theoretic framework for quantifying loss when abstracting causal models across levels of granularity}
+}
+
+% ---------------------------------------------------------------------------
+% 5. Gradient Estimation for Discrete Variables (离散变量梯度估计)
+% ---------------------------------------------------------------------------
+
+@article{shekhovtsov2021biasvariance,
+  title     = {Bias-Variance Tradeoffs in Single-Sample Binary Gradient Estimators},
+  author    = {Alexander Shekhovtsov},
+  journal   = {arXiv preprint},
+  year      = {2021},
+  eprint    = {2110.03549},
+  archivePrefix = {arXiv},
+  note      = {Analysis of bias-variance tradeoffs in straight-through and other binary gradient estimators}
+}
+
+@article{shekhovtsov2022cold,
+  title     = {Cold Analysis of {R}ao-{B}lackwellized Straight-Through {G}umbel-{S}oftmax Gradient Estimator},
+  author    = {Alexander Shekhovtsov},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  note      = {Rao-Blackwellization analysis of straight-through Gumbel-softmax for VAE and quantized network training}
+}
+
+% ---------------------------------------------------------------------------
+% 6. Outlier / Probably Irrelevant (可能无关, 归档保留)
+% ---------------------------------------------------------------------------
+
+@article{joseph2025polarization,
+  title     = {A Tale of Two Polarization Paradoxes {I}: the Diamagnetic Polarization Paradox},
+  author    = {Ilon Joseph},
+  journal   = {arXiv preprint},
+  year      = {2025},
+  eprint    = {2505.06870},
+  archivePrefix = {arXiv},
+  note      = {LIKELY IRRELEVANT — plasma physics paper, probably fetched due to arXiv ID collision or broad search; kept for archival completeness}
+}
