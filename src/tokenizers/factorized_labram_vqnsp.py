@@ -40,6 +40,68 @@ from .labram_vqnsp import (
 )
 
 
+class CausalLowRankCrossAdapter(nn.Module):
+    """Low-rank causal EEG-to-fNIRS adapter for pre-VQ source exchange."""
+
+    def __init__(
+        self,
+        *,
+        eeg_dim: int,
+        fnirs_dim: int,
+        rank: int = 16,
+        adapter_dim: int = 64,
+        max_lag_tokens: int = 5,
+        residual_init: float = 0.1,
+        dropout: float = 0.05,
+    ) -> None:
+        super().__init__()
+        self.max_lag_tokens = max(int(max_lag_tokens), 0)
+        self.eeg_context_proj = nn.Linear(eeg_dim, rank)
+        self.fnirs_query_proj = nn.Linear(fnirs_dim, rank)
+        self.context_to_adapter = nn.Linear(rank, adapter_dim)
+        self.adapter_to_fnirs = nn.Linear(adapter_dim, fnirs_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.residual_gate = nn.Parameter(torch.tensor(float(residual_init), dtype=torch.float32))
+
+    def _lagged_eeg_context(self, eeg_low_rank: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch, tokens, rank = eeg_low_rank.shape
+        lags = min(self.max_lag_tokens, max(tokens - 1, 0)) + 1
+        contexts = []
+        valid = []
+        for lag in range(lags):
+            if lag == 0:
+                shifted = eeg_low_rank
+                mask = torch.ones(tokens, dtype=torch.bool, device=eeg_low_rank.device)
+            else:
+                padding = eeg_low_rank.new_zeros(batch, lag, rank)
+                shifted = torch.cat([padding, eeg_low_rank[:, :-lag, :]], dim=1)
+                mask = torch.arange(tokens, device=eeg_low_rank.device) >= lag
+            contexts.append(shifted)
+            valid.append(mask)
+        return torch.stack(contexts, dim=2), torch.stack(valid, dim=0)
+
+    def forward(
+        self,
+        eeg_encoded: torch.Tensor,
+        fnirs_encoded: torch.Tensor,
+        *,
+        detach_context: bool = True,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if detach_context:
+            eeg_encoded = eeg_encoded.detach()
+        eeg_low_rank = self.eeg_context_proj(eeg_encoded)
+        fnirs_query = self.fnirs_query_proj(fnirs_encoded)
+        lagged_eeg, valid_mask = self._lagged_eeg_context(eeg_low_rank)
+        scores = (lagged_eeg * fnirs_query.unsqueeze(2)).sum(dim=-1)
+        scores = scores / math.sqrt(max(float(fnirs_query.shape[-1]), 1.0))
+        scores = scores.masked_fill(~valid_mask.t().unsqueeze(0), -1.0e4)
+        lag_weights = torch.softmax(scores, dim=-1)
+        context = (lag_weights.unsqueeze(-1) * lagged_eeg).sum(dim=2)
+        adapter_hidden = F.gelu(self.context_to_adapter(context))
+        adapter_update = self.adapter_to_fnirs(self.dropout(adapter_hidden))
+        return self.residual_gate * adapter_update, lag_weights
+
+
 class SourceObservationLaBraMVQNSP(BaseTokenizer):
     """Mainline multimodal tokenizer with source/observation branch semantics."""
 
@@ -117,6 +179,16 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         shared_state_bottleneck_weight: float = 0.0,
         shared_state_bottleneck_dim: int = 32,
         shared_state_bottleneck_stop_gradient: bool = True,
+        cross_modal_exchange_enabled: bool = False,
+        cross_modal_exchange_mode: str = 'low_rank_causal_adapter',
+        cross_modal_exchange_direction: str = 'eeg_to_fnirs',
+        cross_modal_exchange_target_branch: str = 'fnirs_source',
+        cross_modal_exchange_rank: int = 16,
+        cross_modal_exchange_adapter_dim: int = 64,
+        cross_modal_exchange_max_lag_tokens: int = 5,
+        cross_modal_exchange_detach_context: bool = True,
+        cross_modal_exchange_residual_init: float = 0.1,
+        cross_modal_exchange_dropout: float = 0.05,
         source_target_weight: float = 0.0,
         eeg_source_aux_weight: float = 0.5,
         source_target_correlation_weight: float = 0.0,
@@ -278,6 +350,27 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.shared_state_bottleneck_weight = max(float(shared_state_bottleneck_weight), 0.0)
         self.shared_state_bottleneck_dim = max(int(shared_state_bottleneck_dim), 1)
         self.shared_state_bottleneck_stop_gradient = bool(shared_state_bottleneck_stop_gradient)
+        self.cross_modal_exchange_enabled = bool(cross_modal_exchange_enabled)
+        self.cross_modal_exchange_mode = str(cross_modal_exchange_mode).lower()
+        self.cross_modal_exchange_direction = str(cross_modal_exchange_direction).lower()
+        self.cross_modal_exchange_target_branch = str(cross_modal_exchange_target_branch).lower()
+        self.cross_modal_exchange_detach_context = bool(cross_modal_exchange_detach_context)
+        self.cross_modal_exchange_max_lag_tokens = max(int(cross_modal_exchange_max_lag_tokens), 0)
+        if self.cross_modal_exchange_mode != 'low_rank_causal_adapter':
+            raise ValueError(
+                "cross_modal_exchange mode must be 'low_rank_causal_adapter', "
+                f"got {self.cross_modal_exchange_mode!r}"
+            )
+        if self.cross_modal_exchange_direction != 'eeg_to_fnirs':
+            raise ValueError(
+                "cross_modal_exchange direction must be 'eeg_to_fnirs' in v1, "
+                f"got {self.cross_modal_exchange_direction!r}"
+            )
+        if self.cross_modal_exchange_target_branch != 'fnirs_source':
+            raise ValueError(
+                "cross_modal_exchange target_branch must be 'fnirs_source' in v1, "
+                f"got {self.cross_modal_exchange_target_branch!r}"
+            )
         fixed_eeg = torch.as_tensor(coupling_fixed_eeg_marginal or [], dtype=torch.float32)
         fixed_fnirs = torch.as_tensor(coupling_fixed_fnirs_marginal or [], dtype=torch.float32)
         self.register_buffer('coupling_fixed_eeg_marginal', fixed_eeg, persistent=False)
@@ -531,6 +624,18 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             nn.LayerNorm(fnirs_source_codebook_dim),
             nn.Linear(fnirs_source_codebook_dim, self.shared_state_bottleneck_dim),
         )
+        if self.cross_modal_exchange_enabled:
+            self.cross_modal_exchange = CausalLowRankCrossAdapter(
+                eeg_dim=eeg_encoder_embed_dim,
+                fnirs_dim=fnirs_encoder_embed_dim,
+                rank=max(int(cross_modal_exchange_rank), 1),
+                adapter_dim=max(int(cross_modal_exchange_adapter_dim), 1),
+                max_lag_tokens=self.cross_modal_exchange_max_lag_tokens,
+                residual_init=float(cross_modal_exchange_residual_init),
+                dropout=max(float(cross_modal_exchange_dropout), 0.0),
+            )
+        else:
+            self.cross_modal_exchange = None
 
         self.eeg_source_decode_input_proj = nn.Linear(
             eeg_source_codebook_dim,
@@ -610,6 +715,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         observation_target_cfg = loss_cfg.get('observation_target', {})
         branch_cfg = loss_cfg.get('branch', {})
         codebook_cfg = loss_cfg.get('codebook', {})
+        exchange_cfg = model_cfg.get('cross_modal_exchange', {})
         data_cfg = config.get('data', {})
         window_cfg = data_cfg.get('window', {})
         hrf_cfg = source_target_cfg.get('hrf', {})
@@ -697,6 +803,16 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             shared_state_bottleneck_weight=loss_cfg.get('shared_state_bottleneck', {}).get('weight', 0.0),
             shared_state_bottleneck_dim=loss_cfg.get('shared_state_bottleneck', {}).get('dim', 32),
             shared_state_bottleneck_stop_gradient=loss_cfg.get('shared_state_bottleneck', {}).get('stop_gradient', True),
+            cross_modal_exchange_enabled=exchange_cfg.get('enabled', False),
+            cross_modal_exchange_mode=exchange_cfg.get('mode', 'low_rank_causal_adapter'),
+            cross_modal_exchange_direction=exchange_cfg.get('direction', 'eeg_to_fnirs'),
+            cross_modal_exchange_target_branch=exchange_cfg.get('target_branch', 'fnirs_source'),
+            cross_modal_exchange_rank=exchange_cfg.get('rank', 16),
+            cross_modal_exchange_adapter_dim=exchange_cfg.get('adapter_dim', 64),
+            cross_modal_exchange_max_lag_tokens=exchange_cfg.get('max_lag_tokens', 5),
+            cross_modal_exchange_detach_context=exchange_cfg.get('detach_context', True),
+            cross_modal_exchange_residual_init=exchange_cfg.get('residual_init', 0.1),
+            cross_modal_exchange_dropout=exchange_cfg.get('dropout', 0.05),
             source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
             eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
             source_target_correlation_weight=source_target_cfg.get(
@@ -1453,6 +1569,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 'fnirs_to_eeg_source_predictor.',
                 'eeg_shared_state_proj.',
                 'fnirs_shared_state_proj.',
+                'cross_modal_exchange.',
             )
             own_keys = set(self.state_dict().keys())
             state_keys = set(state_dict.keys())
@@ -1484,10 +1601,22 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
     def encode_modalities(self, eeg: torch.Tensor, fnirs: torch.Tensor) -> Dict[str, torch.Tensor]:
         eeg_encoded = self._encode_modality(eeg, self.eeg_patch_size, self.eeg_patch_embed, self.eeg_encoder)
         fnirs_encoded = self._encode_modality(fnirs, self.fnirs_patch_size, self.fnirs_patch_embed, self.fnirs_encoder)
+        fnirs_source_input = fnirs_encoded
+        result: Dict[str, torch.Tensor] = {}
+        if self.cross_modal_exchange is not None:
+            exchange_update, exchange_lag_weights = self.cross_modal_exchange(
+                eeg_encoded,
+                fnirs_encoded,
+                detach_context=self.cross_modal_exchange_detach_context,
+            )
+            fnirs_source_input = fnirs_encoded + exchange_update
+            result['cross_modal_exchange_update'] = exchange_update
+            result['cross_modal_exchange_lag_weights'] = exchange_lag_weights
         return {
+            **result,
             'eeg_source': self.eeg_source_proj(eeg_encoded),
             'eeg_observation': self.eeg_observation_proj(eeg_encoded),
-            'fnirs_source': self.fnirs_source_proj(fnirs_encoded),
+            'fnirs_source': self.fnirs_source_proj(fnirs_source_input),
             'fnirs_observation': self.fnirs_observation_proj(fnirs_encoded),
         }
 
@@ -1632,6 +1761,19 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         )
 
         zero_scalar = eeg_source_q.new_zeros(())
+        cross_modal_exchange_update_norm = zero_scalar
+        cross_modal_exchange_lag_entropy = zero_scalar
+        cross_modal_exchange_residual_gate = zero_scalar
+        exchange_update = latents.get('cross_modal_exchange_update')
+        exchange_lag_weights = latents.get('cross_modal_exchange_lag_weights')
+        if torch.is_tensor(exchange_update):
+            cross_modal_exchange_update_norm = exchange_update.pow(2).mean().sqrt()
+        if torch.is_tensor(exchange_lag_weights):
+            lag_entropy = -(exchange_lag_weights.clamp_min(1.0e-12).log() * exchange_lag_weights).sum(dim=-1)
+            lag_count = max(int(exchange_lag_weights.shape[-1]), 1)
+            cross_modal_exchange_lag_entropy = lag_entropy.mean() / math.log(max(lag_count, 2))
+        if self.cross_modal_exchange is not None:
+            cross_modal_exchange_residual_gate = self.cross_modal_exchange.residual_gate.detach()
         source_balance_terms = []
         if self.source_branch_enabled:
             source_balance_terms.extend([
@@ -1848,6 +1990,9 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'coupling_lag_count': coupling_lag_count,
             'interaction_aux_loss': interaction_aux_loss,
             'shared_state_bottleneck_loss': shared_state_bottleneck_loss,
+            'cross_modal_exchange_update_norm': cross_modal_exchange_update_norm,
+            'cross_modal_exchange_lag_entropy': cross_modal_exchange_lag_entropy,
+            'cross_modal_exchange_residual_gate': cross_modal_exchange_residual_gate,
             'codebook_balance_loss': codebook_balance_loss,
             'source_balance_loss': source_balance_loss,
             'observation_balance_loss': observation_balance_loss,
@@ -2040,6 +2185,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 'eeg_shared_state_proj.',
                 'fnirs_shared_state_proj.',
             )},
+            {'name': 'cross_modal_exchange', 'label': 'Cross Exchange', 'prefixes': ('cross_modal_exchange.',)},
             {'name': 'eeg_source_quantizer', 'label': 'EEG Source Quant', 'prefixes': ('eeg_source_quantizer.',)},
             {'name': 'fnirs_source_quantizer', 'label': 'fNIRS Source Quant', 'prefixes': ('fnirs_source_quantizer.',)},
             {'name': 'eeg_observation_quantizer', 'label': 'EEG Obs Quant', 'prefixes': ('eeg_observation_quantizer.',)},

@@ -987,6 +987,7 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
             'eeg_shared_state_proj.',
             'fnirs_shared_state_proj.',
             'context_coupling_router.',
+            'cross_modal_exchange.',
         )
         allowed_missing.update(
             key for key in incompatible.missing_keys

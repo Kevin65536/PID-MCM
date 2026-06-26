@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from experiments.scripts.train_source_observation_tokenizer import apply_epoch_schedules, compute_gradient_attribution
-from src.tokenizers.factorized_labram_vqnsp import SourceObservationLaBraMVQNSP
+from src.tokenizers.factorized_labram_vqnsp import CausalLowRankCrossAdapter, SourceObservationLaBraMVQNSP
 from src.tokenizers.labram_vqnsp import NormEMAVectorQuantizer
 from src.visualization.gradient_diagnostics import (
     plot_gradient_influence_dashboard,
@@ -454,6 +454,148 @@ class GradientDiagnosticsTests(unittest.TestCase):
 
         self.assertAlmostEqual(detached_fnirs_grad, 0.0, places=6)
         self.assertGreater(direct_fnirs_grad, 0.0)
+
+    def test_cross_modal_exchange_causal_mask_blocks_future_eeg_tokens(self):
+        torch.manual_seed(51)
+        adapter = CausalLowRankCrossAdapter(
+            eeg_dim=6,
+            fnirs_dim=5,
+            rank=3,
+            adapter_dim=4,
+            max_lag_tokens=2,
+            residual_init=0.1,
+            dropout=0.0,
+        )
+        _, lag_weights = adapter(torch.randn(2, 4, 6), torch.randn(2, 4, 5), detach_context=False)
+
+        self.assertEqual(tuple(lag_weights.shape), (2, 4, 3))
+        self.assertTrue(torch.allclose(lag_weights[:, 0, 1:], torch.zeros_like(lag_weights[:, 0, 1:]), atol=1e-6))
+        self.assertTrue(torch.allclose(lag_weights[:, 1, 2], torch.zeros_like(lag_weights[:, 1, 2]), atol=1e-6))
+
+    def test_cross_modal_exchange_detach_context_blocks_eeg_gradient(self):
+        torch.manual_seed(53)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        detached = self._build_tiny_model(
+            cross_modal_exchange_enabled=True,
+            cross_modal_exchange_detach_context=True,
+            cross_modal_exchange_rank=4,
+            cross_modal_exchange_adapter_dim=8,
+            cross_modal_exchange_max_lag_tokens=1,
+            cross_modal_exchange_dropout=0.0,
+        )
+        latents = detached.encode_modalities(eeg, fnirs)
+        latents['fnirs_source'].pow(2).mean().backward()
+        detached_eeg_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in detached.named_parameters()
+            if (name.startswith('eeg_patch_embed') or name.startswith('eeg_encoder')) and param.grad is not None
+        )
+
+        direct = self._build_tiny_model(
+            cross_modal_exchange_enabled=True,
+            cross_modal_exchange_detach_context=False,
+            cross_modal_exchange_rank=4,
+            cross_modal_exchange_adapter_dim=8,
+            cross_modal_exchange_max_lag_tokens=1,
+            cross_modal_exchange_dropout=0.0,
+        )
+        latents = direct.encode_modalities(eeg, fnirs)
+        latents['fnirs_source'].pow(2).mean().backward()
+        direct_eeg_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in direct.named_parameters()
+            if (name.startswith('eeg_patch_embed') or name.startswith('eeg_encoder')) and param.grad is not None
+        )
+        direct_fnirs_grad = sum(
+            float(param.grad.abs().sum().item())
+            for name, param in direct.named_parameters()
+            if name.startswith('fnirs_source_proj') and param.grad is not None
+        )
+
+        self.assertAlmostEqual(detached_eeg_grad, 0.0, places=6)
+        self.assertGreater(direct_eeg_grad, 0.0)
+        self.assertGreater(direct_fnirs_grad, 0.0)
+
+    def test_cross_modal_exchange_updates_only_fnirs_source_branch(self):
+        torch.manual_seed(55)
+        eeg = torch.randn(2, 3, 40)
+        fnirs = torch.randn(2, 4, 20)
+        base = self._build_tiny_model()
+        exchange = self._build_tiny_model(
+            cross_modal_exchange_enabled=True,
+            cross_modal_exchange_detach_context=False,
+            cross_modal_exchange_rank=4,
+            cross_modal_exchange_adapter_dim=8,
+            cross_modal_exchange_max_lag_tokens=1,
+            cross_modal_exchange_dropout=0.0,
+        )
+        exchange.load_state_dict(base.state_dict(), strict=False)
+        base.eval()
+        exchange.eval()
+
+        with torch.no_grad():
+            base_latents = base.encode_modalities(eeg, fnirs)
+            exchange_latents = exchange.encode_modalities(eeg, fnirs)
+
+        self.assertTrue(torch.allclose(base_latents['eeg_source'], exchange_latents['eeg_source'], atol=1e-6))
+        self.assertTrue(torch.allclose(base_latents['eeg_observation'], exchange_latents['eeg_observation'], atol=1e-6))
+        self.assertTrue(torch.allclose(base_latents['fnirs_observation'], exchange_latents['fnirs_observation'], atol=1e-6))
+        self.assertGreater(float(exchange_latents['cross_modal_exchange_update'].abs().sum().item()), 0.0)
+        self.assertAlmostEqual(float(exchange.cross_modal_exchange.residual_gate.item()), 0.1, places=6)
+
+    def test_cross_modal_exchange_config_and_gradient_group_are_exposed(self):
+        config = {
+            'model': {
+                'eeg': {
+                    'seq_length': 40,
+                    'patch_size': 20,
+                    'channels': 3,
+                    'encoder_embed_dim': 16,
+                    'encoder_depth': 1,
+                    'encoder_num_heads': 4,
+                    'decoder_embed_dim': 16,
+                    'decoder_depth': 1,
+                    'decoder_num_heads': 4,
+                },
+                'fnirs': {
+                    'seq_length': 20,
+                    'patch_size': 10,
+                    'channels': 4,
+                    'encoder_embed_dim': 12,
+                    'encoder_depth': 1,
+                    'encoder_num_heads': 4,
+                    'decoder_embed_dim': 12,
+                    'decoder_depth': 1,
+                    'decoder_num_heads': 4,
+                },
+                'source': {'codebook_size': 4, 'codebook_dim': 8},
+                'eeg_observation': {'codebook_size': 4, 'codebook_dim': 8},
+                'fnirs_observation': {'codebook_size': 4, 'codebook_dim': 8},
+                'quantizer': {'kmeans_init': False, 'revive_dead_codes': False},
+                'cross_modal_exchange': {
+                    'enabled': True,
+                    'mode': 'low_rank_causal_adapter',
+                    'direction': 'eeg_to_fnirs',
+                    'target_branch': 'fnirs_source',
+                    'rank': 4,
+                    'adapter_dim': 8,
+                    'max_lag_tokens': 1,
+                    'detach_context': False,
+                    'dropout': 0.0,
+                },
+                'drop_path': 0.0,
+                'dropout': 0.0,
+            },
+            'loss': {},
+        }
+        model = SourceObservationLaBraMVQNSP.from_config(config)
+        outputs = model(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+
+        self.assertIn('cross_modal_exchange_update_norm', outputs)
+        self.assertGreater(float(outputs['cross_modal_exchange_update_norm'].item()), 0.0)
+        group_names = [group['name'] for group in model.get_gradient_parameter_group_specs()]
+        self.assertIn('cross_modal_exchange', group_names)
 
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)
