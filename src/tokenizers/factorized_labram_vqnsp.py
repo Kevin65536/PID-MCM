@@ -204,14 +204,29 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         cross_modal_fusion_max_lag_tokens: int = 5,
         cross_modal_fusion_relative_lag_bias: bool = True,
         cross_modal_fusion_dropout: float = 0.1,
+        cross_modal_fusion_apply_to_source: bool = True,
+        cross_modal_fusion_adaptive_lag_enabled: bool = False,
+        cross_modal_fusion_adaptive_lag_temperature: float = 1.0,
+        cross_modal_fusion_adaptive_lag_prior: Optional[Sequence[float]] = None,
         source_codebook_mode: str = 'independent',
         cross_modal_temporal_nce_weight: float = 0.0,
         cross_modal_masked_latent_weight: float = 0.0,
         cross_modal_soft_code_weight: float = 0.0,
+        cross_modal_paired_margin_weight: float = 0.0,
+        cross_modal_paired_margin: float = 0.05,
         cross_modal_alignment_temperature: float = 0.1,
         cross_modal_positive_lag_weights: Optional[Sequence[float]] = None,
         cross_modal_token_mask_ratio: float = 0.5,
         cross_modal_modality_dropout_probability: float = 0.25,
+        cross_token_enabled: bool = False,
+        cross_token_codebook_size: int = 64,
+        cross_token_dim: int = 32,
+        cross_token_residual_scale: float = 0.25,
+        cross_token_latent_weight: float = 0.20,
+        cross_token_distillation_weight: float = 0.05,
+        cross_token_margin_weight: float = 0.20,
+        cross_token_margin: float = 0.05,
+        cross_token_balance_weight: float = 0.01,
         source_target_weight: float = 0.0,
         eeg_source_aux_weight: float = 0.5,
         source_target_correlation_weight: float = 0.0,
@@ -404,6 +419,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         if self.cross_modal_fusion_enabled and self.cross_modal_exchange_enabled:
             raise ValueError('cross_modal_fusion and legacy cross_modal_exchange cannot both be enabled')
         self.cross_modal_fusion_max_lag_tokens = max(int(cross_modal_fusion_max_lag_tokens), 0)
+        self.cross_modal_fusion_apply_to_source = bool(cross_modal_fusion_apply_to_source)
+        self.cross_modal_fusion_adaptive_lag_enabled = bool(cross_modal_fusion_adaptive_lag_enabled)
         self.source_codebook_mode = str(source_codebook_mode).lower()
         if self.source_codebook_mode not in {'independent', 'shared_joint'}:
             raise ValueError("source_codebook mode must be independent/shared_joint")
@@ -412,6 +429,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.cross_modal_temporal_nce_weight = max(float(cross_modal_temporal_nce_weight), 0.0)
         self.cross_modal_masked_latent_weight = max(float(cross_modal_masked_latent_weight), 0.0)
         self.cross_modal_soft_code_weight = max(float(cross_modal_soft_code_weight), 0.0)
+        self.cross_modal_paired_margin_weight = max(float(cross_modal_paired_margin_weight), 0.0)
+        self.cross_modal_paired_margin = max(float(cross_modal_paired_margin), 0.0)
         self.cross_modal_alignment_temperature = max(float(cross_modal_alignment_temperature), 1e-6)
         default_lag_weights = [0.0, 0.1, 0.4, 0.4, 0.1, 0.0]
         self.cross_modal_positive_lag_weights = list(
@@ -423,6 +442,17 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         self.cross_modal_modality_dropout_probability = min(
             max(float(cross_modal_modality_dropout_probability), 0.0), 1.0
         )
+        self.cross_token_enabled = bool(cross_token_enabled)
+        self.cross_token_codebook_size = max(int(cross_token_codebook_size), 2)
+        self.cross_token_dim = max(int(cross_token_dim), 8)
+        self.cross_token_residual_scale = max(float(cross_token_residual_scale), 0.0)
+        self.cross_token_latent_weight = max(float(cross_token_latent_weight), 0.0)
+        self.cross_token_distillation_weight = max(float(cross_token_distillation_weight), 0.0)
+        self.cross_token_margin_weight = max(float(cross_token_margin_weight), 0.0)
+        self.cross_token_margin = max(float(cross_token_margin), 0.0)
+        self.cross_token_balance_weight = max(float(cross_token_balance_weight), 0.0)
+        if self.cross_token_enabled and not self.cross_modal_fusion_enabled:
+            raise ValueError('cross_token requires cross_modal_fusion')
         fixed_eeg = torch.as_tensor(coupling_fixed_eeg_marginal or [], dtype=torch.float32)
         fixed_fnirs = torch.as_tensor(coupling_fixed_fnirs_marginal or [], dtype=torch.float32)
         self.register_buffer('coupling_fixed_eeg_marginal', fixed_eeg, persistent=False)
@@ -714,6 +744,9 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 relative_lag_bias=bool(cross_modal_fusion_relative_lag_bias),
                 dropout=max(float(cross_modal_fusion_dropout), 0.0),
                 mode=self.cross_modal_fusion_mode,
+                adaptive_lag_enabled=self.cross_modal_fusion_adaptive_lag_enabled,
+                adaptive_lag_temperature=max(float(cross_modal_fusion_adaptive_lag_temperature), 1e-6),
+                adaptive_lag_prior=cross_modal_fusion_adaptive_lag_prior,
             )
             if self.cross_modal_fusion_enabled else None
         )
@@ -728,6 +761,38 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         )
         self.eeg_source_mask_token = nn.Parameter(torch.zeros(1, 1, eeg_source_codebook_dim))
         self.fnirs_source_mask_token = nn.Parameter(torch.zeros(1, 1, fnirs_source_codebook_dim))
+        self.cross_token_predictor_proj = (
+            nn.Identity()
+            if self.cross_token_enabled and self.cross_token_dim == fnirs_source_codebook_dim
+            else nn.Sequential(
+                nn.LayerNorm(fnirs_source_codebook_dim),
+                nn.Linear(fnirs_source_codebook_dim, self.cross_token_dim),
+            ) if self.cross_token_enabled else None
+        )
+        self.cross_token_teacher_proj = (
+            nn.Identity()
+            if self.cross_token_enabled and self.cross_token_dim == fnirs_source_codebook_dim
+            else nn.Sequential(
+                nn.LayerNorm(fnirs_source_codebook_dim),
+                nn.Linear(fnirs_source_codebook_dim, self.cross_token_dim),
+            ) if self.cross_token_enabled else None
+        )
+        self.cross_token_to_fnirs = nn.Sequential(
+            nn.LayerNorm(self.cross_token_dim),
+            nn.Linear(self.cross_token_dim, fnirs_source_codebook_dim),
+        ) if self.cross_token_enabled else None
+        self.cross_token_quantizer = (
+            NormEMAVectorQuantizer(
+                n_embed=self.cross_token_codebook_size,
+                embedding_dim=self.cross_token_dim,
+                beta=beta,
+                decay=decay,
+                kmeans_init=kmeans_init,
+                revive_dead_codes=revive_dead_codes,
+                dead_code_threshold=dead_code_threshold,
+            )
+            if self.cross_token_enabled else None
+        )
 
         self.eeg_source_decode_input_proj = nn.Linear(
             eeg_source_codebook_dim,
@@ -809,8 +874,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         codebook_cfg = loss_cfg.get('codebook', {})
         exchange_cfg = model_cfg.get('cross_modal_exchange', {})
         fusion_cfg = model_cfg.get('cross_modal_fusion', {})
+        cross_token_cfg = model_cfg.get('cross_modal_token', {})
         source_codebook_cfg = model_cfg.get('source_codebook', {})
         cross_alignment_cfg = loss_cfg.get('cross_modal_alignment', {})
+        cross_token_loss_cfg = loss_cfg.get('cross_modal_token', {})
         data_cfg = config.get('data', {})
         window_cfg = data_cfg.get('window', {})
         hrf_cfg = source_target_cfg.get('hrf', {})
@@ -916,16 +983,31 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             cross_modal_fusion_max_lag_tokens=fusion_cfg.get('max_lag_tokens', 5),
             cross_modal_fusion_relative_lag_bias=fusion_cfg.get('relative_lag_bias', True),
             cross_modal_fusion_dropout=fusion_cfg.get('dropout', 0.1),
+            cross_modal_fusion_apply_to_source=fusion_cfg.get('apply_to_source', True),
+            cross_modal_fusion_adaptive_lag_enabled=fusion_cfg.get('adaptive_lag_enabled', False),
+            cross_modal_fusion_adaptive_lag_temperature=fusion_cfg.get('adaptive_lag_temperature', 1.0),
+            cross_modal_fusion_adaptive_lag_prior=fusion_cfg.get('adaptive_lag_prior'),
             source_codebook_mode=source_codebook_cfg.get('mode', 'independent'),
             cross_modal_temporal_nce_weight=cross_alignment_cfg.get('temporal_nce_weight', 0.0),
             cross_modal_masked_latent_weight=cross_alignment_cfg.get('masked_latent_weight', 0.0),
             cross_modal_soft_code_weight=cross_alignment_cfg.get('soft_code_distillation_weight', 0.0),
+            cross_modal_paired_margin_weight=cross_alignment_cfg.get('paired_margin_weight', 0.0),
+            cross_modal_paired_margin=cross_alignment_cfg.get('paired_margin', 0.05),
             cross_modal_alignment_temperature=cross_alignment_cfg.get('temperature', 0.1),
             cross_modal_positive_lag_weights=cross_alignment_cfg.get('positive_lag_weights'),
             cross_modal_token_mask_ratio=cross_alignment_cfg.get('token_mask_ratio', 0.5),
             cross_modal_modality_dropout_probability=cross_alignment_cfg.get(
                 'modality_dropout_probability', 0.25
             ),
+            cross_token_enabled=cross_token_cfg.get('enabled', False),
+            cross_token_codebook_size=cross_token_cfg.get('codebook_size', 64),
+            cross_token_dim=cross_token_cfg.get('dim', 32),
+            cross_token_residual_scale=cross_token_cfg.get('residual_scale', 0.25),
+            cross_token_latent_weight=cross_token_loss_cfg.get('latent_weight', 0.20),
+            cross_token_distillation_weight=cross_token_loss_cfg.get('distillation_weight', 0.05),
+            cross_token_margin_weight=cross_token_loss_cfg.get('margin_weight', 0.20),
+            cross_token_margin=cross_token_loss_cfg.get('margin', 0.05),
+            cross_token_balance_weight=cross_token_loss_cfg.get('balance_weight', 0.01),
             source_target_weight=source_target_cfg.get('weight', source_target_cfg.get('source_target_weight', 0.0)),
             eeg_source_aux_weight=source_target_cfg.get('eeg_aux_weight', source_target_cfg.get('eeg_source_aux_weight', 0.5)),
             source_target_correlation_weight=source_target_cfg.get(
@@ -1689,6 +1771,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 'shared_source_quantizer.',
                 'eeg_source_mask_token',
                 'fnirs_source_mask_token',
+                'cross_token_predictor_proj.',
+                'cross_token_teacher_proj.',
+                'cross_token_to_fnirs.',
+                'cross_token_quantizer.',
             )
             own_keys = set(self.state_dict().keys())
             state_keys = set(state_dict.keys())
@@ -1759,10 +1845,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_source = fnirs_source_pre
         if self.cross_modal_fusion is not None:
             fused = self.cross_modal_fusion(eeg_source_pre, fnirs_source_pre)
-            eeg_source = fused['eeg_source']
-            fnirs_source = fused['fnirs_source']
+            if self.cross_modal_fusion_apply_to_source:
+                eeg_source = fused['eeg_source']
+                fnirs_source = fused['fnirs_source']
             result['cross_modal_fusion_fnirs_attention'] = fused['fnirs_attention']
             result['cross_modal_fusion_eeg_attention'] = fused['eeg_attention']
+            result['cross_modal_fusion_lag_probabilities'] = fused['fnirs_lag_probabilities']
         return {
             **result,
             'eeg_source_pre': eeg_source_pre,
@@ -1901,6 +1989,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         masked_fraction = zero
         shuffled_latent = zero
         pairing_gain = zero
+        paired_margin_loss = zero
         if self.cross_modal_fusion is not None and (
             self.cross_modal_masked_latent_weight > 0.0 or self.cross_modal_soft_code_weight > 0.0
         ):
@@ -1919,16 +2008,30 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             latent = fnirs_latent
             soft_code = fnirs_code
             masked_fraction = fnirs_mask.float().mean()
-            if not self.training and eeg_source_pre.shape[1] > 1:
-                shuffled_eeg = torch.roll(masked_eeg, shifts=1, dims=1)
+            if eeg_source_pre.shape[0] > 1 or eeg_source_pre.shape[1] > 1:
+                shuffled_eeg = (
+                    torch.roll(masked_eeg, shifts=1, dims=0)
+                    if eeg_source_pre.shape[0] > 1
+                    else torch.flip(masked_eeg, dims=[1])
+                )
                 shuffled_prediction = self.cross_modal_fusion(shuffled_eeg, masked_fnirs)['fnirs_source']
+                paired_values = 1.0 - F.cosine_similarity(
+                    predicted['fnirs_source'][fnirs_mask],
+                    fnirs_source_pre.detach()[fnirs_mask],
+                    dim=-1,
+                )
                 shuffled_values = 1.0 - F.cosine_similarity(
                     shuffled_prediction[fnirs_mask],
                     fnirs_source_pre.detach()[fnirs_mask],
                     dim=-1,
                 )
                 shuffled_latent = shuffled_values.mean() if shuffled_values.numel() else zero
-                pairing_gain = shuffled_latent - fnirs_latent
+                paired_value = paired_values.mean() if paired_values.numel() else zero
+                pairing_gain = shuffled_latent - paired_value
+                if paired_values.numel():
+                    paired_margin_loss = F.relu(
+                        self.cross_modal_paired_margin + paired_values - shuffled_values
+                    ).mean()
             if self.cross_modal_fusion_mode == 'bidirectional_cross_attention':
                 eeg_latent, eeg_code = masked_alignment_losses(
                     predicted['eeg_source'],
@@ -1948,6 +2051,103 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'cross_modal_masked_fraction': masked_fraction,
             'cross_modal_masked_shuffled_latent_loss': shuffled_latent,
             'cross_modal_masked_pairing_gain': pairing_gain,
+            'cross_modal_paired_margin_loss': paired_margin_loss,
+        }
+
+    def _compute_cross_token_state(
+        self,
+        eeg_source_pre: torch.Tensor,
+        fnirs_source_pre: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
+        zero = eeg_source_pre.new_zeros(())
+        if not self.cross_token_enabled:
+            return {'enabled': eeg_source_pre.new_tensor(0.0)}
+        if self.cross_modal_fusion is None or self.cross_token_quantizer is None:
+            raise RuntimeError('cross_token requires fusion and quantizer modules')
+
+        masked_fnirs = self.fnirs_source_mask_token.expand_as(fnirs_source_pre)
+        paired_fusion = self.cross_modal_fusion(eeg_source_pre, masked_fnirs)
+        shuffled_eeg = (
+            torch.roll(eeg_source_pre, shifts=1, dims=0)
+            if eeg_source_pre.shape[0] > 1
+            else torch.flip(eeg_source_pre, dims=[1])
+        )
+        shuffled_fusion = self.cross_modal_fusion(shuffled_eeg, masked_fnirs)
+
+        predicted = F.normalize(self.cross_token_predictor_proj(paired_fusion['fnirs_source']), dim=-1)
+        shuffled = F.normalize(self.cross_token_predictor_proj(shuffled_fusion['fnirs_source']), dim=-1)
+        teacher = F.normalize(self.cross_token_teacher_proj(fnirs_source_pre), dim=-1)
+        tokens = predicted.shape[1]
+        joint_q, joint_indices, joint_info = self.cross_token_quantizer(
+            torch.cat([predicted, teacher.detach()], dim=1)
+        )
+        predicted_q = joint_q[:, :tokens]
+        teacher_q = joint_q[:, tokens:]
+        predicted_indices = joint_indices[:, :tokens]
+        teacher_indices = joint_indices[:, tokens:]
+
+        weight = self.cross_token_quantizer.get_codebook_weight()
+        predicted_logits = self._assignment_logits(predicted, weight)
+        teacher_logits = self._assignment_logits(teacher.detach(), weight)
+        shuffled_logits = self._assignment_logits(shuffled, weight)
+        temperature = self.cross_modal_alignment_temperature
+        teacher_probs = F.softmax(teacher_logits / temperature, dim=-1)
+        distillation = F.kl_div(
+            F.log_softmax(predicted_logits / temperature, dim=-1),
+            teacher_probs,
+            reduction='batchmean',
+        )
+        paired_values = 1.0 - F.cosine_similarity(predicted, teacher.detach(), dim=-1)
+        shuffled_values = 1.0 - F.cosine_similarity(shuffled, teacher.detach(), dim=-1)
+        latent_loss = paired_values.mean()
+        shuffled_loss = shuffled_values.mean()
+        pairing_gain = shuffled_loss - latent_loss
+        margin_loss = F.relu(self.cross_token_margin + paired_values - shuffled_values).mean()
+
+        assignment_probs = straight_through_assignment_probs(predicted_logits, temperature)
+        balance_loss = batch_usage_entropy_loss(assignment_probs)
+        shuffled_indices = shuffled_logits.argmax(dim=-1)
+        pair_match = (predicted_indices == teacher_indices).float().mean()
+        shuffled_match = (shuffled_indices == teacher_indices).float().mean()
+
+        def branch_perplexity(indices: torch.Tensor) -> torch.Tensor:
+            counts = F.one_hot(indices.reshape(-1), self.cross_token_codebook_size).float().mean(dim=0)
+            return torch.exp(-(counts * (counts + 1e-10).log()).sum())
+
+        objective = (
+            self.cross_token_latent_weight * latent_loss +
+            self.cross_token_distillation_weight * distillation +
+            self.cross_token_margin_weight * margin_loss +
+            self.cross_token_balance_weight * balance_loss +
+            joint_info['vq_loss']
+        )
+        lag_probs = paired_fusion['fnirs_lag_probabilities']
+        lag_entropy = (
+            -(lag_probs.clamp_min(1e-12) * lag_probs.clamp_min(1e-12).log()).sum(dim=-1).mean()
+            / math.log(max(lag_probs.shape[-1], 2))
+            if lag_probs.numel() else zero
+        )
+        return {
+            'enabled': eeg_source_pre.new_tensor(1.0),
+            'objective': objective,
+            'predicted_q': predicted_q,
+            'teacher_q': teacher_q,
+            'predicted_indices': predicted_indices,
+            'teacher_indices': teacher_indices,
+            'latent_loss': latent_loss,
+            'shuffled_latent_loss': shuffled_loss,
+            'pairing_gain': pairing_gain,
+            'margin_loss': margin_loss,
+            'distillation_loss': distillation,
+            'balance_loss': balance_loss,
+            'vq_loss': joint_info['vq_loss'],
+            'pair_match_rate': pair_match,
+            'shuffled_match_rate': shuffled_match,
+            'hard_pairing_gain': pair_match - shuffled_match,
+            'predicted_perplexity': branch_perplexity(predicted_indices),
+            'teacher_perplexity': branch_perplexity(teacher_indices),
+            'lag_entropy': lag_entropy,
+            'lag_probabilities': lag_probs,
         }
 
     def forward(
@@ -1986,6 +2186,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         fnirs_observation = latents['fnirs_observation']
         eeg_source_pre = latents['eeg_source_pre']
         fnirs_source_pre = latents['fnirs_source_pre']
+
+        cross_token_state = self._compute_cross_token_state(eeg_source_pre, fnirs_source_pre)
+        if self.cross_token_enabled:
+            fnirs_source = fnirs_source + self.cross_token_residual_scale * self.cross_token_to_fnirs(
+                cross_token_state['predicted_q']
+            )
 
         (
             eeg_source_q,
@@ -2030,6 +2236,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'cross_modal_masked_shuffled_latent_loss'
         ]
         cross_modal_masked_pairing_gain = cross_modal_alignment['cross_modal_masked_pairing_gain']
+        cross_modal_paired_margin_loss = cross_modal_alignment['cross_modal_paired_margin_loss']
 
         source_alignment = self._compute_source_alignment_state(eeg_source_logits, fnirs_source_logits)
         source_coupling_loss = source_alignment['source_coupling_loss']
@@ -2090,6 +2297,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         cross_modal_fusion_lag_entropy = zero_scalar
         cross_modal_fusion_physiologic_lag_mass = zero_scalar
         cross_modal_fusion_reverse_lag_mass = zero_scalar
+        cross_modal_adaptive_lag_entropy = zero_scalar
+        cross_modal_adaptive_lag_mass = zero_scalar
         fnirs_attention = latents.get('cross_modal_fusion_fnirs_attention')
         if torch.is_tensor(fnirs_attention):
             cross_modal_fusion_lag_entropy, cross_modal_fusion_physiologic_lag_mass = attention_lag_statistics(
@@ -2104,6 +2313,17 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 self.cross_modal_fusion_max_lag_tokens,
                 'fnirs_to_eeg',
             )
+        adaptive_lag_probs = cross_token_state.get(
+            'lag_probabilities', latents.get('cross_modal_fusion_lag_probabilities')
+        )
+        if torch.is_tensor(adaptive_lag_probs) and adaptive_lag_probs.numel() > 0:
+            cross_modal_adaptive_lag_entropy = (
+                -(adaptive_lag_probs.clamp_min(1e-12) * adaptive_lag_probs.clamp_min(1e-12).log())
+                .sum(dim=-1).mean() / math.log(max(adaptive_lag_probs.shape[-1], 2))
+            )
+            indices = [index for index in (2, 3) if index < adaptive_lag_probs.shape[-1]]
+            if indices:
+                cross_modal_adaptive_lag_mass = adaptive_lag_probs[..., indices].sum(dim=-1).mean()
         source_balance_terms = []
         if self.source_branch_enabled:
             source_balance_terms.extend([
@@ -2254,10 +2474,13 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         source_coupling_weighted_loss = (
             self.coupling_weight * self.alignment_scale
         ) * source_coupling_loss
+        cross_token_objective = cross_token_state.get('objective', zero_scalar)
         cross_modal_alignment_unscaled_loss = (
             self.cross_modal_temporal_nce_weight * cross_modal_temporal_nce_loss +
             self.cross_modal_masked_latent_weight * cross_modal_masked_latent_loss +
-            self.cross_modal_soft_code_weight * cross_modal_soft_code_distillation_loss
+            self.cross_modal_soft_code_weight * cross_modal_soft_code_distillation_loss +
+            self.cross_modal_paired_margin_weight * cross_modal_paired_margin_loss +
+            cross_token_objective
         )
         cross_modal_alignment_weighted_loss = (
             self.alignment_scale * self.cross_modal_gradient_scale
@@ -2343,9 +2566,27 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'cross_modal_masked_fraction': cross_modal_masked_fraction,
             'cross_modal_masked_shuffled_latent_loss': cross_modal_masked_shuffled_latent_loss,
             'cross_modal_masked_pairing_gain': cross_modal_masked_pairing_gain,
+            'cross_modal_paired_margin_loss': cross_modal_paired_margin_loss,
             'cross_modal_fusion_lag_entropy': cross_modal_fusion_lag_entropy,
             'cross_modal_fusion_physiologic_lag_mass': cross_modal_fusion_physiologic_lag_mass,
             'cross_modal_fusion_reverse_lag_mass': cross_modal_fusion_reverse_lag_mass,
+            'cross_modal_adaptive_lag_entropy': cross_modal_adaptive_lag_entropy,
+            'cross_modal_adaptive_lag_mass': cross_modal_adaptive_lag_mass,
+            'cross_token_enabled': cross_token_state.get('enabled', zero_scalar),
+            'cross_token_objective': cross_token_objective,
+            'cross_token_latent_loss': cross_token_state.get('latent_loss', zero_scalar),
+            'cross_token_shuffled_latent_loss': cross_token_state.get('shuffled_latent_loss', zero_scalar),
+            'cross_token_pairing_gain': cross_token_state.get('pairing_gain', zero_scalar),
+            'cross_token_margin_loss': cross_token_state.get('margin_loss', zero_scalar),
+            'cross_token_distillation_loss': cross_token_state.get('distillation_loss', zero_scalar),
+            'cross_token_balance_loss': cross_token_state.get('balance_loss', zero_scalar),
+            'cross_token_vq_loss': cross_token_state.get('vq_loss', zero_scalar),
+            'cross_token_pair_match_rate': cross_token_state.get('pair_match_rate', zero_scalar),
+            'cross_token_shuffled_match_rate': cross_token_state.get('shuffled_match_rate', zero_scalar),
+            'cross_token_hard_pairing_gain': cross_token_state.get('hard_pairing_gain', zero_scalar),
+            'cross_token_predicted_perplexity': cross_token_state.get('predicted_perplexity', zero_scalar),
+            'cross_token_teacher_perplexity': cross_token_state.get('teacher_perplexity', zero_scalar),
+            'cross_token_lag_entropy': cross_token_state.get('lag_entropy', zero_scalar),
             'codebook_balance_loss': codebook_balance_loss,
             'source_balance_loss': source_balance_loss,
             'observation_balance_loss': observation_balance_loss,
@@ -2376,6 +2617,8 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'fnirs_observation_only_reconstructed': fnirs_observation_reconstructed,
             'eeg_source_indices': eeg_source_indices,
             'fnirs_source_indices': fnirs_source_indices,
+            'eeg_cross_indices': cross_token_state.get('predicted_indices'),
+            'fnirs_cross_indices': cross_token_state.get('teacher_indices'),
             'eeg_observation_indices': eeg_observation_indices,
             'fnirs_observation_indices': fnirs_observation_indices,
             'eeg_source_z': eeg_source,
@@ -2467,6 +2710,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             self.eeg_source_quantizer,
             self.fnirs_source_quantizer,
             self.shared_source_quantizer,
+            self.cross_token_quantizer,
             self.eeg_observation_quantizer,
             self.fnirs_observation_quantizer,
         ):
@@ -2477,7 +2721,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
         return float(self.quantization_strength)
 
     def set_source_codebook_updates_enabled(self, enabled: bool) -> None:
-        for quantizer in (self.eeg_source_quantizer, self.fnirs_source_quantizer, self.shared_source_quantizer):
+        for quantizer in (
+            self.eeg_source_quantizer,
+            self.fnirs_source_quantizer,
+            self.shared_source_quantizer,
+            self.cross_token_quantizer,
+        ):
             if quantizer is not None and hasattr(quantizer, 'set_ema_updates_enabled'):
                 quantizer.set_ema_updates_enabled(enabled)
 
@@ -2537,6 +2786,10 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
             'cross_modal_soft_code_distillation_loss': (
                 self.cross_modal_soft_code_weight * alignment_scale * self.cross_modal_gradient_scale
             ),
+            'cross_modal_paired_margin_loss': (
+                self.cross_modal_paired_margin_weight * alignment_scale * self.cross_modal_gradient_scale
+            ),
+            'cross_token_objective': alignment_scale * self.cross_modal_gradient_scale,
             'codebook_balance_loss': self.codebook_balance_weight,
             'orthogonality_loss': self.orthogonality_weight,
         }
@@ -2569,6 +2822,12 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 'cross_modal_fnirs_projection.',
                 'eeg_source_mask_token',
                 'fnirs_source_mask_token',
+            )},
+            {'name': 'cross_modal_token', 'label': 'Cross Token', 'prefixes': (
+                'cross_token_predictor_proj.',
+                'cross_token_teacher_proj.',
+                'cross_token_to_fnirs.',
+                'cross_token_quantizer.',
             )},
             {'name': 'eeg_source_quantizer', 'label': 'EEG Source Quant', 'prefixes': ('eeg_source_quantizer.',)},
             {'name': 'fnirs_source_quantizer', 'label': 'fNIRS Source Quant', 'prefixes': ('fnirs_source_quantizer.',)},

@@ -770,6 +770,67 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertNotIn('alignment_gradient_ratio', metrics)
         self.assertEqual(model.get_cross_modal_gradient_scale(), 1.0)
 
+    def test_fusion_can_audit_without_changing_source_latents(self):
+        model = self._build_tiny_model(
+            cross_modal_fusion_enabled=True,
+            cross_modal_fusion_apply_to_source=False,
+            cross_modal_fusion_embed_dim=8,
+            cross_modal_fusion_depth=1,
+            cross_modal_fusion_num_heads=2,
+            cross_modal_fusion_max_lag_tokens=2,
+            cross_modal_fusion_dropout=0.0,
+        )
+        model.eval()
+        with torch.no_grad():
+            latents = model.encode_modalities(torch.randn(2, 3, 40), torch.randn(2, 4, 20))
+        self.assertTrue(torch.allclose(latents['eeg_source'], latents['eeg_source_pre']))
+        self.assertTrue(torch.allclose(latents['fnirs_source'], latents['fnirs_source_pre']))
+
+    def test_adaptive_lag_router_is_causal_and_normalized(self):
+        fusion = LagAwareCrossModalFusion(
+            eeg_dim=8,
+            fnirs_dim=8,
+            embed_dim=8,
+            depth=1,
+            num_heads=2,
+            max_lag_tokens=3,
+            dropout=0.0,
+            relative_lag_bias=True,
+            mode='causal_cross_attention',
+            adaptive_lag_enabled=True,
+            adaptive_lag_prior=(0.01, 0.1, 0.44, 0.45),
+        )
+        output = fusion(torch.randn(3, 6, 8), torch.randn(3, 6, 8))
+        probabilities = output['fnirs_lag_probabilities']
+        self.assertEqual(probabilities.shape, (3, 4))
+        self.assertTrue(torch.allclose(probabilities.sum(dim=-1), torch.ones(3), atol=1e-6))
+        attention = output['fnirs_attention'].mean(dim=(1, 2))
+        self.assertEqual(float(torch.triu(attention, diagonal=1).abs().max().detach()), 0.0)
+
+    def test_shared_private_cross_token_updates_joint_codebook_once(self):
+        torch.manual_seed(71)
+        model = self._build_tiny_model(
+            cross_modal_fusion_enabled=True,
+            cross_modal_fusion_apply_to_source=False,
+            cross_modal_fusion_embed_dim=8,
+            cross_modal_fusion_depth=1,
+            cross_modal_fusion_num_heads=2,
+            cross_modal_fusion_max_lag_tokens=1,
+            cross_modal_fusion_dropout=0.0,
+            cross_token_enabled=True,
+            cross_token_codebook_size=8,
+            cross_token_dim=8,
+            cross_token_residual_scale=0.25,
+        )
+        model.train()
+        before = int(model.cross_token_quantizer.update_count.item())
+        outputs = model(torch.randn(4, 3, 40), torch.randn(4, 4, 20))
+        after = int(model.cross_token_quantizer.update_count.item())
+        self.assertEqual(after - before, 1)
+        self.assertEqual(outputs['eeg_cross_indices'].shape, outputs['fnirs_cross_indices'].shape)
+        self.assertTrue(torch.isfinite(outputs['cross_token_objective']))
+        self.assertTrue(torch.isfinite(outputs['cross_token_hard_pairing_gain']))
+
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)
         model = self._build_tiny_model(

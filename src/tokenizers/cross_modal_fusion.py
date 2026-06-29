@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -59,7 +59,13 @@ class LagAwareCrossAttentionBlock(nn.Module):
             nn.Parameter(torch.zeros(self.max_lag_tokens + 1)) if relative_lag_bias else None
         )
 
-    def forward(self, query: torch.Tensor, context: torch.Tensor, direction: str) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        query: torch.Tensor,
+        context: torch.Tensor,
+        direction: str,
+        dynamic_lag_bias: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         mask = _directional_attention_mask(
             query.shape[1],
             self.max_lag_tokens,
@@ -68,6 +74,21 @@ class LagAwareCrossAttentionBlock(nn.Module):
             device=query.device,
             dtype=query.dtype,
         )
+        if dynamic_lag_bias is not None:
+            if dynamic_lag_bias.shape != (query.shape[0], self.max_lag_tokens + 1):
+                raise ValueError(
+                    "dynamic_lag_bias must have shape "
+                    f"[B, {self.max_lag_tokens + 1}], got {tuple(dynamic_lag_bias.shape)}"
+                )
+            positions = torch.arange(query.shape[1], device=query.device)
+            query_pos = positions.view(-1, 1)
+            key_pos = positions.view(1, -1)
+            lag = query_pos - key_pos if direction == "eeg_to_fnirs" else key_pos - query_pos
+            valid = (lag >= 0) & (lag <= self.max_lag_tokens)
+            selected = dynamic_lag_bias[:, lag.clamp(0, self.max_lag_tokens)]
+            dynamic_mask = torch.where(valid.unsqueeze(0), selected, selected.new_full((), float("-inf")))
+            static = mask.masked_fill(~valid, 0.0).unsqueeze(0)
+            mask = (dynamic_mask + static).repeat_interleave(self.attention.num_heads, dim=0)
         update, weights = self.attention(
             self.query_norm(query),
             self.context_norm(context),
@@ -95,6 +116,9 @@ class LagAwareCrossModalFusion(nn.Module):
         relative_lag_bias: bool = True,
         dropout: float = 0.1,
         mode: str = "causal_cross_attention",
+        adaptive_lag_enabled: bool = False,
+        adaptive_lag_temperature: float = 1.0,
+        adaptive_lag_prior: Optional[Sequence[float]] = None,
     ) -> None:
         super().__init__()
         if mode not in {"causal_cross_attention", "bidirectional_cross_attention"}:
@@ -103,6 +127,8 @@ class LagAwareCrossModalFusion(nn.Module):
             raise ValueError("cross-modal fusion embed_dim must be divisible by num_heads")
         self.mode = mode
         self.max_lag_tokens = max(int(max_lag_tokens), 0)
+        self.adaptive_lag_enabled = bool(adaptive_lag_enabled)
+        self.adaptive_lag_temperature = max(float(adaptive_lag_temperature), 1e-6)
         self.eeg_input = nn.Linear(eeg_dim, embed_dim) if eeg_dim != embed_dim else nn.Identity()
         self.fnirs_input = nn.Linear(fnirs_dim, embed_dim) if fnirs_dim != embed_dim else nn.Identity()
         self.eeg_output = nn.Linear(embed_dim, eeg_dim) if eeg_dim != embed_dim else nn.Identity()
@@ -115,16 +141,40 @@ class LagAwareCrossModalFusion(nn.Module):
             LagAwareCrossAttentionBlock(embed_dim, num_heads, self.max_lag_tokens, dropout, relative_lag_bias)
             for _ in range(max(int(depth), 1))
         ]) if mode == "bidirectional_cross_attention" else nn.ModuleList()
+        self.fnirs_lag_router = (
+            nn.Linear(embed_dim, self.max_lag_tokens + 1)
+            if self.adaptive_lag_enabled else None
+        )
+        if self.fnirs_lag_router is not None:
+            nn.init.zeros_(self.fnirs_lag_router.weight)
+            prior = list(adaptive_lag_prior or [1.0] * (self.max_lag_tokens + 1))
+            if len(prior) != self.max_lag_tokens + 1:
+                raise ValueError("adaptive_lag_prior must match max_lag_tokens + 1")
+            prior_tensor = torch.as_tensor(prior, dtype=self.fnirs_lag_router.bias.dtype).clamp_min(1e-6)
+            with torch.no_grad():
+                self.fnirs_lag_router.bias.copy_(prior_tensor.log())
 
     def forward(self, eeg_source: torch.Tensor, fnirs_source: torch.Tensor) -> Dict[str, torch.Tensor]:
         eeg_state = self.eeg_input(eeg_source)
         fnirs_state = self.fnirs_input(fnirs_source)
         fnirs_weights = []
         eeg_weights = []
+        lag_probabilities = []
         for index, fnirs_block in enumerate(self.fnirs_blocks):
             previous_eeg = eeg_state
             previous_fnirs = fnirs_state
-            fnirs_state, weights = fnirs_block(previous_fnirs, previous_eeg, "eeg_to_fnirs")
+            dynamic_bias = None
+            if self.fnirs_lag_router is not None:
+                lag_logits = self.fnirs_lag_router(previous_eeg.mean(dim=1)) / self.adaptive_lag_temperature
+                lag_probs = F.softmax(lag_logits, dim=-1)
+                lag_probabilities.append(lag_probs)
+                dynamic_bias = lag_probs.clamp_min(1e-8).log()
+            fnirs_state, weights = fnirs_block(
+                previous_fnirs,
+                previous_eeg,
+                "eeg_to_fnirs",
+                dynamic_lag_bias=dynamic_bias,
+            )
             fnirs_weights.append(weights)
             if self.mode == "bidirectional_cross_attention":
                 eeg_state, weights = self.eeg_blocks[index](previous_eeg, previous_fnirs, "fnirs_to_eeg")
@@ -136,6 +186,10 @@ class LagAwareCrossModalFusion(nn.Module):
             "eeg_attention": (
                 torch.stack(eeg_weights, dim=1)
                 if eeg_weights else eeg_source.new_zeros(eeg_source.shape[0], 0, 0, eeg_source.shape[1], eeg_source.shape[1])
+            ),
+            "fnirs_lag_probabilities": (
+                torch.stack(lag_probabilities, dim=1).mean(dim=1)
+                if lag_probabilities else eeg_source.new_zeros(eeg_source.shape[0], 0)
             ),
         }
 

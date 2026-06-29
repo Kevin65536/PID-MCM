@@ -647,7 +647,7 @@ def update_cross_modal_gradient_scale(model, outputs: Dict[str, Any], config: Di
         if param.requires_grad and (
             name.startswith('eeg_encoder.') or name.startswith('fnirs_encoder.') or
             name.startswith('eeg_source_proj.') or name.startswith('fnirs_source_proj.') or
-            name.startswith('cross_modal_fusion.')
+            name.startswith('cross_modal_fusion.') or name.startswith('cross_token_')
         )
     ]
     if not selected:
@@ -1089,6 +1089,10 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
             'shared_source_quantizer.',
             'eeg_source_mask_token',
             'fnirs_source_mask_token',
+            'cross_token_predictor_proj.',
+            'cross_token_teacher_proj.',
+            'cross_token_to_fnirs.',
+            'cross_token_quantizer.',
         )
         allowed_missing.update(
             key for key in incompatible.missing_keys
@@ -1187,6 +1191,10 @@ def build_optimizer(model, config: dict):
         'cross_modal_fnirs_projection.',
         'eeg_source_mask_token',
         'fnirs_source_mask_token',
+        'cross_token_predictor_proj.',
+        'cross_token_teacher_proj.',
+        'cross_token_to_fnirs.',
+        'cross_token_quantizer.',
     )))
     observation_prefixes = tuple(group_cfg.get('observation_prefixes', (
         'eeg_observation_',
@@ -1237,12 +1245,14 @@ def apply_staged_trainability(model, epoch: int, config: dict) -> Dict[str, floa
 
 def cross_modal_alignment_enabled(config: Dict[str, Any]) -> bool:
     alignment = config.get('loss', {}).get('cross_modal_alignment', {})
-    return any(
+    cross_token = config.get('model', {}).get('cross_modal_token', {})
+    return bool(cross_token.get('enabled', False)) or any(
         float(alignment.get(key, 0.0)) > 0.0
         for key in (
             'temporal_nce_weight',
             'masked_latent_weight',
             'soft_code_distillation_weight',
+            'paired_margin_weight',
         )
     )
 
