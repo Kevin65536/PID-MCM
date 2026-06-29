@@ -105,20 +105,91 @@
 
 ---
 
-## 20 项被驳斥的主张（关键驳斥）
+## 20 项被驳回的声明（完整存档）
 
-在对抗性验证中被排除的主张包括：
+**投票机制**：每条声明由 3 个独立 agent 验证；≥2 票 `refuted` 即被驳回。记法：`确认票-驳回票`。
 
-| 被驳斥的主张 | 排除理由 |
-|---------------|-----------|
-| "FSQ 消除了 codebook 崩溃及所有 VQ 病理" | FSQ 消除了崩溃，但引入了标量量化伪影；是权衡，而非万能药 |
-| "VQ-VAE codebook 的 EMA 更新在数学上对梯度问题免疫" | EMA 等价于重新缩放的 SGD；稀疏使用仍然产生稀疏的有效更新 |
-| "增大 codebook 大小 K 不能挽救有效表示容量" | 部分驳斥 — 增大 K 有帮助，但收益递减；维度崩溃仍然存在 |
-| "维度崩溃（而非 STE 梯度差距）是主要病理" | 这些是共现现象，而非竞争性解释；因果关系方向尚不明确 |
-| "Gumbel-softmax（软分配）成功解决了梯度问题" | GS 自身有严重病理：深度网络中指数级梯度消失、低 τ 时的极端方差 |
-| "CMCM 损失通过完全可微路径到达编码器" | 正确，但路径通过 softmin 概率，在低温度下这些概率也存在梯度质量问题 |
-| "任何固定容量的离散 codebook 都强制施加硬性的 I(Z;T) ≤ log2(K) 上限" | 作为上界成立，但该界限是宽松的——有效容量通常远低于此 |
-| "AE 预热（先作为未量化自编码器训练）可防止 codebook 崩溃" | 源自单篇 2026 年论文的初步结果，未经独立复现 |
+#### #1 — 投票 0-3
+**声明**：Quantization can be made fully differentiable without STE by reparameterizing it as additive distortion injection, providing genuine (not approximate) gradient flow through the bottleneck.
+**来源**：Vali et al., ICLR 2026 (DiVeQ) — https://iclr.cc/virtual/2026/poster/10010131
+
+#### #2 — 投票 0-3
+**声明**：The SF-DiVeQ (space-filling) variant achieves full codebook utilization — implying that poor codebook utilization (codebook collapse) in standard VQ is a consequence of the STE gradient approximation, not an inherent property of discrete bottlenecks.
+**来源**：Vali et al., ICLR 2026 (DiVeQ) — https://iclr.cc/virtual/2026/poster/10010131
+
+#### #3 — 投票 0-3
+**声明**：The reparameterization-based gradient path preserves identical hard-assignment forward pass at inference while enabling gradient-based training, demonstrating that the forward/backward mismatch (the core STE pathology identified by Huh et al.) is architecturally avoidable.
+**来源**：Vali et al., ICLR 2026 (DiVeQ) — https://iclr.cc/virtual/2026/poster/10010131
+
+#### #4 — 投票 0-3
+**声明**：Replacing the STE with a gradient that encodes geometric relationships (the rotation trick, which preserves the angle between gradient and codebook vector) reduces quantization error by over an order of magnitude and dramatically improves codebook utilization across 11 different VQ-VAE training paradigms, without changing the forward pass.
+**来源**：Fifty et al., ICLR 2025 (Rotation Trick) — https://arxiv.org/abs/2410.06424
+
+#### #5 — 投票 1-2
+**声明**：The paper explicitly uses EMA-based codebook updates (not gradient descent) for all experiments, demonstrating that EMA updates do NOT circumvent the STE gradient pathology — the encoder gradient problem persists regardless of how the codebook itself is updated, because the bottleneck between encoder and decoder remains the non-differentiable argmin.
+**来源**：Fifty et al., ICLR 2025 — https://arxiv.org/abs/2410.06424
+
+#### #6 — 投票 0-3
+**声明**：FSQ eliminates codebook collapse and all auxiliary losses (commitment loss, codebook reseeding, code splitting, entropy penalties) using only reconstruction loss. This demonstrates that auxiliary/coupling losses are not inherently blocked by the VQ bottleneck — the problem is VQ's high-dimensional learned Voronoi partition, not gradient flow through quantization.
+**来源**：Mentzer et al., ICLR 2024 (FSQ) — https://arxiv.org/abs/2309.15505
+
+#### #7 — 投票 1-2
+**声明**：Without a cross-modal coupling objective, a SHARED VQ codebook will spontaneously partition into modality-specific subspaces due to the distributional gap between modalities.
+**来源**：Liu et al., CVPR 2021 (CMCM) — https://arxiv.org/abs/2106.05438
+
+#### #8 — 投票 0-3
+**声明**：VQ-VAE suffers from three interlocking flaws — non-differentiable quantization, straight-through estimator (STE) approximation, and codebook collapse — that are causally linked: the non-differentiable argmin lookup blocks native gradient flow, forcing reliance on STE hacks, while the winner-takes-all codebook update leaves non-winning entries static, producing collapse. This is an independent corroboration of VQ gradient pathology that does NOT cite Huh et al. (ICML 2023).
+**来源**：Lu et al., 2026 (PCA-VAE) — https://arxiv.org/abs/2602.18904
+
+#### #9 — 投票 0-3
+**声明**：The Gumbel-Softmax relaxation analysis directly contradicts the assumption that soft assignment solves gradient problems. Proposition 3 states that for deep networks with L layers using GS, the probability to observe a non-zero gradient 'vanishes at the rate O(τ^L).' This implies that even with soft assignment (Gumbel-softmax), gradient signal degrades exponentially in depth — meaning the coupling loss gradient reaching the encoder through the soft quantizer would be exponentially attenuated by network depth, even without the hard argmax problem.
+**来源**：Shekhovtsov, GCPR 2021 — https://ar5iv.labs.arxiv.org/html/2110.03549
+
+#### #10 — 投票 0-3
+**声明**：The paper's Proposition 1 and 2 together establish that Gumbel-Softmax has a bias-variance tradeoff controlled by temperature τ: bias is O(τ) (vanishes as τ→0) but variance is O(1/τ) (explodes as τ→0). This means there is NO temperature setting that simultaneously gives low bias AND low variance. For the EEG-fNIRS architecture using Gumbel-softmax soft assignment in the coupling loss, this predicts that the coupling gradient is either high-bias (large τ, wrong direction) or high-variance (small τ, noisy), with no sweet spot.
+**来源**：Shekhovtsov, GCPR 2021 — https://ar5iv.labs.arxiv.org/html/2110.03549
+
+#### #11 — 投票 1-2
+**声明**：The STE gradient estimation gap (difference between gradients of non-quantized vs. quantized model) is proportionally bounded by the quantization error. When quantization error is zero, the STE is guaranteed to minimize the loss without bias.
+**来源**：Huh et al., ICML 2023 — https://proceedings.mlr.press/v202/huh23a/huh23a.pdf
+
+#### #12 — 投票 1-2
+**声明**：Commitment loss is an asymmetric, mode-seeking divergence that gives exactly zero gradient to unselected codebook entries. Once a code is not selected as nearest-neighbor for any input in a batch, it receives no gradient signal and will likely remain permanently dead, creating a self-reinforcing collapse cycle.
+**来源**：Huh et al., ICML 2023 — https://proceedings.mlr.press/v202/huh23a/huh23a.pdf
+
+#### #13 — 投票 0-3
+**声明**：Gumbel-softmax (soft assignment) successfully routes cross-modal gradients through the VQ bottleneck, enabling language-to-vision codebook shaping that hard STE cannot achieve. This directly contradicts the claim that 'STE gradient gap makes auxiliary losses impossible to propagate through VQ.'
+**来源**：arXiv:2208.00475 — https://arxiv.org/abs/2208.00475
+
+#### #14 — 投票 0-3
+**声明**：An auxiliary cross-modal objective (language-conditioned pixel reconstruction + MIM) successfully reshapes VQ token semantics — each codebook entry acquires a specific visual semantic meaning. This is a counterexample to the hypothesis that auxiliary loss gradients cannot meaningfully alter VQ token assignments.
+**来源**：arXiv:2208.00475 — https://arxiv.org/abs/2208.00475
+
+#### #15 — 投票 0-3
+**声明**：Dimensional collapse (not STE gradient gap) is the root cause of VQ-VAE training plateaus: VQ-VAE representations collapse to 1-2% of full latent rank, creating an irreducible loss floor that codebook improvement techniques (respawn, EMA, larger K) cannot surpass. The mechanism is sequential mode activation combined with rate-distortion water-filling — lower-variance latent directions are permanently suppressed by the quantization rate constraint, not by poor gradient flow.
+**来源**：Zhao et al., 2026 — https://browse-export.arxiv.org/abs/2605.06870
+
+#### #16 — 投票 0-3
+**声明**：Larger codebook size K does not rescue effective rank under cold-start VQ training. Vanilla VQGAN achieves the same L1 loss across K from 2^10 to 2^14, and codebook effective dimension stays at 2-5 regardless of K growing 64x. This directly predicts the empirical finding that fNIRS effective rank remains 6-8 even with K=128 in the EEG-fNIRS tokenizer — the plateau is a structural property of VQ training dynamics, not a gradient shortfall.
+**来源**：Zhao et al., 2026 — https://browse-export.arxiv.org/abs/2605.06870
+
+#### #17 — 投票 0-3
+**声明**：AE warm-up (training as unquantized autoencoder before introducing VQ) restores codebook effective dimension from 3-5 to 17-19 and reduces perceptual loss by 17-35%, without changing the quantizer type, codebook size, or gradient estimator. This falsifies the hypothesis that gradient pathology is the limiting factor: if STE gradient gap were the bottleneck, warm-up (which uses the same STE during VQ phase) could not produce such dramatic improvements.
+**来源**：Zhao et al., 2026 — https://browse-export.arxiv.org/abs/2605.06870
+
+#### #18 — 投票 0-3
+**声明**：Only selected codewords receive gradient updates during VQ-VAE training, producing sparse gradients that cause codeword collapse and prevent rich data representations — this is independent of the STE approximation quality and constitutes a gradient-flow pathology even when STE is unbiased.
+**来源**：Lancucki et al., IJCNN 2020 — https://ar5iv.labs.arxiv.org/html/2005.08520
+
+#### #19 — 投票 0-3
+**声明**：EMA updates for VQ-VAE codebooks are mathematically equivalent to rescaled SGD with per-codeword learning rates proportional to usage frequency — meaning EMA-based quantizers do NOT escape the fundamental gradient flow limitations of the VQ bottleneck; they only re-weight the effective learning rate per codeword.
+**来源**：Lancucki et al., IJCNN 2020 — https://ar5iv.labs.arxiv.org/html/2005.08520
+
+#### #20 — 投票 0-3
+**声明**：Any fixed-capacity discrete codebook imposes a hard information-theoretic upper bound I(Z;T) ≤ log₂|V|^{H_l} on cross-modal information throughput, independent of training quality or gradient estimation method. This means the CCA drop from 0.28 (continuous) to 0.12 (discrete) could be a structural encoding limit, not a gradient pathology.
+**来源**：arXiv:2604.03191 — https://ar5iv.labs.arxiv.org/html/2604.03191
+
+**投票汇总**：16 条一致驳回（0-3），4 条分歧驳回（1-2）。20 条全部被驳回。
 
 ---
 
