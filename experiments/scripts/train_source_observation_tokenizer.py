@@ -636,6 +636,48 @@ def compute_multimodal_aux_losses(
     return aux_loss, scalar_metrics, tensor_metrics
 
 
+def update_cross_modal_gradient_scale(model, outputs: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, float]:
+    control = config.get('training', {}).get('alignment_gradient_control', {})
+    alignment = outputs.get('cross_modal_alignment_unscaled_loss')
+    if not control.get('enabled', False) or not torch.is_tensor(alignment) or not alignment.requires_grad:
+        return {}
+    reconstruction = outputs.get('eeg_rec_loss') + outputs.get('fnirs_rec_loss') + outputs.get('vq_loss')
+    selected = [
+        param for name, param in model.named_parameters()
+        if param.requires_grad and (
+            name.startswith('eeg_encoder.') or name.startswith('fnirs_encoder.') or
+            name.startswith('eeg_source_proj.') or name.startswith('fnirs_source_proj.') or
+            name.startswith('cross_modal_fusion.')
+        )
+    ]
+    if not selected:
+        return {}
+    rec_grads = torch.autograd.grad(reconstruction, selected, retain_graph=True, allow_unused=True)
+    align_grads = torch.autograd.grad(alignment, selected, retain_graph=True, allow_unused=True)
+    rec_sq = sum((grad.detach().square().sum() for grad in rec_grads if grad is not None), reconstruction.new_zeros(()))
+    align_sq = sum((grad.detach().square().sum() for grad in align_grads if grad is not None), reconstruction.new_zeros(()))
+    rec_norm = float(rec_sq.sqrt().item())
+    align_norm = float(align_sq.sqrt().item())
+    if align_norm <= 1e-12:
+        return {'alignment_raw_gradient_norm': align_norm, 'reconstruction_gradient_norm': rec_norm}
+    target_ratio = float(control.get('target_ratio', 0.30))
+    minimum = float(control.get('min_scale', 0.1))
+    maximum = float(control.get('max_scale', 20.0))
+    target_scale = min(max(target_ratio * rec_norm / align_norm, minimum), maximum)
+    current = float(getattr(model, 'get_cross_modal_gradient_scale', lambda: 1.0)())
+    ema = min(max(float(control.get('ema', 0.9)), 0.0), 0.999)
+    updated = ema * current + (1.0 - ema) * target_scale
+    if hasattr(model, 'set_cross_modal_gradient_scale'):
+        model.set_cross_modal_gradient_scale(updated)
+    return {
+        'alignment_raw_gradient_norm': align_norm,
+        'reconstruction_gradient_norm': rec_norm,
+        'alignment_gradient_target_scale': target_scale,
+        'alignment_gradient_scale': updated,
+        'alignment_gradient_ratio': updated * align_norm / max(rec_norm, 1e-12),
+    }
+
+
 def train_epoch(
     model,
     dataloader,
@@ -654,6 +696,8 @@ def train_epoch(
     grad_cfg = gradient_attribution_cfg or {'enabled': False, 'max_batches': 1}
     gradient_dashboard: Optional[Dict[str, Any]] = None
     gradient_dashboard_batches = 0
+    gradient_control_totals: Dict[str, float] = {}
+    gradient_control_batches = 0
     prefetch_batches = bool(
         config.get('training', {}).get('performance', {}).get('cuda_prefetch', False)
     )
@@ -685,15 +729,31 @@ def train_epoch(
             del diagnostic_outputs, diagnostic_aux_tensors, grad_outputs
 
         outputs = model(eeg, fnirs, targets=targets)
+        gradient_control_metrics: Dict[str, float] = {}
+        control_cfg = config.get('training', {}).get('alignment_gradient_control', {})
+        control_interval = max(int(control_cfg.get('update_interval_steps', 10)), 1)
+        if control_cfg.get('enabled', False) and (batch_index == 1 or batch_index % control_interval == 0):
+            gradient_control_metrics = update_cross_modal_gradient_scale(model, outputs, config)
         aux_loss, aux_metrics, aux_tensors = compute_multimodal_aux_losses(config, eeg, fnirs, outputs)
-        loss = outputs['loss'] + aux_loss
+        old_alignment = outputs.get('cross_modal_alignment_weighted_loss')
+        unscaled_alignment = outputs.get('cross_modal_alignment_unscaled_loss')
+        if torch.is_tensor(old_alignment) and torch.is_tensor(unscaled_alignment):
+            alignment_scale = float(getattr(model, 'get_alignment_scale', lambda: 1.0)())
+            gradient_scale = float(getattr(model, 'get_cross_modal_gradient_scale', lambda: 1.0)())
+            weighted_alignment = alignment_scale * gradient_scale * unscaled_alignment
+            loss = outputs['loss'] - old_alignment + weighted_alignment + aux_loss
+            outputs['cross_modal_alignment_weighted_loss'] = weighted_alignment
+            outputs['cross_modal_gradient_scale'] = weighted_alignment.new_tensor(gradient_scale)
+        else:
+            weighted_alignment = outputs['loss'].new_zeros(())
+            loss = outputs['loss'] + aux_loss
         coupling_objective = outputs.get('source_coupling_loss')
         if not torch.is_tensor(coupling_objective):
             coupling_objective = loss.new_zeros(())
         weighted_coupling_objective = outputs.get('source_coupling_weighted_loss')
         if not torch.is_tensor(weighted_coupling_objective):
             weighted_coupling_objective = loss.new_zeros(())
-        primary_loss = loss - weighted_coupling_objective
+        primary_loss = loss - weighted_coupling_objective - weighted_alignment
 
         loss.backward()
 
@@ -729,6 +789,10 @@ def train_epoch(
                 _accumulate_metric(totals, key, value)
         for key, value in aux_metrics.items():
             _accumulate_metric(totals, key, value)
+        for key, value in gradient_control_metrics.items():
+            gradient_control_totals[key] = gradient_control_totals.get(key, 0.0) + float(value)
+        if gradient_control_metrics:
+            gradient_control_batches += 1
 
         if max_batches is not None and batch_index >= max_batches:
             break
@@ -736,6 +800,8 @@ def train_epoch(
     averaged = _finalize_metric_totals(totals, total_batches)
     if grad_batches > 0:
         averaged.update({key: value / grad_batches for key, value in grad_totals.items()})
+    if gradient_control_batches > 0:
+        averaged.update({key: value / gradient_control_batches for key, value in gradient_control_totals.items()})
     if gradient_dashboard is not None and gradient_dashboard_batches > 0:
         gradient_dashboard = _finalize_gradient_dashboard(gradient_dashboard, gradient_dashboard_batches)
     return averaged, gradient_dashboard
@@ -749,6 +815,11 @@ def validate_epoch(
     device: torch.device,
     max_batches: Optional[int] = None,
 ) -> Dict[str, float]:
+    original_quantization_strength = None
+    forced_hard = bool(config.get('training', {}).get('validation', {}).get('forced_hard', False))
+    if forced_hard and hasattr(model, 'get_quantization_strength'):
+        original_quantization_strength = float(model.get_quantization_strength())
+        model.set_quantization_strength(1.0)
     model.eval()
     totals: Dict[str, Any] = {}
     total_batches = 0
@@ -769,7 +840,10 @@ def validate_epoch(
         weighted_coupling_objective = outputs.get('source_coupling_weighted_loss')
         if not torch.is_tensor(weighted_coupling_objective):
             weighted_coupling_objective = total_loss.new_zeros(())
-        primary_loss = total_loss - weighted_coupling_objective
+        weighted_alignment = outputs.get('cross_modal_alignment_weighted_loss')
+        if not torch.is_tensor(weighted_alignment):
+            weighted_alignment = total_loss.new_zeros(())
+        primary_loss = total_loss - weighted_coupling_objective - weighted_alignment
         total_batches += 1
 
         _accumulate_metric(totals, 'val_loss', total_loss.detach())
@@ -787,7 +861,11 @@ def validate_epoch(
         if max_batches is not None and batch_index >= max_batches:
             break
 
-    return _finalize_metric_totals(totals, total_batches)
+    result = _finalize_metric_totals(totals, total_batches)
+    if original_quantization_strength is not None:
+        model.set_quantization_strength(original_quantization_strength)
+    result['val_forced_hard_quantization'] = 1.0 if forced_hard else 0.0
+    return result
 
 
 def maybe_seed_best_checkpoint(
@@ -866,6 +944,8 @@ def snapshot_model_schedule_state(model) -> Dict[str, float]:
         state.update(getattr(model, 'get_balance_scales')())
     if hasattr(model, 'get_quantization_strength'):
         state['quantization_strength'] = float(model.get_quantization_strength())
+    if hasattr(model, 'get_cross_modal_gradient_scale'):
+        state['cross_modal_gradient_scale'] = float(model.get_cross_modal_gradient_scale())
     return state
 
 
@@ -885,6 +965,8 @@ def apply_model_schedule_state(model, schedule_state: Dict[str, Any]) -> None:
         )
     if 'quantization_strength' in schedule_state and hasattr(model, 'set_quantization_strength'):
         model.set_quantization_strength(float(schedule_state['quantization_strength']))
+    if 'cross_modal_gradient_scale' in schedule_state and hasattr(model, 'set_cross_modal_gradient_scale'):
+        model.set_cross_modal_gradient_scale(float(schedule_state['cross_modal_gradient_scale']))
 
 
 def apply_epoch_schedules(model, epoch: int, config: dict) -> Dict[str, float]:
@@ -988,6 +1070,12 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
             'fnirs_shared_state_proj.',
             'context_coupling_router.',
             'cross_modal_exchange.',
+            'cross_modal_fusion.',
+            'cross_modal_eeg_projection.',
+            'cross_modal_fnirs_projection.',
+            'shared_source_quantizer.',
+            'eeg_source_mask_token',
+            'fnirs_source_mask_token',
         )
         allowed_missing.update(
             key for key in incompatible.missing_keys
@@ -1010,6 +1098,8 @@ def maybe_apply_warm_start(model, config: dict, device: torch.device):
             f"Full warm-start: loaded {full_checkpoint}; "
             f"reset_coupling={reset_coupling}"
         )
+        if hasattr(model, 'initialize_shared_source_codebook'):
+            model.initialize_shared_source_codebook(seed=int(config.get('experiment', {}).get('seed', 0)))
 
     def load_branch(checkpoint_path: str, branch_prefix: str):
         checkpoint = load_checkpoint_file(checkpoint_path, device=device)
@@ -1065,6 +1155,71 @@ def maybe_restrict_trainable_parameters(model, config: dict) -> list[str]:
     if not trainable:
         raise RuntimeError(f"trainable_parameter_prefixes matched no model parameters: {prefixes}")
     return trainable
+
+
+def build_optimizer(model, config: dict):
+    training_cfg = config.get('training', {})
+    default_lr = float(training_cfg.get('learning_rate', 1e-4))
+    weight_decay = float(training_cfg.get('weight_decay', 0.01))
+    group_cfg = training_cfg.get('optimizer_groups', {})
+    if not group_cfg.get('enabled', False):
+        return torch.optim.AdamW(
+            [param for param in model.parameters() if param.requires_grad],
+            lr=default_lr,
+            weight_decay=weight_decay,
+        )
+    new_prefixes = tuple(group_cfg.get('new_module_prefixes', (
+        'cross_modal_fusion.',
+        'cross_modal_eeg_projection.',
+        'cross_modal_fnirs_projection.',
+        'eeg_source_mask_token',
+        'fnirs_source_mask_token',
+    )))
+    observation_prefixes = tuple(group_cfg.get('observation_prefixes', (
+        'eeg_observation_',
+        'fnirs_observation_',
+    )))
+    buckets = {'new': [], 'observation': [], 'legacy': []}
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.startswith(new_prefixes):
+            buckets['new'].append(param)
+        elif name.startswith(observation_prefixes):
+            buckets['observation'].append(param)
+        else:
+            buckets['legacy'].append(param)
+    groups = []
+    for name, params in buckets.items():
+        if not params:
+            continue
+        groups.append({
+            'params': params,
+            'lr': float(group_cfg.get(f'{name}_lr', default_lr)),
+            'group_name': name,
+        })
+    return torch.optim.AdamW(groups, lr=default_lr, weight_decay=weight_decay)
+
+
+def apply_staged_trainability(model, epoch: int, config: dict) -> Dict[str, float]:
+    staged = config.get('training', {}).get('staged_unfreeze', {})
+    if not staged.get('enabled', False):
+        return {'encoder_frozen': 0.0, 'source_codebook_updates_enabled': 1.0}
+    freeze_epochs = max(int(staged.get('freeze_encoder_epochs', 5)), 0)
+    encoder_frozen = epoch <= freeze_epochs
+    encoder_prefixes = tuple(staged.get('encoder_prefixes', (
+        'eeg_patch_embed.', 'fnirs_patch_embed.', 'eeg_encoder.', 'fnirs_encoder.',
+    )))
+    for name, param in model.named_parameters():
+        if name.startswith(encoder_prefixes):
+            param.requires_grad_(not encoder_frozen)
+    codebook_updates_enabled = epoch > max(int(staged.get('freeze_codebook_epochs', freeze_epochs)), 0)
+    if hasattr(model, 'set_source_codebook_updates_enabled'):
+        model.set_source_codebook_updates_enabled(codebook_updates_enabled)
+    return {
+        'encoder_frozen': 1.0 if encoder_frozen else 0.0,
+        'source_codebook_updates_enabled': 1.0 if codebook_updates_enabled else 0.0,
+    }
 
 
 def build_checkpoint_payload(
@@ -1342,11 +1497,7 @@ def main():
             analysis_type=analysis_type,
         )
 
-        optimizer = torch.optim.AdamW(
-            [param for param in model.parameters() if param.requires_grad],
-            lr=config['training'].get('learning_rate', 1e-4),
-            weight_decay=config['training'].get('weight_decay', 0.01),
-        )
+        optimizer = build_optimizer(model, config)
         warmup_epochs = int(config['training'].get('warmup_epochs', 0))
         total_epochs = int(config['training']['epochs'])
         scheduler = CosineAnnealingLR(
@@ -1394,6 +1545,8 @@ def main():
         max_train_batches = _positive_int_or_none(config['training'].get('max_train_batches'))
 
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
+        best_alignment_monitor = float('inf')
+        last_checkpoint_payload = None
         interrupted = False
         stop_epoch = start_epoch
         if es_cfg.get('enabled', True) and early_stopping_start_epoch > 1:
@@ -1404,6 +1557,7 @@ def main():
             for epoch in range(start_epoch + 1, total_epochs + 1):
                 stop_epoch = epoch
                 schedule_metrics = apply_epoch_schedules(model, epoch, config)
+                schedule_metrics.update(apply_staged_trainability(model, epoch, config))
                 alignment_scale = schedule_metrics['alignment_scale']
 
                 _cuda_synchronize_if_needed(device)
@@ -1477,7 +1631,7 @@ def main():
                 merged_metrics.update({
                     key: value
                     for key, value in train_metrics.items()
-                    if key.startswith('grad_') or key.startswith('weighted_term_')
+                    if key.startswith('grad_') or key.startswith('weighted_term_') or key.startswith('alignment_gradient_')
                 })
                 merged_metrics.update({k: v for k, v in val_metrics.items() if k != 'val_loss'})
                 logger.log_epoch(
@@ -1556,6 +1710,7 @@ def main():
                     alignment_scale=alignment_scale,
                     is_best=improved,
                 )
+                last_checkpoint_payload = checkpoint_payload
 
                 save_periodic_checkpoint = save_every > 0 and (epoch % save_every == 0)
                 if save_periodic_checkpoint or improved:
@@ -1565,6 +1720,12 @@ def main():
                         is_best=improved,
                         keep_epoch_copy=save_periodic_checkpoint,
                     )
+                if improved:
+                    torch.save(checkpoint_payload, logger.checkpoints_dir / 'best_hard_primary.pt')
+                alignment_monitor = val_metrics.get('val_cross_modal_alignment_weighted_loss')
+                if run_validation and isinstance(alignment_monitor, (int, float)) and alignment_monitor < best_alignment_monitor:
+                    best_alignment_monitor = float(alignment_monitor)
+                    torch.save(checkpoint_payload, logger.checkpoints_dir / 'best_alignment.pt')
 
                 if es_cfg.get('enabled', True) and monitor_active and epochs_without_improvement >= patience:
                     print(f"Early stopping at epoch {epoch} (best epoch: {best_epoch})")
@@ -1572,6 +1733,9 @@ def main():
         except KeyboardInterrupt:
             interrupted = True
             print(f"\nTraining interrupted at epoch {stop_epoch}. Finalizing from best available checkpoint...")
+
+        if last_checkpoint_payload is not None:
+            torch.save(last_checkpoint_payload, logger.checkpoints_dir / 'final_model.pt')
 
         final_metrics = finalize_training_run(
             logger=logger,

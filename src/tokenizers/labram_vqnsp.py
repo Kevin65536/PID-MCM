@@ -128,6 +128,7 @@ class NormEMAVectorQuantizer(nn.Module):
         self.learnable_codebook_transform = bool(learnable_codebook_transform)
         self.codebook_transform_loss_weight = max(float(codebook_transform_loss_weight), 0.0)
         self.quantization_strength = 1.0
+        self.ema_updates_enabled = True
         
         # Codebook initialization
         if kmeans_init:
@@ -208,6 +209,9 @@ class NormEMAVectorQuantizer(nn.Module):
 
     def get_quantization_strength(self) -> float:
         return float(self.quantization_strength)
+
+    def set_ema_updates_enabled(self, enabled: bool):
+        self.ema_updates_enabled = bool(enabled)
     
     def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
         """
@@ -254,7 +258,7 @@ class NormEMAVectorQuantizer(nn.Module):
         vq_loss = commitment_loss + codebook_loss
         
         # EMA codebook update
-        if self.training:
+        if self.training and self.ema_updates_enabled:
             # One-hot encoding
             encodings = F.one_hot(indices, self.num_tokens).float()  # [B*N, K]
             
