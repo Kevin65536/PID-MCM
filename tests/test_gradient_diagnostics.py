@@ -3,6 +3,7 @@ import unittest
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from experiments.scripts.train_source_observation_tokenizer import (
@@ -737,6 +738,37 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertIn('alignment_gradient_ratio', metrics)
         self.assertGreaterEqual(model.get_cross_modal_gradient_scale(), 0.1)
         self.assertLessEqual(model.get_cross_modal_gradient_scale(), 2.0)
+
+    def test_alignment_gradient_controller_skips_zero_reconstruction_norm(self):
+        class ZeroReconstructionModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.eeg_source_proj = nn.Linear(2, 2, bias=False)
+                self.scale = 1.0
+
+            def get_cross_modal_gradient_scale(self):
+                return self.scale
+
+            def set_cross_modal_gradient_scale(self, value):
+                self.scale = float(value)
+
+        model = ZeroReconstructionModel()
+        parameter_sum = model.eeg_source_proj.weight.sum()
+        outputs = {
+            'eeg_rec_loss': parameter_sum * 0.0,
+            'fnirs_rec_loss': parameter_sum * 0.0,
+            'vq_loss': parameter_sum * 0.0,
+            'cross_modal_alignment_unscaled_loss': parameter_sum.square(),
+        }
+
+        metrics = update_cross_modal_gradient_scale(model, outputs, {
+            'training': {'alignment_gradient_control': {'enabled': True}}
+        })
+
+        self.assertEqual(metrics['alignment_gradient_update_skipped'], 1.0)
+        self.assertEqual(metrics['reconstruction_gradient_norm'], 0.0)
+        self.assertNotIn('alignment_gradient_ratio', metrics)
+        self.assertEqual(model.get_cross_modal_gradient_scale(), 1.0)
 
     def test_fnirs_observation_dropout_one_disables_branch_in_eval(self):
         torch.manual_seed(23)

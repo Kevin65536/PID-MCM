@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import torch
 import yaml
 
 from experiments.scripts.finalize_tokenizer_full_cross_modal_alignment_suite import main as finalize_main
@@ -12,9 +13,55 @@ from experiments.scripts.launch_tokenizer_full_cross_modal_alignment_suite impor
     initialize_suite,
     prepare_z7,
 )
+from experiments.scripts.reselect_tokenizer_alignment_checkpoints import select_alignment_checkpoint
+from experiments.scripts.train_source_observation_tokenizer import alignment_checkpoint_min_epoch
 
 
 class FullCrossModalAlignmentSuiteTests(unittest.TestCase):
+    def test_alignment_checkpoint_waits_for_all_schedules(self):
+        config = {
+            'training': {
+                'alignment_warmup': {'enabled': True, 'start_epoch': 1, 'ramp_epochs': 5},
+                'quantization_warmup': {'enabled': True, 'start_epoch': 1, 'ramp_epochs': 10},
+                'staged_unfreeze': {
+                    'enabled': True,
+                    'freeze_encoder_epochs': 5,
+                    'freeze_codebook_epochs': 5,
+                },
+            },
+        }
+        self.assertEqual(alignment_checkpoint_min_epoch(config), 10)
+
+    def test_reselection_excludes_warmup_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_dir = Path(tmpdir)
+            (run_dir / 'checkpoints').mkdir()
+            config = {
+                'loss': {'cross_modal_alignment': {'temporal_nce_weight': 0.2}},
+                'training': {
+                    'alignment_warmup': {'enabled': True, 'start_epoch': 1, 'ramp_epochs': 5},
+                    'quantization_warmup': {'enabled': True, 'start_epoch': 1, 'ramp_epochs': 10},
+                    'staged_unfreeze': {'enabled': True, 'freeze_encoder_epochs': 5, 'freeze_codebook_epochs': 5},
+                },
+            }
+            (run_dir / 'config.yaml').write_text(yaml.safe_dump(config), encoding='utf-8')
+            epochs = []
+            for epoch, alignment, primary in ((5, 0.1, 1.0), (10, 0.5, 1.01), (20, 0.3, 1.02)):
+                torch_payload = {'epoch': epoch, 'model_state_dict': {'value': epoch}}
+                torch.save(torch_payload, run_dir / 'checkpoints' / f'checkpoint_epoch_{epoch}.pt')
+                epochs.append({
+                    'epoch': epoch,
+                    'val_cross_modal_alignment_unscaled_loss': alignment,
+                    'val_primary_loss': primary,
+                })
+            (run_dir / 'metrics.json').write_text(json.dumps({'epochs': epochs}), encoding='utf-8')
+
+            result = select_alignment_checkpoint(run_dir)
+
+            self.assertEqual(result['status'], 'selected')
+            self.assertEqual(result['selected_epoch'], 20)
+            self.assertTrue((run_dir / 'checkpoints/best_alignment_eligible.pt').exists())
+
     def test_launcher_generates_screening_and_confirmatory_matrix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             suite = Path(tmpdir) / "20260627_lag_aware_cross_transformer_v1"

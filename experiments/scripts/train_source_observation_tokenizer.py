@@ -659,7 +659,17 @@ def update_cross_modal_gradient_scale(model, outputs: Dict[str, Any], config: Di
     rec_norm = float(rec_sq.sqrt().item())
     align_norm = float(align_sq.sqrt().item())
     if align_norm <= 1e-12:
-        return {'alignment_raw_gradient_norm': align_norm, 'reconstruction_gradient_norm': rec_norm}
+        return {
+            'alignment_raw_gradient_norm': align_norm,
+            'reconstruction_gradient_norm': rec_norm,
+            'alignment_gradient_update_skipped': 1.0,
+        }
+    if rec_norm <= 1e-12:
+        return {
+            'alignment_raw_gradient_norm': align_norm,
+            'reconstruction_gradient_norm': rec_norm,
+            'alignment_gradient_update_skipped': 1.0,
+        }
     target_ratio = float(control.get('target_ratio', 0.30))
     minimum = float(control.get('min_scale', 0.1))
     maximum = float(control.get('max_scale', 20.0))
@@ -674,7 +684,10 @@ def update_cross_modal_gradient_scale(model, outputs: Dict[str, Any], config: Di
         'reconstruction_gradient_norm': rec_norm,
         'alignment_gradient_target_scale': target_scale,
         'alignment_gradient_scale': updated,
-        'alignment_gradient_ratio': updated * align_norm / max(rec_norm, 1e-12),
+        'alignment_gradient_ratio': updated * align_norm / rec_norm,
+        'alignment_raw_gradient_norm': align_norm,
+        'reconstruction_gradient_norm': rec_norm,
+        'alignment_gradient_update_skipped': 0.0,
     }
 
 
@@ -1222,6 +1235,39 @@ def apply_staged_trainability(model, epoch: int, config: dict) -> Dict[str, floa
     }
 
 
+def cross_modal_alignment_enabled(config: Dict[str, Any]) -> bool:
+    alignment = config.get('loss', {}).get('cross_modal_alignment', {})
+    return any(
+        float(alignment.get(key, 0.0)) > 0.0
+        for key in (
+            'temporal_nce_weight',
+            'masked_latent_weight',
+            'soft_code_distillation_weight',
+        )
+    )
+
+
+def alignment_checkpoint_min_epoch(config: Dict[str, Any]) -> int:
+    training = config.get('training', {})
+    selection = training.get('checkpoint', {}).get('alignment_selection', {})
+    if selection.get('min_epoch') is not None:
+        return max(int(selection['min_epoch']), 1)
+
+    schedule_end_epochs = [1]
+    for key in ('alignment_warmup', 'quantization_warmup'):
+        schedule = training.get(key, {})
+        if schedule.get('enabled', False):
+            start = max(int(schedule.get('start_epoch', 1)), 1)
+            ramp = max(int(schedule.get('ramp_epochs', 1)), 1)
+            schedule_end_epochs.append(start + ramp - 1)
+
+    staged = training.get('staged_unfreeze', {})
+    if staged.get('enabled', False):
+        schedule_end_epochs.append(max(int(staged.get('freeze_encoder_epochs', 0)), 0) + 1)
+        schedule_end_epochs.append(max(int(staged.get('freeze_codebook_epochs', 0)), 0) + 1)
+    return max(schedule_end_epochs)
+
+
 def build_checkpoint_payload(
     epoch: int,
     model,
@@ -1546,6 +1592,8 @@ def main():
 
         best_epoch = int(resume_best_epoch) if resume_best_epoch is not None else start_epoch
         best_alignment_monitor = float('inf')
+        alignment_checkpoint_start = alignment_checkpoint_min_epoch(config)
+        alignment_checkpoint_enabled = cross_modal_alignment_enabled(config)
         last_checkpoint_payload = None
         interrupted = False
         stop_epoch = start_epoch
@@ -1631,7 +1679,11 @@ def main():
                 merged_metrics.update({
                     key: value
                     for key, value in train_metrics.items()
-                    if key.startswith('grad_') or key.startswith('weighted_term_') or key.startswith('alignment_gradient_')
+                    if (
+                        key.startswith('grad_') or key.startswith('weighted_term_') or
+                        key.startswith('alignment_gradient_') or
+                        key in {'alignment_raw_gradient_norm', 'reconstruction_gradient_norm'}
+                    )
                 })
                 merged_metrics.update({k: v for k, v in val_metrics.items() if k != 'val_loss'})
                 logger.log_epoch(
@@ -1722,10 +1774,23 @@ def main():
                     )
                 if improved:
                     torch.save(checkpoint_payload, logger.checkpoints_dir / 'best_hard_primary.pt')
-                alignment_monitor = val_metrics.get('val_cross_modal_alignment_weighted_loss')
-                if run_validation and isinstance(alignment_monitor, (int, float)) and alignment_monitor < best_alignment_monitor:
+                alignment_monitor = val_metrics.get('val_cross_modal_alignment_unscaled_loss')
+                alignment_checkpoint_eligible = (
+                    alignment_checkpoint_enabled and epoch >= alignment_checkpoint_start
+                )
+                if (
+                    run_validation and alignment_checkpoint_eligible and
+                    isinstance(alignment_monitor, (int, float)) and
+                    alignment_monitor < best_alignment_monitor
+                ):
                     best_alignment_monitor = float(alignment_monitor)
-                    torch.save(checkpoint_payload, logger.checkpoints_dir / 'best_alignment.pt')
+                    alignment_payload = dict(checkpoint_payload)
+                    alignment_payload.update({
+                        'alignment_selection_metric': 'val_cross_modal_alignment_unscaled_loss',
+                        'alignment_selection_value': best_alignment_monitor,
+                        'alignment_selection_min_epoch': alignment_checkpoint_start,
+                    })
+                    torch.save(alignment_payload, logger.checkpoints_dir / 'best_alignment.pt')
 
                 if es_cfg.get('enabled', True) and monitor_active and epochs_without_improvement >= patience:
                     print(f"Early stopping at epoch {epoch} (best epoch: {best_epoch})")
