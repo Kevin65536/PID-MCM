@@ -196,9 +196,10 @@ def build_config(
             "alignment_gradient_control": {
                 "enabled": not condition.continuous_ceiling,
                 "target_ratio": 0.30,
-                "min_scale": 0.1,
+                "initial_scale": 0.01,
+                "min_scale": 0.001,
                 "max_scale": 20.0,
-                "ema": 0.9,
+                "ema": 0.5,
                 "update_interval_steps": 10,
             },
             "validation": {

@@ -1538,6 +1538,11 @@ def main():
         print(f"Model: {model.__class__.__name__}")
         print(f"Source codebook size: {model.get_codebook_size()}")
         maybe_apply_warm_start(model, config, device)
+        gradient_control_cfg = config.get('training', {}).get('alignment_gradient_control', {})
+        if gradient_control_cfg.get('enabled', False) and hasattr(model, 'set_cross_modal_gradient_scale'):
+            initial_gradient_scale = float(gradient_control_cfg.get('initial_scale', 1.0))
+            model.set_cross_modal_gradient_scale(initial_gradient_scale)
+            print(f"Initial cross-modal gradient scale: {model.get_cross_modal_gradient_scale():.6f}")
         trainable_parameters = maybe_restrict_trainable_parameters(model, config)
         print(f"Trainable parameter tensors: {len(trainable_parameters)}")
         if len(trainable_parameters) <= 12:

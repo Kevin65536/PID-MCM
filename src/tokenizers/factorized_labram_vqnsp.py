@@ -2731,7 +2731,7 @@ class SourceObservationLaBraMVQNSP(BaseTokenizer):
                 quantizer.set_ema_updates_enabled(enabled)
 
     def set_cross_modal_gradient_scale(self, scale: float) -> None:
-        self.cross_modal_gradient_scale = min(max(float(scale), 0.1), 20.0)
+        self.cross_modal_gradient_scale = min(max(float(scale), 1.0e-4), 20.0)
 
     def get_cross_modal_gradient_scale(self) -> float:
         return float(self.cross_modal_gradient_scale)

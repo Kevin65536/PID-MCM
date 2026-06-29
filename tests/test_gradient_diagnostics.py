@@ -739,6 +739,31 @@ class GradientDiagnosticsTests(unittest.TestCase):
         self.assertGreaterEqual(model.get_cross_modal_gradient_scale(), 0.1)
         self.assertLessEqual(model.get_cross_modal_gradient_scale(), 2.0)
 
+    def test_alignment_gradient_controller_can_scale_below_legacy_floor(self):
+        torch.manual_seed(66)
+        model = self._build_tiny_model(
+            cross_modal_fusion_enabled=True,
+            cross_modal_fusion_embed_dim=8,
+            cross_modal_fusion_depth=1,
+            cross_modal_fusion_num_heads=2,
+            cross_modal_fusion_dropout=0.0,
+            cross_modal_temporal_nce_weight=0.2,
+            cross_modal_positive_lag_weights=(0.0, 1.0),
+        )
+        outputs = model(torch.randn(4, 3, 40), torch.randn(4, 4, 20))
+        metrics = update_cross_modal_gradient_scale(model, outputs, {
+            'training': {'alignment_gradient_control': {
+                'enabled': True,
+                'target_ratio': 0.01,
+                'min_scale': 0.001,
+                'max_scale': 2.0,
+                'ema': 0.0,
+            }}
+        })
+        self.assertIn('alignment_gradient_ratio', metrics)
+        self.assertGreaterEqual(model.get_cross_modal_gradient_scale(), 0.001)
+        self.assertLess(model.get_cross_modal_gradient_scale(), 0.1)
+
     def test_alignment_gradient_controller_skips_zero_reconstruction_norm(self):
         class ZeroReconstructionModel(nn.Module):
             def __init__(self):
