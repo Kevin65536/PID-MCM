@@ -1,18 +1,29 @@
 # Current Architecture: Source/Observation Tokenizer
 
 > **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
-> **Last updated**: 2026-06-04
-> **Current phase**: Croce local cache tokenizer training with highWL-only fNIRS input
+> **Last updated**: 2026-07-01
+> **Current phase**: Legacy source/observation runtime frozen as the implementation baseline; physiology-semantic redesign approved but not implemented
 > **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
-> **Active note**: repository code still contains legacy proxy target implementations. They are candidate baselines only. They do **not** define the current branch-target contract.
+> **Active note**: this file describes code that runs today. The approved replacement is specified in [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md) and becomes current only after its implementation and validation gates pass. Repository code still contains older proxy-target paths; they remain candidate baselines only.
 
 > **Current training contract**: the active tokenizer dataset is `croce_local_cache`. Each sample is one fNIRS spatial anchor, its six-channel local EEG neighbourhood, and explicit source/observation targets from the generated Croce cache. fNIRS uses only `highWL` (`source_fnirs_optical_channel_0` / `obs_fnirs_optical_channel_0`) as an optical measurement-space, HbO-sensitive proxy; `lowWL` remains in cache metadata but is ignored by the current model input.
 
-> **Current source vector default**: source codebooks use `codebook_dim=128` for both EEG and fNIRS. Observation codebook dimensions remain branch-specific. Codebook size `K` is config-dependent; the Croce highWL v2 base config still defines the structural source size, while capacity/transfer suites can override `K` explicitly.
+> **Current audited X3 dimensions**: the run named `k128_dim128_x3_causal_exchange_seed20260652` has source codebook size `K=128`, but its explicit `eeg_codebook_dim` and `fnirs_codebook_dim` fields both resolve to vector dimension `D=48`; the generic `codebook_dim=128` field is shadowed. Runtime dimensions, not run names, are authoritative. Observation dimensions are EEG `D=64` and fNIRS `D=48`.
 
 ---
+
+## 0. Approved Target Architecture — Not Implemented
+
+The 2026-07-01 design freeze approved a physiology-semantic replacement with four boundaries:
+
+1. an uncertainty-aware Croce-style physical state teacher used as privileged training supervision;
+2. independently inferred EEG and fNIRS semantic tokens;
+3. continuous private/residual paths that preserve information outside the semantic bottleneck;
+4. frozen-token sequence-to-distribution coupling evaluated against fNIRS history and marginal baselines.
+
+The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). None of those target components should be cited as implemented until the transition rule in that archive is satisfied.
 
 ## 1. Architecture Contract
 
@@ -56,20 +67,21 @@ graph TB
     end
 
     subgraph Projection["Projection Heads (4×)"]
-        E_SP["eeg_source_proj<br/>256→128"]
+        E_SP["eeg_source_proj<br/>256→48 in audited X3"]
         E_OP["eeg_observation_proj<br/>256→64"]
-        F_SP["fnirs_source_proj<br/>160→128"]
+        F_SP["fnirs_source_proj<br/>160→48 in audited X3"]
         F_OP["fnirs_observation_proj<br/>160→48"]
     end
 
     subgraph Quantizers["Quantizers (4× NormEMAVectorQuantizer)"]
-        E_SQ["eeg_source_quantizer<br/>K=config D=128"]
-        F_SQ["fnirs_source_quantizer<br/>K=config D=128"]
-        E_OQ["eeg_observation_quantizer<br/>K=64 D=64"]
-        F_OQ["fnirs_observation_quantizer<br/>K=32 base / 64 sweep D=48"]
+        E_SQ["eeg_source_quantizer<br/>K=128 D=48 in audited X3"]
+        F_SQ["fnirs_source_quantizer<br/>K=128 D=48 in audited X3"]
+        E_OQ["eeg_observation_quantizer<br/>K=256 D=64 in audited X3"]
+        F_OQ["fnirs_observation_quantizer<br/>K=128 D=48 in audited X3"]
     end
 
     subgraph Coupling["Cross-Modal Coupling"]
+        X3["optional X3 causal adapter<br/>EEG context updates fNIRS encoder features before source projection"]
         COUP_LOGITS["coupling_logits<br/>Parameter: n_lags x K_src x K_src"]
         COUP_LOSS["lag_focus_loss<br/>+ joint_smoothness_loss"]
     end
@@ -113,6 +125,9 @@ graph TB
 
     E_ENC --> E_SP & E_OP
     F_ENC --> F_SP & F_OP
+    E_ENC -.-> X3
+    F_ENC -.-> X3
+    X3 -.-> F_SP
 
     E_SP --> E_SQ
     F_SP --> F_SQ
@@ -389,7 +404,8 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Phase 2 | Historical Proxy-Target Stages | ⚠️ Historical | Legacy proxy-target experiments, retained only for comparison |
 | Phase 2A | Decoder Structure Redesign | ✅ Complete | Dual decoder, explicit observation target, additive reconstruction |
 | Phase 2B | Croce Candidate Model Audit | ⚠️ Historical Candidate | Joint state-space tooling and proxy-target baselines introduced |
-| Current | Croce Local HighWL Tokenizer Training | ✅ **Active** | Train and evaluate the local highWL-only source/observation tokenizer on generated Croce caches |
+| Current | Croce Local/X3 Source-Observation Runtime | 🧊 **Frozen baseline** | Preserve the runnable highWL-only lineage and audited X3 exchange run for reproduction and comparison |
+| Planned | Physiology-Semantic Redesign | 📝 Approved, not implemented | Independent semantic tokenizers, uncertainty-aware state teacher, residual information path, and frozen sequence coupling |
 | Mechanism C | Causal Asymmetry | ❌ Abandoned | See IMPLEMENTATION_PLAN.md §11 |
 
 ### Locked Phase1 Handoff
@@ -411,7 +427,9 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 
 | Document | Role |
 |----------|------|
-| [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) | Implementation order, file migration scope, validation gates |
+| [physiology_semantic_tokenizer/README.md](physiology_semantic_tokenizer/README.md) | Approved redesign archive and authority map |
+| [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | Target implementation order, correctness checks, and module validity gates |
+| [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) | Historical implementation plan for the current source/observation runtime |
 | [CROCE2017_REAL_DATA_VALIDATION_PLAN.md](CROCE2017_REAL_DATA_VALIDATION_PLAN.md) | Real-data validation plan for Croce-style forward approximations, inverse stability, and tokenizer integration |
 | [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
 | [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |

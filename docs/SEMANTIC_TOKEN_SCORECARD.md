@@ -1,13 +1,16 @@
 # Tokenizer Evaluation Gates
 
 > Last Updated: 2026-06-04
-> Status: Active — covers Croce local source/observation tokenizer training with highWL-only fNIRS input
+> Status: Frozen historical scorecard for Croce local source/observation runs
+> Superseded for new experiments by: [physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)
 > Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
 > Supersedes: pre-S2 five-layer scorecard (Layer A-E) — archived by this rewrite
 
 ---
 
 ## 1. Why This Document Exists
+
+> The four gates below remain the correct rubric for archived S2 runs. They must not be used to promote the 2026-07-01 redesign, whose gates explicitly test teacher validity, information retention, controlled coupling, and reproducibility.
 
 S2 redesign 已将 tokenizer 主线从"事后分析条件概率"转为"设计带有生理结构先验的离散表示机制"。旧 scorecard 的五个 layer（A-E）中有大量指标是为 V6 的 shared/private + smooth_signal proxy 架构设计的，在 S2 中不再适用。
 

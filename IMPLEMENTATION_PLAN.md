@@ -1,7 +1,8 @@
 # Neuro-Tokenization Implementation Plan
 
 > Last revised: 2026-06-04
-> Status: Croce local source/observation target caches generated for both datasets; highWL-only tokenizer training active. Legacy proxy target paths remain only as candidate baselines, not as the current branch-target contract.
+> Status: Historical implementation plan for the runnable source/observation lineage through 2026-06-04. The 2026-07-01 physiology-semantic redesign is approved but not yet implemented.
+> Superseded for future implementation by: [docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
 > Detailed design rationale: [docs/PHYSIOLOGICAL_COUPLING_PLAN.md](docs/PHYSIOLOGICAL_COUPLING_PLAN.md)
 > Evaluation scorecard: [docs/SEMANTIC_TOKEN_SCORECARD.md](docs/SEMANTIC_TOKEN_SCORECARD.md) — 4 evaluation gates (Health / Semantics / Structure / Utility)
 > Experiment log: [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md)
@@ -11,7 +12,7 @@
 
 ## 1. Role of This Document
 
-本文件是当前仓库唯一的 tokenizer 主实现计划文档。
+本文件保留 source/observation 主线的历史实现顺序；它不再是未来 tokenizer 改造的权威计划。新架构以 [physiology-semantic implementation plan](docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) 为准。
 
 文档分工固定如下：
 
@@ -20,7 +21,7 @@
 3. **docs/SEMANTIC_TOKEN_SCORECARD.md**：4-gate 评价框架（Health / Semantics / Structure / Utility）。
 4. **docs/EXPERIMENT_LOG.md**：正式实验结论。
 
-如果多个文档之间出现冲突，以本文件的实现顺序为准；如果是机制定义或数学细节冲突，以生理耦合计划为准。
+若讨论 2026-07-01 之前的 source/observation 实现，以本文件为历史记录；若讨论已批准的新设计，以 physiology-semantic archive 中的架构、理论、实现和实验文档为准。
 
 ---
 

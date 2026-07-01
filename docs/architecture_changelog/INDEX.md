@@ -2,7 +2,8 @@
 
 > The authoritative chronological record of every architectural change to the neuro-tokenization mainline.
 > Current architecture state: [ARCHITECTURE.md](../ARCHITECTURE.md)
-> Implementation plan: [IMPLEMENTATION_PLAN.md](../../IMPLEMENTATION_PLAN.md)
+> Approved target architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Target implementation plan: [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
 
 ---
 
@@ -10,6 +11,8 @@
 
 ```mermaid
 gantt
+    accTitle: Architecture evolution timeline
+    accDescr: The source observation lineage is complete through the Croce local runtime, followed by a planned physiology semantic tokenizer redesign.
     title Architecture Evolution Timeline
     dateFormat  YYYY-MM-DD
     axisFormat  %m/%d
@@ -27,6 +30,8 @@ gantt
     section Phase 2C: Croce Local Cache
         HighWL-only Local Tokenizer Input :done, 2026-06-04, 2026-06-04
         Storage Layout Normalization      :done, 2026-06-04, 2026-06-04
+    section Phase 3: Semantic Redesign
+        Design and experiment freeze      :milestone, 2026-07-01, 0d
 ```
 
 ## Change Records
@@ -41,6 +46,7 @@ gantt
 | 6 | 2026-05-14 | Phase 2B | Architecture Stabilization & Document Alignment | `IMPLEMENTATION_PLAN.md`, `ARCHITECTURE.md`, `README.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `SEMANTIC_TOKEN_SCORECARD.md`, `THEORY.md`, `EXPERIMENT_LOG.md`, `INDEX.md` | Merged |
 | 7 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
 | 8 | 2026-06-04 | Phase 2C | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | `ExperimentLogger`, `run_metrics_comparison.py`, `croce_local configs`, `STORAGE_LAYOUT.md` | Merged |
+| 9 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
 
 ## How to Add a New Entry
 
@@ -49,7 +55,7 @@ gantt
 3. Add a row to the Change Records table above
 4. Update the Timeline gantt chart if needed
 5. Update [ARCHITECTURE.md](../ARCHITECTURE.md) to reflect the new current state
-6. If the change completes a phase, update IMPLEMENTATION_PLAN.md §10 (Implementation Order)
+6. If the change completes a phase, update the implementation plan identified by the relevant architecture record
 
 ## Conventions
 

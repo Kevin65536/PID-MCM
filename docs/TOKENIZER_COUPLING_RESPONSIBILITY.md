@@ -1,5 +1,7 @@
 # Tokenizer Coupling Responsibility Boundary
 
+> **Status (2026-07-01):** The separation advocated here is now formalized in the approved [physiology-semantic target architecture](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md). The primary tokenizer uses independent modality inference; EEG-sequence-to-fNIRS-distribution coupling is evaluated after tokenizer freeze. This file remains the concise responsibility rationale.
+
 ## Current Position
 
 The source/observation tokenizer is treated as a discrete physiological representation interface. It is not yet treated as a solved EEG-fNIRS fusion model.
@@ -11,9 +13,9 @@ The tokenizer stage should provide:
 - controlled codebook usage without excessive dead codes,
 - no material increase in subject, task, event-phase, or position leakage.
 
-Current operational default:
+Historical operational default for the audited source/observation runs:
 
-- source codebook vector dim is `128` for both EEG source and fNIRS source,
+- the audited X3 run has `K=128` and effective EEG/fNIRS source vector dimension `D=48`; its generic `codebook_dim=128` field is shadowed by modality-specific fields,
 - observation codebook dims remain branch-specific and are not changed by this default,
 - the K128 vector-dim sweep supports `D=128` as the capacity default, but does not show that hard-token cross-modal coupling is solved.
 

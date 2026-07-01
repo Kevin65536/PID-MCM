@@ -1,12 +1,15 @@
 # Physiological Coupling Constraints for EEG-fNIRS Tokenizer
 
 > Created: 2026-04-30 | Last revised: 2026-06-04
-> Status: Active design document — Croce local highWL-only source/observation training contract under evaluation
+> Status: Historical mechanism document for the current Croce local highWL-only source/observation runtime
+> Superseded for the approved redesign by: [physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) and [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
 > Reference implementation surface: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py), [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py)
 
 ---
 
 ## 1. Motivation
+
+> This section explains the source/observation lineage. It remains necessary for reproducing existing runs but does not define the planned physiology-semantic tokenizer.
 
 当前 source/observation 主线已经不再卡在“要不要 factorization”上，而是卡在一个更根本的问题上：
 

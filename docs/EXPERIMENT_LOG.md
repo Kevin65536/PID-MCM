@@ -25,9 +25,10 @@ The downstream Motor Imagery (MI) classification task suffered from a severe lac
 
 | Date | ID | Phase | Description | Status |
 |------|----|-------|-------------|--------|
-| 2026-05-11 | EXP-P1-GATE1-LOCK | Phase 1 | Source/observation Gate1 stabilization, best-baseline lock, and archive handoff | Completed |
-| 2026-05-14 | EXP-P2B-ARCH-STABLE | Phase 2B | Architecture stabilized: Croce 2017 physical model + coupling structure priors implemented and merged | Completed |
+| 2026-07-01 | EXP-P3-DESIGN-FREEZE | Phase 3 design | Physiology-semantic tokenizer architecture, theory, implementation gates, and experiment program frozen before code work | Planned |
 | 2026-06-04 | EXP-CROCE-HIGHWL-LOCAL | Croce local tokenizer | HighWL-only local cache adapter, explicit source/observation targets, Gate0 contract, launch configs, and first training launch | Active |
+| 2026-05-14 | EXP-P2B-ARCH-STABLE | Phase 2B | Architecture stabilized: Croce 2017 physical model + coupling structure priors implemented and merged | Completed |
+| 2026-05-11 | EXP-P1-GATE1-LOCK | Phase 1 | Source/observation Gate1 stabilization, best-baseline lock, and archive handoff | Completed |
 
 ---
 
@@ -35,6 +36,22 @@ UMAP-related experiment records have been moved to:
 - comparative_methods/UMAP/EXPERIMENT_SUMMARY.md
 
 This project-level log now tracks only project-wide milestones.
+
+---
+
+## EXP-P3-DESIGN-FREEZE: Physiology-Semantic Redesign Baseline (2026-07-01)
+
+### Objective
+
+Freeze the evidence-to-decision record, target architecture, theoretical assumptions, implementation/correctness plan, and falsifiable experiment suites before modifying tokenizer code.
+
+### Status
+
+`Planned`: documentation is an approved design contract, not an implementation or a positive experimental result. The archive is [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md), with the architecture delta recorded in [the 2026-07-01 changelog](architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md).
+
+### Promotion rule
+
+The target becomes current only after code correctness, smoke, short-formal, and module-specific validity gates pass. Failed gates and null scientific results remain part of the formal experiment record.
 
 ---
 
