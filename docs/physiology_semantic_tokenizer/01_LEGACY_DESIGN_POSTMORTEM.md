@@ -123,10 +123,10 @@ Frozen event embeddings predicted `source_name` at `0.6476` balanced accuracy an
 
 ## 🔗 Evidence artifacts
 
-- [`X3 information-drop audit`](../../experiments/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/information_drop_audit/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
-- [`X3 local-coupling audit`](../../experiments/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/local_coupling_audit/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
-- [`X3 codebook geometry`](../../experiments/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/codebook_geometry/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
-- [`Whole-brain short-formal summary`](../../experiments/runs/downstream/source_observation_wholebrain_pretrain/20260624_k128_dim128_wholebrain_mlm_v1/short_formal/summary.json)
-- [`Whole-brain embedding probes`](../../experiments/runs/downstream/source_observation_wholebrain_pretrain/20260624_k128_dim128_wholebrain_mlm_v1/short_formal/embedding_probe_report.json)
+- [`X3 information-drop audit`](../../experiments/archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/information_drop_audit/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
+- [`X3 local-coupling audit`](../../experiments/archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/local_coupling_audit/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
+- [`X3 codebook geometry`](../../experiments/archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/codebook_geometry/k128_dim128_x3_causal_exchange_seed20260652/summary.json)
+- [`Whole-brain short-formal summary`](../../experiments/archive/pre_physiology_semantic_20260701/runs/downstream/source_observation_wholebrain_pretrain/20260624_k128_dim128_wholebrain_mlm_v1/short_formal/summary.json)
+- [`Whole-brain embedding probes`](../../experiments/archive/pre_physiology_semantic_20260701/runs/downstream/source_observation_wholebrain_pretrain/20260624_k128_dim128_wholebrain_mlm_v1/short_formal/embedding_probe_report.json)
 
 _Last updated: 2026-07-01_

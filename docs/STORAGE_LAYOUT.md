@@ -1,76 +1,132 @@
-# Storage Layout
+# Storage layout and result isolation
 
-> Status: Active as of 2026-06-04.
+_Canonical cache, active-run, and archive namespaces as of 2026-07-01_
 
-This document records the canonical storage layout for generated Croce cache
-artifacts and experiment outputs. Generated data and run outputs remain ignored
-by git; tracked configs and docs point to the stable entry paths below.
+---
 
-## Active Croce Cache Namespace
+## 📋 Core rule
 
-Current tokenizer training uses the highWL-only Croce local cache contract:
+The directory name must answer whether an artifact belongs to the approved physiology-semantic program or to a superseded lineage. New tools operate on the active root only; historical analysis requires an explicit archive path.
 
-```text
-croce_validation/cache/croce_local/highwl_v1/
-  single_trial_motor_imagery -> ../../EEG_fNIRS_single_trail_pf_full
-  single_trial_mental_arithmetic -> ../../EEG_fNIRS_single_trail_pf_full_mental_arithmetic_regen_20260603_182938
-  simultaneous_cognitive -> ../../simultaneous_optical_pf_cache
+```mermaid
+flowchart LR
+    accTitle: Active and archived storage boundary
+    accDescr: New configs write only to the physiology semantic result root, while all pre-redesign runs and reports are physically isolated under a dated experiment archive.
+
+    active_config["📋 Active target config"] --> active_run["🧪 Active suite and run"]
+    active_run --> active_summary["📊 Run-level evidence"]
+    legacy_config["🗂️ Compatibility config"] -.-> archive_run["🗂️ Dated historical archive"]
+    archive_run -.->|Explicit path only| historical_analysis["🔍 Historical re-analysis"]
+
+    classDef active fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef archive fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef evidence fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class active_config,active_run active
+    class legacy_config,archive_run archive
+    class active_summary,historical_analysis evidence
 ```
 
-The symlinks are the canonical config-facing paths. The underlying cache roots
-stay in place while the current highWL training job is running.
+## 🧪 Active experiment namespace
 
-## Experiment Run Namespace
-
-Future source/observation Croce local runs should be written under:
+Every new run is written below:
 
 ```text
-experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/
+experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/
 ```
 
-Configs opt into this with:
+The suite names are fixed by the experiment program:
+
+| Suite | Purpose |
+| --- | --- |
+| `e0_teacher_validity` | Cache, physical teacher, observability, uncertainty |
+| `e1_quantizer_correctness` | EMA correctness and codebook health |
+| `e2_semantic_supervision` | Waveform, state, and hybrid targets |
+| `e3_masked_state` | Contextual physiological prediction |
+| `e4_residual_strategy` | Continuous residual and later RVQ/FSQ |
+| `e5_optical_representation` | HighWL, lowWL, paired optical, derived representations |
+| `e6_information_ladder` | Continuous-to-discrete information retention |
+| `e7_frozen_coupling` | Marginal/history-controlled sequence coupling |
+| `e8_wholebrain_downstream` | Representation modes and downstream utility |
+| `e9_visualization_stability` | Signature matching and figure reproducibility |
+
+Configs resolve the namespace explicitly:
 
 ```yaml
 experiment:
-  run_group: source_observation/croce_local/highwl_v1
+  run_group: physiology_semantic_tokenizer/e0_teacher_validity
 ```
 
-The live run launched before this namespace normalization remains at:
+No script may write a new run directly below `experiments/runs/`.
+
+## 📦 Run artifact contract
 
 ```text
-experiments/runs/s2_croce_local_highwl_base_20260604_153549/
+<run>/
+├── config.yaml
+├── resolved_config.yaml
+├── manifest.json
+├── environment.json
+├── checkpoints/
+├── metrics/
+│   ├── train.jsonl
+│   ├── validation.jsonl
+│   └── test_summary.json
+├── diagnostics/
+├── predictions/
+├── figures/
+├── figure_data/
+└── summary.md
 ```
 
-Do not move that directory while the training process is active.
+`manifest.json` records the Git revision, dirty-worktree state, config/cache/split hashes, seed, command, timestamps, schema version, and completion status. Test metrics are written once after selection is frozen.
 
-## Archive Layout
+## 💾 Cache namespaces
 
-Historical artifacts that are no longer compatible with the current highWL
-local tokenizer paradigm were archived on 2026-06-04 instead of deleted.
+The pre-redesign highWL compatibility cache remains available at:
 
 ```text
-croce_validation/archive/cache/legacy_pre_highwl_v1_20260604/
-croce_validation/archive/results/pre_croce_local_highwl_20260604/
-croce_validation/archive/analysis/pre_croce_local_highwl_20260604/
-
-experiments/runs/archive/pre_croce_local_highwl_20260604/
-experiments/archive/results/pre_croce_local_highwl_20260604/
-experiments/archive/comparison_reports/pre_croce_local_highwl_20260604/
+croce_validation/cache/croce_local/highwl_v1/
 ```
 
-The Phase 1 Gate1 reference long run was moved into its existing formal archive
-bundle:
+It is a historical input contract, not the target physical-teacher schema. The target implementation must use a versioned root:
 
 ```text
-experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/
+croce_validation/cache/physiology_semantic_tokenizer/<schema_version>/
 ```
 
-## Discovery Rules
+The new cache version must expose paired optical observations, state posterior statistics, solver metadata, and causal-valid masks before E0 can run.
 
-- Active training configs should use canonical cache symlink roots, not dated
-  physical cache roots.
-- New highWL local tokenizer results should use `experiment.run_group`.
-- Comparison tooling discovers nested run directories by searching for
-  `metrics.json` and skips `experiments/runs/archive/` by default.
-- Archived artifacts can still be inspected directly by absolute path, but they
-  should not be used as current-paradigm evidence.
+## 🗂️ Historical archive
+
+All result families present at the 2026-07-01 design freeze were moved to:
+
+```text
+experiments/archive/pre_physiology_semantic_20260701/
+├── runs/
+├── comparison_reports/
+├── README.md
+└── archive_manifest.tsv
+```
+
+Earlier archives remain under their existing `experiments/archive/` and `croce_validation/archive/` namespaces. The [dated archive inventory](../experiments/archive/pre_physiology_semantic_20260701/README.md) records the move and evidence boundary.
+
+## 🔍 Discovery rules
+
+- Active tools default to `experiments/runs/physiology_semantic_tokenizer/`.
+- Archive paths are never searched through a project-wide recursive glob.
+- Explicit archive analysis must name `--runs-root` or an exact run directory.
+- A suite summary can discover only descendants of its own suite.
+- Discovery ignores directories without a valid manifest or required schema marker.
+- Absolute paths inside old manifests are preserved as provenance; the archive manifest maps original to current locations.
+- Generated payloads remain Git-ignored. Storage READMEs and lightweight archive manifests are force-tracked.
+
+## 🛡️ Migration policy
+
+- Move historical artifacts; do not delete or rewrite them.
+- Do not create compatibility symlinks inside `experiments/runs/`, because they reintroduce discovery and reading ambiguity.
+- Update active evidence links to the archive location.
+- Keep archived configs and scripts labeled as compatibility surfaces until the target replacements are implemented.
+- A target run is never stored in the archive merely because its scientific gate failed; valid negative results remain active evidence.
+
+_Last updated: 2026-07-01_

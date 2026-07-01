@@ -3,7 +3,7 @@
 > Date: 2026-06-04
 > Phase: Phase 2C - Croce local cache tokenizer training
 > Status: Merged
-> Related docs: [ARCHITECTURE.md](../ARCHITECTURE.md), [SEMANTIC_TOKEN_SCORECARD.md](../SEMANTIC_TOKEN_SCORECARD.md), [PHYSIOLOGICAL_COUPLING_PLAN.md](../PHYSIOLOGICAL_COUPLING_PLAN.md)
+> Related docs: [ARCHITECTURE.md](../ARCHITECTURE.md), [archived semantic token scorecard](../archive/pre_physiology_semantic_20260701/source_observation/SEMANTIC_TOKEN_SCORECARD.md), [archived physiological coupling plan](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 
 ## Summary
 

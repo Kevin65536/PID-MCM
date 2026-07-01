@@ -2,7 +2,7 @@
 
 > **Date**: 2026-05-11 | **Phase**: 2A | **Git**: (pending implementation)
 > **Status**: Planned
-> **Links**: [IMPLEMENTATION_PLAN.md §6.4](../../IMPLEMENTATION_PLAN.md) | [ARCHITECTURE.md](../ARCHITECTURE.md)
+> **Links**: [Archived implementation plan §6.4](../archive/pre_physiology_semantic_20260701/source_observation/IMPLEMENTATION_PLAN.md) | [ARCHITECTURE.md](../ARCHITECTURE.md)
 
 ## Motivation
 

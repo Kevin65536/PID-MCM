@@ -2,7 +2,7 @@
 
 > **Date**: YYYY-MM-DD | **Phase**: [Phase 1 / 2 / 2A / 3 / A / C] | **Git**: `<start_commit>..<end_commit>`
 > **Status**: [Planned / In Progress / Merged]
-> **Links**: [IMPLEMENTATION_PLAN.md §X](IMPLEMENTATION_PLAN.md) | [ARCHITECTURE.md](ARCHITECTURE.md)
+> **Links**: [Target implementation plan](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | [Current runtime architecture](../ARCHITECTURE.md)
 
 ## Motivation
 
@@ -62,9 +62,9 @@ graph TB
 ## Linked Artifacts
 
 - **Config**: `experiments/configs/source_observation/<phase>/<config>.yaml`
-- **Experiment**: `experiments/runs/<optional_run_group>/<run_name>/`
+- **Experiment**: `experiments/runs/physiology_semantic_tokenizer/<suite>/<run_name>/`
 - **Scorecard**: Gate 1-4 results summary
-- **Related changelog entries**: [YYYY-MM-DD Title](YYYY-MM-DD_title.md)
+- **Related changelog entries**: `YYYY-MM-DD_title.md`
 
 ## Gate Impact
 

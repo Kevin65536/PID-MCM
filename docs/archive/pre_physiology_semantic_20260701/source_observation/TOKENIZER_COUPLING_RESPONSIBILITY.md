@@ -1,6 +1,6 @@
 # Tokenizer Coupling Responsibility Boundary
 
-> **Status (2026-07-01):** The separation advocated here is now formalized in the approved [physiology-semantic target architecture](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md). The primary tokenizer uses independent modality inference; EEG-sequence-to-fNIRS-distribution coupling is evaluated after tokenizer freeze. This file remains the concise responsibility rationale.
+> **Status (2026-07-01):** The separation advocated here is now formalized in the approved [physiology-semantic target architecture](../../../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md). The primary tokenizer uses independent modality inference; EEG-sequence-to-fNIRS-distribution coupling is evaluated after tokenizer freeze. This file remains the concise responsibility rationale.
 
 ## Current Position
 

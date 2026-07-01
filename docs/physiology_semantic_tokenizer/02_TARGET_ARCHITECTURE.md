@@ -272,6 +272,7 @@ The architecture can support the claim that tokens represent state regions and t
 - [`Theoretical foundations`](03_THEORETICAL_FOUNDATIONS.md)
 - [`Implementation and validation plan`](04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [`Experiment design`](05_EXPERIMENT_DESIGN.md)
+- [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Current runtime architecture`](../ARCHITECTURE.md)
 
 _Last updated: 2026-07-01_

@@ -178,7 +178,7 @@ These are intended to be consumed before each new dataset adapter is written, an
 
 In addition to unit tests, the repository now includes a human-readable continuous-record inspection script:
 
-- [experiments/scripts/signal_visualization/visualize_continuous_alignment.py](experiments/scripts/signal_visualization/visualize_continuous_alignment.py)
+- [experiments/scripts/signal_visualization/visualize_continuous_alignment.py](../experiments/scripts/signal_visualization/visualize_continuous_alignment.py)
 
 Purpose:
 

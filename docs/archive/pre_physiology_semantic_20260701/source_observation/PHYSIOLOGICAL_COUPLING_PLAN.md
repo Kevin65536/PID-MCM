@@ -2,8 +2,8 @@
 
 > Created: 2026-04-30 | Last revised: 2026-06-04
 > Status: Historical mechanism document for the current Croce local highWL-only source/observation runtime
-> Superseded for the approved redesign by: [physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) and [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
-> Reference implementation surface: [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py), [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py)
+> Superseded for the approved redesign by: [theoretical foundations](../../../physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) and [target architecture](../../../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Reference implementation surface: [factorized_labram_vqnsp.py](../../../../src/tokenizers/factorized_labram_vqnsp.py), [neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py)
 
 ---
 
@@ -157,7 +157,7 @@ lag focus 与 joint smoothness 仍是有效的结构先验，但它们的职责�
 
 从 2026-05-22 起，以下规则适用于仓库文档解释：
 
-1. 本文件、[IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md)、[ARCHITECTURE.md](ARCHITECTURE.md) 和 [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) 共同定义当前 branch-target 合同。
+1. 本文件、[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)、[ARCHITECTURE.md](../../../ARCHITECTURE.md) 和 [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) 共同记录历史 branch-target 合同。
 2. 旧 proxy 文档只保留为历史记录或候选 baseline 说明。
 3. 代码中现存的 legacy target-construction 路径不能反向定义当前文档语义。
 4. 如果历史 changelog 与当前活动文档冲突，以当前活动文档为准。

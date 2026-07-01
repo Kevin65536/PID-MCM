@@ -2,7 +2,7 @@
 
 > **Last Updated**: 2025-12-22  
 > **Status**: Phase 1 - Foundation  
-> **Theory Reference**: [`docs/THEORY.md`](docs/THEORY.md)
+> **Theory Reference**: [`THEORY_v1_ELP.md`](THEORY_v1_ELP.md)
 
 ---
 
@@ -13,9 +13,9 @@ This implementation realizes the **Explicit Latent Partitioning (ELP)** framewor
 **核心策略**：采用渐进式实验验证，先在合成数据上快速迭代各组件，再迁移到真实 EEG-fNIRS 数据。
 
 ### Quick Reference
-- **Theory (ELP/PID)**: [`docs/THEORY.md`](docs/THEORY.md)
-- **Method Comparison**: [`docs/references/CoMM_FactorCL_analysis.md`](docs/references/CoMM_FactorCL_analysis.md)
-- **Data Design**: [`docs/references/synthetic_dataset_design.md`](docs/references/synthetic_dataset_design.md)
+- **Theory (ELP/PID)**: [`THEORY_v1_ELP.md`](THEORY_v1_ELP.md)
+- **Method Comparison**: [`CoMM_FactorCL_analysis.md`](../../../../references/CoMM_FactorCL_analysis.md)
+- **Data Design**: [`synthetic_dataset_design.md`](../../../../references/synthetic_dataset_design.md)
 
 ---
 

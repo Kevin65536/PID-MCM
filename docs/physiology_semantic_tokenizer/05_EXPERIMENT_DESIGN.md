@@ -252,5 +252,6 @@ Each suite contains a `suite_manifest.json`, `README.md`, dry-run manifest, smok
 - [`Target architecture`](02_TARGET_ARCHITECTURE.md)
 - [`Theoretical foundations`](03_THEORETICAL_FOUNDATIONS.md)
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
+- [`Active experiment log`](06_EXPERIMENT_LOG.md)
 
 _Last updated: 2026-07-01_

@@ -2,7 +2,7 @@
 
 > **Date**: 2026-05-06 | **Phase**: 1 (Structural Migration) | **Git**: `84299b4..ab7d7e0`
 > **Status**: Merged
-> **Links**: [IMPLEMENTATION_PLAN.md §6.2](../../IMPLEMENTATION_PLAN.md) | [PHYSIOLOGICAL_COUPLING_PLAN.md §2](../../PHYSIOLOGICAL_COUPLING_PLAN.md)
+> **Links**: [Archived implementation plan §6.2](../archive/pre_physiology_semantic_20260701/source_observation/IMPLEMENTATION_PLAN.md) | [Archived physiological coupling plan §2](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 
 ## Motivation
 

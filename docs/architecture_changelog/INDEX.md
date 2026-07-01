@@ -32,6 +32,7 @@ gantt
         Storage Layout Normalization      :done, 2026-06-04, 2026-06-04
     section Phase 3: Semantic Redesign
         Design and experiment freeze      :milestone, 2026-07-01, 0d
+        Archive namespace isolation       :milestone, 2026-07-01, 0d
 ```
 
 ## Change Records
@@ -47,6 +48,7 @@ gantt
 | 7 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
 | 8 | 2026-06-04 | Phase 2C | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | `ExperimentLogger`, `run_metrics_comparison.py`, `croce_local configs`, `STORAGE_LAYOUT.md` | Merged |
 | 9 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
+| 10 | 2026-07-01 | Phase 3 preparation | [Documentation and Run Archive Isolation](2026-07-01_document_and_run_archive_isolation.md) | `docs/archive/`, `experiments/archive/`, `STORAGE_LAYOUT.md`, project guides | Merged |
 
 ## How to Add a New Entry
 

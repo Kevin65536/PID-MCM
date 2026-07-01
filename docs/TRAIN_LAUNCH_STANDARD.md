@@ -1,5 +1,7 @@
 # Training Launch Standard
 
+> **Status (2026-07-01):** The launcher remains the supported process entrypoint, but the physiology-semantic training task is not implemented yet. The source/observation and downstream tasks below are compatibility workflows for archived lineages and must not be treated as target-architecture commands.
+
 This repository keeps exactly one supported training launcher:
 
 ```bash
@@ -11,9 +13,13 @@ Use `--foreground` only for short interactive debugging runs.
 
 Direct execution of `train_*.py` entrypoints is intentionally rejected; train tasks must enter through the launcher.
 
-## Supported Tasks
+## 🎯 Target task status
 
-### source-observation-tokenizer
+`physiology-semantic-tokenizer` is reserved but not registered. It must not be added to the launcher until the P1 tensor/cache contract, P2 quantizer tests, dry-run manifest, and active output-root assertions pass. Its future outputs belong below `experiments/runs/physiology_semantic_tokenizer/<suite>/`.
+
+## 🧰 Supported tasks
+
+### source-observation-tokenizer — compatibility only
 
 Script: `experiments/scripts/train_source_observation_tokenizer.py`
 
@@ -25,7 +31,7 @@ Supported task-specific arguments:
 - `--skip-post-analysis`
 
 Default post-analysis writes the gate scorecard plus codebook usage, reconstruction, and token pattern visualizations under the run `analysis/` directory.
-Croce local highWL configs set `experiment.run_group`, so their outputs are written under `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`.
+Existing Croce local configs retain their historical `experiment.run_group`. Their completed outputs were moved to `experiments/archive/pre_physiology_semantic_20260701/runs/source_observation/`. Do not launch them as new-design experiments.
 
 Example:
 
@@ -57,7 +63,7 @@ bash experiments/scripts/launch_training_nohup.sh \
 
 Script: `experiments/scripts/export_source_observation_tokens.py`
 
-This is the current first-stage downstream entry point for the Croce source/observation tokenizer line. It freezes a completed tokenizer checkpoint and exports 2s token sequences under `experiments/runs/downstream/source_observation_tokens/`.
+This is the compatibility downstream entry point for the Croce source/observation tokenizer line. Its completed outputs are archived under `experiments/archive/pre_physiology_semantic_20260701/runs/downstream/`.
 
 Supported task-specific arguments:
 
@@ -98,7 +104,7 @@ bash experiments/scripts/launch_training_nohup.sh \
   --config experiments/configs/phase1a/foundation_multimodal_interface.yaml
 ```
 
-## Analysis Script Placement
+## 📊 Analysis script placement
 
 - Standardized post-training analysis implementations live in `src/visualization`.
 - Standardized manual reruns use `experiments/scripts/analyze_alignment.py`.

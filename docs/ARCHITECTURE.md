@@ -51,6 +51,9 @@ The complete target tensor contracts, losses, implementation gates, and experime
 
 ```mermaid
 graph TB
+    accTitle: Frozen source observation runtime
+    accDescr: Current compatibility architecture from local EEG and high wavelength fNIRS inputs through projection, quantization, optional X3 exchange, coupling losses, and additive source observation reconstruction.
+
     subgraph Inputs
         EEG["Local EEG Signal<br/>B x 6ch x 4000"]
         FNIRS["fNIRS highWL Signal<br/>B x 1ch x 200"]
@@ -155,12 +158,15 @@ graph TB
     EEG --> E_OT
     FNIRS --> F_OT
 
-    style Coupling fill:#e1f5fe
-    style Quantizers fill:#fff3e0
-    style Projection fill:#f3e5f5
-    style SourceDecoders fill:#e8f5e9
-    style ObsDecoders fill:#fce4ec
-    style Targets fill:#fff9c4
+    classDef representation fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef decoder fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef coupling_style fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef target_style fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
+
+    class Projection,Quantizers representation
+    class SourceDecoders,ObsDecoders decoder
+    class Coupling coupling_style
+    class Targets target_style
 ```
 
 
@@ -170,6 +176,9 @@ graph TB
 
 ```mermaid
 sequenceDiagram
+    accTitle: Frozen runtime data flow
+    accDescr: Sequence from raw modality inputs and cached branch targets through encoders, quantizers, coupling, decoders, and the complete compatibility loss.
+
     participant EEG as EEG [B,6,4000]
     participant fNIRS as fNIRS highWL [B,1,200]
     participant Enc as Encoders
@@ -212,6 +221,9 @@ sequenceDiagram
 
 ```mermaid
 graph LR
+    accTitle: Frozen runtime loss contract
+    accDescr: Compatibility loss decomposition across reconstruction, source and observation targets, vector quantization, coupling, codebook balance, and branch orthogonality.
+
     TOTAL[total_loss] --> REC[full reconstruction]
     TOTAL --> ST[source_target_loss<br/>fNIRS + EEG]
     TOTAL --> OT[observation_loss<br/>fNIRS + EEG]
@@ -314,18 +326,18 @@ Current implementation does not force the two source codebooks to share numeric 
 | [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
 | [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
 | [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
-| `experiments/configs/source_observation/croce_local/` | Current Croce local highWL-only tokenizer configs. Active corrected-cache experiments use `croce_validation/cache/croce_local/highwl_v2/` and write under `experiments/runs/source_observation/croce_local/highwl_v2/` |
+| `experiments/configs/source_observation/croce_local/` | Frozen compatibility configs for the Croce highWL/X3 lineage. Their existing results are archived under `experiments/archive/pre_physiology_semantic_20260701/runs/` |
 
 ## 5. Quantizer Summary
 
 | Quantizer | Codebook Size | Embedding Dim | Semantics |
 |-----------|---------------|---------------|-----------|
-| `eeg_source_quantizer` | K=32 | D=48 | EEG neurovascular coupling state (shared neural driver) |
-| `fnirs_source_quantizer` | K=32 | D=48 | fNIRS neurovascular coupling state (shared neural driver) |
-| `eeg_observation_quantizer` | K=64 | D=64 | EEG modality-specific encoding debt |
-| `fnirs_observation_quantizer` | K=32 base / K=64 sweep | D=48 | highWL fNIRS modality-specific encoding debt |
+| `eeg_source_quantizer` | K=128 | D=48 | Audited X3 EEG source branch |
+| `fnirs_source_quantizer` | K=128 | D=48 | Audited X3 fNIRS source branch |
+| `eeg_observation_quantizer` | K=256 | D=64 | Audited X3 EEG observation branch |
+| `fnirs_observation_quantizer` | K=128 | D=48 | Audited X3 highWL observation branch |
 
-All quantizers use EMA updates, kmeans initialization, dead code revival, and cosine-similarity-based assignment (l2-normalized). The active Croce local base keeps source at K=32, EEG observation at K=64, and starts highWL-only fNIRS observation at K=32; the small sweep tests LR=2e-4 and fNIRS observation K=64.
+All quantizers use the current implementation's EMA-like updates, kmeans initialization, dead-code revival, and cosine-similarity assignment. The table records the audited X3 runtime rather than historical base-config defaults. The redesign plan treats the current vector update as a correctness issue because codeword sums are not maintained by EMA.
 
 ## 6. Coupling Mechanism
 
@@ -406,7 +418,7 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 | Phase 2B | Croce Candidate Model Audit | ⚠️ Historical Candidate | Joint state-space tooling and proxy-target baselines introduced |
 | Current | Croce Local/X3 Source-Observation Runtime | 🧊 **Frozen baseline** | Preserve the runnable highWL-only lineage and audited X3 exchange run for reproduction and comparison |
 | Planned | Physiology-Semantic Redesign | 📝 Approved, not implemented | Independent semantic tokenizers, uncertainty-aware state teacher, residual information path, and frozen sequence coupling |
-| Mechanism C | Causal Asymmetry | ❌ Abandoned | See IMPLEMENTATION_PLAN.md §11 |
+| Mechanism C | Causal Asymmetry | ❌ Abandoned | See the [archived implementation plan](archive/pre_physiology_semantic_20260701/source_observation/IMPLEMENTATION_PLAN.md) |
 
 ### Locked Phase1 Handoff
 
@@ -414,14 +426,14 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 |----------|------|
 | [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Current best Gate1-stable baseline alias |
 | [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline |
-| [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
+| [Archived Phase 1 best run](../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
 
 ### Phase 2 Diagnostic Baseline
 
 | Artifact | Role |
 |----------|------|
-| [experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/](../experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/) | Phase 2 run with full Gate 1-4 analysis |
-| [experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json](../experiments/runs/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json) | Gate scorecard: Gate1=pending, Gate2/3/4=fail |
+| [Archived Phase 2 diagnostic run](../experiments/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/) | Phase 2 run with full Gate 1-4 analysis |
+| [Archived Phase 2 gate summary](../experiments/archive/pre_croce_local_highwl_20260604/s2_phase2_gate2_hrf_target_uniform32_bs128_longrun/analysis/gate_summary.json) | Gate scorecard: Gate1=pending, Gate2/3/4=fail |
 
 ## 10. Related Documents
 
@@ -429,10 +441,10 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 |----------|------|
 | [physiology_semantic_tokenizer/README.md](physiology_semantic_tokenizer/README.md) | Approved redesign archive and authority map |
 | [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | Target implementation order, correctness checks, and module validity gates |
-| [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) | Historical implementation plan for the current source/observation runtime |
-| [CROCE2017_REAL_DATA_VALIDATION_PLAN.md](CROCE2017_REAL_DATA_VALIDATION_PLAN.md) | Real-data validation plan for Croce-style forward approximations, inverse stability, and tokenizer integration |
-| [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) | Mechanism motivation, math, physiological interpretation |
-| [SEMANTIC_TOKEN_SCORECARD.md](SEMANTIC_TOKEN_SCORECARD.md) | 4-Gate evaluation framework |
-| [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) | Formal experiment conclusions |
+| [Archived implementation plan](archive/pre_physiology_semantic_20260701/source_observation/IMPLEMENTATION_PLAN.md) | Historical implementation plan for the source/observation runtime |
+| [Croce real-data validation plan](../croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md) | Real-data validation plan for Croce-style forward approximations and inverse stability |
+| [Archived physiological coupling plan](archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md) | Historical mechanism motivation and mathematics |
+| [Archived semantic token scorecard](archive/pre_physiology_semantic_20260701/source_observation/SEMANTIC_TOKEN_SCORECARD.md) | Historical four-gate evaluation framework |
+| [Active experiment log](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) | Results admitted under the target design |
 | [STORAGE_LAYOUT.md](STORAGE_LAYOUT.md) | Canonical generated-data and run-output paths |
 | [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md) | Chronological architecture change records |

@@ -47,7 +47,7 @@ Freeze the evidence-to-decision record, target architecture, theoretical assumpt
 
 ### Status
 
-`Planned`: documentation is an approved design contract, not an implementation or a positive experimental result. The archive is [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md), with the architecture delta recorded in [the 2026-07-01 changelog](architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md).
+`Planned`: documentation is an approved design contract, not an implementation or a positive experimental result. The active design is [docs/physiology_semantic_tokenizer/](../../../physiology_semantic_tokenizer/README.md), with the architecture delta recorded in [the 2026-07-01 changelog](../../../architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md).
 
 ### Promotion rule
 
@@ -63,12 +63,12 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 ### Configuration
 
-- Locked baseline: [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
-- Best config alias: [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml)
-- Best long-warmup run: [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
-- Reference long run: [experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538](../experiments/runs/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538)
-- Archive log: [docs/archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md](archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md)
-- Result index: [experiments/archive/results/pre_croce_local_highwl_20260604/source_observation_index.json](../experiments/archive/results/pre_croce_local_highwl_20260604/source_observation_index.json)
+- Locked baseline: [gate1_baseline_locked_bs128.yaml](../../../../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
+- Best config alias: [gate1_best_current.yaml](../../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml)
+- Best long-warmup run: [archived best run](../../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
+- Reference long run: [archived reference run](../../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538)
+- Archive log: [Phase 1 Gate1 stabilization](../../../archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md)
+- Result index: [source observation index](../../../../experiments/archive/results/pre_croce_local_highwl_20260604/source_observation_index.json)
 
 ### Results
 
@@ -86,7 +86,7 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 ### Conclusion
 
-Phase 1 now has a formal best baseline and a formal archive bundle. Future source/observation work should start from [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml), and any new mainline claim must be compared against this locked handoff artifact.
+Phase 1 now has a formal best baseline and a formal archive bundle. Historical reproduction starts from [gate1_best_current.yaml](../../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml); new target-architecture work does not inherit this config.
 
 ---
 
@@ -98,11 +98,11 @@ Complete the Croce 2017 physical model source target implementation, integrate c
 
 ### Configuration
 
-- Mainline: `SourceObservationLaBraMVQNSP` in [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
-- Losses: lag_focus_loss + joint_smoothness_loss in [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py)
-- SMC validation: [src/inference/neurovascular_smc.py](../src/inference/neurovascular_smc.py)
-- Spatial priors: [src/data/channel_adjacency.py](../src/data/channel_adjacency.py)
-- Architecture changelog: [docs/architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md](architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md)
+- Mainline: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../../../../src/tokenizers/factorized_labram_vqnsp.py)
+- Losses: lag_focus_loss + joint_smoothness_loss in [multimodal_tokenizer.py](../../../../src/losses/multimodal_tokenizer.py)
+- SMC validation: [neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py)
+- Spatial priors: [channel_adjacency.py](../../../../src/data/channel_adjacency.py)
+- Architecture changelog: [Croce 2017 physical model targets](../../../architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md)
 
 ### Key Architecture Decisions
 
@@ -127,7 +127,7 @@ Start the next tokenizer training phase from generated Croce source/observation 
 
 ### Configuration
 
-- Dataset adapter: [src/data/croce_local_cache_dataset.py](../src/data/croce_local_cache_dataset.py)
+- Dataset adapter: [croce_local_cache_dataset.py](../../../../src/data/croce_local_cache_dataset.py)
 - Training base config: `experiments/configs/source_observation/croce_local/highwl_base.yaml`
 - Sweep configs: `highwl_lr2e4.yaml`, `highwl_fnirsobs64.yaml`
 - Canonical cache roots:
@@ -136,7 +136,7 @@ Start the next tokenizer training phase from generated Croce source/observation 
   - `croce_validation/cache/croce_local/highwl_v1/simultaneous_cognitive`
 - Future run namespace: `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`
 - Current live run, launched before namespace normalization: `experiments/runs/s2_croce_local_highwl_base_20260604_153549/`
-- Storage layout: [docs/STORAGE_LAYOUT.md](STORAGE_LAYOUT.md)
+- Storage layout: [docs/STORAGE_LAYOUT.md](../../../STORAGE_LAYOUT.md)
 
 ### Key Decisions
 

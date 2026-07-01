@@ -91,7 +91,7 @@ config = logger.config
 All training and evaluation scripts must use `ExperimentLogger` to ensure runs are reproducible and logged in a standard format.
 
 ### 3.1 Standard Workflow
-1.  **Initialize Logger**: This creates a unique run directory `experiments/runs/<exp_name>_<timestamp>/`.
+1.  **Initialize Logger**: Target-architecture configs must create a unique run directory at `experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/`.
 2.  **Log Metrics**: Use `logger.log_epoch()` inside training loops.
 3.  **Save Checkpoints**: Use `logger.save_checkpoint()`.
 4.  **Finalize**: Use `logger.log_final()` at the end.
@@ -168,11 +168,11 @@ When adding a new model or experiment:
 
 ### 6.1 Human-Readable Logging
 While `metrics.json` and automated logs capture exact numbers, context must be captured manually:
-*   Any significant new experiment **must** be appended to `docs/EXPERIMENT_LOG.md`.
+*   Any target-architecture experiment admitted as evidence **must** be appended to `docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`.
 *   Follow the template exactly: include clear definitions of `Objective`, `Configuration`, `Results`, `Analysis`, and `Conclusion`.
 
 ### 6.2 Phase Archiving
 When an experimental phase reaches a major conclusion (whether successful or hitting a defined bottleneck/dead end):
 1.  **Document Learnings**: Summarize the critical bottleneck or successful breakthrough at the top of the main experiment log.
-2.  **Archive Runs**: Move the associated run folders into `experiments/runs/archive/<phase_or_topic_name>/`.
+2.  **Archive Runs**: Move superseded-lineage runs into a dated root below `experiments/archive/`; never place archives inside `experiments/runs/`.
 3.  **Archive Logs**: Move the raw text block of those experiments into a dedicated archive doc (e.g., `docs/archive/logs/ARCHIVED_PRE_EXPERIMENTS.md`) to keep the primary log clean and readable for the next phase.

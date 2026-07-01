@@ -2,7 +2,7 @@
 
 > Last Updated: 2026-06-04
 > Status: Frozen historical scorecard for Croce local source/observation runs
-> Superseded for new experiments by: [physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)
+> Superseded for new experiments by: [active experiment design](../../../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)
 > Architecture: [PHYSIOLOGICAL_COUPLING_PLAN.md](PHYSIOLOGICAL_COUPLING_PLAN.md) — source/observation branch semantics
 > Supersedes: pre-S2 five-layer scorecard (Layer A-E) — archived by this rewrite
 
