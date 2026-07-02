@@ -266,6 +266,8 @@ Publication visualizations must obey the following rules:
 
 The architecture can support the claim that tokens represent state regions and that EEG token sequences predict future fNIRS token distributions only after the corresponding gates pass. It cannot by itself support claims of causal neurovascular coupling, universal task invariance, or one-to-one token correspondence.
 
+Differences between task-specific coupling patterns are a secondary, non-blocking research objective. Their absence does not invalidate controlled incremental coupling, and their presence supports only a qualified secondary finding; it does not change any gate decision in the current approved program.
+
 ## 🔗 Related documents
 
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
@@ -275,4 +277,4 @@ The architecture can support the claim that tokens represent state regions and t
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Current runtime architecture`](../ARCHITECTURE.md)
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

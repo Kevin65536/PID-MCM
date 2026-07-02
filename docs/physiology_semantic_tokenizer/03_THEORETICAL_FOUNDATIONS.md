@@ -280,7 +280,7 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 | --- | --- | --- |
 | Semantic tokens retain physical state | Prototype-to-state error beats reconstruction-only and shuffled-teacher controls | No improvement or unstable signatures across seeds |
 | Residual preserves omitted information | Semantic plus residual recovers task/reconstruction information lost by hard ID | Residual adds no information or only source leakage |
-| EEG sequence predicts fNIRS response | Held-out incremental NLL gain over fNIRS history/marginal baseline | Gain disappears within dataset/task or under subject holdout |
+| EEG sequence predicts fNIRS response | Held-out incremental NLL gain over the matched fNIRS-history/marginal and nuisance-controlled baseline | Gain disappears under subject holdout or after source/history/marginal controls |
 | Correspondence is physiological | Gain peaks at plausible lags and is destroyed by time/spatial nulls | Gain survives nulls or follows dataset position only |
 | Tokens generalize | Physical signatures and task utility remain stable across subjects and seeds | Token matching is arbitrary and downstream gains are source-specific |
 | Paired optical input is informative | It improves teacher state confidence or downstream retention over highWL-only | No reproducible improvement under matched capacity |
@@ -291,7 +291,7 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 - “The tokenizer discretizes teacher-defined neural and hemodynamic state regions.”
 - “EEG token sequences provide incremental held-out information about future fNIRS token distributions.”
-- “Coupling patterns differ across prespecified task conditions.”
+- “In a secondary analysis, coupling patterns differed across the examined task conditions.” This language requires direct uncertainty and confound-control evidence but is not a primary gate claim.
 - “Soft token posteriors and residual representations preserve information not available from hard IDs.”
 
 ### Prohibited without additional causal evidence

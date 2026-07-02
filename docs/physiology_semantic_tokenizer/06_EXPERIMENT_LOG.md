@@ -21,8 +21,9 @@ A result is added here only when it has:
 1. a run or suite manifest under the active result root;
 2. an immutable resolved configuration and split hash;
 3. a declared primary endpoint from [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md);
-4. a completion status that distinguishes smoke, short-formal, and full-formal evidence;
-5. a link to the run-level summary rather than only a pooled suite report.
+4. a versioned `decision_protocol.yaml`, `metric_registry.json`, and `evidence_calibration.json`;
+5. a completion status that distinguishes smoke, short-formal, and full-formal evidence;
+6. a link to the run-level summary rather than only a pooled suite report.
 
 ## 🗂️ Historical results
 
@@ -41,4 +42,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

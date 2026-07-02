@@ -1,12 +1,14 @@
 # Implementation and validation plan
 
-_Approved execution plan; no target-architecture code had been merged as of 2026-07-01_
+_Final approved execution plan; no target-architecture code had been merged as of 2026-07-02_
 
 ---
 
 ## 📋 Scope and completion rule
 
 This plan converts the target architecture into independently testable modules. A module is complete only when its code-correctness checks and its scientific-validity gate both pass. A lower training loss, a successful smoke run, or a visually structured heatmap is not sufficient by itself.
+
+Scientific gates use adaptive, versioned evidence calibration rather than permanent numerical cutoffs. Deterministic software invariants remain fixed, while data-dependent health ranges and effect criteria are learned from synthetic references, training-only pilots, matched baselines, and null distributions. The calibration procedure and protected-data boundary are fixed before the corresponding formal test evaluation; newly discovered metrics remain diagnostic or secondary until a new evaluation version.
 
 The existing `source_observation` and X3 cross-modal-exchange paths remain runnable baselines. The redesign is introduced behind new configuration names and output schemas; archival runs are never rewritten in place.
 
@@ -91,7 +93,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 - hard ID equals the posterior argmax;
 - runtime codebook shape equals the resolved modality-specific configuration.
 
-**Validity gate:** on a fixed latent stream, active-code fraction, effective rank, nearest-neighbor cosine, assignment entropy, and prototype drift stay inside preregistered healthy ranges without repeated mass revival. These are health checks, not semantic evidence.
+**Validity gate:** on a fixed latent stream, active-code fraction, effective rank, nearest-neighbor cosine, assignment entropy, and prototype drift remain consistent with health ranges calibrated from synthetic references and training-only pilots, without repeated mass revival. These ranges may change by modality, dataset, or phase and must retain their calibration provenance. They are health checks, not semantic evidence.
 
 ### P3 — Expose the physical state teacher
 
@@ -114,7 +116,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 - teacher uncertainty and validity masks produce zero contribution where invalid;
 - permutation of token IDs leaves all ID-invariant metrics unchanged.
 
-**Validity gate:** the semantic branch must improve held-out state decoding and prototype stability over reconstruction-only VQ, while semantic-plus-residual reconstruction and downstream information do not regress beyond the preregistered tolerance. Failure of either side blocks coupling experiments.
+**Validity gate:** the semantic branch must improve held-out state decoding and prototype stability over reconstruction-only VQ under the versioned evidence protocol, while semantic-plus-residual reconstruction and downstream information remain consistent with the calibrated continuous-latent reference. G2 information retention and G3 state semantics are co-equal gates; failure of either side blocks coupling experiments.
 
 ### P5 — Export representations and update consumers
 
@@ -136,7 +138,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 - lag indexing is verified with injected delayed synthetic events;
 - no coupling gradient reaches tokenizer parameters in the primary experiment.
 
-**Validity gate:** held-out incremental log-likelihood must be positive with a confidence interval excluding zero in the preregistered primary dataset, survive subject-controlled and marginal-controlled tests, and show a reproducible lag profile. Global pooled significance alone does not pass.
+**Validity gate:** held-out incremental log-likelihood must be directionally positive and separated from calibrated shuffle/time-shift/null evidence in the declared primary evaluation scope, survive subject-, source-, history-, marginal-, and task-prevalence-controlled tests, and show a reproducible lag profile. No universal minimum gain is imposed. Distinct task-specific coupling patterns remain a non-blocking secondary analysis; global pooled significance alone does not pass.
 
 ### P7 — Produce stable analysis and publication figures
 
@@ -144,7 +146,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 **Correctness checks:** train-only ordering, deterministic seed matching, fixed scales for compared panels, invariant results under arbitrary ID permutation, and figure-data tables saved beside each image.
 
-**Validity gate:** a reader can distinguish raw prevalence, history prediction, and EEG-incremental coupling from the exported figure alone. Seed/task stability statistics must accompany any claimed physiological pattern.
+**Validity gate:** a reader can distinguish raw prevalence, history prediction, and EEG-incremental coupling from the exported figure alone. Seed stability must accompany the primary physiological pattern. Task-specific stability is reported only when the secondary task-interaction analysis supports it and is not required for G6.
 
 ## 🔬 Test pyramid
 
@@ -156,7 +158,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 | Dry run | construct every planned suite without training | minutes | Missing artifact or invalid config |
 | Smoke | tiny subject/sample subset, 1–2 epochs | under 1 hour target | NaN, collapse, leakage, unusable throughput |
 | Short formal | fixed small folds and seeds | hours | Module validity gate fails |
-| Full formal | preregistered folds, datasets, and seeds | days | Primary scientific endpoint fails |
+| Full formal | versioned folds, datasets, seeds, and evidence protocol | days | Primary scientific endpoint fails |
 
 The execution order is always `unit → integration → dry-run → smoke → short formal → full formal`. Full experiments do not compensate for a failed lower-level check.
 
@@ -168,6 +170,9 @@ Every target-architecture run writes to:
 experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/
 ├── config.yaml
 ├── resolved_config.yaml
+├── decision_protocol.yaml
+├── metric_registry.json
+├── evidence_calibration.json
 ├── manifest.json
 ├── environment.json
 ├── checkpoints/
@@ -185,7 +190,7 @@ experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/
 └── summary.md
 ```
 
-`manifest.json` must include Git commit, dirty-worktree flag, cache/schema version, dataset and split hashes, checkpoint hashes, seed, command, start/end time, and completion status. Test metrics are written only once after model and hyperparameter selection are frozen.
+`manifest.json` must include Git commit, dirty-worktree flag, cache/schema version, dataset and split hashes, checkpoint hashes, seed, command, start/end time, completion status, and hashes for the decision protocol, metric registry, and evidence calibration. Protected-test metrics are written only once after the model, hyperparameters, metric roles, and applicable calibration procedure are frozen.
 
 ## 🔄 Migration and rollback
 
@@ -205,7 +210,8 @@ The redesign is implemented only when all of the following are true:
 4. the experiment matrix has immutable manifests and run-level summaries;
 5. figures are regenerated from saved tables, not notebook-only state;
 6. downstream results compare all four representation modes on identical folds;
-7. claims in the paper are limited to gates that actually passed.
+7. every gate decision links to its versioned decision protocol, metric registry, and calibration evidence;
+8. claims in the paper are limited to gates that actually passed, while task-specific coupling remains explicitly secondary.
 
 ## 🔗 Related documents
 
@@ -214,4 +220,4 @@ The redesign is implemented only when all of the following are true:
 - [`Experiment design`](05_EXPERIMENT_DESIGN.md)
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

@@ -30,6 +30,9 @@ Each run uses `<timestamp>_<descriptive_name>/` and follows the artifact contrac
 <suite>/<timestamp>_<name>/
 ├── config.yaml
 ├── resolved_config.yaml
+├── decision_protocol.yaml
+├── metric_registry.json
+├── evidence_calibration.json
 ├── manifest.json
 ├── environment.json
 ├── checkpoints/
@@ -40,6 +43,8 @@ Each run uses `<timestamp>_<descriptive_name>/` and follows the artifact contrac
 ├── figure_data/
 └── summary.md
 ```
+
+`decision_protocol.yaml` fixes the endpoint, calibration procedure, null/reference construction, and protected-data boundary without imposing a permanent numerical cutoff. `metric_registry.json` records whether each metric is primary, secondary, or diagnostic. `evidence_calibration.json` preserves the data-dependent ranges, uncertainty evidence, and rationale used for the gate decision.
 
 ## 🚦 Status values
 
@@ -55,4 +60,4 @@ Suite and run manifests use only:
 
 The absence of a completion marker is never interpreted as success.
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

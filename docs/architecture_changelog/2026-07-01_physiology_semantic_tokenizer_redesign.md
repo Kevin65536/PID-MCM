@@ -130,7 +130,7 @@ These keys describe an approved contract, not an accepted parser schema yet.
 | --- | --- | --- |
 | G0 Data/teacher | New blocking gate | State observability, calibration, masks, and no leakage pass |
 | G1 Quantizer | Strengthened | Deterministic EMA tests and healthy geometry pass |
-| G2 Information | Strengthened | Semantic-plus-residual closes the preregistered continuous-latent gap |
+| G2 Information | Strengthened | Semantic-plus-residual reaches the dataset/phase-calibrated continuous-latent retention reference |
 | G3 Semantics | Replaced | Held-out prototype/state decoding and seed stability pass |
 | G4 Coupling | Replaced | Held-out incremental likelihood over history/marginal baseline passes |
 | G5 Utility | Strengthened | Fine-task gains survive subject/source controls |
@@ -142,6 +142,8 @@ These keys describe an approved contract, not an accepted parser schema yet.
 - Semantic IDs, posterior, prototype embeddings, and residuals are all first-class outputs.
 - Equal EEG/fNIRS token indices have no semantic privilege.
 - The primary coupling claim is sequence-to-distribution and incremental, not token-to-token or raw conditional.
+- Data-dependent health and scientific thresholds remain adaptive; each gate records a versioned calibration procedure and protected-data boundary instead of using a permanent numerical cutoff.
+- Task-specific coupling differences remain a non-blocking secondary objective and are not required for G4, G5, or G6.
 - Continuous residuals precede RVQ/FSQ so semantic failure is not confounded with a second quantizer.
 - Pre-VQ exchange remains a historical ablation only.
 
