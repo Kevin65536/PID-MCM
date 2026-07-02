@@ -8,6 +8,7 @@ from .reconstruction import (
     compute_smoothness_loss,
     compute_stft_loss,
 )
+from .physiology_semantic import PhysiologySemanticLoss
 
 __all__ = [
     'AlignmentLoss',
@@ -16,4 +17,5 @@ __all__ = [
     'compute_multi_stft_loss',
     'compute_smoothness_loss',
     'compute_stft_loss',
+    'PhysiologySemanticLoss',
 ]

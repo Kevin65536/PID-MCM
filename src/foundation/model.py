@@ -38,6 +38,8 @@ class UnifiedMultimodalFoundationModel(nn.Module):
 
         self.eeg_embedding = nn.Embedding(cfg.eeg_vocab_size, cfg.hidden_dim, padding_idx=cfg.pad_token_id)
         self.fnirs_embedding = nn.Embedding(cfg.fnirs_vocab_size, cfg.hidden_dim, padding_idx=cfg.pad_token_id)
+        self.eeg_input_projection = nn.LazyLinear(cfg.hidden_dim)
+        self.fnirs_input_projection = nn.LazyLinear(cfg.hidden_dim)
         self.modality_embedding = nn.Embedding(2, cfg.hidden_dim)
         self.position_embedding = nn.Embedding(cfg.max_seq_len, cfg.hidden_dim)
 
@@ -81,12 +83,16 @@ class UnifiedMultimodalFoundationModel(nn.Module):
             input_ids=batch.eeg.input_ids,
             attention_mask=batch.eeg.attention_mask,
             token_embedding=self.eeg_embedding,
+            inputs_embeds=batch.eeg.inputs_embeds,
+            input_projection=self.eeg_input_projection,
             modality_id=0,
         )
         fnirs_states = self._encode_modality(
             input_ids=batch.fnirs.input_ids,
             attention_mask=batch.fnirs.attention_mask,
             token_embedding=self.fnirs_embedding,
+            inputs_embeds=batch.fnirs.inputs_embeds,
+            input_projection=self.fnirs_input_projection,
             modality_id=1,
         )
 
@@ -200,6 +206,8 @@ class UnifiedMultimodalFoundationModel(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         token_embedding: nn.Embedding,
+        inputs_embeds: Optional[torch.Tensor],
+        input_projection: nn.Module,
         modality_id: int,
     ) -> torch.Tensor:
         input_ids = self._truncate_if_needed(input_ids)
@@ -210,7 +218,11 @@ class UnifiedMultimodalFoundationModel(nn.Module):
         positions = torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(bsz, seq_len)
         modality_ids = torch.full_like(input_ids, fill_value=modality_id)
 
-        x = token_embedding(input_ids)
+        if inputs_embeds is None:
+            x = token_embedding(input_ids)
+        else:
+            inputs_embeds = inputs_embeds[:, :seq_len]
+            x = input_projection(inputs_embeds)
         x = x + self.modality_embedding(modality_ids) + self.position_embedding(positions)
 
         key_padding_mask = None

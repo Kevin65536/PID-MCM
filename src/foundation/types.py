@@ -14,11 +14,13 @@ class TokenSequence:
 
     input_ids: torch.Tensor
     attention_mask: Optional[torch.Tensor] = None
+    inputs_embeds: Optional[torch.Tensor] = None
 
     def to(self, device: torch.device) -> "TokenSequence":
         return TokenSequence(
             input_ids=self.input_ids.to(device),
             attention_mask=None if self.attention_mask is None else self.attention_mask.to(device),
+            inputs_embeds=None if self.inputs_embeds is None else self.inputs_embeds.to(device),
         )
 
 

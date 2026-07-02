@@ -8,9 +8,8 @@ Usage:
   bash experiments/scripts/launch_training_nohup.sh --task physiology-semantic-tokenizer [task args]
 
 Status:
-  The active physiology-semantic training entrypoint is reserved but has not
-  passed its implementation gates yet. This launcher intentionally starts no
-  pre-redesign task.
+  Launches the active P2-P5 training entrypoint. The entrypoint enforces the
+  E0 optimizer gate; software smoke runs cannot bypass it.
 
 Historical workflows:
   See experiments/scripts/archive/pre_physiology_semantic_20260701/README.md.
@@ -34,6 +33,26 @@ if [[ "$2" != "physiology-semantic-tokenizer" ]]; then
     exit 2
 fi
 
-echo "Task 'physiology-semantic-tokenizer' is reserved but not implemented." >&2
-echo "Implement P1/P2 and active run-root assertions before enabling launch." >&2
-exit 2
+shift 2
+
+if [[ "$#" -eq 0 ]]; then
+    echo "Training arguments are required; pass --config and --dry-run or --smoke." >&2
+    exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+python_bin="$repo_root/.venv/bin/python"
+entrypoint="$repo_root/experiments/train_physiology_semantic_tokenizer.py"
+log_root="$repo_root/experiments/runs/physiology_semantic_tokenizer/launcher_logs"
+timestamp="$(date +%Y%m%d_%H%M%S)"
+log_path="$log_root/${timestamp}_physiology_semantic_tokenizer.log"
+
+if [[ ! -x "$python_bin" ]]; then
+    echo "Missing project Python: $python_bin" >&2
+    exit 2
+fi
+
+mkdir -p "$log_root"
+cd "$repo_root"
+setsid -f nohup "$python_bin" "$entrypoint" "$@" >"$log_path" 2>&1 < /dev/null
+echo "Launched physiology-semantic-tokenizer. Log: $log_path"

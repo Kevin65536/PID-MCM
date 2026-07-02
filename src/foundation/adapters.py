@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
 
 import torch
+
+from src.tokenizers.physiology_semantic_tokenizer import ModalityTokenizerOutput
 
 from .types import MultimodalTokenBatch, PretrainingTargets, TokenSequence
 
@@ -47,6 +49,36 @@ class TokenBatchAdapter:
             eeg=TokenSequence(input_ids=eeg_ids.long(), attention_mask=eeg_mask.long()),
             fnirs=TokenSequence(input_ids=fnirs_ids.long(), attention_mask=fnirs_mask.long()),
             labels=labels,
+        )
+
+    def from_physiology_semantic_outputs(
+        self,
+        outputs: Mapping[str, ModalityTokenizerOutput],
+        mode: str,
+        labels: Optional[torch.Tensor] = None,
+    ) -> MultimodalTokenBatch:
+        """Build a whole-brain input without creating replacement codebook weights."""
+        if mode not in {"hard", "codebook", "soft", "semantic_residual"}:
+            raise ValueError("mode must be one of: hard, codebook, soft, semantic_residual")
+
+        def convert(output: ModalityTokenizerOutput) -> TokenSequence:
+            raw_ids = output.quantizer.hard_ids.long()
+            input_ids = raw_ids + 2  # reserve 0/1 for padding and masking
+            mask = torch.ones_like(input_ids)
+            embeddings = None
+            if mode == "codebook":
+                embeddings = output.quantizer.codebook[raw_ids]
+            elif mode == "soft":
+                embeddings = output.quantizer.expected_embedding
+            elif mode == "semantic_residual":
+                embeddings = torch.cat((output.quantizer.expected_embedding, output.residual), dim=-1)
+            return TokenSequence(input_ids=input_ids, attention_mask=mask, inputs_embeds=embeddings)
+
+        return MultimodalTokenBatch(
+            eeg=convert(outputs["eeg"]),
+            fnirs=convert(outputs["fnirs"]),
+            labels=labels,
+            metadata={"representation_mode": mode},
         )
 
     def create_mlm_inputs(

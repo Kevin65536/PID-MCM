@@ -1,0 +1,73 @@
+experiment:
+  name: "p2_p5_software_smoke"
+  run_group: "physiology_semantic_tokenizer/software_smoke"
+  description: "P2-P5 correctness smoke; no scientific gate evaluation."
+
+data:
+  modality: "both"
+  dataset: "croce_local_cache"
+  contract: "physiology_semantic_v2"
+  data_root: "croce_validation/cache/croce_local/physiology_semantic_v2_smoke"
+  cache_sources:
+    - name: "single_trial_mental_arithmetic_smoke"
+      root: "croce_validation/cache/croce_local/physiology_semantic_v2_smoke/single_trial_mental_arithmetic"
+      task: "mental_arithmetic"
+  split:
+    train_subjects: [1]
+    val_subjects: [21]
+    test_subjects: [25]
+  window:
+    duration_s: 20.0
+  crop:
+    train_random: false
+    force_deterministic_all_splits: true
+    eval_event_offsets_s: [0.0]
+  teacher:
+    causal_history_s: 10.0
+  normalization:
+    enabled: true
+    scope: "sample"
+    eps: 1.0e-6
+  num_workers: 0
+  dataloader:
+    pin_memory: false
+    drop_last: false
+
+model:
+  type: "physiology_semantic"
+  encoder:
+    eeg_dim: 256
+    fnirs_dim: 160
+  quantizer:
+    codebook_size: 128
+    embedding_dim: 64
+    assignment: "euclidean"
+    decay: 0.99
+    eps: 1.0e-5
+    commitment_cost: 0.25
+    temperature: 1.0
+    revive_dead_codes: false
+  residual:
+    eeg_dim: 64
+    fnirs_dim: 32
+  context:
+    history_tokens: 5
+
+loss:
+  state: {weight: 1.0}
+  prototype: {weight: 1.0}
+  masked_state: {weight: 1.0}
+  reconstruction: {weight: 1.0}
+  vq: {weight: 1.0}
+  private: {weight: 0.0}
+
+training:
+  batch_size: 1
+  seed: 11
+  lr: 1.0e-4
+  optimizer_steps: 1
+
+validation:
+  phase: "p2_p5_software_smoke"
+  e0_passed: false
+  protected_test_metrics: false
