@@ -6,7 +6,13 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from src.data import CroceLocalCacheDataset, create_configured_multimodal_dataloaders
+from src.data import (
+    PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA,
+    CroceLocalCacheDataset,
+    CrocePhysiologySemanticDataset,
+    create_configured_multimodal_dataloaders,
+    validate_physiology_semantic_data_config,
+)
 
 
 class CroceLocalCacheDatasetTests(unittest.TestCase):
@@ -81,6 +87,46 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             "events": ["event_000"],
         }
         (subject_dir / "cache_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        return subject_dir
+
+    def _write_target_cache(self, root: Path) -> Path:
+        subject_dir = self._write_cache(root)
+        cache_path = subject_dir / "subject1_cache.npz"
+        with np.load(cache_path, allow_pickle=False) as npz:
+            arrays = {key: np.asarray(npz[key]) for key in npz.files}
+        prefix = "AF7_Fp1/event_000"
+        eeg_steps = 10_000
+        fnirs_steps = 500
+        state_mean = np.stack(
+            [np.linspace(0.0, 1.0, fnirs_steps, dtype=np.float32) + index for index in range(5)],
+            axis=1,
+        )
+        arrays.update(
+            {
+                f"{prefix}/state_estimates": state_mean,
+                f"{prefix}/state_var": np.full((fnirs_steps, 5), 0.25, dtype=np.float32),
+                f"{prefix}/r_estimates_eeg": np.linspace(-1.0, 1.0, eeg_steps, dtype=np.float32),
+                f"{prefix}/r_var_eeg": np.full(eeg_steps, 0.04, dtype=np.float32),
+                f"{prefix}/teacher_valid_mask": np.ones(fnirs_steps, dtype=np.bool_),
+            }
+        )
+        np.savez(cache_path, **arrays)
+        manifest_path = subject_dir / "cache_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["cache_schema_version"] = PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA
+        manifest["teacher_contract"] = {
+            "version": "physical_state_teacher_v1",
+            "state_names": ["s", "delta_f", "delta_hbo", "delta_hb", "r"],
+        }
+        manifest["config"].update(
+            {
+                "eeg_fs_hz": 200.0,
+                "fnirs_fs_hz": 10.0,
+                "eeg_unit": "uV",
+                "fnirs_units": {"primary": "V", "secondary": "V"},
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         return subject_dir
 
     def test_dataset_uses_highwl_only_and_keeps_local_shapes(self):
@@ -315,6 +361,84 @@ class CroceLocalCacheDatasetTests(unittest.TestCase):
             gate0 = dataset.get_gate0_metadata()
             self.assertTrue(gate0["normalization_enabled"])
             self.assertEqual(gate0["fnirs_normalization_mode"], "separate")
+
+    def test_target_contract_returns_paired_optical_teacher_and_additive_normalization(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write_target_cache(root)
+            dataset = CrocePhysiologySemanticDataset(
+                cache_sources=[{"name": "toy", "root": str(root), "task": "mental_arithmetic"}],
+                subject_ids=[1],
+                split="val",
+                crop_duration_s=20.0,
+                eval_event_offsets_s=[0.0],
+                causal_history_s=10.0,
+                normalization={"enabled": True, "scope": "sample", "eps": 1e-8},
+            )
+
+            item = dataset[0]
+
+            self.assertEqual(tuple(item["eeg"].shape), (6, 4000))
+            self.assertEqual(tuple(item["fnirs"].shape), (2, 200))
+            self.assertEqual(tuple(item["teacher"]["state_mean"].shape), (200, 5))
+            self.assertEqual(tuple(item["teacher"]["state_var"].shape), (200, 5))
+            self.assertEqual(tuple(item["teacher"]["neural_driver_eeg_rate"].shape), (4000, 1))
+            self.assertTrue(
+                torch.allclose(
+                    item["eeg"],
+                    item["decomposition"]["eeg_source"] + item["decomposition"]["eeg_residual"],
+                )
+            )
+            self.assertTrue(
+                torch.allclose(
+                    item["fnirs"],
+                    item["decomposition"]["fnirs_source"] + item["decomposition"]["fnirs_residual"],
+                )
+            )
+            self.assertFalse(torch.any(item["teacher"]["teacher_valid_mask"][:100]))
+            self.assertTrue(torch.all(item["teacher"]["teacher_valid_mask"][100:]))
+            self.assertEqual(dataset.get_num_fnirs_channels(), 2)
+            self.assertEqual(dataset.get_gate0_metadata()["cache_contract"], PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA)
+
+    def test_target_contract_rejects_unversioned_legacy_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write_cache(root)
+            with self.assertRaisesRegex(ValueError, "requires 'croce_physiology_semantic_v2'"):
+                CrocePhysiologySemanticDataset(
+                    cache_sources=[{"name": "toy", "root": str(root)}],
+                    subject_ids=[1],
+                    split="val",
+                )
+
+    def test_target_config_rejects_split_leakage_and_bad_normalization_provenance(self):
+        base = {
+            "contract": "physiology_semantic_v2",
+            "split": {
+                "train_subjects": [1, 2],
+                "val_subjects": [3],
+                "test_subjects": [4],
+            },
+            "normalization": {"enabled": True, "scope": "sample"},
+        }
+        validate_physiology_semantic_data_config(base)
+
+        leaked = {**base, "split": {**base["split"], "val_subjects": [2]}}
+        with self.assertRaisesRegex(ValueError, "Subject leakage"):
+            validate_physiology_semantic_data_config(leaked)
+
+        bad_fit = {
+            **base,
+            "normalization": {
+                "enabled": True,
+                "scope": "fixed_train",
+                "fit_subject_ids": [1, 3],
+                "eeg": {"offset": [0.0] * 6, "scale": [1.0] * 6},
+                "fnirs": {"offset": [0.0] * 2, "scale": [1.0] * 2},
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "subset of train_subjects"):
+            validate_physiology_semantic_data_config(bad_fit)
 
 
 if __name__ == "__main__":

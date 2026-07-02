@@ -60,6 +60,7 @@ FNIRS_SOURCE_CHANNEL0_FIELD = "source_fnirs_optical_channel_0"
 FNIRS_SOURCE_CHANNEL1_FIELD = "source_fnirs_optical_channel_1"
 FNIRS_OBS_CHANNEL0_FIELD = "obs_fnirs_optical_channel_0"
 FNIRS_OBS_CHANNEL1_FIELD = "obs_fnirs_optical_channel_1"
+CACHE_SCHEMA_VERSION = "croce_physiology_semantic_v2"
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +345,7 @@ def _process_anchor(payload: Tuple[argparse.Namespace, Any, Any, int]) -> Dict[s
         "fnirs_fs_hz": float(bundle.fnirs_fs_hz),
         "pair_mode": str(bundle.pair_mode),
         "pair_labels": [str(bundle.pair_labels[0]), str(bundle.pair_labels[1])],
+        "eeg_unit": str(bundle.units.get("eeg", "unknown")),
         "fnirs_units": {
             "primary": str(bundle.units.get("fnirs_primary", "a.u.")),
             "secondary": str(bundle.units.get("fnirs_secondary", "a.u.")),
@@ -383,7 +385,17 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
       time.
     """
     r_estimates_eeg = np.asarray(pf_result["r_estimates_eeg"], dtype=np.float64)
+    r_std_eeg = np.asarray(pf_result["r_std_eeg"], dtype=np.float64)
     estimates = np.asarray(pf_result["state_estimates"], dtype=np.float64)
+    state_std = np.asarray(pf_result["state_std"], dtype=np.float64)
+    if state_std.shape != estimates.shape:
+        raise ValueError(
+            f"state_std shape {state_std.shape} must match state_estimates shape {estimates.shape}"
+        )
+    if r_std_eeg.shape != r_estimates_eeg.shape:
+        raise ValueError(
+            f"r_std_eeg shape {r_std_eeg.shape} must match r_estimates_eeg shape {r_estimates_eeg.shape}"
+        )
 
     lead_eeg = np.asarray(bundle.lead_field, dtype=np.float64)
     jac_p = np.asarray(bundle.jac_primary, dtype=np.float64)
@@ -424,6 +436,12 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
     obs_eeg = eeg_raw - pred_eeg_raw
     obs_primary = fnirs_p_raw[:, 0:1] - pred_primary_raw
     obs_secondary = fnirs_s_raw[:, 0:1] - pred_secondary_raw
+    teacher_valid_mask = (
+        np.all(np.isfinite(estimates), axis=1)
+        & np.all(np.isfinite(state_std), axis=1)
+        & np.all(np.isfinite(fnirs_p_raw[:, 0:1]), axis=1)
+        & np.all(np.isfinite(fnirs_s_raw[:, 0:1]), axis=1)
+    )
 
     return {
         "source_eeg": pred_eeg_raw.astype(np.float32),
@@ -433,7 +451,10 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
         FNIRS_OBS_CHANNEL0_FIELD: obs_primary.astype(np.float32),
         FNIRS_OBS_CHANNEL1_FIELD: obs_secondary.astype(np.float32),
         "r_estimates_eeg": r_estimates_eeg.astype(np.float32),
+        "r_var_eeg": np.square(r_std_eeg).astype(np.float32),
         "state_estimates": estimates.astype(np.float32),
+        "state_var": np.square(state_std).astype(np.float32),
+        "teacher_valid_mask": teacher_valid_mask.astype(np.bool_),
         # Assembly metadata: which channels this anchor covers
         "anchor_primary_channel": str(bundle.fnirs_primary_channel_names[0]),
         "anchor_secondary_channel": str(bundle.fnirs_secondary_channel_names[0]),
@@ -688,6 +709,7 @@ def main() -> None:
     # ---- Save manifest ----
     selected_event_indices = [int(window["event_idx"]) for window in (selected_event_windows or [])]
     manifest = {
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
         "generated_at": datetime.now().isoformat(),
         "config": {
             "mode": str(args.mode),
@@ -723,6 +745,7 @@ def main() -> None:
             "fnirs_fs_hz": float(results[0]["fnirs_fs_hz"]) if results else None,
             "pair_mode": str(results[0]["pair_mode"]) if results else "unknown",
             "pair_labels": list(results[0]["pair_labels"]) if results else [],
+            "eeg_unit": str(results[0]["eeg_unit"]) if results else "unknown",
             "fnirs_target_semantics": "optical_measurement_space",
             "fnirs_target_labels": list(results[0]["pair_labels"]) if results else [],
             "fnirs_target_field_names": [
@@ -745,8 +768,28 @@ def main() -> None:
                 FNIRS_OBS_CHANNEL0_FIELD,
                 FNIRS_OBS_CHANNEL1_FIELD,
                 "r_estimates_eeg",
+                "r_var_eeg",
                 "state_estimates",
+                "state_var",
+                "teacher_valid_mask",
             ],
+        },
+        "teacher_contract": {
+            "version": "physical_state_teacher_v1",
+            "state_names": ["s", "delta_f", "delta_hbo", "delta_hb", "r"],
+            "state_mean_field": "state_estimates",
+            "state_var_field": "state_var",
+            "state_cov_field": None,
+            "neural_driver_eeg_rate_field": "r_estimates_eeg",
+            "neural_driver_var_eeg_rate_field": "r_var_eeg",
+            "eeg_clean_mean_field": "source_eeg",
+            "fnirs_clean_mean_fields": [
+                FNIRS_SOURCE_CHANNEL0_FIELD,
+                FNIRS_SOURCE_CHANNEL1_FIELD,
+            ],
+            "valid_mask_field": "teacher_valid_mask",
+            "validity_semantics": "finite_solver_posterior_and_paired_optical_support",
+            "causal_crop_boundary_masking": "loader_responsibility",
         },
         "anchors_processed": len(anchor_names),
         "events_processed": processed_segments,

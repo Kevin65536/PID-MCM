@@ -56,6 +56,7 @@ class GenerateTargetCacheTests(unittest.TestCase):
         )
         pf_result = {
             "r_estimates_eeg": np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
+            "r_std_eeg": np.asarray([0.1, 0.2, 0.3], dtype=np.float64),
             "state_estimates": np.asarray(
                 [
                     [0.0, 0.0, 1.0, 2.0, 0.0],
@@ -64,12 +65,15 @@ class GenerateTargetCacheTests(unittest.TestCase):
                 ],
                 dtype=np.float64,
             ),
+            "state_std": np.full((3, 5), 0.5, dtype=np.float64),
         }
 
         entry = GEN._build_cache_entry(bundle, pf_result, _AuditStub())
 
         self.assertIn("source_fnirs_optical_channel_0", entry)
         self.assertIn("obs_fnirs_optical_channel_1", entry)
+        self.assertIn("state_var", entry)
+        self.assertIn("teacher_valid_mask", entry)
         self.assertNotIn("source_fnirs_hbo", entry)
 
         np.testing.assert_allclose(entry["source_eeg"].ravel(), np.asarray([1.0, 2.0, 3.0], dtype=np.float32))
@@ -103,6 +107,7 @@ class GenerateTargetCacheTests(unittest.TestCase):
         )
         pf_result = {
             "r_estimates_eeg": eeg_rate_latent,
+            "r_std_eeg": np.full_like(eeg_rate_latent, 0.25),
             "state_estimates": np.asarray(
                 [
                     [0.0, 0.0, 0.0, 0.0, 100.0],
@@ -110,11 +115,13 @@ class GenerateTargetCacheTests(unittest.TestCase):
                 ],
                 dtype=np.float64,
             ),
+            "state_std": np.full((2, 5), 0.5, dtype=np.float64),
         }
 
         entry = GEN._build_cache_entry(bundle, pf_result, _AuditStub())
 
         np.testing.assert_allclose(entry["source_eeg"].ravel(), (2.0 * eeg_rate_latent).astype(np.float32))
+        np.testing.assert_allclose(entry["r_var_eeg"].ravel(), 0.25**2)
         self.assertLess(np.mean(np.diff(entry["source_eeg"].ravel()) == 0.0), 0.1)
 
 

@@ -17,6 +17,9 @@ HIGHWL_SOURCE_FIELD = "source_fnirs_optical_channel_0"
 HIGHWL_OBSERVATION_FIELD = "obs_fnirs_optical_channel_0"
 LOWWL_SOURCE_FIELD = "source_fnirs_optical_channel_1"
 LOWWL_OBSERVATION_FIELD = "obs_fnirs_optical_channel_1"
+PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA = "croce_physiology_semantic_v2"
+PHYSIOLOGY_SEMANTIC_DATA_CONTRACT = "physiology_semantic_v2"
+PHYSICAL_STATE_NAMES = ("s", "delta_f", "delta_hbo", "delta_hb", "r")
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -695,4 +698,376 @@ class CroceLocalCacheDataset(Dataset):
         ]
 
 
-__all__ = ["CroceLocalCacheDataset"]
+def validate_physiology_semantic_data_config(data_cfg: Mapping[str, Any]) -> None:
+    """Validate split and normalization provenance for the target data contract."""
+
+    contract = str(data_cfg.get("contract", ""))
+    if contract != PHYSIOLOGY_SEMANTIC_DATA_CONTRACT:
+        raise ValueError(
+            f"Target Croce data requires contract={PHYSIOLOGY_SEMANTIC_DATA_CONTRACT!r}, got {contract!r}."
+        )
+
+    split_cfg = data_cfg.get("split", {})
+    if not isinstance(split_cfg, Mapping):
+        raise ValueError("data.split must be a mapping with train/val/test subject lists.")
+    splits = {
+        name: {int(value) for value in split_cfg.get(f"{name}_subjects", split_cfg.get(name, []))}
+        for name in ("train", "val", "test")
+    }
+    empty = [name for name, subjects in splits.items() if not subjects]
+    if empty:
+        raise ValueError(f"Target Croce data requires non-empty subject splits; empty={empty}.")
+    overlaps = {
+        "train_val": sorted(splits["train"] & splits["val"]),
+        "train_test": sorted(splits["train"] & splits["test"]),
+        "val_test": sorted(splits["val"] & splits["test"]),
+    }
+    overlaps = {name: values for name, values in overlaps.items() if values}
+    if overlaps:
+        raise ValueError(f"Subject leakage across target Croce splits: {overlaps}")
+
+    normalization = data_cfg.get("normalization", {})
+    if not isinstance(normalization, Mapping) or not bool(normalization.get("enabled", False)):
+        return
+    scope = str(normalization.get("scope", "sample"))
+    if scope not in {"sample", "fixed_train"}:
+        raise ValueError("Target raw-space normalization scope must be 'sample' or 'fixed_train'.")
+    if scope == "fixed_train":
+        fit_subjects = {int(value) for value in normalization.get("fit_subject_ids", [])}
+        if not fit_subjects:
+            raise ValueError("fixed_train normalization requires fit_subject_ids provenance.")
+        if not fit_subjects.issubset(splits["train"]):
+            raise ValueError(
+                "Normalization fit_subject_ids must be a subset of train_subjects and exclude val/test subjects."
+            )
+        for modality, channels in (("eeg", 6), ("fnirs", 2)):
+            modality_cfg = normalization.get(modality, {})
+            if not isinstance(modality_cfg, Mapping):
+                raise ValueError(f"fixed_train normalization requires a {modality} mapping.")
+            for field in ("offset", "scale"):
+                values = np.asarray(modality_cfg.get(field, []), dtype=np.float32)
+                if values.shape != (channels,):
+                    raise ValueError(
+                        f"fixed_train normalization {modality}.{field} must have shape ({channels},), "
+                        f"got {values.shape}."
+                    )
+                if not np.all(np.isfinite(values)):
+                    raise ValueError(f"fixed_train normalization {modality}.{field} contains non-finite values.")
+            if np.any(np.asarray(modality_cfg["scale"], dtype=np.float32) <= 0):
+                raise ValueError(f"fixed_train normalization {modality}.scale must be positive.")
+
+
+class CrocePhysiologySemanticDataset(CroceLocalCacheDataset):
+    """Strict paired-optical Croce loader for the physiology-semantic target contract."""
+
+    def __init__(
+        self,
+        *,
+        cache_sources: Sequence[Mapping[str, Any] | str],
+        subject_ids: Optional[Iterable[int]] = None,
+        split: str = "train",
+        crop_duration_s: float = 20.0,
+        eeg_sample_rate_hz: float = 200.0,
+        fnirs_sample_rate_hz: float = 10.0,
+        train_random_crop: bool = True,
+        eval_event_offsets_s: Sequence[float] = (-10.0, 0.0, 20.0),
+        seed: int = 42,
+        cache_npz_handles: bool = True,
+        max_npz_cache_size: int = 128,
+        normalization: Optional[Mapping[str, Any]] = None,
+        entry_filters: Optional[Mapping[str, Any]] = None,
+        causal_history_s: float = 10.0,
+    ):
+        self.raw_normalization_cfg = dict(normalization or {})
+        self.causal_history_s = float(causal_history_s)
+        if self.causal_history_s < 0:
+            raise ValueError("causal_history_s must be non-negative")
+        super().__init__(
+            cache_sources=cache_sources,
+            subject_ids=subject_ids,
+            split=split,
+            crop_duration_s=crop_duration_s,
+            eeg_sample_rate_hz=eeg_sample_rate_hz,
+            fnirs_sample_rate_hz=fnirs_sample_rate_hz,
+            train_random_crop=train_random_crop,
+            eval_event_offsets_s=eval_event_offsets_s,
+            seed=seed,
+            cache_npz_handles=cache_npz_handles,
+            max_npz_cache_size=max_npz_cache_size,
+            normalization=None,
+            entry_filters=entry_filters,
+        )
+        self._validate_cache_contracts()
+
+    def _validate_cache_contracts(self) -> None:
+        self._target_cache_metadata: Dict[Path, Dict[str, Any]] = {}
+        checked: set[Path] = set()
+        for entry in self.entries:
+            if entry.cache_path in checked:
+                continue
+            checked.add(entry.cache_path)
+            manifest_path = entry.cache_path.parent / "cache_manifest.json"
+            manifest = _load_json(manifest_path)
+            schema = str(manifest.get("cache_schema_version", ""))
+            if schema != PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA:
+                raise ValueError(
+                    f"Cache {entry.cache_path} uses schema {schema or 'unversioned'!r}; "
+                    f"target contract requires {PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA!r}."
+                )
+            teacher_contract = manifest.get("teacher_contract", {})
+            if not isinstance(teacher_contract, Mapping):
+                raise ValueError(f"Cache {entry.cache_path} has no teacher_contract mapping.")
+            state_names = tuple(str(value) for value in teacher_contract.get("state_names", ()))
+            if state_names != PHYSICAL_STATE_NAMES:
+                raise ValueError(
+                    f"Cache {entry.cache_path} state_names={state_names} do not match {PHYSICAL_STATE_NAMES}."
+                )
+            config = manifest.get("config", {})
+            if not isinstance(config, Mapping):
+                raise ValueError(f"Cache {entry.cache_path} has no config mapping.")
+            eeg_rate = float(config.get("eeg_fs_hz", float("nan")))
+            fnirs_rate = float(config.get("fnirs_fs_hz", float("nan")))
+            if not np.isclose(eeg_rate, self.eeg_sample_rate_hz) or not np.isclose(
+                fnirs_rate, self.fnirs_sample_rate_hz
+            ):
+                raise ValueError(
+                    f"Cache {entry.cache_path} sampling rates {(eeg_rate, fnirs_rate)} do not match "
+                    f"loader rates {(self.eeg_sample_rate_hz, self.fnirs_sample_rate_hz)}."
+                )
+            pair_labels = tuple(str(value) for value in config.get("pair_labels", ()))
+            if pair_labels != ("highWL", "lowWL"):
+                raise ValueError(f"Cache {entry.cache_path} pair_labels={pair_labels} are not paired optical input.")
+            fnirs_units_cfg = config.get("fnirs_units", {})
+            if not isinstance(fnirs_units_cfg, Mapping):
+                raise ValueError(f"Cache {entry.cache_path} has no fnirs_units mapping.")
+            eeg_unit = str(config.get("eeg_unit", "")).strip()
+            fnirs_units = (
+                str(fnirs_units_cfg.get("primary", "")).strip(),
+                str(fnirs_units_cfg.get("secondary", "")).strip(),
+            )
+            if not eeg_unit or not all(fnirs_units):
+                raise ValueError(f"Cache {entry.cache_path} has incomplete physical unit metadata.")
+            self._target_cache_metadata[entry.cache_path] = {
+                "eeg_unit": eeg_unit,
+                "fnirs_units": fnirs_units,
+            }
+
+    @staticmethod
+    def _read_required(npz: Any, entry: CroceCacheEntry, field: str, channels: int) -> np.ndarray:
+        key = f"{entry.prefix}/{field}"
+        if key not in npz:
+            raise KeyError(f"Missing target-contract cache field {key!r} in {entry.cache_path}")
+        return _as_channel_time(npz[key], expected_channels=channels, field_name=key)
+
+    def _read_target_arrays(self, entry: CroceCacheEntry, npz: Any) -> Dict[str, np.ndarray]:
+        arrays = {
+            "eeg_source": self._read_required(npz, entry, "source_eeg", 6),
+            "eeg_residual": self._read_required(npz, entry, "obs_eeg", 6),
+            "fnirs_source_0": self._read_required(npz, entry, HIGHWL_SOURCE_FIELD, 1),
+            "fnirs_source_1": self._read_required(npz, entry, LOWWL_SOURCE_FIELD, 1),
+            "fnirs_residual_0": self._read_required(npz, entry, HIGHWL_OBSERVATION_FIELD, 1),
+            "fnirs_residual_1": self._read_required(npz, entry, LOWWL_OBSERVATION_FIELD, 1),
+            "state_mean": self._read_required(npz, entry, "state_estimates", 5),
+            "state_var": self._read_required(npz, entry, "state_var", 5),
+            "neural_driver": self._read_required(npz, entry, "r_estimates_eeg", 1),
+            "neural_driver_var": self._read_required(npz, entry, "r_var_eeg", 1),
+            "teacher_valid_mask": self._read_required(npz, entry, "teacher_valid_mask", 1),
+        }
+        for name, array in arrays.items():
+            if not np.all(np.isfinite(array)):
+                raise ValueError(f"Non-finite values in {entry.cache_path}:{entry.prefix}/{name}")
+        if np.any(arrays["state_var"] < 0) or np.any(arrays["neural_driver_var"] < 0):
+            raise ValueError(f"Negative posterior variance in {entry.cache_path}:{entry.prefix}")
+        return arrays
+
+    def _raw_normalize(
+        self,
+        source: np.ndarray,
+        residual: np.ndarray,
+        *,
+        modality: str,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        raw = source + residual
+        enabled = bool(self.raw_normalization_cfg.get("enabled", False))
+        eps = float(self.raw_normalization_cfg.get("eps", 1e-6))
+        if not enabled:
+            offset = np.zeros((1, raw.shape[1]), dtype=np.float32)
+            scale = np.ones((1, raw.shape[1]), dtype=np.float32)
+        elif str(self.raw_normalization_cfg.get("scope", "sample")) == "sample":
+            offset = np.mean(raw, axis=0, keepdims=True, dtype=np.float64).astype(np.float32)
+            scale = np.std(raw, axis=0, keepdims=True, dtype=np.float64).astype(np.float32)
+            scale = np.where(scale >= eps, scale, 1.0).astype(np.float32)
+        else:
+            modality_cfg = self.raw_normalization_cfg.get(modality, {})
+            offset = np.asarray(modality_cfg.get("offset", []), dtype=np.float32).reshape(1, -1)
+            scale = np.asarray(modality_cfg.get("scale", []), dtype=np.float32).reshape(1, -1)
+            if offset.shape[1] != raw.shape[1] or scale.shape[1] != raw.shape[1]:
+                raise ValueError(f"Invalid fixed_train {modality} normalization shape.")
+        raw_normalized = (raw - offset) / scale
+        source_contribution = source / scale
+        # Allocate centering and floating-point closure to the residual branch;
+        # verify the remaining float32 roundoff against a forward-error bound.
+        residual_contribution = raw_normalized - source_contribution
+        closure_error = float(
+            np.max(np.abs(raw_normalized - source_contribution - residual_contribution))
+        )
+        magnitude = float(
+            max(
+                1.0,
+                np.max(np.abs(raw_normalized)),
+                np.max(np.abs(source_contribution)),
+                np.max(np.abs(residual_contribution)),
+            )
+        )
+        closure_tolerance = 8.0 * float(np.finfo(np.float32).eps) * magnitude
+        if closure_error > closure_tolerance:
+            raise RuntimeError(f"{modality} additive raw-space normalization invariant failed")
+        return raw_normalized, source_contribution, residual_contribution, offset.reshape(-1), scale.reshape(-1)
+
+    def __getitem__(self, index: int) -> Dict[str, Any]:
+        entry = self.entries[index]
+        if self.cache_npz_handles:
+            arrays = self._read_target_arrays(entry, self._open_npz(entry.cache_path))
+        else:
+            with np.load(entry.cache_path, allow_pickle=False) as npz:
+                arrays = self._read_target_arrays(entry, npz)
+
+        fnirs_source = np.concatenate((arrays["fnirs_source_0"], arrays["fnirs_source_1"]), axis=1)
+        fnirs_residual = np.concatenate((arrays["fnirs_residual_0"], arrays["fnirs_residual_1"]), axis=1)
+        total_fnirs = min(
+            fnirs_source.shape[0],
+            fnirs_residual.shape[0],
+            arrays["state_mean"].shape[0],
+            arrays["state_var"].shape[0],
+            arrays["teacher_valid_mask"].shape[0],
+        )
+        fnirs_start = self._crop_start(total_fnirs, entry)
+        fnirs_end = fnirs_start + self.fnirs_crop_samples
+        eeg_start = fnirs_start * self.eeg_per_fnirs
+        eeg_end = eeg_start + self.eeg_crop_samples
+
+        eeg_source = arrays["eeg_source"][eeg_start:eeg_end]
+        eeg_residual = arrays["eeg_residual"][eeg_start:eeg_end]
+        fnirs_source = fnirs_source[fnirs_start:fnirs_end]
+        fnirs_residual = fnirs_residual[fnirs_start:fnirs_end]
+        state_mean = arrays["state_mean"][fnirs_start:fnirs_end]
+        state_var = arrays["state_var"][fnirs_start:fnirs_end]
+        neural_driver = arrays["neural_driver"][eeg_start:eeg_end]
+        neural_driver_var = arrays["neural_driver_var"][eeg_start:eeg_end]
+        cached_valid = arrays["teacher_valid_mask"][fnirs_start:fnirs_end, 0].astype(bool)
+
+        expected_shapes = {
+            "eeg_source": (self.eeg_crop_samples, 6),
+            "fnirs_source": (self.fnirs_crop_samples, 2),
+            "state_mean": (self.fnirs_crop_samples, 5),
+            "neural_driver": (self.eeg_crop_samples, 1),
+        }
+        observed = {
+            "eeg_source": eeg_source.shape,
+            "fnirs_source": fnirs_source.shape,
+            "state_mean": state_mean.shape,
+            "neural_driver": neural_driver.shape,
+        }
+        for name, shape in expected_shapes.items():
+            if observed[name] != shape:
+                raise ValueError(
+                    f"Unexpected {name} crop shape {observed[name]} (expected {shape}) for "
+                    f"{entry.cache_path}:{entry.prefix}"
+                )
+
+        eeg, eeg_source_norm, eeg_residual_norm, eeg_offset, eeg_scale = self._raw_normalize(
+            eeg_source, eeg_residual, modality="eeg"
+        )
+        fnirs, fnirs_source_norm, fnirs_residual_norm, fnirs_offset, fnirs_scale = self._raw_normalize(
+            fnirs_source, fnirs_residual, modality="fnirs"
+        )
+        causal_valid = np.ones(self.fnirs_crop_samples, dtype=bool)
+        causal_valid[: min(int(np.ceil(self.causal_history_s * self.fnirs_sample_rate_hz)), causal_valid.size)] = False
+        teacher_valid = cached_valid & causal_valid
+
+        def tensor_tc_to_ct(array: np.ndarray) -> torch.Tensor:
+            return torch.from_numpy(np.ascontiguousarray(array.T.astype(np.float32, copy=False)))
+
+        crop_start_s = float(fnirs_start) / self.fnirs_sample_rate_hz
+        physical_metadata = self._target_cache_metadata[entry.cache_path]
+        return {
+            "contract": PHYSIOLOGY_SEMANTIC_DATA_CONTRACT,
+            "eeg": tensor_tc_to_ct(eeg),
+            "fnirs": tensor_tc_to_ct(fnirs),
+            "teacher": {
+                "state_mean": torch.from_numpy(np.ascontiguousarray(state_mean.astype(np.float32))),
+                "state_var": torch.from_numpy(np.ascontiguousarray(state_var.astype(np.float32))),
+                "neural_driver_eeg_rate": torch.from_numpy(np.ascontiguousarray(neural_driver.astype(np.float32))),
+                "neural_driver_var_eeg_rate": torch.from_numpy(
+                    np.ascontiguousarray(neural_driver_var.astype(np.float32))
+                ),
+                "eeg_clean_mean": tensor_tc_to_ct(eeg_source),
+                "fnirs_clean_mean": tensor_tc_to_ct(fnirs_source),
+                "teacher_valid_mask": torch.from_numpy(teacher_valid),
+                "cache_valid_mask": torch.from_numpy(cached_valid),
+                "causal_valid_mask": torch.from_numpy(causal_valid),
+            },
+            "decomposition": {
+                "eeg_source": tensor_tc_to_ct(eeg_source_norm),
+                "eeg_residual": tensor_tc_to_ct(eeg_residual_norm),
+                "fnirs_source": tensor_tc_to_ct(fnirs_source_norm),
+                "fnirs_residual": tensor_tc_to_ct(fnirs_residual_norm),
+            },
+            "normalization": {
+                "scope": str(self.raw_normalization_cfg.get("scope", "sample")),
+                "eeg_offset": torch.from_numpy(eeg_offset),
+                "eeg_scale": torch.from_numpy(eeg_scale),
+                "fnirs_offset": torch.from_numpy(fnirs_offset),
+                "fnirs_scale": torch.from_numpy(fnirs_scale),
+            },
+            "subject": torch.tensor(entry.subject_id, dtype=torch.long),
+            "subject_id": torch.tensor(entry.subject_id, dtype=torch.long),
+            "label": torch.tensor(entry.label_id, dtype=torch.long),
+            "label_name": entry.label_name,
+            "anchor": entry.anchor,
+            "source_name": entry.source_name,
+            "source_task": entry.task,
+            "event_idx": torch.tensor(-1 if entry.event_idx is None else entry.event_idx, dtype=torch.long),
+            "crop_start_fnirs": torch.tensor(fnirs_start, dtype=torch.long),
+            "crop_start_s": torch.tensor(crop_start_s, dtype=torch.float32),
+            "cache_entry_id": f"{entry.source_name}|{entry.task}|subject_{entry.subject_id:03d}|{entry.prefix}",
+            "cache_schema_version": PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA,
+            "eeg_sample_rate_hz": torch.tensor(self.eeg_sample_rate_hz, dtype=torch.float32),
+            "fnirs_sample_rate_hz": torch.tensor(self.fnirs_sample_rate_hz, dtype=torch.float32),
+            "eeg_unit": physical_metadata["eeg_unit"],
+            "fnirs_units": physical_metadata["fnirs_units"],
+            "fnirs_component_labels": ("highWL", "lowWL"),
+        }
+
+    def get_num_fnirs_channels(self) -> int:
+        return 2
+
+    def get_fnirs_channel_names(self) -> List[str]:
+        return ["highWL", "lowWL"]
+
+    def get_gate0_metadata(self) -> Dict[str, Any]:
+        metadata = super().get_gate0_metadata()
+        metadata.update(
+            {
+                "cache_contract": PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA,
+                "selected_fnirs_component": "paired_optical",
+                "ignored_fnirs_components": [],
+                "fnirs_optical_components": 2,
+                "fnirs_channels": 2,
+                "teacher_state_names": list(PHYSICAL_STATE_NAMES),
+                "causal_history_s": self.causal_history_s,
+                "normalization_enabled": bool(self.raw_normalization_cfg.get("enabled", False)),
+                "normalization_scope": str(self.raw_normalization_cfg.get("scope", "sample")),
+            }
+        )
+        return metadata
+
+
+__all__ = [
+    "CroceLocalCacheDataset",
+    "CrocePhysiologySemanticDataset",
+    "PHYSIOLOGY_SEMANTIC_CACHE_SCHEMA",
+    "PHYSIOLOGY_SEMANTIC_DATA_CONTRACT",
+    "PHYSICAL_STATE_NAMES",
+    "validate_physiology_semantic_data_config",
+]

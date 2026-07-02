@@ -9,7 +9,12 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
-from .croce_local_cache_dataset import CroceLocalCacheDataset
+from .croce_local_cache_dataset import (
+    PHYSIOLOGY_SEMANTIC_DATA_CONTRACT,
+    CroceLocalCacheDataset,
+    CrocePhysiologySemanticDataset,
+    validate_physiology_semantic_data_config,
+)
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
 from .registry import normalize_data_config, resolve_dataset_id, resolve_modality_preprocessing
 from .simultaneous_eeg_nirs_dataset import (
@@ -285,7 +290,14 @@ def create_multimodal_window_dataset(
 
     if dataset_id == 'croce_local_cache':
         crop_cfg = data_cfg.get('crop', {})
-        return CroceLocalCacheDataset(
+        is_target_contract = str(data_cfg.get('contract', '')) == PHYSIOLOGY_SEMANTIC_DATA_CONTRACT
+        dataset_cls = CrocePhysiologySemanticDataset if is_target_contract else CroceLocalCacheDataset
+        extra_kwargs = (
+            {'causal_history_s': float(data_cfg.get('teacher', {}).get('causal_history_s', 10.0))}
+            if is_target_contract
+            else {}
+        )
+        return dataset_cls(
             cache_sources=data_cfg.get('cache_sources', [data_cfg.get('data_root', 'croce_validation/cache')]),
             subject_ids=subject_ids,
             split=str(data_cfg.get('_split_name', 'train')),
@@ -299,6 +311,7 @@ def create_multimodal_window_dataset(
             max_npz_cache_size=int(data_cfg.get('max_npz_cache_size', params.get('max_npz_cache_size', 128))),
             normalization=data_cfg.get('normalization', {}),
             entry_filters=data_cfg.get('entry_filters', {}),
+            **extra_kwargs,
         )
 
     if dataset_id == 'eeg_fnirs_single_trial':
@@ -425,6 +438,8 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
     dataset_id = resolve_dataset_id(data_cfg)
 
     if dataset_id == 'croce_local_cache':
+        if str(data_cfg.get('contract', '')) == PHYSIOLOGY_SEMANTIC_DATA_CONTRACT:
+            validate_physiology_semantic_data_config(data_cfg)
         dataloaders: Dict[str, DataLoader] = {}
         force_deterministic = bool(data_cfg.get('crop', {}).get('force_deterministic_all_splits', False))
         for split_name in ('train', 'val', 'test'):

@@ -1,0 +1,48 @@
+experiment:
+  name: "p1_e0_contract_smoke"
+  run_group: "physiology_semantic_tokenizer/e0_teacher_validity"
+  description: "P1 real-data smoke for the paired-optical physical-teacher cache contract."
+
+data:
+  modality: "both"
+  dataset: "croce_local_cache"
+  contract: "physiology_semantic_v2"
+  data_root: "croce_validation/cache/croce_local/physiology_semantic_v2_smoke"
+  cache_sources:
+    - name: "single_trial_mental_arithmetic_smoke"
+      root: "croce_validation/cache/croce_local/physiology_semantic_v2_smoke/single_trial_mental_arithmetic"
+      task: "mental_arithmetic"
+  split:
+    train_subjects: [1]
+    val_subjects: [21]
+    test_subjects: [25]
+  window:
+    duration_s: 20.0
+  crop:
+    train_random: false
+    force_deterministic_all_splits: true
+    eval_event_offsets_s: [0.0]
+  teacher:
+    causal_history_s: 10.0
+  normalization:
+    enabled: true
+    scope: "sample"
+    eps: 1.0e-6
+  num_workers: 0
+  dataloader:
+    pin_memory: false
+    drop_last: false
+
+training:
+  batch_size: 1
+  seed: 11
+
+validation:
+  phase: "p1_contract_smoke"
+  protected_test_metrics: false
+  expected_shapes:
+    eeg: [6, 4000]
+    fnirs: [2, 200]
+    state_mean: [200, 5]
+    state_var: [200, 5]
+    neural_driver_eeg_rate: [4000, 1]
