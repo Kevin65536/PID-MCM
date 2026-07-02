@@ -1,0 +1,21 @@
+_base_: "./gate2_phase2a_dual_decoder_uniform32_obs64_bs128.yaml"
+
+experiment:
+  name: "s2_phase2a_gate2_dual_decoder_uniform32_obs64_bs128_provq_recovery"
+  description: "Phase 2A retry with delayed branch-target warmup and mature-epoch early stopping"
+
+training:
+  early_stopping:
+    start_epoch: 61
+  source_target_warmup:
+    enabled: true
+    start_epoch: 31
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  observation_target_warmup:
+    enabled: true
+    start_epoch: 31
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0

@@ -1,0 +1,119 @@
+# EEG Frequency-Domain Patch VQ-VAE Configuration
+# Following LaBraM's approach of FFT amplitude + phase reconstruction
+#
+# Key Improvements:
+# - Frequency domain encoding/decoding (like LaBraM)
+# - Multi-scale temporal encoder (like NeuroRVQ)
+# - Separate amplitude and phase prediction heads
+# - Better suited for EEG frequency band analysis
+#
+# Expected Benefits:
+# - Better preservation of frequency information
+# - More meaningful tokens for MI classification
+# - Lower reconstruction error especially in frequency domain
+
+_base_: "../base.yaml"
+
+experiment:
+  name: "eeg_freq_patch_vqvae_1s"
+  description: "EEG tokenizer with frequency domain reconstruction (1s patches)"
+  seed: 42
+  device: "cuda"
+
+# Data configuration
+data:
+  modality: "eeg"
+  dataset: "eeg_fnirs_single_trial"
+  data_root: "data/EEG+NIRS Single-Trial"
+  preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  window:
+    length: 800           # 4.0s @ 200Hz
+    stride: 400           # 50% overlap
+    offset_ms: 500        # MI response delay
+  split:
+    train_subjects: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    val_subjects: [21,22,23,24,25]
+    test_subjects: [26,27,28,29]
+  task: "motor_imagery"
+  channel_mode: "independent"
+  n_channels: 30
+  exclude_eog: true
+  num_workers: 4
+
+# Model configuration - Frequency Domain Patch VQ-VAE
+model:
+  type: "freq_patch_vqvae"  # New model type
+  input_channels: 1
+  seq_length: 800           # 4s @ 200Hz
+  
+  # Patch configuration
+  patch:
+    size: 200               # 1 second per patch
+    stride: 200             # Non-overlapping
+  
+  encoder:
+    type: "multiscale"      # Multi-scale temporal encoder (like NeuroRVQ)
+    hidden_dim: 256
+    output_dim: 64
+    num_layers: 2
+    num_scales: 4           # 4 parallel conv branches
+  
+  quantizer:
+    codebook_size: 2048
+    embedding_dim: 64
+    commitment_cost: 0.1    # Lower for faster codebook learning
+    ema_decay: 0.99
+    reset_unused: true
+    reset_threshold: 2
+  
+  decoder:
+    hidden_dim: 256
+    num_layers: 2
+
+# Token specification
+token_spec:
+  patch_size_samples: 200
+  patch_size_seconds: 1.0
+  tokens_per_window: 4
+  fft_size: 101            # patch_size // 2 + 1
+  codebook_size: 2048
+  embedding_dim: 64
+
+# Loss configuration - Balanced frequency and time domain
+# 时域和频域都需要保持较好的重建效果
+loss:
+  amplitude:
+    weight: 1.0             # FFT幅度重建
+    type: "mse"
+  phase:
+    weight: 0.5             # FFT相位重建 (较难预测)
+    type: "mse"
+  time:
+    weight: 1.0             # ★ 时域MSE同样重要，便于直观评估和后续分析
+    type: "mse"
+  
+  # Use log amplitude for better numerical stability
+  use_log_amplitude: true
+
+# Training configuration
+training:
+  epochs: 150
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  warmup_epochs: 10
+  gradient_clip: 1.0
+  
+  early_stopping:
+    enabled: true
+    patience: 25
+    min_delta: 0.0001
+
+# Logging
+logging:
+  log_every: 5
+  save_checkpoint_every: 10
+  visualize_every: 20

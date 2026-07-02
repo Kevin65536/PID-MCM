@@ -1,0 +1,10 @@
+_base_: "./gate1_health_uniform32_stable_sourceonly_balance_provq_fftstabilized_bs128.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_freqmain_smoke_bs128"
+  description: "Short smoke validation for time + loss-aligned spectral-amplitude reconstruction objective"
+
+training:
+  epochs: 12
+  early_stopping:
+    patience: 12

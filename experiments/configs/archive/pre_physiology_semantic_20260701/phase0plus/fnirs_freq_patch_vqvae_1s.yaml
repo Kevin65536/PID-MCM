@@ -1,0 +1,108 @@
+# fNIRS Frequency-Domain Patch VQ-VAE Configuration
+# Adapted for low-frequency fNIRS signals (10Hz sampling)
+#
+# Key adaptations for fNIRS:
+# - Lower patch size (1s = 10 samples)
+# - Lower FFT size
+# - Emphasis on low-frequency amplitude preservation
+
+_base_: "../base.yaml"
+
+experiment:
+  name: "fnirs_freq_patch_vqvae_1s"
+  description: "fNIRS tokenizer with frequency domain reconstruction (1s patches)"
+  seed: 42
+  device: "cuda"
+
+# Data configuration
+data:
+  modality: "fnirs"
+  dataset: "eeg_fnirs_single_trial"
+  data_root: "data/EEG+NIRS Single-Trial"
+  preprocessing:
+    resample_rate: 10       # Native fNIRS rate
+    lowpass: 0.2            # Remove physiological artifacts
+  window:
+    length: 40              # 4.0s @ 10Hz
+    stride: 20              # 50% overlap
+    offset_ms: 500
+  split:
+    train_subjects: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    val_subjects: [21,22,23,24,25]
+    test_subjects: [26,27,28,29]
+  task: "motor_imagery"
+  channel_mode: "independent"
+  n_channels: 36
+  hbo_only: true
+  num_workers: 4
+
+# Model configuration
+model:
+  type: "freq_patch_vqvae"
+  input_channels: 1
+  seq_length: 40            # 4s @ 10Hz
+  
+  patch:
+    size: 10                # 1 second per patch (10 samples @ 10Hz)
+    stride: 10
+  
+  encoder:
+    type: "mlp"             # MLP better for very short sequences
+    hidden_dim: 128
+    output_dim: 64
+    num_layers: 2
+  
+  quantizer:
+    codebook_size: 1024     # Smaller codebook for fNIRS
+    embedding_dim: 64
+    commitment_cost: 0.1
+    ema_decay: 0.99
+    reset_unused: true
+    reset_threshold: 2
+  
+  decoder:
+    hidden_dim: 128
+    num_layers: 2
+
+# Token specification
+token_spec:
+  patch_size_samples: 10
+  patch_size_seconds: 1.0
+  tokens_per_window: 4
+  fft_size: 6               # 10 // 2 + 1
+  codebook_size: 1024
+  embedding_dim: 64
+
+# Loss configuration - fNIRS强调时域趋势
+loss:
+  amplitude:
+    weight: 1.0             # FFT幅度重建
+    type: "mse"
+  phase:
+    weight: 0.3             # fNIRS主要是低频/趋势，相位不太重要
+    type: "mse"
+  time:
+    weight: 1.5             # ★ fNIRS更强调时域趋势准确性
+    type: "mse"
+  use_log_amplitude: true
+
+# Training configuration
+training:
+  epochs: 150
+  batch_size: 64
+  learning_rate: 0.0005     # Lower LR for stability
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  warmup_epochs: 10
+  gradient_clip: 1.0
+  
+  early_stopping:
+    enabled: true
+    patience: 25
+    min_delta: 0.0001
+
+# Logging
+logging:
+  log_every: 5
+  save_checkpoint_every: 10
+  visualize_every: 20

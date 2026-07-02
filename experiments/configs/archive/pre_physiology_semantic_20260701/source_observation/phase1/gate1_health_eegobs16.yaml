@@ -1,0 +1,13 @@
+_base_: "./gate1_health_uniform32.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_eegobs16"
+  description: "Phase 1 Gate1 health run with extra EEG observation codebook shrinkage"
+
+model:
+  eeg_observation:
+    codebook_size: 16
+
+loss:
+  codebook:
+    balance_weight: 0.1

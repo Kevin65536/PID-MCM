@@ -201,11 +201,13 @@ Example:
 
 ```bash
 python experiments/scripts/signal_visualization/visualize_continuous_alignment.py \
-	--config source_observation/phase1/default.yaml \
+	--config archive/pre_physiology_semantic_20260701/source_observation/phase1/default.yaml \
 	--subject-id 1 \
 	--session-idx 0 \
 	--focus-trial-idx 0
 ```
+
+This command uses an archived config only as a dataset/preprocessing fixture. New tokenizer configs must not inherit from it.
 
 Expected output:
 

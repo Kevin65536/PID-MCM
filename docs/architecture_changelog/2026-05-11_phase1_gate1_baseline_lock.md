@@ -67,8 +67,8 @@ The baseline was approved as a structural handoff, not as a physiological-coupli
 
 ## 🔗 Archived artifacts
 
-- [Locked baseline config](../../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
-- [Best baseline alias](../../experiments/configs/source_observation/phase1/gate1_best_current.yaml)
+- [Locked baseline config](../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
+- [Best baseline alias](../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml)
 - [Best archived run](../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
 - [Archive manifest](../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json)
 

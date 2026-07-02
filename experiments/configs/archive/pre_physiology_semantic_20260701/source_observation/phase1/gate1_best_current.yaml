@@ -1,0 +1,5 @@
+_base_: "./gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_best_current"
+  description: "Alias to the current best Phase 1 Gate1-stable baseline"

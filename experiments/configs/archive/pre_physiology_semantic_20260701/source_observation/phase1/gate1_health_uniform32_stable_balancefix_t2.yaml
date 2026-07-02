@@ -1,0 +1,9 @@
+_base_: "./gate1_health_uniform32_stable_lr1e4.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_uniform32_stable_balancefix_t2"
+  description: "Phase 1 Gate1 balance-fix run with hard assignment stats and codebook temperature 2.0"
+
+loss:
+  codebook:
+    assignment_temperature: 2.0

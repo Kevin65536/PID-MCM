@@ -33,6 +33,7 @@ gantt
     section Phase 3: Semantic Redesign
         Design and experiment freeze      :milestone, 2026-07-01, 0d
         Archive namespace isolation       :milestone, 2026-07-01, 0d
+        Code and config isolation         :milestone, 2026-07-02, 0d
 ```
 
 ## Change Records
@@ -49,6 +50,7 @@ gantt
 | 8 | 2026-06-04 | Phase 2C | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | `ExperimentLogger`, `run_metrics_comparison.py`, `croce_local configs`, `STORAGE_LAYOUT.md` | Merged |
 | 9 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
 | 10 | 2026-07-01 | Phase 3 preparation | [Documentation and Run Archive Isolation](2026-07-01_document_and_run_archive_isolation.md) | `docs/archive/`, `experiments/archive/`, `STORAGE_LAYOUT.md`, project guides | Merged |
+| 11 | 2026-07-02 | Phase 3 preparation | [Code and Configuration Archive Isolation](2026-07-02_code_and_config_archive_isolation.md) | `src/compatibility/`, dated scripts/configs/tests, `pytest.ini`, active launcher | Merged |
 
 ## How to Add a New Entry
 

@@ -1,0 +1,123 @@
+_base_: "../../base.yaml"
+
+experiment:
+  name: "s2_phase1_structural"
+  description: "Phase 1 Structural Migration — Source/Observation baseline"
+
+data:
+  modality: "multimodal"
+  dataset: "eeg_fnirs_single_trial"
+  data_root: "data/EEG+NIRS Single-Trial"
+  task: "motor_imagery"
+  split:
+    train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    val_subjects: [21, 22, 23, 24, 25]
+    test_subjects: [26, 27, 28, 29]
+  window:
+    duration_s: 10.0
+    offset_ms: 0.0
+  exclude_eog: true
+  hbo_only: true
+  hbr_only: false
+  eeg_preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  fnirs_preprocessing:
+    lowpass: 0.2
+
+model:
+  type: "source_observation_labram_vqnsp"
+  eeg:
+    seq_length: 2000
+    patch_size: 400
+    channels: 30
+    encoder_embed_dim: 256
+    encoder_depth: 8
+    encoder_num_heads: 8
+    decoder_embed_dim: 256
+    decoder_depth: 4
+    decoder_num_heads: 8
+  fnirs:
+    seq_length: 100
+    patch_size: 20
+    channels: 36
+    encoder_embed_dim: 160
+    encoder_depth: 6
+    encoder_num_heads: 4
+    decoder_embed_dim: 160
+    decoder_depth: 3
+    decoder_num_heads: 4
+  source:
+    codebook_size: 128
+    eeg_codebook_dim: 48
+    fnirs_codebook_dim: 48
+  eeg_observation:
+    codebook_size: 256
+    codebook_dim: 64
+  fnirs_observation:
+    codebook_size: 128
+    codebook_dim: 48
+  quantizer:
+    beta: 1.0
+    decay: 0.99
+    kmeans_init: true
+    revive_dead_codes: true
+    dead_code_threshold: 10
+
+loss:
+  reconstruction:
+    eeg_amplitude_weight: 1.0
+    eeg_phase_weight: 0.0
+    eeg_time_weight: 0.9
+    fnirs_amplitude_weight: 1.0
+    fnirs_phase_weight: 0.0
+    fnirs_time_weight: 1.0
+  coupling:
+    weight: 0.0
+  branch:
+    orthogonality_weight: 0.01
+  codebook:
+    balance_weight: 0.02
+    assignment_temperature: 1.0
+
+training:
+  epochs: 200
+  batch_size: 32
+  learning_rate: 0.001
+  early_stopping:
+    enabled: true
+    patience: 30
+    metric: "val_loss"
+    mode: "min"
+
+analysis:
+  reconstruction_visualization:
+    enabled: true
+    subdir: "reconstruction_visualizations"
+    max_samples: 4
+    domains: ["time", "frequency"]
+    time_window_s:
+      eeg: 2.0
+      fnirs: 5.0
+    max_time_points:
+      eeg: 500
+      fnirs: 250
+    channel_indices:
+      eeg: 0
+      fnirs: 0
+    frequency_range_hz:
+      eeg: [0.0, 45.0]
+      fnirs: [0.0, 0.5]
+  token_pattern_visualization:
+    enabled: true
+    subdir: "token_pattern_visualizations"
+    max_samples: 32
+    top_k: 8
+    max_patches_per_code: 96
+    max_overlay_patches: 20
+    channel_indices:
+      eeg: 0
+      fnirs: 0
+    frequency_range_hz:
+      eeg: [0.0, 45.0]
+      fnirs: [0.0, 0.5]

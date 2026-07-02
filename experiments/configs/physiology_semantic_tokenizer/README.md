@@ -12,6 +12,6 @@ New configuration files are added here only when their parser, shape assertions,
 experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/
 ```
 
-Existing configs in `source_observation/`, `downstream/`, `phase0/`, and `phase0plus/` reproduce earlier lineages and are not templates for the redesign.
+Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families are isolated under [`../archive/pre_physiology_semantic_20260701/`](../archive/pre_physiology_semantic_20260701/README.md) and are not config fallbacks or templates for the redesign.
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

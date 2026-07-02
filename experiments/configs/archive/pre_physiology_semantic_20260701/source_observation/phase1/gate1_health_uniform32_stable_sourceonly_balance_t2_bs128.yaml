@@ -1,0 +1,22 @@
+_base_: "./gate1_health_uniform32_stable_lr1e4.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_t2_bs128"
+  description: "Phase 1 Gate1 source-only balance run with source temperature 2.0, observation balance disabled, and higher throughput"
+
+loss:
+  codebook:
+    source_assignment_temperature: 2.0
+    observation_assignment_temperature: 1.0
+    source_balance_scale: 1.0
+    observation_balance_scale: 0.0
+
+training:
+  batch_size: 128
+
+data:
+  num_workers: 8
+  dataloader:
+    persistent_workers: true
+    prefetch_factor: 4
+    drop_last: true

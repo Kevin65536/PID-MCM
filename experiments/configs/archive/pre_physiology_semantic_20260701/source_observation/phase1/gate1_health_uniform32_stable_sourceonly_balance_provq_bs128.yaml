@@ -1,0 +1,15 @@
+_base_: "./gate1_health_uniform32_stable_sourceonly_balance_t2_bs128.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_bs128"
+  description: "Phase 1 Gate1 source-only balance base with progressive quantization warmup (ProVQ-style)"
+
+training:
+  quantization_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 60
+    start_scale: 0.0
+    end_scale: 1.0
+  early_stopping:
+    patience: 80

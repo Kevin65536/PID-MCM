@@ -17,6 +17,7 @@ New tokenizer work is governed by [`physiology_semantic_tokenizer/`](physiology_
 | Which experiments are allowed? | [`05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) |
 | What has run under the new design? | [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
 | Where should outputs be saved? | [`STORAGE_LAYOUT.md`](STORAGE_LAYOUT.md) |
+| Which source packages are active? | [`../src/README.md`](../src/README.md) |
 
 ## 🗂️ Document lifecycle
 
@@ -57,5 +58,6 @@ flowchart LR
 - Do not treat `docs/reliable_survey/` as implementation authority.
 - Keep target claims marked planned until their code-correctness and scientific-validity gates pass.
 - Update this index whenever a document changes authority class.
+- Treat `src.compatibility`, dated script/config archives, and archived tests as explicit historical dependencies only.
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

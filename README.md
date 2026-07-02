@@ -62,13 +62,14 @@ source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-The supported launcher remains:
+The active launcher is reserved for the redesign:
 
 ```bash
-bash experiments/scripts/launch_training_nohup.sh --task TASK [task arguments]
+bash experiments/scripts/launch_training_nohup.sh \
+  --task physiology-semantic-tokenizer
 ```
 
-No target-architecture training task is registered yet. Existing `source-observation-tokenizer`, token-export, whole-brain, and coupling-suite commands reproduce the archived lineage only.
+No target-architecture training task is registered yet, so the launcher exits without starting a process. Source/observation, token-export, whole-brain, and coupling-suite entrypoints are isolated under the [dated script archive](experiments/scripts/archive/pre_physiology_semantic_20260701/README.md).
 
 ## 📦 Result policy
 

@@ -183,7 +183,7 @@ TokenFlow 最值得借鉴的，不是“共享一个 codebook”，而是：
 当前代码实现中：
 
 - [src/tokenizers/shared_labram_vqnsp.py](../../src/tokenizers/shared_labram_vqnsp.py)
-- [src/tokenizers/factorized_labram_vqnsp.py](../../src/tokenizers/factorized_labram_vqnsp.py)
+- [archived source/observation tokenizer](../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py)
 
 仍要求 EEG 和 fNIRS 在每个窗口内产出相同 token 数。
 

@@ -1,0 +1,28 @@
+_base_: "./gate2_phase2a_dual_decoder_uniform32_obs64_bs128_provq_recovery_20s.yaml"
+
+experiment:
+  name: "s2_phase2a_spatial_target_preview_20s"
+  description: "Preview config for spatially-informed source targets before training"
+
+data:
+  use_artifact_data: true
+
+loss:
+  source_target:
+    spatial:
+      enabled: true
+      eeg_rms_smoothing_ms: 200.0
+      reference_subject_id: 1
+
+analysis:
+  reconstruction_visualization:
+    time_window_s:
+      eeg: 20.0
+      fnirs: 20.0
+    max_time_points:
+      eeg: 1000
+      fnirs: 400
+  spatial_visualization:
+    enabled: true
+    subdir: "spatial_target_previews"
+    max_samples: 4

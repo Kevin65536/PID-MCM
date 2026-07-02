@@ -1,0 +1,2 @@
+# Frozen configuration snapshots retain their original line endings and spacing.
+experiments/configs/archive/pre_physiology_semantic_20260701/** -whitespace

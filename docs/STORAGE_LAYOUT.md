@@ -111,6 +111,19 @@ experiments/archive/pre_physiology_semantic_20260701/
 
 Earlier archives remain under their existing `experiments/archive/` and `croce_validation/archive/` namespaces. The [dated archive inventory](../experiments/archive/pre_physiology_semantic_20260701/README.md) records the move and evidence boundary.
 
+## 💻 Code and configuration namespaces
+
+The same active/archive boundary applies to executable context:
+
+| Surface | Active path | Pre-redesign path |
+| --- | --- | --- |
+| Training scripts | `experiments/scripts/` | `experiments/scripts/archive/pre_physiology_semantic_20260701/` |
+| Configurations | `experiments/configs/physiology_semantic_tokenizer/` | `experiments/configs/archive/pre_physiology_semantic_20260701/` |
+| Model-specific code | future active target package | `src/compatibility/pre_physiology_semantic_20260701/` |
+| Tests | `tests/` | `tests/archive/pre_physiology_semantic_20260701/` |
+
+Default tokenizer registration and pytest collection exclude the compatibility surfaces. Historical checkpoint loading requires explicit compatibility registration.
+
 ## 🔍 Discovery rules
 
 - Active tools default to `experiments/runs/physiology_semantic_tokenizer/`.
@@ -129,4 +142,4 @@ Earlier archives remain under their existing `experiments/archive/` and `croce_v
 - Keep archived configs and scripts labeled as compatibility surfaces until the target replacements are implemented.
 - A target run is never stored in the archive merely because its scientific gate failed; valid negative results remain active evidence.
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

@@ -1,0 +1,71 @@
+_base_: "./highwl_recon_stable_fullval.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_phys_compile_prefetch"
+  device: "cuda:1"
+  description: "Croce local highWL-only physiological source-target recovery with torch.compile and CUDA prefetch"
+
+data:
+  num_workers: 16
+  max_npz_cache_size: 256
+  dataloader:
+    persistent_workers: true
+    prefetch_factor: 6
+    in_order: false
+    pin_memory: true
+    drop_last: true
+
+loss:
+  source_target:
+    weight: 0.05
+    eeg_aux_weight: 0.02
+    correlation_weight: 0.12
+    eeg_aux_correlation_weight: 0.02
+  observation_target:
+    weight: 0.01
+
+training:
+  batch_size: 512
+  epochs: 70
+  min_lr: 0.00002
+  performance:
+    tf32: true
+    matmul_precision: "high"
+    cudnn_benchmark: true
+    cuda_prefetch: true
+    compile:
+      enabled: true
+      scope: "encode_modalities"
+      mode: "default"
+      fullgraph: false
+      dynamic: false
+      suppress_errors: true
+      capture_scalar_outputs: true
+  validation:
+    interval_epochs: 2
+    start_epoch: 1
+    max_batches: null
+  early_stopping:
+    enabled: true
+    start_epoch: 35
+    patience: 14
+  quantization_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 90
+    start_scale: 0.0
+    end_scale: 1.0
+  source_target_warmup:
+    enabled: true
+    start_epoch: 8
+    ramp_epochs: 35
+    start_scale: 0.0
+    end_scale: 1.0
+  observation_target_warmup:
+    enabled: true
+    start_epoch: 24
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  checkpoint:
+    save_every: 20

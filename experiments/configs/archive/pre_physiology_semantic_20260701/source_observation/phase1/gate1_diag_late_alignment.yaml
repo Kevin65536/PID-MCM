@@ -1,0 +1,12 @@
+_base_: "./gate1_debug.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_diag_late_alignment"
+  description: "Phase 1 Gate1 diagnostic control with delayed coupling warmup"
+
+training:
+  alignment_warmup:
+    enabled: true
+    start_epoch: 40
+    ramp_epochs: 20
+    start_scale: 0.0

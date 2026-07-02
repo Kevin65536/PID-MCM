@@ -1,0 +1,47 @@
+_base_: "./default.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_baseline_locked_bs128"
+  description: "Locked Phase 1 Gate1-stable baseline without explicit phase supervision"
+
+model:
+  source:
+    codebook_size: 32
+  eeg_observation:
+    codebook_size: 32
+  fnirs_observation:
+    codebook_size: 32
+  quantizer:
+    beta: 0.5
+    decay: 0.95
+    dead_code_threshold: 20
+
+loss:
+  coupling:
+    weight: 0.0
+  codebook:
+    balance_weight: 0.08
+    source_assignment_temperature: 2.0
+    observation_assignment_temperature: 1.0
+    source_balance_scale: 1.0
+    observation_balance_scale: 0.0
+
+training:
+  batch_size: 128
+  learning_rate: 0.0001
+  warmup_epochs: 10
+  quantization_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 60
+    start_scale: 0.0
+    end_scale: 1.0
+  early_stopping:
+    patience: 80
+
+data:
+  num_workers: 8
+  dataloader:
+    persistent_workers: true
+    prefetch_factor: 4
+    drop_last: true

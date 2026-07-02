@@ -1,0 +1,8 @@
+_base_: "./gate2_phase2a_dual_decoder_uniform32_obs64_bs128_provq_recovery_20s.yaml"
+
+experiment:
+  name: "s2_phase2a_gate2_dual_decoder_uniform32_obs64_bs128_provq_recovery_20s_lr5e5"
+  description: "Phase 2A recovery 20s window sweep at learning rate 5e-5"
+
+training:
+  learning_rate: 0.00005

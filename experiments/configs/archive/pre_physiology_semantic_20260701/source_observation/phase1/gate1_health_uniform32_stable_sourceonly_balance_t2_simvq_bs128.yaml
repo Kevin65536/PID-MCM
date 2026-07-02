@@ -1,0 +1,10 @@
+_base_: "./gate1_health_uniform32_stable_sourceonly_balance_t2_bs128.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_t2_simvq_bs128"
+  description: "Phase 1 Gate1 source-only balance run with source SimVQ transform and higher throughput"
+
+model:
+  quantizer:
+    source_simvq_enabled: true
+    source_simvq_loss_weight: 0.25

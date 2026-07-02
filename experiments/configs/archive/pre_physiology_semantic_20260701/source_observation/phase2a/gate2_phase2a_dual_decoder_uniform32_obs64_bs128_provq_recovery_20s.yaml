@@ -1,0 +1,15 @@
+_base_: "./gate2_phase2a_dual_decoder_uniform32_obs64_bs128_provq_recovery.yaml"
+
+experiment:
+  name: "s2_phase2a_gate2_dual_decoder_uniform32_obs64_bs128_provq_recovery_20s"
+  description: "Phase 2A recovery setup with 20s multimodal windows"
+
+data:
+  window:
+    duration_s: 20.0
+
+model:
+  eeg:
+    seq_length: 4000
+  fnirs:
+    seq_length: 200

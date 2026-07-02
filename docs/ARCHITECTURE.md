@@ -3,7 +3,7 @@
 > **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
 > **Last updated**: 2026-07-01
 > **Current phase**: Legacy source/observation runtime frozen as the implementation baseline; physiology-semantic redesign approved but not implemented
-> **Mainline class**: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py)
+> **Compatibility class**: `SourceObservationLaBraMVQNSP` in [source_observation_tokenizer.py](../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py). This document describes the runnable pre-redesign architecture, not the active target contract.
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
 > **Active note**: this file describes code that runs today. The approved replacement is specified in [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md) and becomes current only after its implementation and validation gates pass. Repository code still contains older proxy-target paths; they remain candidate baselines only.
@@ -292,7 +292,7 @@ Current implementation does not force the two source codebooks to share numeric 
 
 | File | Role |
 |------|------|
-| [src/tokenizers/factorized_labram_vqnsp.py](../src/tokenizers/factorized_labram_vqnsp.py) | **Mainline tokenizer**: `SourceObservationLaBraMVQNSP` — encoders, projectors, 4 quantizers, coupling, dual source/observation decoders |
+| [source_observation_tokenizer.py](../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py) | **Compatibility tokenizer**: `SourceObservationLaBraMVQNSP` — encoders, projectors, 4 quantizers, coupling, dual source/observation decoders |
 | [src/tokenizers/labram_vqnsp.py](../src/tokenizers/labram_vqnsp.py) | **Shared components**: `NormEMAVectorQuantizer`, `TransformerEncoder`, `TransformerDecoder`, `l2norm`, `MultiChannelPatchEmbedding` |
 | [src/tokenizers/base.py](../src/tokenizers/base.py) | Abstract `BaseTokenizer` class |
 | [src/tokenizers/registry.py](../src/tokenizers/registry.py) | Tokenizer factory: config → constructor mapping, `StandardizedOutput` interface |
@@ -301,7 +301,7 @@ Current implementation does not force the two source codebooks to share numeric 
 
 | File | Role |
 |------|------|
-| [src/losses/multimodal_tokenizer.py](../src/losses/multimodal_tokenizer.py) | Codebook health, orthogonality, lag focus, EEG-neighbor smoothness, lag-balanced pair likelihood, and lag-evidence losses |
+| [multimodal_tokenizer_losses.py](../src/compatibility/pre_physiology_semantic_20260701/multimodal_tokenizer_losses.py) | Archived codebook, orthogonality, lag-focus, neighborhood, and coupling-shaping losses |
 | [src/losses/reconstruction.py](../src/losses/reconstruction.py) | Multi-STFT and time-domain reconstruction losses |
 
 ### Spatial & Physiological Priors
@@ -316,17 +316,17 @@ Current implementation does not force the two source codebooks to share numeric 
 
 | File | Role |
 |------|------|
-| [src/visualization/tokenizer_analysis_suite.py](../src/visualization/tokenizer_analysis_suite.py) | Standardized analysis entry point |
-| [src/visualization/source_observation_analysis.py](../src/visualization/source_observation_analysis.py) | Source/observation alignment analysis, Gate 0-4 scorecard. Gate0 asserts the highWL-only cache/input contract before semantic metrics are interpreted |
+| [tokenizer_analysis_suite.py](../src/compatibility/pre_physiology_semantic_20260701/visualization/tokenizer_analysis_suite.py) | Archived standardized analysis entry point |
+| [source_observation_analysis.py](../src/compatibility/pre_physiology_semantic_20260701/visualization/source_observation_analysis.py) | Archived source/observation alignment analysis and Gate 0-4 scorecard |
 
 ### Configs
 
 | Directory | Purpose |
 |-----------|---------|
-| [experiments/configs/source_observation/phase1/](../experiments/configs/source_observation/phase1/) | Phase 1 Gate1 baseline configs (locked) |
-| [experiments/configs/source_observation/phase2/](../experiments/configs/source_observation/phase2/) | Historical proxy-target configs; not current branch-target contract |
-| [experiments/configs/source_observation/phase2a/](../experiments/configs/source_observation/phase2a/) | Historical redesign configs; decoder structure still relevant, target semantics superseded |
-| `experiments/configs/source_observation/croce_local/` | Frozen compatibility configs for the Croce highWL/X3 lineage. Their existing results are archived under `experiments/archive/pre_physiology_semantic_20260701/runs/` |
+| [phase1/](../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/) | Archived Phase 1 Gate1 baseline configs |
+| [phase2/](../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase2/) | Archived proxy-target configs |
+| [phase2a/](../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase2a/) | Archived dual-decoder redesign configs |
+| `experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/croce_local/` | Frozen Croce highWL/X3 compatibility configs |
 
 ## 5. Quantizer Summary
 
@@ -424,8 +424,8 @@ Full reconstruction = source_recon + observation_recon (additive in signal space
 
 | Artifact | Role |
 |----------|------|
-| [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Current best Gate1-stable baseline alias |
-| [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Gate1 baseline |
+| [gate1_best_current.yaml](../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml) | Archived best Gate1-stable baseline alias |
+| [gate1_baseline_locked_bs128.yaml](../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Archived locked Gate1 baseline |
 | [Archived Phase 1 best run](../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Best recorded Gate1 pass |
 
 ### Phase 2 Diagnostic Baseline

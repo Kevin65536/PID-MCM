@@ -1,0 +1,65 @@
+# Phase 0 Experiment: FSQ Tokenizer on fNIRS Data
+# Inherits from base.yaml
+
+experiment:
+  name: "P0_fNIRS_FSQ"
+  description: "Verify FSQ tokenizer on real fNIRS data"
+  seed: 42
+
+data:
+  modality: "fnirs"
+  dataset: "TBD"  # TODO: Specify dataset path
+  preprocessing:
+    resample_rate: 10         # fNIRS typically has lower sampling rate
+    lowpass: 0.1              # Low-pass filter for fNIRS
+    signal_type: "hbo"        # hbo | hbr | both
+  window:
+    length: 100               # 10s @ 10Hz (longer windows for fNIRS)
+    stride: 50                # 50% overlap
+
+model:
+  type: "fsq"
+  input_channels: 1
+  seq_length: 100             # Match fNIRS window length
+  
+  encoder:
+    hidden_dims: [32, 64, 128]  # Smaller network for lower-dimensional fNIRS
+    kernel_size: 5
+    stride: 2
+  
+  quantizer:
+    levels: [8, 8, 8, 8]      # 4096 effective codes
+  
+  decoder:
+    hidden_dims: [128, 64, 32]
+    kernel_size: 5
+    stride: 2
+
+loss:
+  reconstruction:
+    weight: 1.0
+    type: "mse"
+  spectral:
+    weight: 0.05              # Lower weight for fNIRS (less spectral structure)
+    enabled: true
+    type: "multi_stft"
+    fft_sizes: [16, 32, 64]
+  smoothness:                 # fNIRS-specific: penalize non-smooth reconstructions
+    weight: 0.1
+    enabled: true
+
+training:
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+
+evaluation:
+  metrics:
+    - reconstruction_mse
+    - perplexity
+    - code_utilization
+    - dead_codes
+  thresholds:
+    perplexity_min: 1200
+    code_utilization_min: 0.2
+    dead_codes_max_ratio: 0.3

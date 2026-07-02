@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import numpy as np
@@ -10,6 +12,23 @@ from src.data.validation import build_dataset_validation_plan
 
 
 class DatasetRegistryTests(unittest.TestCase):
+    @staticmethod
+    def _write_multimodal_config(root: Path) -> Path:
+        base = root / 'base.yaml'
+        base.write_text(
+            """data:
+  data_root: data/EEG+NIRS Single-Trial
+  eeg_preprocessing:
+    bandpass: [0.5, 45]
+  fnirs_preprocessing:
+    lowpass: 0.2
+""",
+            encoding='utf-8',
+        )
+        child = root / 'multimodal.yaml'
+        child.write_text('_base_: ./base.yaml\n', encoding='utf-8')
+        return child
+
     def test_infers_single_trial_from_root(self):
         normalized = normalize_data_config({
             'data_root': 'data/EEG+NIRS Single-Trial',
@@ -19,13 +38,17 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertEqual(normalized['dataset_registry']['sync_strategy'], 'shared_parallel_port_markers')
 
     def test_load_experiment_config_normalizes_shared_config(self):
-        config = load_experiment_config('source_observation/phase1/default.yaml')
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = load_experiment_config(self._write_multimodal_config(root), configs_dir=root)
         self.assertEqual(config['data']['dataset'], 'eeg_fnirs_single_trial')
         self.assertEqual(config['data']['data_root'], 'data/EEG+NIRS Single-Trial')
         self.assertIn('dataset_registry', config['data'])
 
     def test_load_experiment_config_exposes_modality_specific_preprocessing(self):
-        config = load_experiment_config('source_observation/phase1/default.yaml')
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = load_experiment_config(self._write_multimodal_config(root), configs_dir=root)
         self.assertEqual(config['data']['eeg_preprocessing']['bandpass'], [0.5, 45])
         self.assertEqual(config['data']['fnirs_preprocessing']['lowpass'], 0.2)
 
@@ -64,10 +87,14 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertNotIn('bandpass', kwargs['fnirs_preprocessing'])
 
     def test_load_experiment_config_resolves_downstream_base(self):
-        try:
-            config = load_experiment_config('downstream/mi_multimodal_token.yaml')
-        except FileNotFoundError:
-            self.skipTest('downstream/mi_multimodal_token.yaml is not present in this checkout')
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downstream = root / 'downstream'
+            downstream.mkdir()
+            config_path = self._write_multimodal_config(downstream)
+            with config_path.open('a', encoding='utf-8') as handle:
+                handle.write('data:\n  task: motor_imagery\n')
+            config = load_experiment_config(config_path.name, configs_dir=root)
         self.assertEqual(config['data']['dataset'], 'eeg_fnirs_single_trial')
         self.assertEqual(config['data']['data_root'], 'data/EEG+NIRS Single-Trial')
         self.assertEqual(config['data']['task'], 'motor_imagery')

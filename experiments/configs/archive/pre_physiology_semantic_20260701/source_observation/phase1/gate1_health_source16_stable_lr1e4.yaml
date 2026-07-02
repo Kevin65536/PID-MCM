@@ -1,0 +1,9 @@
+_base_: "./gate1_health_uniform32_stable_lr1e4.yaml"
+
+experiment:
+  name: "s2_phase1_gate1_health_source16_stable_lr1e4"
+  description: "Phase 1 Gate1 stability run with source-only codebook shrink to 16"
+
+model:
+  source:
+    codebook_size: 16

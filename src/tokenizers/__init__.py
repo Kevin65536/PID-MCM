@@ -21,7 +21,6 @@ from .labram_vqnsp import (
     LaBraMVQNSP_EEG,
     LaBraMVQNSP_fNIRS,
 )
-from .factorized_labram_vqnsp import SourceObservationLaBraMVQNSP
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -43,7 +42,6 @@ _TOKENIZER_REGISTRY['neurorvq_fnirs'] = NeuroRVQTokenizerFNIRS
 _TOKENIZER_REGISTRY['labram_vqnsp'] = LaBraMVQNSP
 _TOKENIZER_REGISTRY['labram_vqnsp_eeg'] = LaBraMVQNSP_EEG
 _TOKENIZER_REGISTRY['labram_vqnsp_fnirs'] = LaBraMVQNSP_fNIRS
-_TOKENIZER_REGISTRY['source_observation_labram_vqnsp'] = SourceObservationLaBraMVQNSP
 
 __all__ = [
     # Base
@@ -61,7 +59,6 @@ __all__ = [
     'LaBraMVQNSP',
     'LaBraMVQNSP_EEG',
     'LaBraMVQNSP_fNIRS',
-    'SourceObservationLaBraMVQNSP',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',

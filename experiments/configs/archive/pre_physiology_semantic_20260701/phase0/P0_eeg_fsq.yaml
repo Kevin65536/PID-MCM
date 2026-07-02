@@ -1,0 +1,63 @@
+# Phase 0 Experiment: FSQ Tokenizer on EEG Data
+# Inherits from base.yaml
+
+experiment:
+  name: "P0_EEG_FSQ"
+  description: "Verify FSQ tokenizer on real EEG data - baseline experiment"
+  seed: 42
+
+data:
+  modality: "eeg"
+  dataset: "TBD"  # TODO: Specify dataset path
+  preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  window:
+    length: 512   # 2.56s @ 200Hz
+    stride: 256   # 50% overlap
+
+model:
+  type: "fsq"
+  input_channels: 1
+  seq_length: 512
+  
+  encoder:
+    hidden_dims: [64, 128, 256]
+    kernel_size: 7
+    stride: 2
+  
+  quantizer:
+    levels: [8, 8, 8, 8]  # 4096 effective codes
+  
+  decoder:
+    hidden_dims: [256, 128, 64]
+    kernel_size: 7
+    stride: 2
+
+loss:
+  reconstruction:
+    weight: 1.0
+    type: "mse"
+  spectral:
+    weight: 0.1
+    enabled: true
+    type: "multi_stft"
+    fft_sizes: [64, 128, 256]
+
+training:
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+
+# Success criteria for this experiment
+evaluation:
+  metrics:
+    - reconstruction_mse
+    - spectral_mse
+    - perplexity
+    - code_utilization
+    - dead_codes
+  thresholds:
+    perplexity_min: 1200      # > 30% of 4096
+    code_utilization_min: 0.2 # > 20% codes active
+    dead_codes_max_ratio: 0.3 # < 30% dead codes

@@ -1,0 +1,70 @@
+# Phase 0 Experiment: VQ-VAE Tokenizer on EEG Data
+# Inherits from base.yaml
+
+experiment:
+  name: "P0_EEG_VQVAE"
+  description: "VQ-VAE tokenizer on real EEG data - compare with FSQ"
+  seed: 42
+
+data:
+  modality: "eeg"
+  dataset: "TBD"  # TODO: Specify dataset path
+  preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  window:
+    length: 512
+    stride: 256
+
+model:
+  type: "vqvae"
+  input_channels: 1
+  seq_length: 512
+  
+  encoder:
+    hidden_dims: [64, 128, 256]
+    kernel_size: 7
+    stride: 2
+  
+  quantizer:
+    codebook_size: 512
+    embedding_dim: 64
+    commitment_cost: 0.25
+    ema_decay: 0.99           # Use EMA for codebook update
+    reset_unused: true        # Reset dead codes periodically
+    reset_threshold: 0.01     # Reset if usage < 1%
+  
+  decoder:
+    hidden_dims: [256, 128, 64]
+    kernel_size: 7
+    stride: 2
+
+loss:
+  reconstruction:
+    weight: 1.0
+    type: "mse"
+  spectral:
+    weight: 0.1
+    enabled: true
+    type: "multi_stft"
+    fft_sizes: [64, 128, 256]
+  commitment:
+    weight: 0.25
+
+training:
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+
+evaluation:
+  metrics:
+    - reconstruction_mse
+    - spectral_mse
+    - perplexity
+    - code_utilization
+    - dead_codes
+    - commitment_loss
+  thresholds:
+    perplexity_min: 150       # > 30% of 512
+    code_utilization_min: 0.2
+    dead_codes_max_ratio: 0.3

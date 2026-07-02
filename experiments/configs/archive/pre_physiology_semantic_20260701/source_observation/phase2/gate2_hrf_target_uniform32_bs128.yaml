@@ -1,0 +1,41 @@
+_base_: "../phase1/gate1_baseline_locked_bs128.yaml"
+
+experiment:
+  name: "s2_phase2_gate2_hrf_target_uniform32_bs128"
+  description: "Phase 2 Gate2 baseline with HRF source target and active source coupling"
+
+loss:
+  source_target:
+    weight: 0.15
+    eeg_source_aux_weight: 0.5
+    warmup_epochs: 30
+    hrf:
+      kernel_duration_s: 24.0
+      peak_delay_s: 6.0
+      peak_dispersion_s: 1.0
+      undershoot_delay_s: 16.0
+      undershoot_dispersion_s: 1.5
+      peak_scale: 1.0
+      undershoot_scale: 0.25
+  coupling:
+    weight: 0.0
+  codebook:
+    balance_weight: 0.08
+    source_assignment_temperature: 2.0
+    observation_assignment_temperature: 1.0
+    source_balance_scale: 1.0
+    observation_balance_scale: 0.0
+
+training:
+  alignment_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0
+  source_target_warmup:
+    enabled: true
+    start_epoch: 1
+    ramp_epochs: 30
+    start_scale: 0.0
+    end_scale: 1.0

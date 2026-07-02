@@ -1,0 +1,18 @@
+_base_: "./highwl_v2_coupling_calibration_fixed_init_gpu0.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_coupling_calibration_motor_only"
+  device: "cuda:1"
+  description: "Frozen-token residual coupling calibration restricted to the single-trial motor-imagery cache source."
+
+data:
+  cache_sources:
+    - name: "single_trial_motor_imagery"
+      root: "croce_validation/cache/croce_local/highwl_v2/single_trial_motor_imagery"
+      task: "motor_imagery"
+
+training:
+  coupling_calibration:
+    epochs: 40
+    patience: 10
+

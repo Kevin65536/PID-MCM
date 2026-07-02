@@ -1,0 +1,16 @@
+_base_: "./highwl_v2_branch_norm_structural_coupling_bs256_280ep_lr2e4_min5e5_compile.yaml"
+
+experiment:
+  name: "s2_croce_local_highwl_v2_pair_soft_w005_bs256_280ep_lr2e4"
+  device: "cuda:1"
+  description: "HighWL v2 structural coupling plus differentiable EEG/fNIRS source-token pair likelihood; pair weight 0.05."
+
+loss:
+  coupling:
+    weight: 0.03
+    lag_focus_weight: 0.25
+    smoothness_weight: 0.05
+    pair_likelihood_weight: 0.05
+    pair_detach_tokens: false
+    pair_temperature: 0.5
+    pair_normalize_by_valid_lags: true

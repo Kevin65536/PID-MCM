@@ -1,0 +1,71 @@
+# Phase 0 Experiment: Cross-Subject Generalization
+# Test tokenizer generalization across subjects
+
+experiment:
+  name: "P1_Cross_Subject"
+  description: "Evaluate tokenizer generalization across different subjects"
+  seed: 42
+
+data:
+  modality: "eeg"  # or fnirs
+  dataset: "TBD"
+  preprocessing:
+    resample_rate: 200
+    bandpass: [0.5, 45]
+  window:
+    length: 512
+    stride: 256
+  
+  # Cross-subject split
+  split:
+    type: "leave_subjects_out"
+    test_subjects: [1, 2]      # Subject IDs for testing
+    val_subjects: [3]          # Subject IDs for validation
+    # Remaining subjects for training
+
+model:
+  type: "fsq"                  # Use best performing tokenizer from P0
+  input_channels: 1
+  seq_length: 512
+  
+  encoder:
+    hidden_dims: [64, 128, 256]
+    kernel_size: 7
+    stride: 2
+  
+  quantizer:
+    levels: [8, 8, 8, 8]
+  
+  decoder:
+    hidden_dims: [256, 128, 64]
+    kernel_size: 7
+    stride: 2
+
+loss:
+  reconstruction:
+    weight: 1.0
+    type: "mse"
+  spectral:
+    weight: 0.1
+    enabled: true
+
+training:
+  epochs: 100
+  batch_size: 64
+  learning_rate: 0.001
+  early_stopping:
+    enabled: true
+    patience: 20
+    metric: "val_reconstruction_mse"
+    mode: "min"
+
+evaluation:
+  metrics:
+    - train_reconstruction_mse
+    - val_reconstruction_mse
+    - test_reconstruction_mse
+    - perplexity
+    - code_utilization
+    - generalization_gap       # test_mse / train_mse
+  thresholds:
+    generalization_gap_max: 2.0  # Test MSE should be < 2x Train MSE
