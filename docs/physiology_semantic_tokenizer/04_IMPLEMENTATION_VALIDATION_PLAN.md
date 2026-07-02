@@ -43,7 +43,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 | Area | Planned path | Change | Compatibility requirement |
 | --- | --- | --- | --- |
-| Quantization | `src/tokenizers/labram_vqnsp.py` | Replace batch-overwrite behavior with count-and-sum EMA; expose full quantizer diagnostics | Legacy behavior remains selectable only for frozen baseline reproduction |
+| Quantization | `src/tokenizers/ema_vector_quantizer.py` **new** | Add count-and-sum EMA and full quantizer diagnostics without changing the legacy quantizer | Archived compatibility code continues to use its unchanged quantizer |
 | Tokenizer | `src/tokenizers/physiology_semantic_tokenizer.py` **new** | Independent semantic VQ and continuous residual branches | No cross-modal feature is accepted by either tokenizer inference API |
 | Registry | `src/tokenizers/registry.py` | Register a new target architecture name | Existing names and checkpoint loading remain unchanged |
 | Cache loader | `src/data/croce_local_cache_dataset.py` | Return paired optical channels, state posterior, uncertainty, masks, and one normalization contract | Preserve highWL-only compatibility mode |
@@ -103,11 +103,13 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 **Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
 
+**Execution boundary:** E0 teacher validity remains blocked until these correctness checks and a one-sample real-cache dry run pass. Tokenizer optimization remains blocked until E0 declares which teacher coordinates are admissible supervision.
+
 **Validity gate:** held-out teacher posterior predictive checks must outperform a mean/history-only baseline for the observed modalities. State coordinates that fail observability or calibration checks are removed from semantic supervision rather than treated as ground truth.
 
 ### P4 — Train independent semantic and residual branches
 
-**Implementation:** add state decoding from continuous latents and codebook prototypes, masked-state prediction, shared decoder reconstruction, and branch-attribution outputs. Start with continuous residuals.
+**Implementation:** add patch-local state decoding from continuous latents and codebook prototypes, post-quantization fixed-history masked-state prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch; a separate context module predicts patch `t` from the five preceding tokens and never changes exported IDs. Start with continuous residuals.
 
 **Correctness checks:**
 
@@ -221,5 +223,6 @@ The redesign is implemented only when all of the following are true:
 - [`Theoretical foundations`](03_THEORETICAL_FOUNDATIONS.md)
 - [`Experiment design`](05_EXPERIMENT_DESIGN.md)
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
+- [`Code migration plan`](07_CODE_MIGRATION_PLAN.md)
 
 _Last updated: 2026-07-02_

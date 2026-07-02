@@ -145,6 +145,10 @@ Each codeword has a decoded physical signature:
 
 where `G_E` predicts EEG-identifiable teacher coordinates and `G_F` predicts fNIRS-identifiable coordinates. Equal token indices have no privileged meaning.
 
+### Temporal context boundary
+
+Semantic token identity is patch-local: quantization of a two-second patch cannot depend on another patch or its absolute position inside a crop. Sequence context is modeled after quantization by a separate causal module. For target patch `t`, the first implementation uses exactly the five preceding tokens (`t-5` through `t-1`), corresponding to ten seconds of history. Targets before index 5 are masked from context losses, and context representations never replace exported tokenizer IDs.
+
 ### Quantizer correctness requirements
 
 The target quantizer must:
