@@ -68,6 +68,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P1 — Establish data, normalization, and tensor contracts
 
+**Implementation status (2026-07-02):** in progress. The versioned paired-optical cache schema, posterior variance fields, strict loader, split/provenance checks, causal crop mask, and raw-space additive normalization passed one-anchor/one-event real-data dry-run and smoke validation on mutually exclusive subjects 1/21/25. This is correctness evidence only; the P1 validity gate and E0 scientific endpoint remain pending.
+
 **Implementation:** add a versioned loader output containing paired optical data, teacher posterior statistics, causal-valid masks, and sample metadata. Apply a single raw-space normalization before any source/residual decomposition.
 
 **Correctness checks:**

@@ -45,7 +45,8 @@ flowchart LR
 | Path | Role | Authority |
 | --- | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Runnable pre-redesign implementation truth | Compatibility and baseline only |
-| [`architecture_changelog/`](architecture_changelog/INDEX.md) | Chronological architecture decisions | Historical record |
+| [`architecture_changelog/`](architecture_changelog/INDEX.md) | Model structure and scientific data-contract decisions | Architecture record |
+| [`project_changelog/`](project_changelog/INDEX.md) | Repository, storage, archive, and operational changes | Project operations record |
 | [`reliable_survey/`](reliable_survey/) | Literature and external-method research | Background evidence |
 | [`report/`](report/) | Presentations and milestone reports | Communication artifacts |
 | [`paper/`](paper/) | Manuscript workspace | Paper-specific claims |

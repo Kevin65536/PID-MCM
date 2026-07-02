@@ -47,6 +47,6 @@ flowchart LR
 
 ## 🧪 Implementation placement
 
-New target modules should be introduced in a dedicated active package after their interfaces are fixed in the implementation plan. Do not rename compatibility classes into the active namespace or use archived registry aliases as target config types.
+The first active target boundary is the strict `CrocePhysiologySemanticDataset` data contract in `data/croce_local_cache_dataset.py`. It is admitted for P1 dry-run/smoke only and does not promote the target architecture before G0 passes. Additional target modules should be introduced only after their interfaces are fixed in the implementation plan. Do not rename compatibility classes into the active namespace or use archived registry aliases as target config types.
 
 _Last updated: 2026-07-02_

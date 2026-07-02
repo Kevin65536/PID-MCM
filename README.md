@@ -101,5 +101,6 @@ Historical material is retained, not deleted:
 - [Superseded theory and plans](docs/archive/pre_physiology_semantic_20260701/README.md)
 - [Pre-redesign runs and comparison reports](experiments/archive/pre_physiology_semantic_20260701/README.md)
 - [Architecture changelog](docs/architecture_changelog/INDEX.md)
+- [Project operations changelog](docs/project_changelog/INDEX.md)
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_

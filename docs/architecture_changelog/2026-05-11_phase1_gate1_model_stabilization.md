@@ -2,7 +2,7 @@
 
 > **Date**: 2026-05-11 | **Phase**: 1 (Gate1 Stabilization) | **Git**: `ab7d7e0..7801c63`
 > **Status**: Merged
-> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [2026-05-06 Migration](2026-05-06_source_observation_migration.md) | [Gate1 Baseline Lock](2026-05-11_phase1_gate1_baseline_lock.md)
+> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [2026-05-06 Migration](2026-05-06_source_observation_migration.md) | [Gate1 Baseline Lock](../project_changelog/2026-05-11_phase1_gate1_baseline_lock.md)
 
 ## Motivation
 
@@ -166,7 +166,7 @@ training:
 - **Best run**: `experiments/runs/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718/` — best_epoch 278, val_loss 1.6395
 - **Related changelog entries**:
   - [2026-05-06 Source/Observation Migration](2026-05-06_source_observation_migration.md) — the architecture this stabilizes
-  - [2026-05-11 Gate1 Baseline Lock](2026-05-11_phase1_gate1_baseline_lock.md) — documentation lock and archival
+  - [2026-05-11 Gate1 Baseline Lock](../project_changelog/2026-05-11_phase1_gate1_baseline_lock.md) — experiment baseline lock and archival
 
 ## Gate Impact
 

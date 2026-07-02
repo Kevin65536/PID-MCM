@@ -6,11 +6,13 @@ _Active run registry for experiments executed under the 2026-07-01 target contra
 
 ## 📋 Current status
 
-No tokenizer training run has yet been promoted under the new architecture. The design and archive freeze is complete; implementation begins at P1/G0.
+No tokenizer training run has yet been promoted under the new architecture. P1 implementation has started: the versioned paired-optical cache/teacher contract passed its real-data dry-run and smoke checks. G0 remains unevaluated because posterior-predictive validity, observability, calibration, and preregistered coverage have not yet been tested.
 
 | Date | ID | Suite | Status | Result root |
 | --- | --- | --- | --- | --- |
 | 2026-07-01 | `PST-DESIGN-FREEZE` | Documentation | Complete | Not applicable |
+| 2026-07-02 | `PST-P1-DRYRUN` | E0 contract dry-run | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_dry_run/` |
+| 2026-07-02 | `PST-P1-SMOKE` | E0 contract smoke | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_smoke/` |
 | Pending | `PST-E0` | Teacher validity | Planned | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/` |
 | Pending | `PST-E1` | Quantizer correctness | Planned | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/` |
 

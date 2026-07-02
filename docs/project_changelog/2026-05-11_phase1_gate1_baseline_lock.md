@@ -1,5 +1,7 @@
 # Phase 1 Gate1 baseline lock and archive
 
+_Experiment operations record; no model forward-structure change._
+
 _Date: 2026-05-11 · Phase: Phase 1 · Status: Merged_
 
 _Links: [archive handoff log](../archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md) · [current runtime architecture](../ARCHITECTURE.md)_

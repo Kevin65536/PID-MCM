@@ -1,5 +1,7 @@
 # [Change Title]
 
+> **Scope requirement**: use this template only when model components, scientific data/tensor flow, supervision, losses, quantization, inference boundaries, or gate-relevant representation interfaces change. Operational repository changes belong in `docs/project_changelog/`.
+
 > **Date**: YYYY-MM-DD | **Phase**: [Phase 1 / 2 / 2A / 3 / A / C] | **Git**: `<start_commit>..<end_commit>`
 > **Status**: [Planned / In Progress / Merged]
 > **Links**: [Target implementation plan](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | [Current runtime architecture](../ARCHITECTURE.md)

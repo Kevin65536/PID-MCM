@@ -1,5 +1,7 @@
 # Storage Layout Normalization
 
+_Project operations record; not a model architecture change._
+
 > **Date**: 2026-06-04 | **Phase**: Phase 2C | **Git**: `dd51f57..HEAD`
 > **Status**: Merged
 > **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [STORAGE_LAYOUT.md](../STORAGE_LAYOUT.md)

@@ -1,5 +1,7 @@
 # Code and configuration archive isolation
 
+_Project operations record; not a model architecture change._
+
 _Date: 2026-07-02 · Phase: Phase 3 preparation · Git: `0ad233a..HEAD` · Status: Merged_
 
 _Links: [source authority map](../../src/README.md) · [training standard](../TRAIN_LAUNCH_STANDARD.md) · [storage layout](../STORAGE_LAYOUT.md)_

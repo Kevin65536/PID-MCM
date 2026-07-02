@@ -131,7 +131,7 @@ loss:
 - **Config**: `experiments/configs/source_observation/phase2a/` (to be created)
 - **Experiment**: (pending)
 - **Scorecard**: Gate 1-4 results summary (pending)
-- **Related changelog entries**: [2026-05-06 Source/Observation Migration](2026-05-06_source_observation_migration.md), [2026-05-11 Phase 1 Gate1 Baseline Lock](2026-05-11_phase1_gate1_baseline_lock.md)
+- **Related changelog entries**: [2026-05-06 Source/Observation Migration](2026-05-06_source_observation_migration.md), [2026-05-11 Phase 1 Gate1 Baseline Lock](../project_changelog/2026-05-11_phase1_gate1_baseline_lock.md)
 
 ## Gate Impact
 

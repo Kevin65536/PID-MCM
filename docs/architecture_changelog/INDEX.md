@@ -7,6 +7,12 @@
 
 ---
 
+## Scope
+
+This directory records changes to model structure and its scientific data contract: model components, tensor/data flow, supervision targets, quantization, losses, inference boundaries, and gate-relevant representation interfaces.
+
+Repository layout, storage paths, documentation authority, archive moves, launcher organization, and test/config namespace maintenance belong in the [project operations changelog](../project_changelog/INDEX.md), even when they support an architecture migration.
+
 ## Timeline
 
 ```mermaid
@@ -16,11 +22,10 @@ gantt
     title Architecture Evolution Timeline
     dateFormat  YYYY-MM-DD
     axisFormat  %m/%d
-    section Phase 1: Structural
+    section Phase 1: Model factorization
         Shared/Private baseline (archived) :done, 2026-04-01, 2026-05-05
         Source/Observation Migration      :done, 2026-05-06, 2026-05-08
         Gate1 Model Stabilization         :done, 2026-05-11, 2026-05-11
-        Gate1 Baseline Lock               :done, 2026-05-11, 2026-05-11
     section Phase 2: Source Target
         HRF Convolution Target            :done, 2026-05-11, 2026-05-11
     section Phase 2A: Redesign
@@ -29,11 +34,9 @@ gantt
         Croce 2017 + Coupling Priors      :done, 2026-05-13, 2026-05-14
     section Phase 2C: Croce Local Cache
         HighWL-only Local Tokenizer Input :done, 2026-06-04, 2026-06-04
-        Storage Layout Normalization      :done, 2026-06-04, 2026-06-04
     section Phase 3: Semantic Redesign
         Design and experiment freeze      :milestone, 2026-07-01, 0d
-        Archive namespace isolation       :milestone, 2026-07-01, 0d
-        Code and config isolation         :milestone, 2026-07-02, 0d
+        P1 data-contract smoke            :milestone, 2026-07-02, 0d
 ```
 
 ## Change Records
@@ -42,15 +45,11 @@ gantt
 |---|------|-------|-------|-----------|--------|
 | 1 | 2026-05-06 | Phase 1 | [Source/Observation Architecture Migration](2026-05-06_source_observation_migration.md) | `factorized_labram_vqnsp.py`, `registry.py`, `multimodal_tokenizer.py`, `__init__.py` | Merged |
 | 2 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Model Stabilization](2026-05-11_phase1_gate1_model_stabilization.md) | `factorized_labram_vqnsp.py`, `multimodal_tokenizer.py`, `labram_vqnsp.py`, `train_source_observation_tokenizer.py` | Merged |
-| 3 | 2026-05-11 | Phase 1 | [Phase 1 Gate1 Baseline Lock and Archive](2026-05-11_phase1_gate1_baseline_lock.md) | `phase1 configs`, `ARCHITECTURE.md`, `EXPERIMENT_LOG.md`, `IMPLEMENTATION_PLAN.md` | Merged |
-| 4 | 2026-05-11 | Phase 2A | [Branch Target Redesign + Dual Decoder Architecture](2026-05-11_phase2a_branch_target_redesign_dual_decoder.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `IMPLEMENTATION_PLAN.md` | Merged |
-| 5 | 2026-05-13 | Phase 2B | [Croce 2017 Physical Model Targets](2026-05-13_phase2b_croce2017_physical_model_targets.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` | Merged |
-| 6 | 2026-05-14 | Phase 2B | Architecture Stabilization & Document Alignment | `IMPLEMENTATION_PLAN.md`, `ARCHITECTURE.md`, `README.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `SEMANTIC_TOKEN_SCORECARD.md`, `THEORY.md`, `EXPERIMENT_LOG.md`, `INDEX.md` | Merged |
-| 7 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
-| 8 | 2026-06-04 | Phase 2C | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | `ExperimentLogger`, `run_metrics_comparison.py`, `croce_local configs`, `STORAGE_LAYOUT.md` | Merged |
-| 9 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
-| 10 | 2026-07-01 | Phase 3 preparation | [Documentation and Run Archive Isolation](2026-07-01_document_and_run_archive_isolation.md) | `docs/archive/`, `experiments/archive/`, `STORAGE_LAYOUT.md`, project guides | Merged |
-| 11 | 2026-07-02 | Phase 3 preparation | [Code and Configuration Archive Isolation](2026-07-02_code_and_config_archive_isolation.md) | `src/compatibility/`, dated scripts/configs/tests, `pytest.ini`, active launcher | Merged |
+| 3 | 2026-05-11 | Phase 2A | [Branch Target Redesign + Dual Decoder Architecture](2026-05-11_phase2a_branch_target_redesign_dual_decoder.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `PHYSIOLOGICAL_COUPLING_PLAN.md`, `IMPLEMENTATION_PLAN.md` | Merged |
+| 4 | 2026-05-13 | Phase 2B | [Croce 2017 Physical Model Targets](2026-05-13_phase2b_croce2017_physical_model_targets.md) | `factorized_labram_vqnsp.py`, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` | Merged |
+| 5 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
+| 6 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
+| 7 | 2026-07-02 | Phase 3 P1/G0 | [P1 Physiology-Semantic Data Contract Smoke](2026-07-02_p1_physiology_semantic_data_contract.md) | v2 cache generator, strict paired-optical loader, E0 contract validator/config | In Progress |
 
 ## How to Add a New Entry
 
@@ -60,6 +59,7 @@ gantt
 4. Update the Timeline gantt chart if needed
 5. Update [ARCHITECTURE.md](../ARCHITECTURE.md) to reflect the new current state
 6. If the change completes a phase, update the implementation plan identified by the relevant architecture record
+7. If the change only moves files, rewrites documentation authority, or changes storage/launcher/test organization, record it in `docs/project_changelog/` instead
 
 ## Conventions
 

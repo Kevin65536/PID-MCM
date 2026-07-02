@@ -1,8 +1,8 @@
 # Current Architecture: Source/Observation Tokenizer
 
 > **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
-> **Last updated**: 2026-07-01
-> **Current phase**: Legacy source/observation runtime frozen as the implementation baseline; physiology-semantic redesign approved but not implemented
+> **Last updated**: 2026-07-02
+> **Current phase**: Legacy source/observation runtime remains the implementation baseline; physiology-semantic P1 data-contract smoke passed, but G0 and target promotion remain pending
 > **Compatibility class**: `SourceObservationLaBraMVQNSP` in [source_observation_tokenizer.py](../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py). This document describes the runnable pre-redesign architecture, not the active target contract.
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 0. Approved Target Architecture — Not Implemented
+## 0. Approved Target Architecture — P1 Contract Smoke Only
 
 The 2026-07-01 design freeze approved a physiology-semantic replacement with four boundaries:
 
@@ -23,7 +23,7 @@ The 2026-07-01 design freeze approved a physiology-semantic replacement with fou
 3. continuous private/residual paths that preserve information outside the semantic bottleneck;
 4. frozen-token sequence-to-distribution coupling evaluated against fNIRS history and marginal baselines.
 
-The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). None of those target components should be cited as implemented until the transition rule in that archive is satisfied.
+The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` cache contract and strict loader now have real-data dry-run/smoke evidence, but G0 has not been evaluated. The physical teacher validity claim, tokenizer, quantizer correction, residual branch, coupling model, and downstream consumers must not be cited as implemented or validated.
 
 ## 1. Architecture Contract
 
