@@ -37,6 +37,7 @@ gantt
     section Phase 3: Semantic Redesign
         Design and experiment freeze      :milestone, 2026-07-01, 0d
         P1 data-contract smoke            :milestone, 2026-07-02, 0d
+        P2-P5 software migration          :milestone, 2026-07-02, 0d
 ```
 
 ## Change Records
@@ -50,6 +51,7 @@ gantt
 | 5 | 2026-06-04 | Phase 2C | [HighWL-only Croce Local Tokenizer Input](2026-06-04_highwl_croce_local_tokenizer_input.md) | `croce_local_cache_dataset.py`, `factory.py`, `factorized_labram_vqnsp.py`, `source_observation_analysis.py`, `croce_local configs` | Merged |
 | 6 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
 | 7 | 2026-07-02 | Phase 3 P1/G0 | [P1 Physiology-Semantic Data Contract Smoke](2026-07-02_p1_physiology_semantic_data_contract.md) | v2 cache generator, strict paired-optical loader, E0 contract validator/config | In Progress |
+| 8 | 2026-07-02 | Phase 3 P2-P5 | [P2-P5 Physiology-Semantic Code Migration](2026-07-02_p2_p5_physiology_semantic_code_migration.md) | corrected EMA VQ, physical teacher, independent tokenizer, gated trainer, export/consumers | Merged |
 
 ## How to Add a New Entry
 

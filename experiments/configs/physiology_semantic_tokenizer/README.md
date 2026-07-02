@@ -1,6 +1,6 @@
 # Physiology-semantic tokenizer configurations
 
-_Active target namespace; P1 contract validation in progress_
+_Active target namespace; P1-P5 software validation complete, scientific gates pending_
 
 ---
 
@@ -19,6 +19,7 @@ Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families 
 | Config | Scope | Gate status |
 | --- | --- | --- |
 | [`p1_e0_contract_smoke.yaml`](p1_e0_contract_smoke.yaml) | One real anchor/event for mutually exclusive train/validation/test subjects | P1 smoke passed; G0 not evaluated |
+| [`p2_p5_software_smoke.yaml`](p2_p5_software_smoke.yaml) | Loader-to-export correctness with fixed target dimensions | Passed; optimizer blocked until E0 |
 
 Run the two mandatory early stages with:
 
@@ -28,5 +29,14 @@ Run the two mandatory early stages with:
 ```
 
 The smoke config validates the real solver-cache-loader chain, tensor shapes, posterior variance, causal masks, split isolation, and additive raw-space normalization. It does not measure the E0 posterior-predictive endpoint and cannot promote G0.
+
+Run the migration software stages with:
+
+```bash
+.venv/bin/python experiments/train_physiology_semantic_tokenizer.py --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml --dry-run
+.venv/bin/python experiments/train_physiology_semantic_tokenizer.py --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml --smoke
+```
+
+With `validation.e0_passed: false`, the entrypoint always writes `optimizer_steps: 0`; changing the requested step count cannot bypass the gate.
 
 _Last updated: 2026-07-02_

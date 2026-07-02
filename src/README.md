@@ -32,10 +32,11 @@ flowchart LR
 | --- | --- |
 | `data/` | Dataset registry, loaders, preprocessing, channel adjacency, and Croce cache adapter |
 | `inference/` | Neurovascular state-space inference reused by the physical teacher |
-| `tokenizers/` | Base interface and candidate single-modality quantizer/encoder primitives |
-| `losses/` | Architecture-neutral reconstruction, alignment, and classification losses |
+| `tokenizers/` | Base interfaces, corrected EMA VQ, and independent physiology-semantic tokenizer branches |
+| `teachers/` | Stop-gradient physical-state patch teacher used only during training and audit |
+| `losses/` | Reconstruction, alignment, classification, and mask-aware physiology-semantic losses |
 | `metrics/` | Reconstruction and codebook-health metrics |
-| `foundation/` | Candidate contextual sequence components; not yet target authority |
+| `foundation/` | Whole-brain consumers for hard, checkpoint-codebook, soft, and semantic-plus-residual modes |
 | `utils/` | Logging, checkpoint, launch, and I/O infrastructure |
 | `visualization/` | Generic tokenizer, classifier, TensorBoard, and gradient utilities |
 
@@ -47,6 +48,6 @@ flowchart LR
 
 ## 🧪 Implementation placement
 
-The first active target boundary is the strict `CrocePhysiologySemanticDataset` data contract in `data/croce_local_cache_dataset.py`. It is admitted for P1 dry-run/smoke only and does not promote the target architecture before G0 passes. Additional target modules should be introduced only after their interfaces are fixed in the implementation plan. Do not rename compatibility classes into the active namespace or use archived registry aliases as target config types.
+The active target now includes the strict `CrocePhysiologySemanticDataset`, corrected EMA quantizer, physical teacher adapter, independent modality tokenizer, gated trainer, and P5 exporter/consumers. These modules are admitted as software-correct interfaces only and do not promote the target architecture before the corresponding scientific gates pass. Do not rename compatibility classes into the active namespace or use archived registry aliases as target config types.
 
 _Last updated: 2026-07-02_

@@ -1,6 +1,6 @@
 # Implementation and validation plan
 
-_Final approved execution plan; no target-architecture code had been merged as of 2026-07-02_
+_Approved execution plan; P1-P5 software interfaces are merged, while all scientific validity gates remain pending_
 
 ---
 
@@ -84,6 +84,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P2 — Correct and instrument the vector quantizer
 
+**Implementation status (2026-07-02):** merged. Count-and-sum EMA, Euclidean and cosine assignment modes, distributed reductions, explicit revival accounting, serialization, posterior outputs, and health diagnostics pass deterministic tests. E1 health calibration and the P2 validity gate have not run.
+
 **Implementation:** maintain EMA cluster counts `N_k` and EMA vector sums `M_k`, then update `e_k=M_k/(N_k+epsilon)`. Log revival events and resolved dimensions.
 
 **Correctness checks:**
@@ -99,6 +101,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P3 — Expose the physical state teacher
 
+**Implementation status (2026-07-02):** merged. Constant/ramp pooling, uncertainty propagation, complete-patch mask contraction, stop-gradient behavior, and a one-sample real-cache dry run pass. E0 and G0 remain unevaluated.
+
 **Implementation:** wrap the Croce solver cache as a frozen teacher returning patch state mean, uncertainty, clean observations, neural driver, and masks. Provide identifiable coordinate subsets for EEG and fNIRS.
 
 **Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
@@ -108,6 +112,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 **Validity gate:** held-out teacher posterior predictive checks must outperform a mean/history-only baseline for the observed modalities. State coordinates that fail observability or calibration checks are removed from semantic supervision rather than treated as ground truth.
 
 ### P4 — Train independent semantic and residual branches
+
+**Implementation status (2026-07-02):** merged for software validation. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, and invalid-mask loss routing pass. The real-cache smoke intentionally performed zero optimizer steps because E0 has not passed; no tokenizer training result exists.
 
 **Implementation:** add patch-local state decoding from continuous latents and codebook prototypes, post-quantization fixed-history masked-state prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch; a separate context module predicts patch `t` from the five preceding tokens and never changes exported IDs. Start with continuous residuals.
 
@@ -123,6 +129,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 **Validity gate:** the semantic branch must improve held-out state decoding and prototype stability over reconstruction-only VQ under the versioned evidence protocol, while semantic-plus-residual reconstruction and downstream information remain consistent with the calibrated continuous-latent reference. G2 information retention and G3 state semantics are co-equal gates; failure of either side blocks coupling experiments.
 
 ### P5 — Export representations and update consumers
+
+**Implementation status (2026-07-02):** merged for software validation. Hard, checkpoint-codebook, soft, and semantic-plus-residual consumers pass round-trip tests; a one-sample validation export with top-k posterior and manifest completed. Frozen-probe validity remains pending.
 
 **Implementation:** version the export schema and allow downstream models to consume hard IDs, transferred codebook embeddings, soft expected embeddings, and residuals.
 

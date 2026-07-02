@@ -2,7 +2,7 @@
 
 > **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
 > **Last updated**: 2026-07-02
-> **Current phase**: Legacy source/observation runtime remains the implementation baseline; physiology-semantic P1 data-contract smoke passed, but G0 and target promotion remain pending
+> **Current phase**: Legacy source/observation runtime remains the validated baseline; physiology-semantic P1-P5 software migration is runnable, but E0/G0 and target promotion remain pending
 > **Compatibility class**: `SourceObservationLaBraMVQNSP` in [source_observation_tokenizer.py](../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py). This document describes the runnable pre-redesign architecture, not the active target contract.
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 0. Approved Target Architecture — P1 Contract Smoke Only
+## 0. Approved Target Architecture — P1-P5 Software Implemented, Gates Pending
 
 The 2026-07-01 design freeze approved a physiology-semantic replacement with four boundaries:
 
@@ -23,7 +23,7 @@ The 2026-07-01 design freeze approved a physiology-semantic replacement with fou
 3. continuous private/residual paths that preserve information outside the semantic bottleneck;
 4. frozen-token sequence-to-distribution coupling evaluated against fNIRS history and marginal baselines.
 
-The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` cache contract and strict loader now have real-data dry-run/smoke evidence, but G0 has not been evaluated. The physical teacher validity claim, tokenizer, quantizer correction, residual branch, coupling model, and downstream consumers must not be cited as implemented or validated.
+The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` contract, corrected quantizer, physical teacher adapter, independent semantic/residual tokenizer, gated training entry, exporter, and four consumer modes are implemented and pass software checks. The smoke deliberately performed no optimizer step because E0 has not passed. None of these results validate teacher physiology, semantic quality, information retention, downstream utility, or coupling.
 
 ## 1. Architecture Contract
 

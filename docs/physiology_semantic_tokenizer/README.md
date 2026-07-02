@@ -1,12 +1,12 @@
 # Physiology-semantic tokenizer redesign archive
 
-_Approved design baseline; P1 implementation started 2026-07-02_
+_Approved design baseline; P1-P5 software migration merged 2026-07-02, scientific gates pending_
 
 ---
 
 ## 📋 Status and authority
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1 data-contract dry-run and smoke work has started, but no module validity gate or tokenizer experiment has passed.
+This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces and correctness tests are now merged, but no module validity gate or tokenizer optimization experiment has passed.
 
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
