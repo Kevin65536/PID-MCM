@@ -657,6 +657,9 @@ def run(args: argparse.Namespace) -> Path:
                 source.get("root") for source in config.get("data", {}).get("cache_sources", [])
             ],
             "teacher_audit_sha256": hashlib.sha256((run_dir / "teacher_audit.json").read_bytes()).hexdigest(),
+            "decision_protocol_sha256": hashlib.sha256((run_dir / "decision_protocol.yaml").read_bytes()).hexdigest(),
+            "metric_registry_sha256": hashlib.sha256((run_dir / "metric_registry.json").read_bytes()).hexdigest(),
+            "evidence_calibration_sha256": hashlib.sha256((run_dir / "evidence_calibration.json").read_bytes()).hexdigest(),
         },
     )
     _write_csv(run_dir / "state_observability.csv", observability_rows)
