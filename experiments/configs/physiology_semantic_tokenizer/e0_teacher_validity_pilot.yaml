@@ -1,0 +1,51 @@
+experiment:
+  name: "e0_teacher_validity_pilot_v1"
+  run_group: "physiology_semantic_tokenizer/e0_teacher_validity"
+  description: "Subject-held-out E0 pilot on versioned paired-optical caches."
+
+data:
+  modality: "both"
+  dataset: "croce_local_cache"
+  contract: "physiology_semantic_v2"
+  data_root: "croce_validation/cache/croce_local/physiology_semantic_v2_e0_pilot"
+  cache_sources:
+    - name: "single_trial_mental_arithmetic_e0_pilot"
+      root: "croce_validation/cache/croce_local/physiology_semantic_v2_e0_pilot/single_trial_mental_arithmetic"
+      task: "mental_arithmetic"
+  split:
+    train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    val_subjects: [19, 20, 21, 22, 23]
+    test_subjects: [24, 25, 26, 27, 28, 29]
+  window:
+    duration_s: 20.0
+  crop:
+    train_random: false
+    force_deterministic_all_splits: true
+    eval_event_offsets_s: [-10.0, 0.0, 20.0]
+  teacher:
+    causal_history_s: 10.0
+  normalization:
+    enabled: true
+    scope: "sample"
+    eps: 1.0e-6
+  num_workers: 4
+  dataloader:
+    pin_memory: false
+    drop_last: false
+    persistent_workers: true
+
+training:
+  batch_size: 32
+  seed: 17
+
+e0:
+  minimum_subjects_per_eval_split: 3
+  minimum_valid_patches_per_eval_split: 100
+  ridge_alphas: [0.1, 1.0, 10.0, 100.0]
+  null_quantile: 0.95
+  permutation_iterations: 128
+  bootstrap_iterations: 1000
+
+validation:
+  phase: "e0_teacher_validity_pilot"
+  protected_test_metrics: true

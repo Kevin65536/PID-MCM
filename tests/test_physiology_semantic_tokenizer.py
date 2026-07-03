@@ -91,3 +91,19 @@ def test_model_shapes_and_invalid_teacher_supervision():
     assert losses["state"].item() == 0.0
     assert losses["prototype"].item() == 0.0
     assert losses["masked_state"].item() == 0.0
+
+
+def test_loss_coordinate_gate_excludes_unadmitted_targets():
+    torch.manual_seed(7)
+    model = _small_model().eval()
+    outputs = model(torch.randn(1, 6, 4000), torch.randn(1, 2, 200))
+    teacher = PhysicalStateTeacher()(_teacher(batch_size=1, valid=True))
+    criterion = PhysiologySemanticLoss(
+        eeg_coordinate_mask=torch.tensor([True, False, False, False, False, False]),
+        fnirs_coordinate_mask=torch.tensor([True, False, False, False, False, False, False, False, False]),
+    )
+    original = criterion(outputs, teacher)["state"]
+    teacher.eeg_target[..., 1:] += 1e6
+    teacher.fnirs_target[..., 1:] += 1e6
+    changed = criterion(outputs, teacher)["state"]
+    assert torch.equal(original, changed)

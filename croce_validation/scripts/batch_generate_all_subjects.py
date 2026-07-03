@@ -46,6 +46,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=11)
     p.add_argument("--threads", type=int, default=1)
     p.add_argument("--parallel-workers", type=int, default=36)
+    p.add_argument("--anchor-list", default="",
+                   help="Optional comma-separated anchor base names forwarded to each subject job")
+    p.add_argument("--max-anchors", type=int, default=0,
+                   help="Cap anchors per subject (0=all)")
     p.add_argument("--torch-device", default="cpu")
     p.add_argument("--output-dir", default=str(PROJECT_ROOT / "croce_validation" / "cache" / "pf_full"))
     p.add_argument("--start-subject", type=int, default=1)
@@ -86,6 +90,10 @@ def run_subject(args: argparse.Namespace, subject_id: int, output_dir: Path) -> 
         "--torch-device", args.torch_device,
         "--output-dir", str(subject_output_dir),
     ]
+    if args.anchor_list:
+        cmd.extend(["--anchor-list", str(args.anchor_list)])
+    if int(args.max_anchors) > 0:
+        cmd.extend(["--max-anchors", str(args.max_anchors)])
     if args.event_indices:
         cmd.extend(["--event-indices", str(args.event_indices)])
     if int(args.max_events) > 0:
@@ -192,6 +200,8 @@ def main() -> None:
             "state_propagation": "matrix_exponential_exact",
             "segment_mode": args.segment_mode,
             "parallel_workers": args.parallel_workers,
+            "anchor_list": args.anchor_list,
+            "max_anchors": args.max_anchors,
             "threads": args.threads,
             "num_particles": args.num_particles,
             "sigma_prop": args.sigma_prop,
@@ -216,7 +226,12 @@ def main() -> None:
         },
         "per_subject": all_results,
     }
-    manifest_path = output_dir / "batch_manifest.json"
+    manifest_name = (
+        "batch_manifest.json"
+        if args.start_subject == 1 and args.end_subject == 29
+        else f"batch_manifest_subjects_{args.start_subject}_{args.end_subject}.json"
+    )
+    manifest_path = output_dir / manifest_name
     manifest_path.write_text(json.dumps(batch_manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     print(f"\n{'='*72}")
