@@ -1,0 +1,12 @@
+{
+  "schema": "physiology_semantic_architecture_changes_v1",
+  "plan_id": "example_plan",
+  "summary": "Example only: highlight the components affected by a future modification plan.",
+  "changes": [
+    {"node_id": "eeg_quantizer", "kind": "modify", "note": "Example quantizer modification"},
+    {"node_id": "fnirs_quantizer", "kind": "modify", "note": "Example quantizer modification"},
+    {"node_id": "p6_coupling", "kind": "add", "note": "Example activation after gate approval"}
+  ],
+  "add_nodes": [],
+  "add_edges": []
+}

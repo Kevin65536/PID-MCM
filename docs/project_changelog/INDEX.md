@@ -18,3 +18,4 @@ Included here:
 | 2026-06-04 | [Storage Layout Normalization](2026-06-04_storage_layout_normalization.md) | Cache/run/result namespaces and archival layout |
 | 2026-07-01 | [Documentation and Run Archive Isolation](2026-07-01_document_and_run_archive_isolation.md) | Documentation authority and historical run isolation |
 | 2026-07-02 | [Code and Configuration Archive Isolation](2026-07-02_code_and_config_archive_isolation.md) | Compatibility package and script/config/test isolation |
+| 2026-07-03 | [SVG Architecture Visualization System](2026-07-03_svg_architecture_visualization_system.md) | Maintained current diagram and plan-specific change overlays |

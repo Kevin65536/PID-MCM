@@ -8,6 +8,8 @@ _Approved architecture contract; implementation pending as of 2026-07-01_
 
 This document specifies the target architecture that replaces reconstruction-centered source-token coupling. It is a forward contract for code changes and experiments, not a description of the current runtime.
 
+The maintained current-runtime SVG and its implementation-status legend are available in [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md). The SVG is generated from a versioned JSON specification and must accompany future modification plans through a plan-specific change overlay.
+
 The target has four separable layers:
 
 1. a frozen or stop-gradient **physical state teacher**;

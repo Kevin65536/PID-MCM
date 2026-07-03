@@ -174,6 +174,8 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 The execution order is always `unit → integration → dry-run → smoke → short formal → full formal`. Full experiments do not compensate for a failed lower-level check.
 
+Any future architecture modification plan must also provide a plan-specific SVG overlay that marks added, modified, and removed components against the maintained current-runtime diagram. The overlay requirement and renderer contract are defined in [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md).
+
 ## 📦 Required run artifact schema
 
 Every target-architecture run writes to:

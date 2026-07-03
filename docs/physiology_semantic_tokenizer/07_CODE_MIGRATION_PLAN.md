@@ -2,6 +2,8 @@
 
 _Decision-complete migration boundary for P2 through P5; P6 coupling is excluded_
 
+> Maintenance note: subsequent modification plans must annotate their affected components on a plan-specific copy of the maintained SVG architecture. See [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md).
+
 ---
 
 ## 📋 Objective and execution boundary

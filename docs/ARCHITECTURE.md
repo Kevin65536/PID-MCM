@@ -25,6 +25,8 @@ The 2026-07-01 design freeze approved a physiology-semantic replacement with fou
 
 The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` contract, corrected quantizer, physical teacher adapter, independent semantic/residual tokenizer, gated training entry, exporter, and four consumer modes are implemented and pass software checks. The smoke deliberately performed no optimizer step because E0 has not passed. None of these results validate teacher physiology, semantic quality, information retention, downstream utility, or coupling.
 
+The maintained SVG view of that software state is [`physiology_semantic_architecture.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg). Future modification plans must use its plan-overlay mechanism rather than editing the generated SVG manually.
+
 ## 1. Architecture Contract
 
 当前主线只把下列语义当作 branch target 合同：
