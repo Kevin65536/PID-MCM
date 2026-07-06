@@ -1,6 +1,6 @@
 # Physiology-semantic tokenizer configurations
 
-_Active target namespace; P1-P5 software validation complete, scientific gates pending_
+_Active target namespace; full trainer available, physical-state supervision blocked by E0_
 
 ---
 
@@ -20,6 +20,10 @@ Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families 
 | --- | --- | --- |
 | [`p1_e0_contract_smoke.yaml`](p1_e0_contract_smoke.yaml) | One real anchor/event for mutually exclusive train/validation/test subjects | P1 smoke passed; G0 not evaluated |
 | [`p2_p5_software_smoke.yaml`](p2_p5_software_smoke.yaml) | Loader-to-export correctness with fixed target dimensions | Passed; optimizer blocked until E0 |
+| [`e0_teacher_validity_pilot.yaml`](e0_teacher_validity_pilot.yaml) | Subject-held-out posterior-predictive teacher validation | Validation blocked; protected test unopened |
+| [`tokenizer_training_pilot.yaml`](tokenizer_training_pilot.yaml) | Full physical-state-supervised training protocol | Blocked by E0 decision artifact |
+| [`tokenizer_optimizer_smoke.yaml`](tokenizer_optimizer_smoke.yaml) | Minimal teacher-supervised optimizer guard check | Correctly rejects blocked E0 |
+| [`tokenizer_reconstruction_baseline_pilot.yaml`](tokenizer_reconstruction_baseline_pilot.yaml) | Teacher-free reconstruction-plus-VQ baseline | CUDA smoke and resume passed |
 
 Run the two mandatory early stages with:
 
@@ -37,6 +41,6 @@ Run the migration software stages with:
 .venv/bin/python experiments/train_physiology_semantic_tokenizer.py --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml --smoke
 ```
 
-With `validation.e0_passed: false`, the entrypoint always writes `optimizer_steps: 0`; changing the requested step count cannot bypass the gate.
+Teacher-supervised runs require a concrete passed E0 decision artifact whose split, contract, cache roots, protocol, registry, and calibration hashes match the run. A boolean flag cannot bypass this check. Teacher-free runs must set every teacher-derived loss weight to zero; they may optimize for quantizer and reconstruction characterization without claiming E0 success.
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-03_

@@ -38,6 +38,7 @@ gantt
         Design and experiment freeze      :milestone, 2026-07-01, 0d
         P1 data-contract smoke            :milestone, 2026-07-02, 0d
         P2-P5 software migration          :milestone, 2026-07-02, 0d
+        E0 gate + full trainer             :milestone, 2026-07-03, 0d
 ```
 
 ## Change Records
@@ -52,6 +53,7 @@ gantt
 | 6 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
 | 7 | 2026-07-02 | Phase 3 P1/G0 | [P1 Physiology-Semantic Data Contract Smoke](2026-07-02_p1_physiology_semantic_data_contract.md) | v2 cache generator, strict paired-optical loader, E0 contract validator/config | In Progress |
 | 8 | 2026-07-02 | Phase 3 P2-P5 | [P2-P5 Physiology-Semantic Code Migration](2026-07-02_p2_p5_physiology_semantic_code_migration.md) | corrected EMA VQ, physical teacher, independent tokenizer, gated trainer, export/consumers | Merged |
+| 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Merged; teacher supervision blocked |
 
 ## How to Add a New Entry
 

@@ -13,7 +13,8 @@ This migration replaces the archived reconstruction-centered `source_observation
 The following rules are fixed:
 
 - formal E0 teacher validation starts only after the P3 adapter passes deterministic correctness tests and a real-data dry run;
-- tokenizer training does not start before E0 establishes which teacher coordinates are admissible supervision;
+- physical-state-supervised training does not start before E0 establishes valid teacher prediction and admissible coordinates;
+- an explicit teacher-free reconstruction-plus-VQ baseline may optimize after a blocked E0 because it consumes no teacher target;
 - legacy aliases, four-branch source/observation quantization, and pre-VQ cross-modal exchange remain archive-only;
 - smoke success is software evidence, not a scientific gate decision.
 
@@ -150,9 +151,9 @@ The fixed-history context module predicts state at `t` from the five preceding e
 
 ### Training entry
 
-The active training script supports `--dry-run`, `--smoke`, and `--resume`. A run must save resolved configuration, environment, split/cache manifest, checkpoints, JSONL metrics, quantizer health, teacher diagnostics, completion status, and hashes required by the run artifact contract. The active launcher remains blocked until the end-to-end CPU smoke passes.
+The active training script supports `--dry-run`, `--smoke`, `--train`, and `--resume`. It implements epoch training and validation, AMP, gradient clipping, AdamW, warm-up/cosine scheduling, early stopping, best/last checkpoints, and complete optimizer/scheduler/scaler state restoration. A run saves resolved configuration, environment, split/cache manifest, JSONL metrics, quantizer health, teacher diagnostics, completion status, and hashes required by the run artifact contract.
 
-Formal tokenizer optimization remains blocked until E0 declares the admissible teacher coordinates. Dry-run and software smoke modes may execute before E0 only with optimizer steps disabled.
+The 2026-07-03 E0 pilot blocked physical-state supervision at validation, so that objective cannot take optimizer steps. The trainer verifies the concrete E0 decision artifact, split hash, data contract, cache roots, and admitted coordinates. The teacher-free reconstruction-plus-VQ path completed CUDA smoke and checkpoint resume; it may proceed to an E1 short-formal pilot without implying that E0 or semantic supervision passed.
 
 ## 📤 P5 export and consumer contract
 
@@ -180,7 +181,7 @@ Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_
 | Pipeline | Loader → teacher → tokenizer → loss → checkpoint → export passes on CPU |
 | Consumer | Export modes use checkpoint-native codebook geometry and preserve sample order |
 
-The execution sequence is unit tests, integration tests, dry run, CPU smoke, E0, and only then formal tokenizer training. P6 remains blocked until tokenizer freeze and the G2/G3 information-retention and state-semantics gates pass.
+The execution sequence is unit tests, integration tests, dry run, E0, then objective-specific smoke and short formal. A failed E0 blocks every teacher-supervised objective, while an explicitly teacher-free baseline remains available for quantizer and reconstruction characterization. P6 remains blocked until tokenizer freeze and the G2/G3 information-retention and state-semantics gates pass.
 
 ## 🔗 References
 
@@ -188,4 +189,4 @@ The execution sequence is unit tests, integration tests, dry run, CPU smoke, E0,
 [^2]: Jiang, W.-B., Wang, Y., Lu, B.-L., & Li, D. (2025). “NeuroLM: A Universal Multi-task Foundation Model for Bridging the Gap between Language and EEG Signals.” https://arxiv.org/abs/2409.00101
 [^3]: Jiang, W.-B. et al. (2024). “Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI.” https://proceedings.iclr.cc/paper_files/paper/2024/file/47393e8594c82ce8fd83adc672cf9872-Paper-Conference.pdf
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-03_

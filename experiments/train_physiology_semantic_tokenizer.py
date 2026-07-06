@@ -170,6 +170,14 @@ def _coordinate_mask(names: tuple[str, ...], admitted: Iterable[str] | None) -> 
     return torch.tensor([name in admitted for name in names], dtype=torch.bool)
 
 
+def _teacher_supervision_requested(config: Mapping[str, Any]) -> bool:
+    loss = config.get("loss", {})
+    return any(
+        float(loss.get(name, {}).get("weight", 0.0)) > 0.0
+        for name in ("state", "prototype", "masked_state")
+    )
+
+
 def _loss_from_config(config: Mapping[str, Any], gate: Mapping[str, Any] | None) -> PhysiologySemanticLoss:
     loss = config.get("loss", {})
     admitted = None if gate is None else gate.get("admissible_coordinates", {})
@@ -293,6 +301,8 @@ def run(args: argparse.Namespace) -> Path:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if args.e0_gate:
         config.setdefault("validation", {})["e0_gate_path"] = args.e0_gate
+    if args.smoke_optimizer_steps is not None:
+        config.setdefault("training", {})["smoke_optimizer_steps"] = args.smoke_optimizer_steps
     training = config.get("training", {})
     seed = int(training.get("seed", 0))
     random.seed(seed)
@@ -302,7 +312,10 @@ def run(args: argparse.Namespace) -> Path:
         torch.cuda.manual_seed_all(seed)
 
     optimizer_requested = bool(args.train or (args.smoke and int(training.get("smoke_optimizer_steps", 0)) > 0))
-    gate, gate_hash = _load_e0_gate(config, require_pass=optimizer_requested)
+    teacher_supervision = _teacher_supervision_requested(config)
+    gate, gate_hash = _load_e0_gate(
+        config, require_pass=bool(optimizer_requested and teacher_supervision)
+    )
     device = _resolve_device(training)
     run_dir = Path(args.output_dir).resolve() if args.output_dir else _default_run_dir(config)
     for relative in ("checkpoints", "metrics", "diagnostics"):
@@ -316,6 +329,7 @@ def run(args: argparse.Namespace) -> Path:
         "stopping_rule": "validation early stopping with configured patience",
         "protected_test_policy": "test split is never evaluated by the trainer",
         "e0_gate_sha256": gate_hash,
+        "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
     }
     (run_dir / "decision_protocol.yaml").write_text(yaml.safe_dump(protocol, sort_keys=False), encoding="utf-8")
     _write_json(run_dir / "metric_registry.json", {
@@ -358,7 +372,7 @@ def run(args: argparse.Namespace) -> Path:
         checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
         if checkpoint.get("schema") != RUN_SCHEMA:
             raise ValueError("Resume checkpoint schema mismatch")
-        if checkpoint.get("e0_gate_sha256") != gate_hash:
+        if checkpoint.get("e0_gate_sha256", "") != (gate_hash or ""):
             raise ValueError("Resume checkpoint E0 gate differs from current gate")
         model.load_state_dict(checkpoint["model_state"])
         optimizer.load_state_dict(checkpoint["optimizer_state"])
@@ -368,6 +382,8 @@ def run(args: argparse.Namespace) -> Path:
         global_step = int(checkpoint["global_step"])
         best_validation = float(checkpoint["best_validation"])
         epochs_without_improvement = int(checkpoint["epochs_without_improvement"])
+        if max_steps is not None and global_step < max_steps and start_epoch >= epochs:
+            epochs = start_epoch + 1
 
     start_time = time.time()
     status = "dry_run_passed"
@@ -478,6 +494,7 @@ def run(args: argparse.Namespace) -> Path:
         "seed": seed,
         "device": str(device),
         "e0_gate_sha256": gate_hash,
+        "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
         "global_step": global_step,
         "best_validation": None if math.isinf(best_validation) else best_validation,
         "split_sha256": split_hash,
@@ -487,6 +504,18 @@ def run(args: argparse.Namespace) -> Path:
         "completed_at": datetime.now(timezone.utc).isoformat(),
     }
     _write_json(run_dir / "manifest.json", manifest)
+    summary_lines = [
+        "# Physiology-semantic tokenizer run summary",
+        "",
+        f"- Status: `{status}`",
+        f"- Objective: `{'teacher_supervised' if teacher_supervision else 'teacher_free'}`",
+        f"- Device: `{device}`",
+        f"- Global optimizer steps: `{global_step}`",
+        f"- Best validation total loss: `{manifest['best_validation']}`",
+        f"- Protected test opened: `False`",
+        "",
+    ]
+    (run_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
     print(json.dumps({"run_dir": str(run_dir), "status": status, "global_step": global_step}, sort_keys=True))
     return run_dir
 
@@ -500,6 +529,7 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--train", action="store_true")
     parser.add_argument("--resume")
     parser.add_argument("--e0-gate", help="Override validation.e0_gate_path with a concrete gate_decision.json")
+    parser.add_argument("--smoke-optimizer-steps", type=int, help="Override smoke step budget")
     parser.add_argument("--output-dir")
     return parser.parse_args()
 

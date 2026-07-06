@@ -8,6 +8,7 @@ from experiments.train_physiology_semantic_tokenizer import (
     _coordinate_mask,
     _load_e0_gate,
     _scheduler,
+    _teacher_supervision_requested,
     _validate_loader_subjects,
 )
 
@@ -55,6 +56,13 @@ def test_training_requires_real_passed_gate_file(tmp_path):
 def test_coordinate_mask_uses_only_gate_admitted_names():
     mask = _coordinate_mask(("a", "b", "c"), ["b"])
     assert torch.equal(mask, torch.tensor([False, True, False]))
+
+
+def test_teacher_free_objective_does_not_claim_teacher_supervision():
+    assert not _teacher_supervision_requested(
+        {"loss": {"state": {"weight": 0}, "prototype": {"weight": 0}, "masked_state": {"weight": 0}}}
+    )
+    assert _teacher_supervision_requested({"loss": {"state": {"weight": 1.0}}})
 
 
 def test_warmup_cosine_scheduler_reaches_lower_learning_rate():

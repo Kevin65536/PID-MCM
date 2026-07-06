@@ -100,6 +100,10 @@ def _patchify(signal: torch.Tensor, patch_size: int) -> torch.Tensor:
     return signal.unfold(-1, patch_size, patch_size).permute(0, 2, 1, 3).contiguous()
 
 
+def normalize_teacher_clean(clean: torch.Tensor, offset: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    return (clean - offset.unsqueeze(-1)) / scale.unsqueeze(-1)
+
+
 def signal_features(patches: torch.Tensor, spectral_bins: int) -> torch.Tensor:
     """Patch-local statistics and low-frequency log-spectrum features."""
     sample_count = patches.shape[-1]
@@ -206,8 +210,22 @@ def _collect_split(loader: Iterable[Mapping[str, Any]], adapter: PhysicalStateTe
         teacher = adapter(batch["teacher"])
         eeg_patches = _patchify(batch["eeg"], 400)
         fnirs_patches = _patchify(batch["fnirs"], 20)
-        eeg_source = _patchify(batch["decomposition"]["eeg_source"], 400)
-        fnirs_source = _patchify(batch["decomposition"]["fnirs_source"], 20)
+        # Predictive means must be centered with the same raw-space offset as
+        # the model input. The decomposition source is an additive contribution
+        # (`source / scale`) and intentionally leaves centering to the residual;
+        # it is therefore not a standalone posterior predictive mean.
+        eeg_clean = normalize_teacher_clean(
+            batch["teacher"]["eeg_clean_mean"],
+            batch["normalization"]["eeg_offset"],
+            batch["normalization"]["eeg_scale"],
+        )
+        fnirs_clean = normalize_teacher_clean(
+            batch["teacher"]["fnirs_clean_mean"],
+            batch["normalization"]["fnirs_offset"],
+            batch["normalization"]["fnirs_scale"],
+        )
+        eeg_source = _patchify(eeg_clean, 400)
+        fnirs_source = _patchify(fnirs_clean, 20)
         valid = teacher.valid_mask
 
         eeg_feature = signal_features(eeg_patches, spectral_bins=16)
@@ -685,6 +703,21 @@ def run(args: argparse.Namespace) -> Path:
             "completed_at": datetime.now(timezone.utc).isoformat(),
         },
     )
+    summary_lines = [
+        "# E0 teacher-validity summary",
+        "",
+        f"- Status: `{status}`",
+        f"- E0 passed: `{gate_passed}`",
+        f"- Protected test opened: `{test_opened}`",
+        f"- EEG validation predictive gain: `{validation_predictive['eeg']['normalized_mse_gain']:.6g}`",
+        f"- fNIRS validation predictive gain: `{validation_predictive['fnirs']['normalized_mse_gain']:.6g}`",
+        f"- Admissible EEG coordinates: `{', '.join(coordinate_pass['eeg']) or 'none'}`",
+        f"- Admissible fNIRS coordinates: `{', '.join(coordinate_pass['fnirs']) or 'none'}`",
+        "",
+        "This result controls physical-state supervision only. It does not block teacher-free reconstruction/VQ baselines.",
+        "",
+    ]
+    (run_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
     print(json.dumps({"run_dir": str(run_dir), "status": status, "e0_passed": gate_passed}, sort_keys=True))
     return run_dir
 

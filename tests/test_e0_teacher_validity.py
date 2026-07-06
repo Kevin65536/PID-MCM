@@ -5,6 +5,7 @@ from experiments.evaluate_physical_teacher_e0 import (
     _fit_ridge,
     _permutation_null,
     _synthetic_recovery,
+    normalize_teacher_clean,
     signal_features,
     subject_bootstrap_ci,
     subject_signflip_null,
@@ -20,6 +21,13 @@ def test_signal_features_are_patch_local_and_finite():
     changed[:, 3] += 100.0
     changed_features = signal_features(changed, spectral_bins=5)
     assert torch.equal(features[:, :3], changed_features[:, :3])
+
+
+def test_teacher_predictive_mean_uses_raw_centering_offset():
+    clean = torch.tensor([[[10.0, 12.0]]])
+    offset = torch.tensor([[8.0]])
+    scale = torch.tensor([[2.0]])
+    assert torch.equal(normalize_teacher_clean(clean, offset, scale), torch.tensor([[[1.0, 2.0]]]))
 
 
 def test_subject_bootstrap_aggregates_by_subject():

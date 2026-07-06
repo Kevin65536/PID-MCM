@@ -1,6 +1,6 @@
 # Implementation and validation plan
 
-_Approved execution plan; P1-P5 software interfaces are merged, while all scientific validity gates remain pending_
+_Approved execution plan; the full P1-P5 runtime is implemented, while E0 blocks physical-state supervision_
 
 ---
 
@@ -68,7 +68,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P1 — Establish data, normalization, and tensor contracts
 
-**Implementation status (2026-07-02):** in progress. The versioned paired-optical cache schema, posterior variance fields, strict loader, split/provenance checks, causal crop mask, and raw-space additive normalization passed one-anchor/one-event real-data dry-run and smoke validation on mutually exclusive subjects 1/21/25. This is correctness evidence only; the P1 validity gate and E0 scientific endpoint remain pending.
+**Implementation status (2026-07-03):** complete for the pilot contract. The versioned paired-optical cache schema, posterior variance fields, strict loader, split/provenance checks, causal crop mask, and raw-space additive normalization passed correctness checks. The E0 pilot cache contains 29 mutually exclusive subject-held-out records, with 18 train, 5 validation, and 6 protected-test subjects. The protected test remains unopened because validation did not pass.
 
 **Implementation:** add a versioned loader output containing paired optical data, teacher posterior statistics, causal-valid masks, and sample metadata. Apply a single raw-space normalization before any source/residual decomposition.
 
@@ -101,19 +101,19 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P3 — Expose the physical state teacher
 
-**Implementation status (2026-07-02):** merged. Constant/ramp pooling, uncertainty propagation, complete-patch mask contraction, stop-gradient behavior, and a one-sample real-cache dry run pass. E0 and G0 remain unevaluated.
+**Implementation status (2026-07-03):** merged and scientifically evaluated at the validation boundary. Constant/ramp pooling, uncertainty propagation, complete-patch mask contraction, stop-gradient behavior, synthetic recovery, and real-cache checks pass. E0 validation is blocked: EEG clean-observation prediction improved over the zero baseline, but fNIRS clean-observation prediction was worse than the history baseline. No protected-test sample was evaluated.
 
 **Implementation:** wrap the Croce solver cache as a frozen teacher returning patch state mean, uncertainty, clean observations, neural driver, and masks. Provide identifiable coordinate subsets for EEG and fNIRS.
 
 **Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
 
-**Execution boundary:** E0 teacher validity remains blocked until these correctness checks and a one-sample real-cache dry run pass. Tokenizer optimization remains blocked until E0 declares which teacher coordinates are admissible supervision.
+**Execution boundary:** physical-state-supervised tokenizer optimization remains blocked until a new versioned E0 protocol passes validation. The blocked decision cannot be bypassed with a boolean configuration flag. A teacher-free reconstruction-plus-VQ baseline may optimize because it does not consume the failed teacher endpoint.
 
 **Validity gate:** held-out teacher posterior predictive checks must outperform a mean/history-only baseline for the observed modalities. State coordinates that fail observability or calibration checks are removed from semantic supervision rather than treated as ground truth.
 
 ### P4 — Train independent semantic and residual branches
 
-**Implementation status (2026-07-02):** merged for software validation. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, and invalid-mask loss routing pass. The real-cache smoke intentionally performed zero optimizer steps because E0 has not passed; no tokenizer training result exists.
+**Implementation status (2026-07-03):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The physical-state-supervised objective remains blocked by E0, so this is software-readiness evidence rather than target-semantic validation.
 
 **Implementation:** add patch-local state decoding from continuous latents and codebook prototypes, post-quantization fixed-history masked-state prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch; a separate context module predicts patch `t` from the five preceding tokens and never changes exported IDs. Start with continuous residuals.
 
