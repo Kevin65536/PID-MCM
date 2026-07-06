@@ -22,6 +22,7 @@ Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families 
 | [`p2_p5_software_smoke.yaml`](p2_p5_software_smoke.yaml) | Loader-to-export correctness with fixed target dimensions | Passed; optimizer blocked until E0 |
 | [`e0_teacher_validity_pilot.yaml`](e0_teacher_validity_pilot.yaml) | Subject-held-out posterior-predictive teacher validation | Validation blocked; protected test unopened |
 | [`e0_teacher_validity_v2.yaml`](e0_teacher_validity_v2.yaml) | Four-dataset measurement audit, layered target/coupling validation, and replayable visual review | Validation blocked on physical observation and posterior calibration; protected test unopened |
+| [`shared_state_reconstruction_bound.yaml`](shared_state_reconstruction_bound.yaml) | Croce-independent capacity curves for shared-only and modality-private reconstruction | Diagnostic only; protected test unopened |
 | [`tokenizer_training_pilot.yaml`](tokenizer_training_pilot.yaml) | Full physical-state-supervised training protocol | Blocked by E0 decision artifact |
 | [`tokenizer_optimizer_smoke.yaml`](tokenizer_optimizer_smoke.yaml) | Minimal teacher-supervised optimizer guard check | Correctly rejects blocked E0 |
 | [`tokenizer_reconstruction_baseline_pilot.yaml`](tokenizer_reconstruction_baseline_pilot.yaml) | Teacher-free reconstruction-plus-VQ baseline | CUDA smoke and resume passed |
@@ -54,4 +55,13 @@ Run the E0-v2 validation and regenerate its visual package with:
 
 Visual review is registered only through `finalize_e0_v2_visual_review.py`, which verifies figure hashes and cannot open the protected test by itself.
 
-_Last updated: 2026-07-03_
+Run the non-gate shared-state bound diagnostic with:
+
+```bash
+.venv/bin/python experiments/evaluate_shared_state_reconstruction_bound.py \
+  --config experiments/configs/physiology_semantic_tokenizer/shared_state_reconstruction_bound.yaml
+```
+
+Its validation-oracle PCA is a lower bound only inside the declared rank-limited linear model class. Subject-held-out PCA/CCA results are achievable errors, not universal biological noise floors.
+
+_Last updated: 2026-07-06_

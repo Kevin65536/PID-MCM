@@ -262,6 +262,12 @@ Clean-waveform error against raw history remains a diagnostic of observation dec
 
 **Execution status (2026-07-03):** E0-v2 validation completed and was not admitted. Measurement, local target, finite-vocabulary, and continuous-coupling layers passed. The physical-observation layer failed for fNIRS (`2.193` clean MSE versus `0.834` history MSE), and synthetic-truth posterior calibration remained outside its sample-size-derived coverage band for the three hemodynamic coordinates. Visual review independently confirmed both failures. The protected test remains closed; the immutable validation archive is `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/`.
 
+### E0-D1 — Shared-state reconstruction-bound diagnostic
+
+After the blocked E0-v2 result, a Croce-independent diagnostic tested whether the paired observations themselves support one low-dimensional state that describes both modalities. The analysis fixed latent capacity, decoder family, input access, temporal crop, and subject split before interpreting a bound. It compared validation-oracle joint PCA, train-fitted joint PCA, cross-modal CCA, single-sided CCA inference, and separate modality PCA over dimensions 1–64. This is diagnostic evidence and cannot promote G0.
+
+At five dimensions, validation-oracle descriptor reconstruction reached EEG/fNIRS $R^2$ of `0.893/0.931`, but joint-component loading balance was only `0.041`; the components were modality-dominated. A CCA-constrained shared state reached only `0.098/-0.222`, and its mean validation canonical correlation was `0.004`. Separate five-dimensional modality models reached `0.880/0.965`. The resulting requirement is to admit only cross-subject-stable shared targets and retain modality-private observation state, measurement adaptation, and delayed hemodynamic dynamics. The full scope and caveats are frozen in [`09_SHARED_STATE_RECONSTRUCTION_BOUND.md`](09_SHARED_STATE_RECONSTRUCTION_BOUND.md).
+
 ## ⚙️ E1 — Quantizer implementation and geometry
 
 **Question:** Does corrected EMA produce a healthy, reproducible codebook without changing the scientific objective?

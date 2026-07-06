@@ -8,6 +8,8 @@ _Approved design baseline; full trainer implemented, E0-v2 physical-teacher vali
 
 This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. E0-v2 passed measurement, local-target, vocabulary, and continuous-coupling validation but failed the fNIRS physical-observation and posterior-calibration layers; physical-state-supervised optimization and target promotion remain blocked, and the protected test was not opened.
 
+The Croce-independent [shared-state reconstruction-bound diagnostic](09_SHARED_STATE_RECONSTRUCTION_BOUND.md) further shows that low-rank joint reconstruction is not equivalent to a cross-subject-stable shared state. It supports a future shared-semantic plus modality-private observation architecture, but it does not change the blocked E0 status.
+
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
 | Question | Authoritative document |
