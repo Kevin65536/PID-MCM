@@ -1,5 +1,11 @@
 # Dataset Registry And Validation Plan
 
+The registered runtime metadata now exposes versioned fNIRS measurement
+contracts. `normalize_data_config()` enables full-record robust fNIRS
+standardization by default for all four registered datasets; explicit configs
+may disable it only for a documented raw-measurement audit. See
+`docs/FNIRS_MEASUREMENT_STANDARDIZATION.md`.
+
 This document defines the shared dataset registration interface that now lives in src/data/registry.py and the pre-adaptation validation plan that lives in src/data/validation.py.
 
 The immediate goal is to stop hard-coding EEG+NIRS Single-Trial assumptions into every training entry point. The registry now provides a single place to resolve:

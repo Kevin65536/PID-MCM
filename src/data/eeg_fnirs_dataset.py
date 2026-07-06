@@ -31,6 +31,16 @@ from scipy.signal import butter, sosfiltfilt
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+from .fnirs_standardization import (
+    get_fnirs_measurement_contract,
+    standardization_config_from_mapping,
+    standardize_fnirs_record,
+)
+
+
+def uses_record_level_fnirs_standardization(preprocessing: Optional[dict]) -> bool:
+    return standardization_config_from_mapping(preprocessing) is not None
+
 
 # =============================================================================
 # Channel Filtering Utilities
@@ -154,6 +164,19 @@ def apply_temporal_filter(
         signal: Continuous data with shape (n_samples, n_channels)
     """
     working_dtype = np.float32
+    measurement_cfg = standardization_config_from_mapping(preprocessing) if modality.lower() == 'fnirs' else None
+    if measurement_cfg is not None:
+        contract = get_fnirs_measurement_contract(
+            str(measurement_cfg['dataset_id']),
+            str(measurement_cfg['signal_key']),
+        )
+        signal = standardize_fnirs_record(
+            signal,
+            sample_rate_hz=float(sample_rate),
+            contract=contract,
+            baseline_rule=str(measurement_cfg.get('baseline_rule', 'robust_linear')),
+            trend_blocks=int(measurement_cfg.get('trend_blocks', 20)),
+        ).values
     resolved = resolve_preprocessing_config(preprocessing, modality)
     if not resolved:
         return signal.astype(working_dtype, copy=True)
@@ -605,7 +628,12 @@ class EEGfNIRSDataset(Dataset):
         cnt_list, _, _ = self._get_subject_data(subject_id, processed=processed)
         session = cnt_list[session_idx].T.copy()
 
-        if normalized and self.normalize and self.normalization_mode == 'session':
+        if (
+            normalized
+            and self.normalize
+            and self.normalization_mode == 'session'
+            and not (self.modality == 'fnirs' and uses_record_level_fnirs_standardization(self.preprocessing))
+        ):
             session_mean, session_std = self._get_session_statistics(subject_id, session_idx)
             session = normalize_window(session, 'session', session_mean, session_std)
 
@@ -700,6 +728,8 @@ class EEGfNIRSDataset(Dataset):
         
         # Normalize
         normalization_mode = self.normalization_mode if self.normalize else 'none'
+        if self.modality == 'fnirs' and uses_record_level_fnirs_standardization(self.preprocessing):
+            normalization_mode = 'none'
         if normalization_mode == 'session':
             session_mean, session_std = self._get_session_statistics(trial.subject_id, trial.session_idx)
             window = normalize_window(window, 'session', session_mean, session_std)
@@ -1069,6 +1099,8 @@ class MultiModalEEGfNIRSDataset(Dataset):
             nirs_cnt, trial.nirs_start_sample, trial.nirs_end_sample, nirs_window_samples
         )
         nirs_norm_mode = self.normalization_mode if self.normalize else 'none'
+        if uses_record_level_fnirs_standardization(self.fnirs_preprocessing):
+            nirs_norm_mode = 'none'
         if nirs_norm_mode == 'session':
             nirs_mean, nirs_std = self._get_nirs_session_statistics(trial.subject_id, trial.session_idx)
             nirs_window = normalize_window(nirs_window, 'session', nirs_mean, nirs_std)

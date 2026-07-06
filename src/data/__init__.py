@@ -66,6 +66,16 @@ from .validation import (
     build_dataset_validation_plan,
     render_validation_plan_markdown,
 )
+from .fnirs_standardization import (
+    FNIRS_STANDARDIZATION_SCHEMA,
+    DATASET_FNIRS_CONTRACTS,
+    FNIRSMeasurementContract,
+    FNIRSStandardizationResult,
+    FNIRSStandardizationState,
+    get_fnirs_measurement_contract,
+    restore_fnirs_record,
+    standardize_fnirs_record,
+)
 from .channel_adjacency import (
     SpatialAdjacencyInfo,
     build_channel_adjacency,
@@ -118,6 +128,14 @@ __all__ = [
     'create_configured_multimodal_dataloaders',
     'create_continuous_visualization_dataset',
     'resolve_normalization_config',
+    'FNIRS_STANDARDIZATION_SCHEMA',
+    'DATASET_FNIRS_CONTRACTS',
+    'FNIRSMeasurementContract',
+    'FNIRSStandardizationResult',
+    'FNIRSStandardizationState',
+    'get_fnirs_measurement_contract',
+    'restore_fnirs_record',
+    'standardize_fnirs_record',
     'CroceLocalCacheDataset',
     'SpatialAdjacencyInfo',
     'build_channel_adjacency',

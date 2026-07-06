@@ -8,6 +8,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import yaml
 
+from .fnirs_standardization import DATASET_FNIRS_CONTRACTS, default_standardization_config
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIGS_DIR = PROJECT_ROOT / 'experiments' / 'configs'
@@ -38,7 +40,7 @@ class DatasetRegistration:
     notes: Sequence[str]
 
     def runtime_metadata(self, data_root: str) -> Dict[str, Any]:
-        return {
+        metadata = {
             'dataset_id': self.dataset_id,
             'display_name': self.display_name,
             'data_root': data_root,
@@ -61,6 +63,12 @@ class DatasetRegistration:
             ],
             'notes': list(self.notes),
         }
+        contracts = DATASET_FNIRS_CONTRACTS.get(self.dataset_id)
+        if contracts:
+            metadata['fnirs_measurement_contracts'] = {
+                key: value.to_dict() for key, value in contracts.items()
+            }
+        return metadata
 
 
 REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
@@ -328,6 +336,7 @@ _FNIRS_LEGACY_PREPROCESSING_KEYS = (
     'resample_rate',
     'sampling_rate',
     'sample_rate',
+    'measurement_standardization',
 )
 
 
@@ -394,6 +403,12 @@ def normalize_data_config(data_cfg: Mapping[str, Any]) -> Dict[str, Any]:
     normalized['split'] = normalize_split_config(normalized)
     normalized['eeg_preprocessing'] = resolve_modality_preprocessing(normalized, 'eeg')
     normalized['fnirs_preprocessing'] = resolve_modality_preprocessing(normalized, 'fnirs')
+    default_fnirs_standardization = default_standardization_config(dataset_id)
+    if default_fnirs_standardization is not None:
+        normalized['fnirs_preprocessing'].setdefault(
+            'measurement_standardization',
+            default_fnirs_standardization,
+        )
     normalized['dataset_registry'] = registration.runtime_metadata(normalized['data_root'])
     return normalized
 

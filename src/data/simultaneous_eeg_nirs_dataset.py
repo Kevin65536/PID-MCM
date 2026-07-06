@@ -21,6 +21,7 @@ from .eeg_fnirs_dataset import (
     get_eeg_channel_mask,
     load_mat_struct,
     normalize_window,
+    uses_record_level_fnirs_standardization,
 )
 
 
@@ -593,7 +594,12 @@ class SimultaneousContinuousDataset:
         self._validate_session_idx(session_idx)
         cnt, _, _ = self._get_subject_data(subject_id, processed=processed)
         session = cnt.T.copy()
-        if normalized and self.normalize and self.normalization_mode == 'session':
+        if (
+            normalized
+            and self.normalize
+            and self.normalization_mode == 'session'
+            and not (self.modality == 'fnirs' and uses_record_level_fnirs_standardization(self.preprocessing))
+        ):
             session_mean, session_std = self._session_stats_cache[subject_id]
             session = normalize_window(session, 'session', session_mean, session_std)
         return session
@@ -815,6 +821,8 @@ class SimultaneousEEGfNIRSDataset(Dataset):
         window = self._extract_window(cnt, trial.start_sample, trial.end_sample)
 
         normalization_mode = self.normalization_mode if self.normalize else 'none'
+        if self.modality == 'fnirs' and uses_record_level_fnirs_standardization(self.preprocessing):
+            normalization_mode = 'none'
         if normalization_mode == 'session':
             session_mean, session_std = self._session_stats_cache[trial.subject_id]
             window = normalize_window(window, 'session', session_mean, session_std)
@@ -1037,10 +1045,12 @@ class SimultaneousMultiModalDataset(Dataset):
             eeg_mean, eeg_std = self._eeg_session_stats_cache[trial.subject_id]
             fnirs_mean, fnirs_std = self._fnirs_session_stats_cache[trial.subject_id]
             eeg_window = normalize_window(eeg_window, 'session', eeg_mean, eeg_std)
-            fnirs_window = normalize_window(fnirs_window, 'session', fnirs_mean, fnirs_std)
+            if not uses_record_level_fnirs_standardization(self.fnirs_preprocessing):
+                fnirs_window = normalize_window(fnirs_window, 'session', fnirs_mean, fnirs_std)
         elif normalization_mode == 'window':
             eeg_window = normalize_window(eeg_window, 'window')
-            fnirs_window = normalize_window(fnirs_window, 'window')
+            if not uses_record_level_fnirs_standardization(self.fnirs_preprocessing):
+                fnirs_window = normalize_window(fnirs_window, 'window')
 
         return {
             'eeg': torch.from_numpy(eeg_window).float(),

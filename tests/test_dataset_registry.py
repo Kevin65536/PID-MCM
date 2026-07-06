@@ -36,6 +36,36 @@ class DatasetRegistryTests(unittest.TestCase):
         })
         self.assertEqual(normalized['dataset'], 'eeg_fnirs_single_trial')
         self.assertEqual(normalized['dataset_registry']['sync_strategy'], 'shared_parallel_port_markers')
+        standardization = normalized['fnirs_preprocessing']['measurement_standardization']
+        self.assertTrue(standardization['enabled'])
+        self.assertEqual(standardization['signal_key'], 'wavelength_pair')
+        self.assertEqual(
+            normalized['dataset_registry']['fnirs_measurement_contracts']['wavelength_pair']['native_unit'],
+            'V',
+        )
+
+    def test_simultaneous_default_contract_keeps_declared_concentration_unit(self):
+        normalized = normalize_data_config({
+            'dataset': 'simultaneous_eeg_nirs',
+            'data_root': 'data/Simultaneous EEG&NIRS',
+        })
+        self.assertEqual(
+            normalized['dataset_registry']['fnirs_measurement_contracts']['oxy_deoxy']['native_unit'],
+            'mmol/L',
+        )
+        self.assertEqual(
+            normalized['fnirs_preprocessing']['measurement_standardization']['signal_key'],
+            'oxy_deoxy',
+        )
+
+    def test_explicit_standardization_disable_is_respected(self):
+        normalized = normalize_data_config({
+            'dataset': 'eeg_fnirs_single_trial',
+            'fnirs_preprocessing': {
+                'measurement_standardization': {'enabled': False},
+            },
+        })
+        self.assertFalse(normalized['fnirs_preprocessing']['measurement_standardization']['enabled'])
 
     def test_load_experiment_config_normalizes_shared_config(self):
         with TemporaryDirectory() as tmp:

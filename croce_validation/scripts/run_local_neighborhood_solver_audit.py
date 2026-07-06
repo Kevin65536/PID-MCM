@@ -67,7 +67,8 @@ from src.data.channel_adjacency import (  # noqa: E402
     canonicalize_channel_label,
     strip_fnirs_chromophore_suffix,
 )
-from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset  # noqa: E402
+from src.data.eeg_fnirs_dataset import MultiModalEEGfNIRSDataset, apply_temporal_filter  # noqa: E402
+from src.data.fnirs_standardization import get_fnirs_measurement_contract, standardize_fnirs_record  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -1571,7 +1572,16 @@ def resolve_dataset_event_windows(
         normalize=False,
         normalization_mode='none',
         eeg_preprocessing={'bandpass': [0.5, 45.0]},
-        fnirs_preprocessing={'lowpass': 0.2},
+        fnirs_preprocessing={
+            'lowpass': 0.2,
+            'measurement_standardization': {
+                'enabled': True,
+                'dataset_id': 'eeg_fnirs_single_trial',
+                'signal_key': 'wavelength_pair',
+                'baseline_rule': 'robust_linear',
+                'trend_blocks': 20,
+            },
+        },
         use_artifact_data=bool(args.use_artifact_eeg),
         exclude_eog=True,
         hbo_only=False,
@@ -1657,7 +1667,10 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     )
 
     eeg_session_list, _, eeg_info = dataset._get_eeg_data(int(args.subject_id), processed=True)
-    fnirs_session_list, _, fnirs_info = dataset._get_nirs_data(int(args.subject_id), processed=True)
+    # Load native fNIRS here so the fitted full-record standardization state is
+    # retained in the run manifest.  The generic loader applies the same
+    # transform but intentionally returns only model-facing values.
+    fnirs_session_list, _, fnirs_info = dataset._get_nirs_data(int(args.subject_id), processed=False)
     task_session_idx, raw_session_idx, task = resolve_task_session_index(
         args,
         min(len(eeg_session_list), len(fnirs_session_list)),
@@ -1695,9 +1708,22 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     )
 
     eeg_full = np.asarray(eeg_session_list[raw_session_idx], dtype=np.float64)
-    fnirs_full = np.asarray(fnirs_session_list[raw_session_idx], dtype=np.float64)
+    fnirs_full_native = np.asarray(fnirs_session_list[raw_session_idx], dtype=np.float64)
     eeg_fs_hz = float(eeg_info['fs'])
     fnirs_fs_hz = float(fnirs_info['fs'])
+    fnirs_standardization = standardize_fnirs_record(
+        fnirs_full_native,
+        sample_rate_hz=fnirs_fs_hz,
+        contract=get_fnirs_measurement_contract('eeg_fnirs_single_trial', 'wavelength_pair'),
+        baseline_rule='robust_linear',
+        trend_blocks=20,
+    )
+    fnirs_full = apply_temporal_filter(
+        fnirs_standardization.values,
+        sample_rate=fnirs_fs_hz,
+        modality='fnirs',
+        preprocessing={'lowpass': 0.2},
+    ).astype(np.float64, copy=False)
     eeg_substeps_per_fnirs = int(round(eeg_fs_hz / fnirs_fs_hz))
     if eeg_substeps_per_fnirs < 1 or not np.isclose(eeg_substeps_per_fnirs * fnirs_fs_hz, eeg_fs_hz, atol=1e-9):
         raise ValueError('Dataset mode requires EEG fs to be an integer multiple of fNIRS fs')
@@ -1803,12 +1829,28 @@ def load_dataset_bundle(args: argparse.Namespace, spatial_config: SpatialConfig)
     jac_secondary = build_positive_weights(local_fnirs_positions, anchor_position_2d, spatial_config.fnirs_sigma_mm)
 
     eeg_norm, eeg_stats = standardize_matrix(eeg_local_raw)
-    fnirs_primary_norm, fnirs_primary_stats = standardize_matrix(fnirs_primary_local)
-    fnirs_secondary_norm, fnirs_secondary_stats = standardize_matrix(fnirs_secondary_local)
+    # fNIRS has already been fitted on the complete continuous record by the
+    # versioned measurement standardizer.  Do not re-fit mean/std on this
+    # selected segment: doing so would reintroduce crop-dependent coordinates.
+    fnirs_primary_norm = fnirs_primary_local.copy()
+    fnirs_secondary_norm = fnirs_secondary_local.copy()
+    fnirs_primary_stats = {
+        'mean': np.zeros(fnirs_primary_local.shape[1], dtype=np.float64).tolist(),
+        'std': np.ones(fnirs_primary_local.shape[1], dtype=np.float64).tolist(),
+        'prestandardized': True,
+    }
+    fnirs_secondary_stats = {
+        'mean': np.zeros(fnirs_secondary_local.shape[1], dtype=np.float64).tolist(),
+        'std': np.ones(fnirs_secondary_local.shape[1], dtype=np.float64).tolist(),
+        'prestandardized': True,
+    }
 
     metadata = {
         'signal_source': 'real_optical_continuous_signal',
         'fnirs_signal_semantics': 'paired_optical_wavelength_channels',
+        'fnirs_measurement_coordinate': 'full_record_robust_linear_detrended_channel_scaled_dimensionless',
+        'fnirs_standardization_state': fnirs_standardization.state.to_dict(),
+        'fnirs_standardization_quality': dict(fnirs_standardization.quality),
         'fnirs_cache_requirement': 'keep_fNIRS_targets_in_optical_measurement_space_before_cross_dataset_caching',
         'data_root': str(args.data_root),
         'task': task,
