@@ -71,9 +71,10 @@ class PhysiologySemanticLoss(nn.Module):
         target: torch.Tensor,
         uncertainty: torch.Tensor,
         teacher_mask: torch.Tensor,
+        teacher_context_mask: torch.Tensor,
         coordinate_mask: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
-        context_mask = teacher_mask & output.context_valid_mask
+        context_mask = teacher_context_mask & output.context_valid_mask
         return {
             "state": self._masked_uncertainty_loss(
                 output.state_prediction, target, uncertainty, teacher_mask, coordinate_mask
@@ -96,10 +97,12 @@ class PhysiologySemanticLoss(nn.Module):
     ) -> Dict[str, torch.Tensor]:
         eeg = self._modality_losses(
             outputs["eeg"], teacher.eeg_target, teacher.eeg_uncertainty, teacher.valid_mask,
+            teacher.context_valid_mask,
             self.eeg_coordinate_mask,
         )
         fnirs = self._modality_losses(
             outputs["fnirs"], teacher.fnirs_target, teacher.fnirs_uncertainty, teacher.valid_mask,
+            teacher.context_valid_mask,
             self.fnirs_coordinate_mask,
         )
         components: Dict[str, torch.Tensor] = {}

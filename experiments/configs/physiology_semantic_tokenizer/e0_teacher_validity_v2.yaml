@@ -1,0 +1,75 @@
+experiment:
+  name: "e0_teacher_validity_v2"
+  run_group: "physiology_semantic_tokenizer/e0_teacher_validity"
+  description: "E0-v2 measurement, target-information, vocabulary, physical-observation, coupling, and visual audit."
+
+data:
+  modality: "both"
+  dataset: "croce_local_cache"
+  contract: "physiology_semantic_v2"
+  data_root: "croce_validation/cache/croce_local/physiology_semantic_v2_e0_pilot"
+  cache_sources:
+    - name: "single_trial_mental_arithmetic_e0_v2"
+      root: "croce_validation/cache/croce_local/physiology_semantic_v2_e0_pilot/single_trial_mental_arithmetic"
+      task: "mental_arithmetic"
+  split:
+    train_subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    val_subjects: [19, 20, 21, 22, 23]
+    test_subjects: [24, 25, 26, 27, 28, 29]
+  window:
+    duration_s: 20.0
+  crop:
+    train_random: false
+    force_deterministic_all_splits: true
+    eval_event_offsets_s: [-10.0, 0.0, 20.0]
+  teacher:
+    causal_history_s: 10.0
+  normalization:
+    enabled: true
+    scope: "sample"
+    eps: 1.0e-6
+  num_workers: 4
+  dataloader:
+    pin_memory: false
+    drop_last: false
+    persistent_workers: true
+
+training:
+  batch_size: 32
+  seed: 29
+
+measurement_audit:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  max_samples_per_subject: 20000
+  trace_points: 1200
+  datasets:
+    - name: "single_trial_voltage"
+      root: "data/EEG+NIRS Single-Trial/NIRS_01-29"
+      subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+    - name: "simultaneous_concentration"
+      root: "data/Simultaneous EEG&NIRS"
+      subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+    - name: "refed_reported_chromophore"
+      root: "data/REFED-dataset/data"
+      subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+    - name: "visual_exported_oxy_deoxy"
+      root: "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults"
+      subjects: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+e0_v2:
+  ridge_alphas: [0.1, 1.0, 10.0, 100.0]
+  null_quantile: 0.95
+  permutation_iterations: 64
+  random_reference_iterations: 32
+  context_shuffle_iterations: 64
+  codebook_size: 128
+  synthetic_calibration:
+    duration_s: 10.0
+    snr_db: 5.0
+    num_particles: 128
+    seeds: [11, 23, 37, 47]
+
+validation:
+  phase: "e0_teacher_validity_v2"
+  protected_test_metrics: false

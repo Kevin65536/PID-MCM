@@ -39,6 +39,7 @@ gantt
         P1 data-contract smoke            :milestone, 2026-07-02, 0d
         P2-P5 software migration          :milestone, 2026-07-02, 0d
         E0 gate + full trainer             :milestone, 2026-07-03, 0d
+        E0-v2 teacher contract audit       :milestone, 2026-07-03, 0d
 ```
 
 ## Change Records
@@ -54,6 +55,7 @@ gantt
 | 7 | 2026-07-02 | Phase 3 P1/G0 | [P1 Physiology-Semantic Data Contract Smoke](2026-07-02_p1_physiology_semantic_data_contract.md) | v2 cache generator, strict paired-optical loader, E0 contract validator/config | In Progress |
 | 8 | 2026-07-02 | Phase 3 P2-P5 | [P2-P5 Physiology-Semantic Code Migration](2026-07-02_p2_p5_physiology_semantic_code_migration.md) | corrected EMA VQ, physical teacher, independent tokenizer, gated trainer, export/consumers | Merged |
 | 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Merged; teacher supervision blocked |
+| 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Merged; validation blocked |
 
 ## How to Add a New Entry
 

@@ -52,6 +52,7 @@ def build_export_batch(
     payload["teacher_full_summary"] = _numpy(teacher.full_summary)
     payload["teacher_full_uncertainty"] = _numpy(teacher.full_uncertainty)
     payload["teacher_valid_mask"] = _numpy(teacher.valid_mask)
+    payload["teacher_context_valid_mask"] = _numpy(teacher.context_valid_mask)
     for key in ("subject_id", "label", "crop_start_s"):
         payload[key] = _numpy(batch[key])
     for key in ("cache_entry_id", "source_name", "source_task", "anchor", "label_name"):

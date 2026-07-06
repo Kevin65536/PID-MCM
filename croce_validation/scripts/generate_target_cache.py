@@ -418,12 +418,19 @@ def _build_cache_entry(bundle: Any, pf_result: Dict[str, Any], audit: Any) -> Di
         r_eeg_eeg = np.interp(target_time, source_time, r_estimates_eeg)
     pred_eeg_norm = r_eeg_eeg.reshape(-1, 1) * lead_eeg.reshape(1, -1)
 
-    # fNIRS source: anchor's own channel only (distance=0 → index 0).
-    # State estimates → normalised prediction at anchor channel.
-    _jac_p0 = jac_p.reshape(1, -1)[:, 0:1]
-    _jac_s0 = jac_s.reshape(1, -1)[:, 0:1]
-    pred_primary_norm = estimates[:, 2:3] * _jac_p0
-    pred_secondary_norm = estimates[:, 3:4] * _jac_s0
+    # fNIRS source: evaluate the canonical observation equation first, then
+    # retain the anchor's own channel (distance=0 → index 0).  In wavelength
+    # space each optical channel is a mixture of delta_hbo and delta_hb; using
+    # the two state coordinates directly silently changes the physical model.
+    _, pred_primary_all, pred_secondary_all = audit.predict_observations(
+        estimates,
+        lead_eeg,
+        jac_p,
+        jac_s,
+        bundle.pair_mode,
+    )
+    pred_primary_norm = np.asarray(pred_primary_all, dtype=np.float64)[:, 0:1]
+    pred_secondary_norm = np.asarray(pred_secondary_all, dtype=np.float64)[:, 0:1]
 
     # Destandardize to raw measurement space
     _fnirs_p_stats0 = {"mean": [fnirs_p_stats["mean"][0]], "std": [fnirs_p_stats["std"][0]]}

@@ -49,6 +49,20 @@ def test_teacher_contracts_mask_to_complete_patches():
     assert torch.equal(output.valid_mask, expected)
 
 
+def test_teacher_separates_local_cache_validity_from_causal_context_validity():
+    adapter = PhysicalStateTeacher()
+    batch = _teacher_batch(batch_size=1)
+    batch["cache_valid_mask"] = torch.ones(1, 200, dtype=torch.bool)
+    batch["causal_valid_mask"] = batch["teacher_valid_mask"].clone()
+    output = adapter(batch)
+
+    assert torch.all(output.valid_mask)
+    assert torch.equal(
+        output.context_valid_mask,
+        torch.tensor([[False, False, False, False, False, True, True, True, True, True]]),
+    )
+
+
 def test_teacher_outputs_are_detached_and_uncertainty_positive():
     adapter = PhysicalStateTeacher()
     batch = _teacher_batch(batch_size=1)

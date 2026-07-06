@@ -101,7 +101,7 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P3 — Expose the physical state teacher
 
-**Implementation status (2026-07-03):** merged and scientifically evaluated at the validation boundary. Constant/ramp pooling, uncertainty propagation, complete-patch mask contraction, stop-gradient behavior, synthetic recovery, and real-cache checks pass. E0 validation is blocked: EEG clean-observation prediction improved over the zero baseline, but fNIRS clean-observation prediction was worse than the history baseline. No protected-test sample was evaluated.
+**Implementation status (2026-07-03):** merged and scientifically evaluated through E0-v2 validation. Cache validity now controls local state/prototype supervision independently of the causal-history mask; only context supervision requires both cache validity and a complete 10-second history. Cross-dataset measurement, local observability, K=128 transmissibility, and continuous coupling checks passed. fNIRS physical-observation prediction and synthetic-truth posterior calibration failed numerical and visual review. No protected-test sample was evaluated.
 
 **Implementation:** wrap the Croce solver cache as a frozen teacher returning patch state mean, uncertainty, clean observations, neural driver, and masks. Provide identifiable coordinate subsets for EEG and fNIRS.
 

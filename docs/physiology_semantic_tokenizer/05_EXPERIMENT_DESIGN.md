@@ -1,6 +1,6 @@
 # Redesigned experiment program
 
-_Final experiment logic for the approved target architecture, 2026-07-02_
+_Final experiment logic for the approved target architecture, updated 2026-07-03_
 
 ---
 
@@ -76,17 +76,191 @@ All architecture comparisons match encoder capacity, local windows, training sam
 
 ## 🧪 E0 — Cache and teacher validity
 
-**Question:** Are the cached state estimates temporally aligned, sufficiently observable, uncertainty-calibrated, and safe to use as supervision?
+### Status and scope boundary
 
-**Method:** audit cache manifests and hashes; compare cached observations with source solver outputs; run posterior predictive reconstruction; perturb individual states in simulation; test coverage and calibration by state coordinate; quantify boundary support after causal masking; compare highWL-only and paired optical observability.
+E0-v1 is preserved as a failed validation result: its fNIRS clean-waveform endpoint did not outperform the two-second history baseline, so physical-state-supervised optimization remains blocked and the protected test remains unopened. The analysis below defines the replacement E0-v2 protocol; it does not reinterpret E0-v1 as passed.
 
-**Primary endpoint:** held-out posterior predictive likelihood or normalized error relative to a history/mean baseline, reported per observed modality.
+E0-v2 treats the Croce state-space dynamics as the fixed physical prior. It does not re-evaluate whether those equations are physiologically valid. It evaluates whether each dataset's measurement semantics, unit/scale adapter, teacher posterior, and tokenizer-facing target projections form a valid information-transfer contract.
 
-**Required controls:** subject-held-out splits, synthetic parameter recovery, state-label permutation, time shift, boundary-mask ablation, and duplicate-cache detection.
+### Dataset measurement contract
 
-**Artifacts:** `teacher_audit.json`, `state_observability.csv`, `posterior_calibration.csv`, `mask_coverage.csv`, predictive-check figures, and cache/solver hashes.
+For modality $m$, dataset $d$, and subject/session $s$, the recorded value is represented as:
 
-**Pass condition:** every supervised coordinate shows useful held-out predictive content relative to the declared history/mean and permutation references, with uncertainty behavior supported by the suite-specific calibration record. No universal coverage cutoff is assumed. Coordinates without adequate evidence are excluded or grouped as latent nuisance variables.
+\[
+Y_{d,s,t}^{m}
+=a_{d,s}^{m}+B_d^{m}O^m(Z_t)+\epsilon_{d,s,t}^{m},
+\]
+
+where $Z_t=(r_t,s_t,\delta f_t,\delta HbO_t,\delta Hb_t)$, $O^m$ is the modality observation mapping, $a_{d,s}^{m}$ is a baseline, and $B_d^{m}$ carries dataset-specific units and relative amplitude scaling. The adapter produces:
+
+\[
+X_{d,s,t}^{m}
+=S_d^{-1}\left[\phi_d(Y_{d,s,t}^{m})-b_{d,s}^{m}\right].
+\]
+
+The transform $\phi_d$ is selected from the dataset description and inspected data fields. It may preserve declared relative HbO/HbR traces, convert intensity-like values to relative optical change, or preserve a paired optical basis without relabeling it as concentration. The subject/session baseline $b_{d,s}^{m}$ and train-only robust dataset scale $S_d$ align relative fluctuations while retaining reversible provenance.
+
+E0 rejects crop-local normalization as the cross-dataset amplitude contract because identical local physiology can receive different scales when placed inside crops with different surrounding variance. Distribution matching must not force physiologically different datasets to have identical marginal distributions. The desired invariance is instead:
+
+\[
+I(K^m;D\mid Z^m)\approx 0,
+\]
+
+meaning that dataset identity should add little token information after the physiological state is fixed.
+
+### Teacher information-transfer contract
+
+For each independent modality student:
+
+\[
+U_t^m=f_m(X_t^m),\qquad K_t^m=Q_m(U_t^m).
+\]
+
+Because inference uses only $X_t^m$, the data-processing inequality imposes:
+
+\[
+I(K_t^m;T_t^m)\le I(X_t^m;T_t^m).
+\]
+
+The irreducible squared prediction risk for a teacher target $T_t^m$ is:
+
+\[
+\min_g E\|T_t^m-g(X_t^m)\|^2
+=E\left[\operatorname{tr}\operatorname{Var}(T_t^m\mid X_t^m)\right].
+\]
+
+E0-v2 therefore validates targets separately by the receptive field that consumes them:
+
+| Teacher field | Consumer | Essential requirement |
+| --- | --- | --- |
+| `local_state_projection` | Continuous latent and codebook prototype | Identifiable from the current modality patch |
+| `context_transition_target` | Fixed-history causal context | Identifiable from the declared history and sensitive to state transition |
+| `physical_observation_mean` | Semantic-only decoder | Expressed in the dataset adapter's canonical relative measurement space |
+| `posterior_covariance` | Loss weighting and calibration | Calibrated as uncertainty; not treated as a physiological state coordinate by default |
+| `valid_mask` | Every teacher-derived loss | Excludes missing support, invalid solver output, and unavailable causal history |
+| `measurement_adapter_metadata` | Audit and export | Records original semantics, units, baseline, scale, channel mapping, and inverse transform |
+
+The same state vector is not automatically valid for every entrance. Local targets are projections $T_t^{local}=P_{local}Z_t$; slow state and innovation targets are $T_t^{context}=P_{dynamic}(Z_{t-L:t},\Delta Z_t)$. In particular, fNIRS flow, slow derivatives, and response phase may be context targets even when they are not recoverable from a two-second patch alone.
+
+### Transmission into discrete token identity
+
+Continuous-state decoding is an optimization scaffold but does not establish discrete semantics. The direct criterion is prototype risk:
+
+\[
+\mathcal L_{proto}=E\|T^{local}-G(e_K)\|_{\Sigma^{-1}}^2.
+\]
+
+For squared loss, the optimal signature is $G(e_k)=E[T^{local}\mid K=k]$, and total variance decomposes as:
+
+\[
+\operatorname{Var}(T^{local})
+=\operatorname{Var}(E[T^{local}\mid K])
++E[\operatorname{Var}(T^{local}\mid K)].
+\]
+
+E0-v2 records the pre-training transmissibility reference:
+
+\[
+R^2_{phys-token}
+=1-
+\frac{E[\operatorname{tr}\operatorname{Var}(T^{local}\mid K)]}
+{\operatorname{tr}\operatorname{Var}(T^{local})}.
+\]
+
+This reference estimates whether a finite vocabulary can partition the admitted target geometry. E2 remains responsible for showing that the trained tokenizer actually realizes this potential.
+
+Waveform information enters through two non-equivalent fidelity paths:
+
+\[
+\mathcal L_{phys-recon}
+=\|D_{sem}(e_K)-X_{phys,T}\|^2,
+\]
+
+\[
+\mathcal L_{full-recon}
+=\|D_{full}(e_K,R)-X\|^2.
+\]
+
+The first tests whether the semantic branch carries the teacher-defined physical observation; the second requires semantic plus residual representations to preserve the complete measurement. Full reconstruction alone cannot establish token semantics because the residual branch may carry nearly all observation information.
+
+### Continuous coupling upper bound
+
+The frozen-token coupling objective ultimately measures:
+
+\[
+\Delta\ell^*
+=I(K^E_{t-L:t-1};K_t^F\mid K^F_{t-L:t-1},D,S).
+\]
+
+Before tokenizer training, E0-v2 must establish that the admitted continuous teacher states contain such incremental information. For a locally linearized transition:
+
+\[
+Z_t^F=A Z_{t-1}^F+B Z_{t-L:t-1}^E+W_t,
+\]
+
+the continuous reference is:
+
+\[
+I(Z^E_{hist};Z_t^F\mid Z^F_{hist})
+=\frac{1}{2}\log
+\frac{\det\Sigma(Z_t^F\mid Z^F_{hist})}
+{\det\Sigma(Z_t^F\mid Z^F_{hist},Z^E_{hist})}.
+\]
+
+If this conditional covariance reduction is absent, no quantizer can create valid coupling evidence. If it is present, the local/prototype targets must preserve the state directions responsible for it. Slow fNIRS level alone may be physiologically meaningful yet add little coupling information when it is already predictable from fNIRS history; transition and innovation sensitivity must therefore be reported separately.
+
+### E0-v2 execution order
+
+```mermaid
+flowchart TD
+    accTitle: E0-v2 teacher admission sequence
+    accDescr: E0-v2 first validates dataset measurement adapters, then target observability and uncertainty, followed by finite-vocabulary transmissibility and the continuous conditional coupling upper bound before any teacher-supervised tokenizer optimization.
+
+    source_data["Dataset description and inspected fields"] --> adapter["Versioned measurement adapter"]
+    adapter --> scale_check{"Units and relative scales auditable?"}
+    scale_check -->|No| repair_adapter["Repair adapter or exclude dataset"]
+    scale_check -->|Yes| teacher_posterior["Croce posterior and observation outputs"]
+    teacher_posterior --> target_split["Split local, context, observation, and uncertainty fields"]
+    target_split --> observability{"Targets identifiable from declared receptive fields?"}
+    observability -->|No| remove_target["Remove, regroup, or move target to context"]
+    observability -->|Yes| transmissibility["Finite-vocabulary physiological transmissibility"]
+    transmissibility --> coupling_bound["Continuous conditional coupling upper bound"]
+    coupling_bound --> admission{"All required references supported?"}
+    admission -->|No| blocked["Keep teacher-supervised training blocked"]
+    admission -->|Yes| freeze_protocol["Freeze E0-v2 protocol and calibration"]
+    freeze_protocol --> protected_test["Open fresh protected evidence once"]
+
+    classDef foundation fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef decision fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef blocked_class fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef admitted fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class source_data,adapter,teacher_posterior,target_split,transmissibility,coupling_bound foundation
+    class scale_check,observability,admission decision
+    class repair_adapter,remove_target,blocked blocked_class
+    class freeze_protocol,protected_test admitted
+```
+
+### Endpoints, controls, and artifacts
+
+| Layer | Primary evidence | Required control |
+| --- | --- | --- |
+| Measurement adapter | Reversible semantics/unit manifest and stable relative-amplitude calibration | Dataset/source prediction, alternate robust scales, crop-position invariance |
+| Target observability | Held-out reduction in target uncertainty/error from the declared modality receptive field | Target permutation, time shift, modality ablation, history-length ablation |
+| Uncertainty | Coverage and standardized residual calibration | Variance scaling sensitivity and invalid-mask ablation |
+| Vocabulary transmissibility | State variance explained by a fixed-capacity partition and within-code conditional variance | Random partition, shuffled target, capacity-matched null |
+| Physical observation | Semantic-only reconstruction in canonical measurement space | Full reconstruction, residual-only attribution, history/mean diagnostic |
+| Coupling upper bound | Conditional covariance or likelihood reduction from EEG state history beyond fNIRS state history | EEG shuffle, time shift, fNIRS-history-only, subject/source stratification |
+
+Required artifacts are `measurement_adapters.yaml`, `unit_scale_audit.csv`, `target_contract.json`, `target_observability.csv`, `posterior_calibration.csv`, `vocabulary_transmissibility.json`, `continuous_coupling_upper_bound.json`, `mask_coverage.csv`, predictive diagnostics, and immutable cache/solver hashes. Every artifact records train/validation provenance and metric role.
+
+### Admission and pass rule
+
+E0-v2 is admitted from validation only when the measurement adapter is auditable, every enabled local/context target is observable from its declared receptive field, uncertainty is calibrated, the fixed-capacity transmissibility reference is non-degenerate, and the continuous state bridge contains incremental EEG-history information beyond fNIRS history. Coordinates or datasets that fail only a scoped requirement are removed, regrouped, or assigned to another entrance before the protocol is frozen. G0 passes only if the frozen contract reproduces the required evidence on the fresh protected evaluation.
+
+Clean-waveform error against raw history remains a diagnostic of observation decomposition, not the single E0 primary endpoint. A validation failure cannot be rescued by another layer's success, and the existing protected test remains closed until the E0-v2 decision protocol, metric registry, calibration procedure, and eligible target list are frozen.
+
+**Execution status (2026-07-03):** E0-v2 validation completed and was not admitted. Measurement, local target, finite-vocabulary, and continuous-coupling layers passed. The physical-observation layer failed for fNIRS (`2.193` clean MSE versus `0.834` history MSE), and synthetic-truth posterior calibration remained outside its sample-size-derived coverage band for the three hemodynamic coordinates. Visual review independently confirmed both failures. The protected test remains closed; the immutable validation archive is `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/`.
 
 ## ⚙️ E1 — Quantizer implementation and geometry
 
@@ -258,7 +432,10 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 
 | Result | Decision |
 | --- | --- |
-| E0 fails | Do not use physical states as labels; repair/calibrate the teacher or return to self-supervised targets |
+| E0 measurement adapter fails | Repair the dataset adapter or exclude that dataset; do not pool its scale with admitted datasets |
+| E0 local/context target fails | Remove, regroup, or move the coordinate to the receptive field that can identify it |
+| E0 continuous coupling upper bound fails | Do not expect token coupling to create incremental information; keep E7 blocked |
+| E0-v2 validation admitted | Freeze admitted targets and calibration, then open fresh protected evidence once; teacher-supervised optimization remains blocked until G0 passes |
 | E1 fails | Stop all expensive training; quantizer results are uninterpretable |
 | E2 fails, E6 passes | Retain information-preserving tokenizer but drop physiological-semantic token claims |
 | E2 passes, E6 fails | Increase or redesign residual capacity; do not use hard tokens alone downstream |
@@ -276,4 +453,4 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-03_

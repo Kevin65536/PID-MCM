@@ -18,6 +18,7 @@ class PhysicalTeacherOutput:
     fnirs_target: torch.Tensor
     fnirs_uncertainty: torch.Tensor
     valid_mask: torch.Tensor
+    context_valid_mask: torch.Tensor
 
 
 class PhysicalStateTeacher(nn.Module):
@@ -91,12 +92,14 @@ class PhysicalStateTeacher(nn.Module):
         driver = teacher["neural_driver_eeg_rate"].detach()
         driver_var = teacher["neural_driver_var_eeg_rate"].detach()
         mask = teacher["teacher_valid_mask"].detach().bool()
+        cache_mask = teacher.get("cache_valid_mask", mask).detach().bool()
+        causal_mask = teacher.get("causal_valid_mask", torch.ones_like(mask)).detach().bool()
         if state_mean.shape != state_var.shape or state_mean.shape[-1] != len(self.state_names):
             raise ValueError("state_mean/state_var must share shape [B,T,5]")
         if driver.shape != driver_var.shape or driver.shape[-1] != 1:
             raise ValueError("neural driver mean/variance must share shape [B,T,1]")
-        if mask.shape != state_mean.shape[:2]:
-            raise ValueError("teacher_valid_mask must have shape [B,T]")
+        if mask.shape != state_mean.shape[:2] or cache_mask.shape != mask.shape or causal_mask.shape != mask.shape:
+            raise ValueError("teacher/cache/causal validity masks must have shape [B,T]")
 
         state_summary, state_uncertainty = self._summarize(
             state_mean, state_var, self.fnirs_sample_rate_hz, self.fnirs_patch_samples
@@ -105,9 +108,17 @@ class PhysicalStateTeacher(nn.Module):
             driver, driver_var, self.eeg_sample_rate_hz, self.eeg_patch_samples
         )
         mask_patch = mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
+        cache_mask_patch = cache_mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
+        causal_mask_patch = causal_mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
         finite_patch = torch.isfinite(state_summary).all(dim=-1) & torch.isfinite(state_uncertainty).all(dim=-1)
         finite_patch &= torch.isfinite(driver_summary).all(dim=-1) & torch.isfinite(driver_uncertainty).all(dim=-1)
-        valid_mask = mask_patch & finite_patch
+        # Local state/prototype supervision needs only a valid physical
+        # posterior.  The fixed-history context objective additionally needs
+        # the crop-boundary causal history.  `mask_patch` remains part of the
+        # context mask for compatibility with caches that already combine the
+        # two conditions.
+        valid_mask = cache_mask_patch & finite_patch
+        context_valid_mask = mask_patch & cache_mask_patch & causal_mask_patch & finite_patch
 
         # Summary layout is statistic-major: [all means, all slopes, all log variances].
         s_indices = torch.tensor([0, 5, 10], device=state_mean.device)
@@ -125,6 +136,7 @@ class PhysicalStateTeacher(nn.Module):
             fnirs_target=fnirs_target.detach(),
             fnirs_uncertainty=fnirs_uncertainty.detach(),
             valid_mask=valid_mask.detach(),
+            context_valid_mask=context_valid_mask.detach(),
         )
 
 

@@ -2,7 +2,7 @@
 
 > **Semantics version**: `s2_source_observation_v4_croce_local_highwl`
 > **Last updated**: 2026-07-03
-> **Current phase**: Legacy source/observation runtime remains the validated baseline; the physiology-semantic trainer is runnable, but E0 blocks physical-state supervision and target promotion
+> **Current phase**: Legacy source/observation runtime remains the validated baseline; the physiology-semantic trainer is runnable, but E0-v2 blocks physical-state supervision and target promotion
 > **Compatibility class**: `SourceObservationLaBraMVQNSP` in [source_observation_tokenizer.py](../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py). This document describes the runnable pre-redesign architecture, not the active target contract.
 > **Changelog**: [architecture_changelog/INDEX.md](architecture_changelog/INDEX.md)
 
@@ -23,7 +23,7 @@ The 2026-07-01 design freeze approved a physiology-semantic replacement with fou
 3. continuous private/residual paths that preserve information outside the semantic bottleneck;
 4. frozen-token sequence-to-distribution coupling evaluated against fNIRS history and marginal baselines.
 
-The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` contract, corrected quantizer, physical teacher adapter, independent semantic/residual tokenizer, full gated trainer, exporter, and four consumer modes are implemented. E0 validation found positive EEG prediction but failed the fNIRS history-baseline endpoint; the protected test remained closed. Consequently, physical-state supervision is blocked. A teacher-free reconstruction-plus-VQ smoke and exact-state resume passed, establishing trainer correctness but not teacher physiology, semantic quality, information retention, downstream utility, or coupling.
+The complete target tensor contracts, losses, implementation gates, and experiment suites live in [docs/physiology_semantic_tokenizer/](physiology_semantic_tokenizer/README.md). The paired-optical `croce_physiology_semantic_v2` contract, corrected quantizer, physical teacher adapter, independent semantic/residual tokenizer, full gated trainer, exporter, and four consumer modes are implemented. E0-v2 separates cache-valid local supervision from causal-history context supervision and audits measurement, observability, uncertainty, vocabulary, physical observation, and continuous coupling. The fNIRS physical-observation and posterior-calibration layers failed validation and visual review; the protected test remained closed. Consequently, physical-state supervision is blocked. A teacher-free reconstruction-plus-VQ smoke and exact-state resume passed, establishing trainer correctness but not teacher physiology, semantic quality, information retention, downstream utility, or coupling.
 
 The maintained SVG view of that software state is [`physiology_semantic_architecture.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg). Future modification plans must use its plan-overlay mechanism rather than editing the generated SVG manually.
 

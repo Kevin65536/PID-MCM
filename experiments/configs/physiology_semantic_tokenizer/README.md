@@ -21,6 +21,7 @@ Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families 
 | [`p1_e0_contract_smoke.yaml`](p1_e0_contract_smoke.yaml) | One real anchor/event for mutually exclusive train/validation/test subjects | P1 smoke passed; G0 not evaluated |
 | [`p2_p5_software_smoke.yaml`](p2_p5_software_smoke.yaml) | Loader-to-export correctness with fixed target dimensions | Passed; optimizer blocked until E0 |
 | [`e0_teacher_validity_pilot.yaml`](e0_teacher_validity_pilot.yaml) | Subject-held-out posterior-predictive teacher validation | Validation blocked; protected test unopened |
+| [`e0_teacher_validity_v2.yaml`](e0_teacher_validity_v2.yaml) | Four-dataset measurement audit, layered target/coupling validation, and replayable visual review | Validation blocked on physical observation and posterior calibration; protected test unopened |
 | [`tokenizer_training_pilot.yaml`](tokenizer_training_pilot.yaml) | Full physical-state-supervised training protocol | Blocked by E0 decision artifact |
 | [`tokenizer_optimizer_smoke.yaml`](tokenizer_optimizer_smoke.yaml) | Minimal teacher-supervised optimizer guard check | Correctly rejects blocked E0 |
 | [`tokenizer_reconstruction_baseline_pilot.yaml`](tokenizer_reconstruction_baseline_pilot.yaml) | Teacher-free reconstruction-plus-VQ baseline | CUDA smoke and resume passed |
@@ -42,5 +43,15 @@ Run the migration software stages with:
 ```
 
 Teacher-supervised runs require a concrete passed E0 decision artifact whose split, contract, cache roots, protocol, registry, and calibration hashes match the run. A boolean flag cannot bypass this check. Teacher-free runs must set every teacher-derived loss weight to zero; they may optimize for quantizer and reconstruction characterization without claiming E0 success.
+
+Run the E0-v2 validation and regenerate its visual package with:
+
+```bash
+.venv/bin/python experiments/evaluate_physical_teacher_e0_v2.py \
+  --config experiments/configs/physiology_semantic_tokenizer/e0_teacher_validity_v2.yaml
+.venv/bin/python experiments/scripts/visualize_e0_v2_audit.py --run-dir <E0-v2-run-dir>
+```
+
+Visual review is registered only through `finalize_e0_v2_visual_review.py`, which verifies figure hashes and cannot open the protected test by itself.
 
 _Last updated: 2026-07-03_

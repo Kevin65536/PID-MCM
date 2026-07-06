@@ -1,12 +1,12 @@
 # Physiology-semantic tokenizer redesign archive
 
-_Approved design baseline; full trainer implemented, E0 physical-teacher validation blocked_
+_Approved design baseline; full trainer implemented, E0-v2 physical-teacher validation blocked_
 
 ---
 
 ## 📋 Status and authority
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. E0 failed its fNIRS validation endpoint, so physical-state-supervised optimization and target promotion remain blocked; the protected test was not opened.
+This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. E0-v2 passed measurement, local-target, vocabulary, and continuous-coupling validation but failed the fNIRS physical-observation and posterior-calibration layers; physical-state-supervised optimization and target promotion remain blocked, and the protected test was not opened.
 
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
