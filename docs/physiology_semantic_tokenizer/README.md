@@ -10,6 +10,8 @@ This directory freezes the design decision reached after the tokenizer coupling 
 
 The Croce-independent [shared-state reconstruction-bound diagnostic](09_SHARED_STATE_RECONSTRUCTION_BOUND.md) further shows that low-rank joint reconstruction is not equivalent to a cross-subject-stable shared state. It supports a future shared-semantic plus modality-private observation architecture, but it does not change the blocked E0 status.
 
+The subsequent [cross-dataset delayed-innovation diagnostic](10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md) used two subjects from each of four datasets. A joint three-dimensional state compressed `0.62%–3.97%` of balanced innovation at a five-second lag, but neither modality could independently recover a positive cross-subject shared fraction; the conservative estimate was `0%` in every dataset. This narrows the next teacher search and leaves E0 blocked.
+
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
 | Question | Authoritative document |
@@ -23,6 +25,7 @@ The currently runnable implementation remains documented in [`docs/ARCHITECTURE.
 | Which target-architecture experiments have run? | [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) |
 | What exact code migration should be executed? | [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) |
 | What does the current implementation look like? | [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) |
+| What do raw-data shared-state diagnostics support? | [`09_SHARED_STATE_RECONSTRUCTION_BOUND.md`](09_SHARED_STATE_RECONSTRUCTION_BOUND.md), [`10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md) |
 
 > 📌 **Transition rule:** A target-architecture statement becomes a current-architecture statement only after its code, tests, smoke run, and module-level validity gate all pass.
 
@@ -77,4 +80,4 @@ These findings motivate the target design. They do not prove that the physical-s
 - [`Archived physiological coupling plan`](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 - [`Archived workflow reconstruction`](../archive/pre_physiology_semantic_20260701/research/workflow-reconstruction-cn/00_WORKFLOW_ARCHITECTURE.md)
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-06_

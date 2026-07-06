@@ -20,3 +20,4 @@ Included here:
 | 2026-07-02 | [Code and Configuration Archive Isolation](2026-07-02_code_and_config_archive_isolation.md) | Compatibility package and script/config/test isolation |
 | 2026-07-03 | [SVG Architecture Visualization System](2026-07-03_svg_architecture_visualization_system.md) | Maintained current diagram and plan-specific change overlays |
 | 2026-07-06 | [Shared-state Reconstruction-bound Diagnostic](2026-07-06_shared_state_reconstruction_bound.md) | Non-gate bound analysis, result provenance, and architecture-plan overlay |
+| 2026-07-06 | [Cross-dataset Shared Neural State Diagnostic](2026-07-06_cross_dataset_shared_neural_state.md) | Four-dataset delayed-innovation experiment, adapters, and visual evidence |

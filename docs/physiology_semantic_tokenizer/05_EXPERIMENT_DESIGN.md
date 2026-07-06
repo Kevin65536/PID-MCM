@@ -268,6 +268,12 @@ After the blocked E0-v2 result, a Croce-independent diagnostic tested whether th
 
 At five dimensions, validation-oracle descriptor reconstruction reached EEG/fNIRS $R^2$ of `0.893/0.931`, but joint-component loading balance was only `0.041`; the components were modality-dominated. A CCA-constrained shared state reached only `0.098/-0.222`, and its mean validation canonical correlation was `0.004`. Separate five-dimensional modality models reached `0.880/0.965`. The resulting requirement is to admit only cross-subject-stable shared targets and retain modality-private observation state, measurement adaptation, and delayed hemodynamic dynamics. The full scope and caveats are frozen in [`09_SHARED_STATE_RECONSTRUCTION_BOUND.md`](09_SHARED_STATE_RECONSTRUCTION_BOUND.md).
 
+### E0-D2 — Cross-dataset delayed-innovation diagnostic
+
+The next diagnostic tested a three-dimensional lagged CCA state after removing each modality's own three-second history, trial phase, and condition. Two subjects from each of Single-Trial, REFED, Simultaneous EEG&NIRS, and Visual Cognitive Motivation were evaluated with reciprocal one-subject train/one-subject validation folds. Five seconds was the fixed primary EEG-leading lag; 0–10 seconds was exploratory.
+
+No dataset produced a positive cross-inferable shared fraction at five seconds. A joint state using both modalities gave balanced innovation ceilings of `3.97%`, `0.62%`, `1.63%`, and `2.56%`, respectively, but independent EEG-only and fNIRS-only states both clipped to `0%` in every dataset. The joint ceiling cannot supervise token identity because it includes target-modality information. Full methods and evidence boundaries are frozen in [`10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md).
+
 ## ⚙️ E1 — Quantizer implementation and geometry
 
 **Question:** Does corrected EMA produce a healthy, reproducible codebook without changing the scientific objective?
