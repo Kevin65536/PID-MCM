@@ -8,6 +8,10 @@ canonical full-cache target is:
 ```text
 data/cache/physiology_semantic_clean_v1/
   cache_manifest.json
+  event_index/
+    event_manifest.json
+    events.jsonl
+    alignment_reports.jsonl
   eeg_fnirs_single_trial/
     subject_01/
       session_00.npz
@@ -69,6 +73,44 @@ Each `*.manifest.json` contains:
 The `homer2_aligned_contract.alignment_state` is the main audit field.  It
 records `applied_steps`, `skipped_steps`, and `missing_inputs`, so downstream
 analysis must not assume all datasets are equally HOMER2-complete.
+
+## Event Index
+
+The event index is a lightweight sidecar generated from original marker and
+label files:
+
+```bash
+.venv/bin/python experiments/build_clean_event_index.py \
+  --subjects-per-dataset 1000 \
+  --records-per-subject 1000 \
+  --output-dir data/cache/physiology_semantic_clean_v1/event_index \
+  --overwrite
+```
+
+`events.jsonl` stores one canonical event per line with:
+
+- `dataset_id`, `subject`, `record_id`, `event_index`
+- `event_type`: `trial`, `session_block`, `video_segment_with_continuous_labels`, or `fnirs_csv_mark`
+- `label` and optional `label_index`
+- modality-specific timestamps: `eeg_time_ms`, `fnirs_time_ms`, `onset_ms`, `duration_ms`
+- `alignment_role`
+- dataset-specific metadata, including source files
+
+`alignment_reports.jsonl` stores one timing report per record.  For datasets
+with paired EEG/fNIRS marker streams, it records:
+
+- number of EEG, fNIRS, and aligned events
+- `alignment_case`: fixed offset, piecewise offset, skipped-marker piecewise offset, continuous drift, etc.
+- `label_sequence_match`
+- offset mean/std and linear drift slope
+- offset blocks and skipped marker indices
+
+Dataset-specific conventions:
+
+- Single-Trial uses paired EEG/NIRS trial markers.  EEG and fNIRS have different recording starts, so event rows keep both timestamps and the offset.
+- Simultaneous EEG&NIRS uses task-aware alignment: `wg` aligns trial markers, while `nback` and `dsr` align session-level markers because fNIRS MATLAB markers are session/block-level there.  DSR may skip one extra EEG session marker before blockwise alignment.
+- REFED stores one video-segment event per subject/video and embeds the continuous valence/arousal label stream in event metadata.  Alignment is by shared segment index rather than marker time.
+- Visual Cognitive Motivation stores fNIRS CSV Mark events (`stimulus_onset`, `stimulus_offset`, `participant_response`) and maps stimulus epochs to `RR/RF/FF/FR` labels from the subject xlsx type table when present.  The current local data do not expose a paired EEG marker stream in the same format, so EEG alignment remains unresolved in the report.
 
 ## Full Build Command
 

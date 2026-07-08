@@ -1,0 +1,497 @@
+#!/usr/bin/env python3
+"""Build a unified event, task-label, and timing-alignment index."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+from pathlib import Path
+import re
+import sys
+from typing import Any, Iterable
+
+import numpy as np
+from scipy.io import loadmat
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.data.event_alignment import (  # noqa: E402
+    EVENT_ALIGNMENT_SCHEMA,
+    CanonicalEvent,
+    EventAlignmentReport,
+    align_paired_marker_streams,
+    normalize_marker_struct,
+    read_xlsx_rows,
+)
+from src.utils.io import write_json  # noqa: E402
+
+
+EVENT_INDEX_SCHEMA = "clean_eeg_fnirs_event_index_v1"
+
+DATA_ROOTS = {
+    "eeg_fnirs_single_trial": PROJECT_ROOT / "data/EEG+NIRS Single-Trial",
+    "refed": PROJECT_ROOT / "data/REFED-dataset",
+    "visual_cognitive_motivation": PROJECT_ROOT / "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults",
+    "simultaneous_eeg_nirs": PROJECT_ROOT / "data/Simultaneous EEG&NIRS",
+}
+
+SINGLE_TRIAL_TASK_BY_SESSION = {
+    0: "motor_imagery",
+    1: "mental_arithmetic",
+    2: "motor_imagery",
+    3: "mental_arithmetic",
+    4: "motor_imagery",
+    5: "mental_arithmetic",
+}
+
+SINGLE_TRIAL_LABELS_BY_TASK = {
+    "motor_imagery": ("LMI", "RMI"),
+    "mental_arithmetic": ("MA", "BL"),
+}
+
+VISUAL_MARK_LABELS = {
+    1: "stimulus_onset",
+    2: "stimulus_offset",
+    3: "participant_response",
+}
+VISUAL_VALID_EPOCH_TYPES = {"RR", "RF", "FF", "FR"}
+
+SIMULTANEOUS_SESSION_CODEBOOKS = {
+    "nback": {
+        "eeg": {112: "0-back session", 128: "2-back session", 144: "3-back session"},
+        "fnirs": {7: "0-back session", 8: "2-back session", 9: "3-back session"},
+    },
+    "dsr": {
+        "eeg": {48: "session"},
+        "fnirs": {3: "session"},
+    },
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
+    parser.add_argument("--subjects-per-dataset", type=int, default=1000)
+    parser.add_argument("--records-per-subject", type=int, default=1000)
+    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v1/event_index")
+    parser.add_argument("--overwrite", action="store_true")
+    return parser.parse_args()
+
+
+def _mat_payload(path: Path, key: str | None = None) -> Any:
+    payload = loadmat(path, struct_as_record=False, squeeze_me=True)
+    if key is None:
+        key = next(name for name in payload if not name.startswith("__"))
+    value = payload[key]
+    if isinstance(value, np.ndarray) and value.dtype == object and value.shape == ():
+        value = value.item()
+    return value
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _jsonable(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT) if path.is_relative_to(PROJECT_ROOT) else path)
+
+
+def _append_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> int:
+    count = 0
+    with path.open("a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(_jsonable(row), ensure_ascii=False) + "\n")
+            count += 1
+    return count
+
+
+def _class_names(value: Any) -> list[str]:
+    return [str(item) for item in np.asarray(value, dtype=object).ravel().tolist()]
+
+
+def _single_trial_subjects(root: Path, limit: int) -> list[int]:
+    subjects = sorted((root / "EEG_01-29").glob("subject *"))[:limit]
+    return [int(subject.name.split()[-1]) for subject in subjects]
+
+
+def iter_single_trial(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
+    events: list[CanonicalEvent] = []
+    reports: list[EventAlignmentReport] = []
+    for subject_id in _single_trial_subjects(root, subject_limit):
+        eeg_dir = root / "EEG_01-29" / f"subject {subject_id:02d}" / "with occular artifact"
+        if not eeg_dir.exists():
+            eeg_dir = root / "EEG_01-29" / f"subject {subject_id:02d}"
+        nirs_dir = root / "NIRS_01-29" / f"subject {subject_id:02d}"
+        eeg_mrk = np.atleast_1d(_mat_payload(eeg_dir / "mrk.mat", "mrk"))
+        nirs_mrk = np.atleast_1d(_mat_payload(nirs_dir / "mrk.mat", "mrk"))
+        for session_idx in range(min(len(eeg_mrk), len(nirs_mrk), record_limit)):
+            record_id = f"session_{session_idx:02d}"
+            task = SINGLE_TRIAL_TASK_BY_SESSION.get(session_idx, "unknown")
+            eeg_marker = normalize_marker_struct(eeg_mrk[session_idx])
+            nirs_marker = normalize_marker_struct(nirs_mrk[session_idx])
+            if task in SINGLE_TRIAL_LABELS_BY_TASK:
+                labels = list(SINGLE_TRIAL_LABELS_BY_TASK[task])
+                eeg_marker["className"] = labels
+                nirs_marker["className"] = labels
+            session_events, report = align_paired_marker_streams(
+                dataset_id="eeg_fnirs_single_trial",
+                subject=f"subject {subject_id:02d}",
+                record_id=record_id,
+                eeg_marker=eeg_marker,
+                fnirs_marker=nirs_marker,
+                event_type="trial",
+            )
+            events.extend(
+                CanonicalEvent(
+                    **{
+                        **event.to_dict(),
+                        "metadata": {
+                            **dict(event.metadata),
+                            "task": task,
+                            "session_idx": session_idx,
+                            "source_files": [_rel(eeg_dir / "mrk.mat"), _rel(nirs_dir / "mrk.mat")],
+                        },
+                    }
+                )
+                for event in session_events
+            )
+            reports.append(report)
+    return events, reports
+
+
+def _sim_subjects(root: Path, limit: int) -> list[int]:
+    subjects = sorted(root.glob("VP*-EEG"))[:limit]
+    return [int(subject.name.split("-")[0].replace("VP", "")) for subject in subjects]
+
+
+def _simultaneous_marker_for_alignment(marker_struct: Any, task: str, modality: str) -> dict[str, Any]:
+    marker = normalize_marker_struct(marker_struct)
+    codebook = SIMULTANEOUS_SESSION_CODEBOOKS.get(task, {}).get(modality)
+    if not codebook:
+        return marker
+    event_desc = marker.get("event_desc")
+    if event_desc is None:
+        return marker
+    desc = np.asarray(event_desc, dtype=np.int64).reshape(-1)
+    mask = np.isin(desc, list(codebook))
+    times = np.asarray(marker["time"], dtype=np.float64)[mask]
+    labels = [codebook[int(value)] for value in desc[mask].tolist()]
+    class_names = list(dict.fromkeys(labels))
+    y = np.zeros((len(class_names), len(labels)), dtype=np.float32)
+    lookup = {label: index for index, label in enumerate(class_names)}
+    for event_index, label in enumerate(labels):
+        y[lookup[label], event_index] = 1.0
+    return {
+        "time": times,
+        "y": y,
+        "className": class_names,
+        "event_desc": desc[mask],
+    }
+
+
+def iter_simultaneous(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
+    events: list[CanonicalEvent] = []
+    reports: list[EventAlignmentReport] = []
+    tasks = ("nback", "dsr", "wg")[:record_limit]
+    for subject_id in _sim_subjects(root, subject_limit):
+        for task in tasks:
+            eeg_path = root / f"VP{subject_id:03d}-EEG" / f"mrk_{task}.mat"
+            fnirs_path = root / f"VP{subject_id:03d}-NIRS" / f"mrk_{task}.mat"
+            if not eeg_path.exists() or not fnirs_path.exists():
+                continue
+            session_events, report = align_paired_marker_streams(
+                dataset_id="simultaneous_eeg_nirs",
+                subject=f"VP{subject_id:03d}",
+                record_id=f"cnt_{task}",
+                eeg_marker=_simultaneous_marker_for_alignment(_mat_payload(eeg_path), task, "eeg"),
+                fnirs_marker=_simultaneous_marker_for_alignment(_mat_payload(fnirs_path), task, "fnirs"),
+                event_type="trial" if task == "wg" else "session_block",
+            )
+            events.extend(
+                CanonicalEvent(
+                    **{
+                        **event.to_dict(),
+                        "metadata": {
+                            **dict(event.metadata),
+                            "task": task,
+                            "source_files": [_rel(eeg_path), _rel(fnirs_path)],
+                        },
+                    }
+                )
+                for event in session_events
+            )
+            reports.append(report)
+    return events, reports
+
+
+def _read_csv_dict(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _refed_video_info(root: Path) -> dict[int, dict[str, str]]:
+    rows = _read_csv_dict(root / "Video_info.csv")
+    return {int(row["video_id"]): {str(k).strip(): str(v).strip() for k, v in row.items()} for row in rows}
+
+
+def _refed_sam(root: Path) -> dict[int, dict[int, dict[str, int]]]:
+    output: dict[int, dict[int, dict[str, int]]] = {}
+    for row in _read_csv_dict(root / "SAM_score.csv"):
+        subject = int(row["sub_id"])
+        output[subject] = {}
+        for video in range(1, 16):
+            output[subject][video] = {
+                "valence": int(row.get(f"Video_{video}_Valence", 0) or 0),
+                "arousal": int(row.get(f"Video_{video}_Arousal", 0) or 0),
+                "dominance": int(row.get(f"Video_{video}_Dominance", 0) or 0),
+                "familiarity": int(row.get(f"Video_{video}_Familiarity", 0) or 0),
+            }
+    return output
+
+
+def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
+    events: list[CanonicalEvent] = []
+    reports: list[EventAlignmentReport] = []
+    video_info = _refed_video_info(root)
+    sam = _refed_sam(root)
+    subjects = sorted((root / "data").glob("[0-9]*"), key=lambda item: int(item.name))[:subject_limit]
+    for subject_dir in subjects:
+        subject_id = int(subject_dir.name)
+        eeg_payload = loadmat(subject_dir / "EEG_videos.mat", variable_names=[f"video_{i}" for i in range(1, record_limit + 1)])
+        fnirs_payload = loadmat(subject_dir / "fNIRS_videos.mat", variable_names=[f"video_{i}" for i in range(1, record_limit + 1)])
+        label_payload = loadmat(root / "annotations" / f"{subject_id}_label.mat", variable_names=[f"video_{i}" for i in range(1, record_limit + 1)])
+        for video in range(1, record_limit + 1):
+            key = f"video_{video}"
+            if key not in fnirs_payload:
+                continue
+            eeg_len = int(np.asarray(eeg_payload[key]).shape[-1]) if key in eeg_payload else None
+            fnirs_len = int(np.asarray(fnirs_payload[key]).shape[-1])
+            labels = np.asarray(label_payload.get(key, np.empty((0, 2))), dtype=np.float32)
+            duration_ms = float(fnirs_len / 47.62 * 1000.0)
+            metadata = {
+                "task": "emotion_video",
+                "video_id": video,
+                "video_info": video_info.get(video, {}),
+                "sam_score": sam.get(subject_id, {}).get(video, {}),
+                "continuous_label_stream": {
+                    "names": ["valence", "arousal"],
+                    "values": labels.tolist(),
+                    "sample_count": int(labels.shape[0]) if labels.ndim else 0,
+                    "sampling_note": "annotation sample grid from REFED *_label.mat; align by normalized video time",
+                },
+                "eeg_samples": eeg_len,
+                "fnirs_samples": fnirs_len,
+                "source_files": [
+                    _rel(subject_dir / "EEG_videos.mat"),
+                    _rel(subject_dir / "fNIRS_videos.mat"),
+                    _rel(root / "annotations" / f"{subject_id}_label.mat"),
+                ],
+            }
+            events.append(
+                CanonicalEvent(
+                    dataset_id="refed",
+                    subject=str(subject_id),
+                    record_id=key,
+                    event_index=video - 1,
+                    event_type="video_segment_with_continuous_labels",
+                    label=video_info.get(video, {}).get("TargetedEmotion", ""),
+                    label_index=video - 1,
+                    eeg_time_ms=0.0,
+                    fnirs_time_ms=0.0,
+                    onset_ms=0.0,
+                    duration_ms=duration_ms,
+                    alignment_role="shared_video_segment_index",
+                    metadata=metadata,
+                )
+            )
+            reports.append(
+                EventAlignmentReport(
+                    dataset_id="refed",
+                    subject=str(subject_id),
+                    record_id=key,
+                    num_eeg_events=1 if eeg_len else 0,
+                    num_fnirs_events=1,
+                    num_aligned_events=1 if eeg_len else 0,
+                    alignment_case="shared_segment_index_no_marker_stream",
+                    label_sequence_match=True,
+                    offset_mean_ms=0.0,
+                    offset_std_ms=0.0,
+                    drift_slope_ms_per_min=None,
+                    metadata={"eeg_samples": eeg_len, "fnirs_samples": fnirs_len, "duration_ms": duration_ms},
+                )
+            )
+    return events, reports
+
+
+def _read_visual_marks(path: Path) -> tuple[list[dict[str, Any]], float]:
+    lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    data_line = next(index for index, line in enumerate(lines) if line.strip() == "Data")
+    sampling_line = next(line for line in lines[:data_line] if line.startswith("Sampling Period[s]"))
+    sample_period_s = float(next(csv.reader([sampling_line]))[1])
+    rows = list(csv.reader(lines[data_line + 1 :]))
+    header = rows[0]
+    mark_idx = header.index("Mark")
+    time_idx = header.index("Time") if "Time" in header else None
+    body_idx = header.index("BodyMovement") if "BodyMovement" in header else None
+    removal_idx = header.index("RemovalMark") if "RemovalMark" in header else None
+    events = []
+    for sample_index, row in enumerate(rows[1:]):
+        if len(row) <= mark_idx:
+            continue
+        try:
+            mark = int(float(row[mark_idx]))
+        except ValueError:
+            continue
+        if mark <= 0:
+            continue
+        events.append(
+            {
+                "sample_index": sample_index,
+                "onset_ms": float(sample_index * sample_period_s * 1000.0),
+                "mark": mark,
+                "clock_time": row[time_idx] if time_idx is not None and len(row) > time_idx else "",
+                "body_movement": row[body_idx] if body_idx is not None and len(row) > body_idx else "",
+                "removal_mark": row[removal_idx] if removal_idx is not None and len(row) > removal_idx else "",
+            }
+        )
+    return events, 1.0 / sample_period_s
+
+
+def _visual_type_map(subject_dir: Path) -> dict[int, str]:
+    path = subject_dir / f"{subject_dir.name}_type.xlsx"
+    if not path.exists():
+        return {}
+    mapping = {}
+    for row in read_xlsx_rows(str(path)):
+        try:
+            epoch_id = int(float(row.get("Epoch_ID", "")))
+        except ValueError:
+            continue
+        mapping[epoch_id] = str(row.get("Type", ""))
+    return mapping
+
+
+def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
+    events: list[CanonicalEvent] = []
+    reports: list[EventAlignmentReport] = []
+    subjects = sorted(path for path in root.glob("S[0-9][0-9]") if (path / "fNIRS").exists())[:subject_limit]
+    for subject_dir in subjects:
+        type_map = _visual_type_map(subject_dir)
+        for oxy_path in sorted((subject_dir / "fNIRS").glob("*Oxy.csv"))[:record_limit]:
+            deoxy_path = Path(str(oxy_path).replace("_Oxy.csv", "_Deoxy.csv"))
+            if not deoxy_path.exists():
+                continue
+            record_id = oxy_path.stem.replace("_Oxy", "")
+            marks, sample_rate = _read_visual_marks(oxy_path)
+            epoch_id = 0
+            for index, item in enumerate(marks):
+                if item["mark"] == 1:
+                    epoch_id += 1
+                epoch_type_raw = type_map.get(epoch_id, "")
+                epoch_type = epoch_type_raw if epoch_type_raw in VISUAL_VALID_EPOCH_TYPES else "unknown"
+                label = VISUAL_MARK_LABELS.get(item["mark"], f"mark_{item['mark']}")
+                events.append(
+                    CanonicalEvent(
+                        dataset_id="visual_cognitive_motivation",
+                        subject=subject_dir.name,
+                        record_id=record_id,
+                        event_index=index,
+                        event_type="fnirs_csv_mark",
+                        label=label,
+                        label_index=item["mark"],
+                        fnirs_time_ms=item["onset_ms"],
+                        onset_ms=item["onset_ms"],
+                        alignment_role="fnirs_native_mark_stream",
+                        metadata={
+                            **item,
+                            "task": "visual_cognitive_motivation",
+                            "epoch_id": epoch_id if epoch_id else None,
+                            "epoch_type": epoch_type,
+                            "epoch_type_raw": epoch_type_raw,
+                            "sample_rate_hz": sample_rate,
+                            "source_files": [_rel(oxy_path), _rel(deoxy_path), _rel(subject_dir / f"{subject_dir.name}_type.xlsx")],
+                        },
+                    )
+                )
+            reports.append(
+                EventAlignmentReport(
+                    dataset_id="visual_cognitive_motivation",
+                    subject=subject_dir.name,
+                    record_id=record_id,
+                    num_eeg_events=0,
+                    num_fnirs_events=len(marks),
+                    num_aligned_events=0,
+                    alignment_case="fnirs_native_mark_stream_without_eeg_marker_file",
+                    label_sequence_match=None,
+                    offset_mean_ms=None,
+                    offset_std_ms=None,
+                    drift_slope_ms_per_min=None,
+                    metadata={"sample_rate_hz": sample_rate, "source_file": _rel(oxy_path)},
+                )
+            )
+    return events, reports
+
+
+def main() -> None:
+    args = parse_args()
+    output_dir = Path(args.output_dir)
+    if not output_dir.is_absolute():
+        output_dir = PROJECT_ROOT / output_dir
+    if output_dir.exists() and not args.overwrite:
+        raise FileExistsError(f"output directory exists; pass --overwrite: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    events_path = output_dir / "events.jsonl"
+    reports_path = output_dir / "alignment_reports.jsonl"
+    events_path.write_text("", encoding="utf-8")
+    reports_path.write_text("", encoding="utf-8")
+
+    counts: dict[str, dict[str, int]] = {}
+    for dataset in args.datasets:
+        if dataset == "eeg_fnirs_single_trial":
+            events, reports = iter_single_trial(DATA_ROOTS[dataset], args.subjects_per_dataset, args.records_per_subject)
+        elif dataset == "simultaneous_eeg_nirs":
+            events, reports = iter_simultaneous(DATA_ROOTS[dataset], args.subjects_per_dataset, args.records_per_subject)
+        elif dataset == "refed":
+            events, reports = iter_refed(DATA_ROOTS[dataset], args.subjects_per_dataset, args.records_per_subject)
+        elif dataset == "visual_cognitive_motivation":
+            events, reports = iter_visual(DATA_ROOTS[dataset], args.subjects_per_dataset, args.records_per_subject)
+        else:
+            continue
+        event_count = _append_jsonl(events_path, (event.to_dict() for event in events))
+        report_count = _append_jsonl(reports_path, (report.to_dict() for report in reports))
+        counts[dataset] = {"events": event_count, "alignment_reports": report_count}
+
+    manifest = {
+        "schema": EVENT_INDEX_SCHEMA,
+        "event_alignment_schema": EVENT_ALIGNMENT_SCHEMA,
+        "parameters": {
+            "datasets": args.datasets,
+            "subjects_per_dataset": args.subjects_per_dataset,
+            "records_per_subject": args.records_per_subject,
+        },
+        "files": {
+            "events_jsonl": _rel(events_path),
+            "alignment_reports_jsonl": _rel(reports_path),
+        },
+        "counts": counts,
+    }
+    write_json(output_dir / "event_manifest.json", manifest, ensure_ascii=False)
+    print(json.dumps({"output_dir": str(output_dir), "counts": counts}, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()
