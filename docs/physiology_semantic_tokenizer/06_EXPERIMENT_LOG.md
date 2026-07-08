@@ -19,6 +19,7 @@ The complete tokenizer training loop is runnable, but E0-v2 remains blocked at v
 | 2026-07-03 | `PST-E0-V2-VALIDATION` | Layered teacher information contract and visual audit | Blocked on physical observation and uncertainty calibration; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/` |
 | 2026-07-06 | `PST-E0-D1-SHARED-BOUND` | Croce-independent shared-state reconstruction bound | Diagnostic complete; supports shared + private redesign; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/` |
 | 2026-07-06 | `PST-E0-D2-CROSS-DATASET-SHARED` | Four-dataset delayed-innovation shared-state diagnostic | Diagnostic complete; cross-inferable fraction 0% in all datasets; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/` |
+| 2026-07-08 | `PST-E0-D3-LIN2024-SUBJECT-HRF` | Lin 2024 inspired subject-specific NVC diagnostic | Diagnostic complete; subject-specific HRF path remains weak; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_113000_lin2024_subject_specific_nvc_v1/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -44,6 +45,12 @@ The E0-D1 diagnostic used raw paired observations from subjects 1–23 without r
 ### Cross-dataset delayed-innovation diagnostic
 
 E0-D2 used two subjects per dataset and reciprocal cross-subject folds. After removing self-history, trial phase, and condition, no independent modality state improved prediction of the paired innovation at the fixed five-second EEG-leading lag. The conservative cross-inferable innovation and total-feature fractions were `0%` for all four datasets. A joint-input three-dimensional CCA state compressed a balanced `3.97%/0.62%/1.63%/2.56%` of innovation in Single-Trial/REFED/Simultaneous/Visual, corresponding to `3.21%/0.56%/1.21%/2.49%` of total standardized feature variance. Because this ceiling uses both modalities, it is supportive capacity evidence only and cannot validate an independently inferable shared neural teacher.
+
+### Lin 2024 subject-specific NVC diagnostic
+
+E0-D3 tested a Lin-style task-related EEG component plus double-gamma HRF model on the Croce-local E0 pilot cache. The Lin-aligned split is `subject_specific_leave_one_event`, where each validation subject and anchor is fitted on three events and evaluated on the held-out event. A `subject_held_out_group` result is retained only as a stress-control because strong cross-subject degradation is expected for a subject-specific HRF method.
+
+The subject-specific leave-one-event EEG-HRF paths remained weak: optimized stimulus, task-PLS EEG, and fNIRS-supervised EEG components reached R2 of `-0.024`, `-0.053`, and `-0.152`, respectively. Even the in-sample `subject_specific_fit_all` diagnostic reached only about `0.04-0.08` R2 for EEG-derived HRF paths, while fNIRS self-persistence remained near `0.997-0.998` R2. The revised run includes raw EEG, EEG-driver, true/predicted fNIRS, residual, and HRF-parameter visualizations. The result supports subject/measurement adapters and private hemodynamic state, not promotion of a Lin-style shared teacher.
 
 ## 🚦 Scientific-result admission rule
 
