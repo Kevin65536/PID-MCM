@@ -8,3 +8,4 @@ Archived diagnostic records:
 - `10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`
 - `20260708_lin2024_subject_specific_nvc_diagnostic.md`
 - `20260708_lin2024_raw_session_trtd_diagnostic.md`
+- `20260708_lin2024_simultaneous_raw_trtd_diagnostic.md`
