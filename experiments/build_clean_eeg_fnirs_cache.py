@@ -39,6 +39,8 @@ DATA_ROOTS = {
     "simultaneous_eeg_nirs": PROJECT_ROOT / "data/Simultaneous EEG&NIRS",
 }
 
+_SOURCE_HASH_CACHE: dict[Path, str] = {}
+
 
 @dataclass(frozen=True)
 class CleanInputRecord:
@@ -80,6 +82,9 @@ def _safe_name(value: str) -> str:
 
 
 def _file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    resolved = path.resolve()
+    if resolved in _SOURCE_HASH_CACHE:
+        return _SOURCE_HASH_CACHE[resolved]
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
@@ -87,7 +92,9 @@ def _file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
             if not chunk:
                 break
             digest.update(chunk)
-    return digest.hexdigest()
+    value = digest.hexdigest()
+    _SOURCE_HASH_CACHE[resolved] = value
+    return value
 
 
 def _jsonable(value: Any) -> Any:
