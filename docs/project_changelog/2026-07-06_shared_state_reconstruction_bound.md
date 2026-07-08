@@ -18,7 +18,7 @@ The rank-limited validation-oracle PCA is documented as a lower bound only withi
 
 - `experiments/evaluate_shared_state_reconstruction_bound.py`
 - `experiments/configs/physiology_semantic_tokenizer/shared_state_reconstruction_bound.yaml`
-- `docs/physiology_semantic_tokenizer/09_SHARED_STATE_RECONSTRUCTION_BOUND.md`
+- `docs/physiology_semantic_tokenizer/archive/diagnostics/09_SHARED_STATE_RECONSTRUCTION_BOUND.md`
 - `docs/physiology_semantic_tokenizer/architecture/shared_state_reconstruction_bound_plan.json`
 - `docs/physiology_semantic_tokenizer/figures/plans/shared_state_reconstruction_bound_plan.svg`
 - `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/`
@@ -29,4 +29,3 @@ The rank-limited validation-oracle PCA is documented as a lower bound only withi
 - current architecture SVG drift check;
 - overlay reference and XML tests;
 - targeted E0-v2, measurement-adapter, and new diagnostic tests.
-

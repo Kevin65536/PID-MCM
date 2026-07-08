@@ -19,7 +19,7 @@ The primary five-second cross-inferable fraction was non-positive in both direct
 - `experiments/evaluate_cross_dataset_shared_neural_state.py`
 - `experiments/configs/physiology_semantic_tokenizer/cross_dataset_shared_neural_state.yaml`
 - `tests/test_cross_dataset_shared_neural_state.py`
-- `docs/physiology_semantic_tokenizer/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`
+- `docs/physiology_semantic_tokenizer/archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`
 - `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/`
 
 ## Validation
