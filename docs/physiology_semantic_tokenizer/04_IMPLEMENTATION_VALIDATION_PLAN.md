@@ -234,5 +234,6 @@ The redesign is implemented only when all of the following are true:
 - [`Experiment design`](05_EXPERIMENT_DESIGN.md)
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Code migration plan`](07_CODE_MIGRATION_PLAN.md)
+- [`Unified dataset loading readiness audit`](11_UNIFIED_DATASET_LOADING_TRAINING_READINESS_AUDIT.md)
 
 _Last updated: 2026-07-02_
