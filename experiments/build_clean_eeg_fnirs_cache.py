@@ -27,6 +27,7 @@ from src.data.homer2_preprocessing import (  # noqa: E402
     apply_homer2_aligned_contract,
     homer2_compatibility_manifest,
 )
+from src.data.clean_physiology_cache import with_canonical_fields  # noqa: E402
 from src.utils.io import save_npz, write_json  # noqa: E402
 
 
@@ -358,7 +359,7 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool) ->
         }
         for path in record.source_paths
     ]
-    manifest = {
+    manifest = with_canonical_fields({
         "schema": CLEAN_CACHE_SCHEMA,
         "record_npz": str(npz_path.relative_to(PROJECT_ROOT)),
         "dataset_id": record.dataset_id,
@@ -382,7 +383,7 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool) ->
             "alignment_state": homer2.state.to_dict(),
             "quality": dict(homer2.quality),
         },
-    }
+    })
     write_json(manifest_path, _jsonable(manifest), ensure_ascii=False)
     return manifest
 
@@ -399,6 +400,12 @@ def main() -> None:
         "schema": CLEAN_CACHE_SCHEMA,
         "homer2_alignment_schema": HOMER2_ALIGNMENT_SCHEMA,
         "output_dir": str(output_dir.relative_to(PROJECT_ROOT) if output_dir.is_relative_to(PROJECT_ROOT) else output_dir),
+        "canonical_join_contract": {
+            "schema": "clean_physiology_cache_index_v1",
+            "key_fields": ["dataset_id", "canonical_subject_id", "base_record_id"],
+            "join_key": "dataset_id|canonical_subject_id|base_record_id",
+            "signal_branch": "separates multiple signal exports for the same canonical record",
+        },
         "parameters": {
             "datasets": args.datasets,
             "subjects_per_dataset": args.subjects_per_dataset,

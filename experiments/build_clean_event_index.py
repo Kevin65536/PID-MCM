@@ -27,6 +27,7 @@ from src.data.event_alignment import (  # noqa: E402
     normalize_marker_struct,
     read_xlsx_rows,
 )
+from src.data.clean_physiology_cache import with_canonical_fields  # noqa: E402
 from src.utils.io import write_json  # noqa: E402
 
 
@@ -471,13 +472,19 @@ def main() -> None:
             events, reports = iter_visual(DATA_ROOTS[dataset], args.subjects_per_dataset, args.records_per_subject)
         else:
             continue
-        event_count = _append_jsonl(events_path, (event.to_dict() for event in events))
-        report_count = _append_jsonl(reports_path, (report.to_dict() for report in reports))
+        event_count = _append_jsonl(events_path, (with_canonical_fields(event.to_dict()) for event in events))
+        report_count = _append_jsonl(reports_path, (with_canonical_fields(report.to_dict()) for report in reports))
         counts[dataset] = {"events": event_count, "alignment_reports": report_count}
 
     manifest = {
         "schema": EVENT_INDEX_SCHEMA,
         "event_alignment_schema": EVENT_ALIGNMENT_SCHEMA,
+        "canonical_join_contract": {
+            "schema": "clean_physiology_cache_index_v1",
+            "key_fields": ["dataset_id", "canonical_subject_id", "base_record_id"],
+            "join_key": "dataset_id|canonical_subject_id|base_record_id",
+            "signal_branch": "separates multiple signal exports for the same canonical record",
+        },
         "parameters": {
             "datasets": args.datasets,
             "subjects_per_dataset": args.subjects_per_dataset,
