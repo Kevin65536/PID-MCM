@@ -137,7 +137,7 @@ def _pair_single_trial_wavelengths(values: np.ndarray, labels: Sequence[str]) ->
     if not low or len(low) != len(high):
         raise ValueError(f"cannot pair lowWL/highWL channels: low={len(low)}, high={len(high)}")
     paired = np.stack((values[:, low], values[:, high]), axis=2)
-    pair_labels = tuple(re.sub(r"\s+(lowWL|highWL).*", "", labels[index]).strip() or f"pair_{i:02d}" for i, index in enumerate(low))
+    pair_labels = tuple(re.sub(r"(lowWL|highWL).*$", "", labels[index]).strip() or f"pair_{i:02d}" for i, index in enumerate(low))
     return paired, pair_labels
 
 

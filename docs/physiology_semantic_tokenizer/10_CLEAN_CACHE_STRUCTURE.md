@@ -55,9 +55,11 @@ Each `.npz` contains:
 - `homer2_channel_names`
 
 The channel semantics differ by branch.  For Single-Trial, native channels are
-low/high wavelength channels, while HOMER2-aligned channels are HbO/HbR pairs
-after OD and MBLL.  For post-conversion datasets, native and HOMER2 channel
-names are intentionally the same because OD/MBLL cannot be replayed.
+low/high wavelength channels, while HOMER2-aligned channels are named as
+`<spatial_pair>_HbO` / `<spatial_pair>_HbR` after OD and MBLL.  The low/high
+wavelength labels are inputs to each MBLL estimate and must not appear as the
+output chromophore suffix.  For post-conversion datasets, native and HOMER2
+channel names are intentionally the same because OD/MBLL cannot be replayed.
 
 ## Record Manifest
 
