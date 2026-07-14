@@ -22,3 +22,4 @@ Included here:
 | 2026-07-06 | [Shared-state Reconstruction-bound Diagnostic](2026-07-06_shared_state_reconstruction_bound.md) | Non-gate bound analysis, result provenance, and architecture-plan overlay |
 | 2026-07-06 | [Cross-dataset Shared Neural State Diagnostic](2026-07-06_cross_dataset_shared_neural_state.md) | Four-dataset delayed-innovation experiment, adapters, and visual evidence |
 | 2026-07-10 | [Four-dataset Unified Quality Loader](2026-07-10_four_dataset_unified_quality_loader.md) | Correct dataset scope, unified loading contract, and quality-report verification |
+| 2026-07-14 | [Single-Trial EEG Artifact-cleaning Candidate](2026-07-14_single_trial_eeg_artifact_candidate.md) | Raw/clean loader branch, adaptive artifact QC, full audit, and admission decision |

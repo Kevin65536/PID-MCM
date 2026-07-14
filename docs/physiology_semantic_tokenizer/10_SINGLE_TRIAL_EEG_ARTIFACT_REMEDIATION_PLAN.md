@@ -2,6 +2,8 @@
 
 _Planned: 2026-07-14_
 
+_Execution status: candidate implemented and fully audited; not admitted_
+
 ## 当前判定
 
 Single-Trial EEG 当前不能被标记为 artifact-clean。统一 loader 仍从发布目录
@@ -33,7 +35,7 @@ Single-Trial EEG 当前不能被标记为 artifact-clean。统一 loader 仍从�
 统一 loader 为 Single-Trial 增加显式配置：
 
 - `eeg_signal_branch=raw_with_ocular_artifact`：保留当前行为，用于回归对照；
-- `eeg_signal_branch=artifact_clean_v2`：新主候选；
+- `eeg_signal_branch=single_trial_eeg_artifact_clean_v2`：新主候选；
 - 两个分支使用相同事件、时钟、channel geometry 和 sample IDs；
 - 输出 `artifact_mask`, `bad_channel_mask`, `cleaning_state` 与处理参数/代码 hash；
 - 原始数据不被覆盖，cleaned cache 使用新 schema/version。
@@ -71,7 +73,7 @@ signal-preservation 检查。
 
 ## 准入 gate
 
-`artifact_clean_v2` 进入正式训练前必须同时满足：
+`single_trial_eeg_artifact_clean_v2` 进入正式训练前必须同时满足：
 
 1. deterministic loader/branch/schema 测试通过；
 2. 29 subjects 的 audit 完整，无 silent channel drop 或 sample loss；
@@ -87,10 +89,70 @@ signal-preservation 检查。
 
 ## 计划代码与产物
 
-- 扩展 `experiments/inspect_eeg_artifacts.py`：全被试批量审计、控制伪影检测器校准；
+- 保留 `experiments/inspect_eeg_artifacts.py` 作为旧的单 session 诊断；新增
+  `experiments/audit_single_trial_eeg_artifact_v2.py` 承担全被试批量审计和控制伪影校准；
 - 新建 `src/data/eeg_artifact_preprocessing.py`：无标签、record-level、可版本化的清理流水线；
 - 扩展 `src/data/unified_physiology.py`：signal branch、masks 和 cleaning provenance；
 - 新建 `tests/test_eeg_artifact_preprocessing.py`：synthetic blink/EMG、mask、reload 和 alignment invariance；
 - 产物目录：`experiments/runs/physiology_semantic_tokenizer/data_quality_audit/single_trial_eeg_artifact_v2/`；
-- 汇总文件：`artifact_calibration.json`, `subject_session_qc.parquet`,
+- 汇总文件：`artifact_calibration.json`, `subject_session_qc.jsonl/.csv`,
   `raw_cleaned_psd_comparison.*`, `signal_preservation.json`, `admission_decision.yaml`。
+
+## 2026-07-14 执行结果
+
+已完成 A0、A1 和保守版 A2：
+
+- 新增 `single_trial_eeg_artifact_clean_v2` record-level branch；raw 分支不覆盖；
+- raw/clean 使用同一 join key、事件、标签、EEG/fNIRS 时钟、20 秒窗口和 geometry；
+- loader 保留 VEOG/HEOG，在裁窗前完成 1–45 Hz filter、robust lagged EOG
+  regression、adaptive bad-channel consensus、geometry-aware interpolation 和
+  高频 burst mask；
+- 高频肌电当前只进入 `artifact_mask`，没有在未验证前被强行消除；
+- `valid_mask` 仍只表达 record boundary，`analysis_valid_mask` 额外排除 artifact
+  samples，`bad_channel_mask` 独立传播；
+- registry 默认仍为 `raw_with_ocular_artifact`，候选状态为
+  `artifact_clean_v2_candidate_not_admitted`；
+- 统一质量报告支持 `--eeg-signal-branch`，并报告 branch/schema、artifact、bad
+  channel 和 analysis-valid 比例。
+
+首轮 29-subject audit 使用“任一 QC 指标异常即坏道”的规则，坏道中位数触及上限
+6，alpha topology 5% 分位仅 0.396，因此该规则被否决并保留为失败校准证据。
+正式候选改为“至少两个指标一致异常，或单项达到极端异常；flatline 直接异常”。
+
+第二轮覆盖 29 subjects × 6 sessions = 174 records：
+
+| 检查 | 结果 |
+| --- | ---: |
+| EEG/EOG source sample/channel loss | 0 |
+| artifact-mask fraction | median 0.154; 5–95% 0.043–0.238 |
+| bad-channel count | median 3; 5–95% 0–6 |
+| median EOG correlation | raw 0.531 → clean 0.028 |
+| clean/raw EOG-correlation ratio | median 0.058 |
+| alpha-power ratio | median 0.877 |
+| non-frontal alpha topology correlation | median 0.967; 5–95% 0.635–0.997 |
+| negative non-frontal alpha-topology records | 0 / 174 |
+| controlled-artifact availability | 28 / 29 subjects; subject 14 missing |
+
+受控记录给出正确的相对方向：Eye Blinking 的低频比例高于 Teeth Clenching，
+Teeth Clenching 的 30–45 Hz 比例高于 Eye Blinking。这只验证检测特征方向，
+不等价于肌电修正算法已通过 sham/null 对照。
+
+真实 unified-loader S19 对照确认 raw/clean 的 window count、join key、event、label、
+alignment、EEG shape、fNIRS values 和 boundary valid masks 全部相同。cleaned-branch
+统一质量报告的既有 contract checks 全部通过。
+
+审计产物位于 gitignored run 目录：
+
+```text
+experiments/runs/physiology_semantic_tokenizer/data_quality_audit/
+  single_trial_eeg_artifact_v2/full_29_subject_consensus_20260714/
+  single_trial_eeg_artifact_v2/unified_report_clean_v2_20260714/
+```
+
+### 当前准入决定
+
+**不准入正式训练。** 已通过全数据覆盖、无 silent loss、EOG reduction、控制记录
+隔离、控制特征方向、坏道饱和和非额区 alpha 保留检查；尚未通过
+`muscle_correction_validated_against_sham`。因此不物化正式 cleaned training cache，
+也不切换 registry 默认 branch。下一步只需围绕受控 EMG/咬牙/张口条件完成
+mask sensitivity、sham/null 与信号保留对照；通过后再生成版本化 cache 并复跑 gate。

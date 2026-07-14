@@ -249,6 +249,7 @@ class DatasetQualityReporter:
         max_channels: int = 8,
         samples_per_dataset: int = 4,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
+        eeg_signal_branch: str = "raw_with_ocular_artifact",
     ) -> None:
         self.output_dir = Path(output_dir)
         self.figures_dir = self.output_dir / "figures"
@@ -257,6 +258,7 @@ class DatasetQualityReporter:
         self.max_channels = int(max_channels)
         self.samples_per_dataset = max(1, int(samples_per_dataset))
         self.window_duration_s = float(window_duration_s)
+        self.eeg_signal_branch = str(eeg_signal_branch)
 
     def compute_snapshot(self, dataset_id: str, *, subject_id: int = 1) -> DatasetQualitySnapshot:
         del subject_id  # selection comes from the canonical cache index
@@ -269,6 +271,7 @@ class DatasetQualityReporter:
             self.cache_root,
             dataset_ids=[dataset_id],
             window_duration_s=self.window_duration_s,
+            eeg_signal_branch=self.eeg_signal_branch,
             require_paired_timestamps=True,
         )
         indices = _sample_indices(dataset, self.samples_per_dataset)
@@ -321,6 +324,11 @@ class DatasetQualityReporter:
             "eeg_finite_fraction": float(np.isfinite(eeg).mean()),
             "fnirs_finite_fraction": float(np.isfinite(fnirs).mean()),
             "eeg_valid_fraction": float(np.mean([np.mean(sample["valid_mask"]["eeg"]) for sample in samples])),
+            "eeg_analysis_valid_fraction": float(np.mean([np.mean(sample["analysis_valid_mask"]["eeg"]) for sample in samples])),
+            "eeg_artifact_fraction": float(np.mean([np.mean(sample["artifact_mask"]["eeg"]) for sample in samples])),
+            "eeg_bad_channel_fraction": float(np.mean([np.mean(sample["bad_channel_mask"]["eeg"]) for sample in samples])),
+            "eeg_signal_branch": str(first["eeg_signal_branch"]),
+            "eeg_artifact_schema": str(first["preprocessing_state"]["eeg"].get("artifact_cleaning", {}).get("schema", "unavailable")),
             "fnirs_valid_fraction": float(np.mean([np.mean(sample["valid_mask"]["fnirs"]) for sample in samples])),
             "fnirs_component_set": sorted(set(first["component_roles"]["fnirs"])),
             "separate_modality_clocks_used": bool(first["alignment"]["separate_modality_clocks_used"]),
@@ -458,6 +466,7 @@ class DatasetQualityReporter:
                 "loader_class": "UnifiedPhysiologyWindowDataset",
                 "schema": "unified_physiology_window_v1",
                 "window_duration_s": self.window_duration_s,
+                "eeg_signal_branch": self.eeg_signal_branch,
             },
             "canonical_preprocessing_contract": CANONICAL_PREPROCESSING.to_dict(),
             "all_contract_checks_passed": all(snapshot.contract_passed for snapshot in snapshots),
@@ -496,7 +505,7 @@ class DatasetQualityReporter:
             "<h1>Four-Dataset Unified Physiology Quality Audit</h1>",
             f"<p>Generated {escape(datetime.now().isoformat(timespec='seconds'))}</p>",
             "<div class='notice'><strong>Scope:</strong> exactly four original datasets. Croce caches are derived EEG/fNIRS source/observation supervision targets and are excluded from the dataset count.</div>",
-            f"<div class='notice'><strong>Loader:</strong> UnifiedPhysiologyWindowDataset · unified_physiology_window_v1 · {self.window_duration_s:g} s observation context.</div>",
+            f"<div class='notice'><strong>Loader:</strong> UnifiedPhysiologyWindowDataset · unified_physiology_window_v1 · {self.window_duration_s:g} s observation context · EEG branch {escape(self.eeg_signal_branch)}.</div>",
             "<h2>Final contract status</h2>",
             _dict_list_to_html_table(rows),
             "<h2>Canonical preprocessing</h2>",
@@ -526,6 +535,7 @@ class DatasetQualityReporter:
             "<h3>Post-unification amplitude</h3>", _build_amplitude_stats_html(snapshot),
             "<h3>Alignment and labels</h3>", _dict_list_to_html_table([{"alignment": snapshot.alignment_report, "label": snapshot.label_contract}]),
             "<h3>Channel geometry</h3>", _dict_list_to_html_table([snapshot.geometry_summary]),
+            "<h3>Artifact and validity masks</h3>", _dict_list_to_html_table([snapshot.artifact_summary]),
         ]
         if snapshot.issues:
             parts.append("<div class='failure'><strong>Issues:</strong><ul>" + "".join(f"<li>{escape(issue)}</li>" for issue in snapshot.issues) + "</ul></div>")
@@ -549,7 +559,7 @@ class DatasetQualityReporter:
             "",
             "Scope: the four original EEG-fNIRS datasets only. `croce_local_cache` is a derived Croce-2017 source/observation supervision cache, not a dataset.",
             "",
-            f"Loader: `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; observation context: **{self.window_duration_s:g} s**.",
+            f"Loader: `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; observation context: **{self.window_duration_s:g} s**; EEG branch: `{self.eeg_signal_branch}`.",
             "",
             "## Final status",
             "",
@@ -570,6 +580,7 @@ class DatasetQualityReporter:
                 f"- Canonical label: `{snapshot.label_contract}`",
                 f"- Alignment: `{snapshot.alignment_report}`",
                 f"- Geometry: `{snapshot.geometry_summary}`",
+                f"- Artifact/validity masks: `{snapshot.artifact_summary}`",
             ])
             for modality, stats in (("EEG", snapshot.eeg_amplitude_stats), ("fNIRS", snapshot.fnirs_amplitude_stats)):
                 if stats:

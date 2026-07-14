@@ -36,6 +36,13 @@ class DatasetRegistryTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             require_dataset_loader('visual_cognitive_motivation', 'continuous_visualization')
 
+    def test_single_trial_registry_keeps_raw_default_until_artifact_gate(self):
+        registration = get_dataset_registration('eeg_fnirs_single_trial')
+        self.assertEqual(registration.default_eeg_signal_branch, 'raw_with_ocular_artifact')
+        self.assertEqual(registration.eeg_artifact_status, 'artifact_clean_v2_candidate_not_admitted')
+        runtime = registration.runtime_metadata(registration.default_root)
+        self.assertEqual(runtime['default_eeg_signal_branch'], 'raw_with_ocular_artifact')
+
     @staticmethod
     def _write_multimodal_config(root: Path) -> Path:
         base = root / 'base.yaml'

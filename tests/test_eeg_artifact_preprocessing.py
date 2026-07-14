@@ -1,0 +1,131 @@
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from src.data.eeg_artifact_preprocessing import (
+    EEGArtifactCleaningConfig,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    clean_single_trial_eeg,
+)
+from src.data.unified_physiology import NativeEEGRecord, preprocess_eeg_record_with_quality
+
+
+def _synthetic_record(duration_s: float = 60.0, sample_rate_hz: float = 200.0):
+    rng = np.random.default_rng(20260714)
+    time = np.arange(int(duration_s * sample_rate_hz)) / sample_rate_hz
+    vertical = np.zeros_like(time)
+    for center in np.arange(3.0, duration_s - 1.0, 6.0):
+        vertical += 8.0 * np.exp(-0.5 * ((time - center) / 0.12) ** 2)
+    horizontal = np.sin(2 * np.pi * 0.2 * time)
+    eog = np.column_stack(
+        (
+            vertical + 0.05 * rng.normal(size=len(time)),
+            horizontal + 0.05 * rng.normal(size=len(time)),
+        )
+    )
+    brain = np.column_stack(
+        [
+            np.sin(2 * np.pi * (8.0 + index * 0.4) * time)
+            + 0.15 * rng.normal(size=len(time))
+            for index in range(8)
+        ]
+    )
+    contamination = np.linspace(0.15, 0.8, brain.shape[1])
+    eeg = brain + vertical[:, None] * contamination[None, :]
+    burst_start = int(min(30.0, max(1.0, duration_s * 0.5)) * sample_rate_hz)
+    burst_stop = burst_start + int(sample_rate_hz)
+    burst_time = time[: burst_stop - burst_start]
+    eeg[burst_start:burst_stop] += (
+        2.0
+        * np.sin(2 * np.pi * 38.0 * burst_time)[:, None]
+        * rng.normal(size=(burst_stop - burst_start, brain.shape[1]))
+    )
+    return eeg, eog, brain, sample_rate_hz
+
+
+def test_cleaner_reduces_eog_correlation_and_preserves_shape():
+    eeg, eog, _, sample_rate = _synthetic_record()
+    result = clean_single_trial_eeg(
+        eeg,
+        eog,
+        sample_rate_hz=sample_rate,
+        channel_names=[f"C{index}" for index in range(eeg.shape[1])],
+        eog_channel_names=["VEOG", "HEOG"],
+    )
+    assert result.cleaned_values.shape == eeg.shape
+    assert result.artifact_mask.shape == (len(eeg),)
+    assert result.bad_channel_mask.shape == (eeg.shape[1],)
+    assert result.state["schema"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
+    assert result.state["median_eog_correlation_after"] < 0.25 * result.state["median_eog_correlation_before"]
+    assert 0.01 < result.state["artifact_fraction"] < 0.4
+
+
+def test_high_frequency_burst_is_masked_without_mass_channel_rejection():
+    eeg, eog, _, sample_rate = _synthetic_record()
+    result = clean_single_trial_eeg(eeg, eog, sample_rate_hz=sample_rate)
+    burst = result.high_frequency_mask[int(29.5 * sample_rate) : int(31.5 * sample_rate)]
+    assert np.mean(burst) > 0.4
+    assert np.count_nonzero(result.bad_channel_mask) <= 1
+    assert result.state["muscle_action"] == "mask_only_until_controlled-artifact admission"
+
+
+def test_cleaning_is_deterministic():
+    eeg, eog, _, sample_rate = _synthetic_record(duration_s=20.0)
+    config = EEGArtifactCleaningConfig(max_regression_samples=5_000)
+    first = clean_single_trial_eeg(eeg, eog, sample_rate_hz=sample_rate, config=config)
+    second = clean_single_trial_eeg(eeg, eog, sample_rate_hz=sample_rate, config=config)
+    np.testing.assert_array_equal(first.cleaned_values, second.cleaned_values)
+    np.testing.assert_array_equal(first.artifact_mask, second.artifact_mask)
+    assert first.state == second.state
+
+
+def test_unified_preprocessing_clean_branch_propagates_masks():
+    eeg, eog, _, sample_rate = _synthetic_record(duration_s=20.0)
+    record = NativeEEGRecord(
+        values=eeg,
+        sample_rate_hz=sample_rate,
+        channel_names=tuple(f"C{index}" for index in range(eeg.shape[1])),
+        native_unit="uV",
+        source_path=Path("synthetic.mat"),
+        auxiliary_values=eog,
+        auxiliary_channel_names=("VEOG", "HEOG"),
+    )
+    canonical, state, quality = preprocess_eeg_record_with_quality(
+        record,
+        signal_branch=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    )
+    assert canonical.shape == eeg.shape
+    assert quality["artifact_mask"].shape == (len(eeg),)
+    assert quality["bad_channel_mask"].shape == (eeg.shape[1],)
+    assert state["signal_branch"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
+    assert state["artifact_cleaning"]["schema"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
+
+
+def test_clean_branch_requires_eog_auxiliary_channels():
+    eeg, _, _, sample_rate = _synthetic_record(duration_s=10.0)
+    record = NativeEEGRecord(
+        values=eeg,
+        sample_rate_hz=sample_rate,
+        channel_names=tuple(f"C{index}" for index in range(eeg.shape[1])),
+        native_unit="uV",
+        source_path=Path("synthetic.mat"),
+    )
+    with pytest.raises(ValueError, match="retained EOG"):
+        preprocess_eeg_record_with_quality(record, signal_branch=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA)
+
+
+def test_flat_channel_uses_geometry_aware_interpolation_when_positions_exist():
+    eeg, eog, _, sample_rate = _synthetic_record(duration_s=20.0)
+    eeg[:, 0] = 0.0
+    angles = np.linspace(0.0, 2.0 * np.pi, eeg.shape[1], endpoint=False)
+    positions = np.column_stack((np.cos(angles), np.sin(angles), np.zeros_like(angles)))
+    result = clean_single_trial_eeg(
+        eeg,
+        eog,
+        sample_rate_hz=sample_rate,
+        channel_positions=positions,
+    )
+    assert result.bad_channel_mask[0]
+    assert "geometry_inverse_distance" in result.state["interpolation"]["method"]
+    assert np.std(result.cleaned_values[:, 0]) > 0.0

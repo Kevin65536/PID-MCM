@@ -109,6 +109,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        '--eeg-signal-branch',
+        choices=('raw_with_ocular_artifact', 'single_trial_eeg_artifact_clean_v2'),
+        default='raw_with_ocular_artifact',
+        help='Single-Trial EEG branch to audit; the registry default remains raw until admission.',
+    )
+    parser.add_argument(
         '--list-datasets',
         action='store_true',
         help='List all registered datasets and exit.',
@@ -158,6 +164,7 @@ def main() -> None:
         max_channels=args.max_channels,
         samples_per_dataset=args.samples_per_dataset,
         window_duration_s=args.window_duration_s,
+        eeg_signal_branch=args.eeg_signal_branch,
     )
 
     html_path, md_path = reporter.build_full_report(

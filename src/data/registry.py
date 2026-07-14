@@ -42,6 +42,8 @@ class DatasetRegistration:
     primary_loader: str = ''
     loader_contract: str = ''
     loader_interfaces: Sequence[str] = ()
+    default_eeg_signal_branch: Optional[str] = None
+    eeg_artifact_status: Optional[str] = None
 
     def runtime_metadata(self, data_root: str) -> Dict[str, Any]:
         metadata = {
@@ -70,6 +72,8 @@ class DatasetRegistration:
             'primary_loader': self.primary_loader,
             'loader_contract': self.loader_contract,
             'loader_interfaces': list(self.loader_interfaces),
+            'default_eeg_signal_branch': self.default_eeg_signal_branch,
+            'eeg_artifact_status': self.eeg_artifact_status,
         }
         contracts = DATASET_FNIRS_CONTRACTS.get(self.dataset_id)
         if contracts:
@@ -148,10 +152,13 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'BBCI toolbox cell-array structure with six sessions per subject.',
             'EEG and fNIRS triggers are delivered simultaneously through a parallel port.',
             'fNIRS keeps direct lowWL/highWL optical measurements at 760/850 nm in the checked repository files.',
+            'Task EEG is released with ocular artifacts; artifact_clean_v2 is an auditable candidate branch and is not the registry default until its admission gate passes.',
         ),
         primary_loader='UnifiedPhysiologyWindowDataset',
         loader_contract='unified_physiology_window_v1',
         loader_interfaces=('unified_physiology', 'legacy_multimodal', 'continuous_visualization'),
+        default_eeg_signal_branch='raw_with_ocular_artifact',
+        eeg_artifact_status='artifact_clean_v2_candidate_not_admitted',
     ),
     'refed': DatasetRegistration(
         dataset_id='refed',
