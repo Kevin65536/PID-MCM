@@ -38,6 +38,7 @@ class DatasetRegistration:
     loader_status: str
     documentation: Sequence[DocumentationReference]
     notes: Sequence[str]
+    resource_kind: str = 'raw_dataset'
 
     def runtime_metadata(self, data_root: str) -> Dict[str, Any]:
         metadata = {
@@ -62,6 +63,7 @@ class DatasetRegistration:
                 for ref in self.documentation
             ],
             'notes': list(self.notes),
+            'resource_kind': self.resource_kind,
         }
         contracts = DATASET_FNIRS_CONTRACTS.get(self.dataset_id)
         if contracts:
@@ -101,6 +103,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'The current tokenizer training contract uses highWL only as an optical measurement-space HbO-sensitive proxy.',
             'lowWL remains in the cache and is explicitly ignored by the highWL-only training dataset.',
         ),
+        resource_kind='derived_supervision_cache',
     ),
     'eeg_fnirs_single_trial': DatasetRegistration(
         dataset_id='eeg_fnirs_single_trial',
@@ -269,6 +272,11 @@ for registration in REGISTERED_DATASETS.values():
 
 def list_registered_datasets() -> List[DatasetRegistration]:
     return list(REGISTERED_DATASETS.values())
+
+
+def list_raw_datasets() -> List[DatasetRegistration]:
+    """Return the four original datasets, excluding derived target caches."""
+    return [registration for registration in REGISTERED_DATASETS.values() if registration.resource_kind == 'raw_dataset']
 
 
 def get_dataset_registration(dataset_id: str) -> DatasetRegistration:

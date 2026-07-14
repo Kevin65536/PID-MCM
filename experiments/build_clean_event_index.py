@@ -60,6 +60,7 @@ VISUAL_MARK_LABELS = {
     3: "participant_response",
 }
 VISUAL_VALID_EPOCH_TYPES = {"RR", "RF", "FF", "FR"}
+VISUAL_EPOCH_TYPE_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
 
 SIMULTANEOUS_SESSION_CODEBOOKS = {
     "nback": {
@@ -386,6 +387,38 @@ def _visual_type_map(subject_dir: Path) -> dict[int, str]:
     return mapping
 
 
+def _read_visual_eeg_onsets(path: Path) -> list[float]:
+    """Read the EDF trigger sidecar and return stimulus-onset times in ms.
+
+    The visual dataset records every trial as three sequential DC9 triggers
+    (appearance, disappearance, decision).  The text sidecar stores only DC9,
+    so the first trigger in each triplet is the unambiguous cross-device
+    anchor corresponding to fNIRS Mark=1.
+    """
+    onsets_s: list[float] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        try:
+            onsets_s.append(float(parts[1]))
+        except ValueError:
+            continue
+    return [float(value * 1000.0) for value in onsets_s[::3]]
+
+
+def _visual_annotation_path(subject_dir: Path, record_id: str) -> Path | None:
+    raw_dir = subject_dir / "EEG" / "raw"
+    part = re.search(r"Part(\d+)", record_id, flags=re.IGNORECASE)
+    if part:
+        candidates = sorted(raw_dir.glob(f"*part{part.group(1)}_annotations.txt"))
+    else:
+        candidates = sorted(raw_dir.glob(f"{subject_dir.name}_annotations.txt"))
+    if not candidates:
+        candidates = sorted(raw_dir.glob("*_annotations.txt"))
+    return candidates[0] if candidates else None
+
+
 def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
     events: list[CanonicalEvent] = []
     reports: list[EventAlignmentReport] = []
@@ -398,50 +431,93 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list
                 continue
             record_id = oxy_path.stem.replace("_Oxy", "")
             marks, sample_rate = _read_visual_marks(oxy_path)
-            epoch_id = 0
-            for index, item in enumerate(marks):
-                if item["mark"] == 1:
-                    epoch_id += 1
-                epoch_type_raw = type_map.get(epoch_id, "")
-                epoch_type = epoch_type_raw if epoch_type_raw in VISUAL_VALID_EPOCH_TYPES else "unknown"
-                label = VISUAL_MARK_LABELS.get(item["mark"], f"mark_{item['mark']}")
-                events.append(
-                    CanonicalEvent(
+            stimulus_marks = [item for item in marks if item["mark"] == 1]
+            annotation_path = _visual_annotation_path(subject_dir, record_id)
+            if annotation_path is None:
+                reports.append(
+                    EventAlignmentReport(
                         dataset_id="visual_cognitive_motivation",
                         subject=subject_dir.name,
                         record_id=record_id,
-                        event_index=index,
-                        event_type="fnirs_csv_mark",
-                        label=label,
-                        label_index=item["mark"],
-                        fnirs_time_ms=item["onset_ms"],
-                        onset_ms=item["onset_ms"],
-                        alignment_role="fnirs_native_mark_stream",
-                        metadata={
-                            **item,
-                            "task": "visual_cognitive_motivation",
-                            "epoch_id": epoch_id if epoch_id else None,
-                            "epoch_type": epoch_type,
-                            "epoch_type_raw": epoch_type_raw,
-                            "sample_rate_hz": sample_rate,
-                            "source_files": [_rel(oxy_path), _rel(deoxy_path), _rel(subject_dir / f"{subject_dir.name}_type.xlsx")],
-                        },
+                        num_eeg_events=0,
+                        num_fnirs_events=len(stimulus_marks),
+                        num_aligned_events=0,
+                        alignment_case="missing_eeg_annotation_sidecar",
+                        label_sequence_match=None,
+                        offset_mean_ms=None,
+                        offset_std_ms=None,
+                        drift_slope_ms_per_min=None,
+                        metadata={"source_file": _rel(oxy_path)},
+                    )
+                )
+                continue
+
+            eeg_onsets_ms = _read_visual_eeg_onsets(annotation_path)
+            eeg_marker = {
+                "time": np.asarray(eeg_onsets_ms, dtype=np.float64),
+                "y": np.ones((1, len(eeg_onsets_ms)), dtype=np.float32),
+                "className": ["stimulus_onset"],
+            }
+            fnirs_marker = {
+                "time": np.asarray([item["onset_ms"] for item in stimulus_marks], dtype=np.float64),
+                "y": np.ones((1, len(stimulus_marks)), dtype=np.float32),
+                "className": ["stimulus_onset"],
+            }
+            aligned_events, report = align_paired_marker_streams(
+                dataset_id="visual_cognitive_motivation",
+                subject=subject_dir.name,
+                record_id=record_id,
+                eeg_marker=eeg_marker,
+                fnirs_marker=fnirs_marker,
+                event_type="trial",
+            )
+            part_match = re.search(r"Part(\d+)", record_id, flags=re.IGNORECASE)
+            epoch_offset = 125 * (int(part_match.group(1)) - 1) if part_match else 0
+            source_files = [
+                _rel(annotation_path),
+                _rel(oxy_path),
+                _rel(deoxy_path),
+                _rel(subject_dir / f"{subject_dir.name}_type.xlsx"),
+            ]
+            for index, event in enumerate(aligned_events):
+                epoch_id = epoch_offset + index + 1
+                epoch_type_raw = type_map.get(epoch_id, "")
+                epoch_type = epoch_type_raw if epoch_type_raw in VISUAL_VALID_EPOCH_TYPES else "unknown"
+                mark = stimulus_marks[index] if index < len(stimulus_marks) else {}
+                events.append(
+                    CanonicalEvent(
+                        **{
+                            **event.to_dict(),
+                            "event_index": index,
+                            "label": epoch_type,
+                            "label_index": VISUAL_EPOCH_TYPE_INDICES[epoch_type],
+                            "metadata": {
+                                **dict(event.metadata),
+                                **mark,
+                                "task": "visual_cognitive_motivation",
+                                "event_role": "stimulus_onset",
+                                "condition_label": epoch_type,
+                                "epoch_id": epoch_id,
+                                "epoch_type": epoch_type,
+                                "epoch_type_raw": epoch_type_raw,
+                                "sample_rate_hz": sample_rate,
+                                "source_files": source_files,
+                            },
+                        }
                     )
                 )
             reports.append(
                 EventAlignmentReport(
-                    dataset_id="visual_cognitive_motivation",
-                    subject=subject_dir.name,
-                    record_id=record_id,
-                    num_eeg_events=0,
-                    num_fnirs_events=len(marks),
-                    num_aligned_events=0,
-                    alignment_case="fnirs_native_mark_stream_without_eeg_marker_file",
-                    label_sequence_match=None,
-                    offset_mean_ms=None,
-                    offset_std_ms=None,
-                    drift_slope_ms_per_min=None,
-                    metadata={"sample_rate_hz": sample_rate, "source_file": _rel(oxy_path)},
+                    **{
+                        **report.to_dict(),
+                        "metadata": {
+                            **dict(report.metadata),
+                            "eeg_annotation_trigger_count": len(eeg_onsets_ms) * 3,
+                            "eeg_stimulus_count": len(eeg_onsets_ms),
+                            "fnirs_stimulus_count": len(stimulus_marks),
+                            "source_files": source_files,
+                        },
+                    }
                 )
             )
     return events, reports

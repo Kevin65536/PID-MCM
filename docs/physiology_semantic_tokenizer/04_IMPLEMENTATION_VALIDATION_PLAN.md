@@ -68,7 +68,18 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 
 ### P1 — Establish data, normalization, and tensor contracts
 
-**Implementation status (2026-07-03):** complete for the pilot contract. The versioned paired-optical cache schema, posterior variance fields, strict loader, split/provenance checks, causal crop mask, and raw-space additive normalization passed correctness checks. The E0 pilot cache contains 29 mutually exclusive subject-held-out records, with 18 train, 5 validation, and 6 protected-test subjects. The protected test remains unopened because validation did not pass.
+**Implementation status (2026-07-10):** the pilot teacher-cache contract remains
+implemented, and the raw-data side has now passed a separate four-dataset software
+contract check. `UnifiedPhysiologyWindowDataset` loads Single-Trial, REFED, Visual,
+and Simultaneous through one schema; it excludes Croce caches from the dataset count,
+uses EEG/fNIRS event clocks separately, emits EEG at 200 Hz and fNIRS at 10 Hz,
+normalizes both to a provenance-preserving dimensionless robust-SD coordinate,
+standardizes fNIRS components to HbO/HbR, and returns canonical labels and geometry
+rows. This is format/loading correctness, not evidence that the four tasks are
+scientifically exchangeable or that physical-teacher supervision is valid. The E0
+pilot cache still contains 29 mutually exclusive subject-held-out records, with 18
+train, 5 validation, and 6 protected-test subjects. The protected test remains
+unopened because validation did not pass.
 
 **Implementation:** add a versioned loader output containing paired optical data, teacher posterior statistics, causal-valid masks, and sample metadata. Apply a single raw-space normalization before any source/residual decomposition.
 

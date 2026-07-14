@@ -6,12 +6,22 @@ from unittest.mock import patch
 import numpy as np
 
 from src.data.factory import create_configured_multimodal_dataloaders
-from src.data.registry import load_experiment_config, normalize_data_config
+from src.data.registry import (
+    get_dataset_registration,
+    list_raw_datasets,
+    load_experiment_config,
+    normalize_data_config,
+)
 from src.data.simultaneous_eeg_nirs_dataset import classify_alignment_pattern, detect_offset_blocks
 from src.data.validation import build_dataset_validation_plan
 
 
 class DatasetRegistryTests(unittest.TestCase):
+    def test_raw_dataset_listing_excludes_croce_derived_target_cache(self):
+        self.assertEqual(len(list_raw_datasets()), 4)
+        self.assertNotIn('croce_local_cache', {item.dataset_id for item in list_raw_datasets()})
+        self.assertEqual(get_dataset_registration('croce_local_cache').resource_kind, 'derived_supervision_cache')
+
     @staticmethod
     def _write_multimodal_config(root: Path) -> Path:
         base = root / 'base.yaml'

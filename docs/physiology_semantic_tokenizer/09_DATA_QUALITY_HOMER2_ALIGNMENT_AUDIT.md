@@ -1,25 +1,32 @@
 # 数据规范化、HOMER2 对齐与统一缓存规范
 
 _Created: 2026-07-08_
-_Unified: 2026-07-09_
+_Unified: 2026-07-10_
 
 ## 当前结论
 
-`data/cache/physiology_semantic_clean_v1` 已从“fNIRS 清洗缓存 +
-事件 sidecar”推进到统一规范缓存的 P1 阶段：
+`data/cache/physiology_semantic_clean_v1` 与原始 EEG bridge 已推进到四数据集
+统一规范加载的 P1 阶段：
 
 - fNIRS signal records、event rows、alignment reports 已共享同一套
   canonical join key。
 - 四个原始数据集中的通道/电极位置资料已经审计，并生成统一
   `channel_geometry` sidecar。
-- 已实现 `CleanPhysiologyCacheIndex` 与 fNIRS-first
-  `CleanPhysiologyAlignedWindowDataset`。
-- 当前缓存仍不是完整 EEG-fNIRS multimodal training cache，因为 EEG signal
-  arrays 尚未进入 `physiology_semantic_clean_v1`。
+- 已实现 `CleanPhysiologyCacheIndex`、fNIRS-first
+  `CleanPhysiologyAlignedWindowDataset` 与四数据集 multimodal
+  `UnifiedPhysiologyWindowDataset`。
+- EEG 不复制进 8.4 GB clean cache，而是由统一 loader 通过 manifest/join key
+  回读原始 MATLAB/EDF record；fNIRS 继续读取 clean-cache
+  `homer2_aligned_fnirs`。这避免重复存储，同时保留原始文件 provenance。
 
 因此当前支持：
 
-- fNIRS-only loading；
+- 四数据集 event-aligned EEG-fNIRS loading；
+- EEG 200 Hz、fNIRS 10 Hz 的统一时基；
+- EEG 与 fNIRS 均为无量纲 `robust_standard_deviation` 数值单位，同时保留
+  native unit metadata；
+- fNIRS 统一交错 HbO/HbR component contract；
+- canonical task label 与统一 channel geometry row schema；
 - raw-native vs HOMER2-aligned fNIRS 对照；
 - 四数据集统一事件/标签审计；
 - geometry-aware loader 和后续空间邻接扩展；
@@ -27,7 +34,9 @@ _Unified: 2026-07-09_
 
 当前不支持：
 
-- 把四个数据集作为等价完整 EEG-fNIRS 样本直接训练；
+- 把不同任务、不同空间覆盖的四个数据集误称为物理上完全同质；当前统一的是
+  数值单位、成分、时基、预处理、标签 schema 和 geometry schema，不是抹除
+  dataset/task provenance；
 - physical-teacher-supervised tokenizer training；
 - protected formal run；
 - 声称 REFED、Visual、Simultaneous 已按完整 HOMER2 optical pipeline
@@ -238,7 +247,8 @@ data/cache/physiology_semantic_clean_v1/
 
 - signal records: 1267
 - canonical record join keys: 787
-- events: 30270
+- events: 14545（Visual 由 1/2/3 三类原始 mark 改为与 EEG DC9 对齐的
+  stimulus-onset trial；不再把三类 mark 当三个训练样本）
 - alignment reports: 787
 - `record_keys_without_events`: 0
 - `event_keys_without_records`: 0
@@ -256,32 +266,45 @@ signal branch 统计：
 
 当前 loader 实现：
 
-- `CleanPhysiologyCacheIndex`
-- `CleanPhysiologyAlignedWindowDataset`
+- `CleanPhysiologyCacheIndex`：signal/event/alignment join；
+- `CleanPhysiologyAlignedWindowDataset`：兼容 fNIRS-first 路径；
+- `UnifiedPhysiologyWindowDataset`：四原始数据集的 EEG-fNIRS 统一路径；
+- `DatasetQualityReporter` / `visualize_dataset_quality.py`：只审计四原始数据集，
+  Croce cache 仅记录为派生监督目标。
 
-返回样本包含：
+统一输出：
 
-- `fnirs`: channel-first window array；
-- `eeg`: 当前为 `None`；
-- `modality_available`: `{"fnirs": true, "eeg": false}`；
-- label 与 event metadata；
-- `dataset_id`, `subject`, `canonical_subject_id`, `record_id`,
-  `base_record_id`, `signal_branch`, `join_key`；
-- sample rate 与 sample slice。
+- `eeg`, `fnirs`: channel-first event window；
+- `sample_rate_hz={"eeg": 200, "fnirs": 10}`；
+- `unit={"eeg": "robust_standard_deviation", "fnirs":
+  "robust_standard_deviation"}`；
+- `component_roles.fnirs`: 仅 HbO/HbR；
+- `label`: `canonical_task_label_v1`，显式分离 namespace、task、condition、
+  class index 与 event role；
+- `alignment`: 分别使用 `eeg_time_ms` 和 `fnirs_time_ms`，不把固定/分段 offset
+  当成同一 clock；
+- 默认只接纳 `stable_fixed_offset`、`piecewise_constant_offset`、
+  `skip_aligned_piecewise_constant_offset` 与
+  `shared_segment_index_no_marker_stream`；continuous-drift/不稳定 record 留在
+  sidecar 中供诊断，但不进入统一训练窗口；
+- `channel_geometry`: EEG/fNIRS 均返回 `canonical_channel_geometry_v1` rows，
+  缺失位置保留 null/provenance，不虚构坐标；
+- native unit、原始路径、full-record robust location/scale、filter/resample state。
 
-当前 2 秒窗口 smoke：
+2026-07-10 8 秒首窗 smoke：
 
-- `branch_preference="hbo_hbr"` 生成 30270 个窗口；
-- 首个样本为 `eeg_fnirs_single_trial|subject_01|session_00`，
-  shape `(72, 20)`。
+| 数据集 | paired windows | EEG shape | fNIRS shape | finite/full-window |
+| --- | ---: | --- | --- | --- |
+| Single-Trial | 3480 | `(30, 1600)` | `(72, 80)` | pass |
+| REFED | 480 | `(64, 1600)` | `(102, 80)` | pass |
+| Visual | 3250（31/55 records 因不稳定 alignment 排除） | `(30, 1600)` | `(48, 80)` | pass |
+| Simultaneous | 2711（1/78 records 排除） | `(30, 1600)` | `(72, 80)` | pass |
 
-这说明统一 fNIRS-first loader 已可工作，但完整 multimodal loader 仍需补：
+仍需在训练入口补：
 
-1. EEG signal cache 或原始 EEG bridge；
-2. split manifest 与 protected-test lock；
-3. bad-channel/window rejection masks；
-4. Visual/REFED EEG alignment 的进一步解析；
-5. physical teacher targets、uncertainty、valid mask，仅在科学 gate 允许后加入。
+1. split manifest 与 protected-test lock；
+2. dataset-specific bad-channel/window rejection masks；
+3. physical teacher targets、uncertainty、valid mask，仅在科学 gate 允许后加入。
 
 ## 7. Rebuild Commands
 
@@ -321,19 +344,30 @@ signal branch 统计：
   --overwrite
 ```
 
+生成四数据集统一质量报告：
+
+```bash
+.venv/bin/python experiments/scripts/visualize_dataset_quality.py --all \
+  --samples-per-dataset 4 \
+  --window-duration-s 8 \
+  --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710
+```
+
 `data/` 仍是 gitignored 本地 artifact。代码、测试和文档进入 git；缓存本体不进入 git。
 
 ## 8. 当前训练判定
 
 支持：
 
-- P1 数据合同、事件合同、geometry sidecar、fNIRS-first loader 已落地；
+- P1 数据合同、事件合同、geometry sidecar、四数据集 multimodal unified loader
+  已落地；
 - raw-native 与 HOMER2-aligned 分支可对照；
-- 四数据集 event/signal join coverage 已清零缺口。
+- 四数据集 format/unit/component/preprocessing/label/timing/geometry schema 的
+  2026-07-10 final check 全部通过。
 
 不支持：
 
-- 把当前缓存称为完整 EEG-fNIRS multimodal training cache；
+- 因此直接声称四数据集 scientific equivalence 或 cross-dataset validity；
 - 把 post-conversion 数据称为完整 HOMER2-clean；
-- 在 EEG signal、artifact masks、split lock、teacher-valid masks 未补齐前启动
+- 在 artifact masks、split lock、teacher-valid masks 未补齐前启动
   physical-teacher-supervised training。
