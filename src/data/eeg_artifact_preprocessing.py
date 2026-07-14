@@ -1,9 +1,10 @@
 """Versioned, record-level EEG artifact cleaning for Single-Trial EEG.
 
 The implementation is deliberately conservative: ocular activity is removed
-with robust EOG regression, while transient high-frequency activity is masked
-instead of being silently projected out.  All thresholds are configurable and
-are interpreted relative to record-level robust reference distributions.
+with robust EOG regression, while only the 30–45 Hz component inside detected
+transient bursts is tapered out.  The detected intervals remain explicitly
+masked after correction.  All thresholds are configurable and interpreted
+relative to record-level robust reference distributions.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt, welch
 
 
-SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA = "single_trial_eeg_artifact_clean_v2"
+SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2 = "single_trial_eeg_artifact_clean_v2"
+SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3 = "single_trial_eeg_artifact_clean_v3"
+SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,9 @@ class EEGArtifactCleaningConfig:
     high_frequency_band_hz: tuple[float, float] = (30.0, 45.0)
     burst_window_s: float = 1.0
     mask_dilation_s: float = 0.15
+    muscle_action: str = "mask_gated_high_frequency_attenuation_v1"
+    muscle_attenuation_strength: float = 1.0
+    muscle_taper_s: float = 0.2
     eog_lag_s: tuple[float, ...] = (-0.05, 0.0, 0.05)
     eog_ridge: float = 1e-3
     huber_delta: float = 1.5
@@ -264,6 +270,51 @@ def detect_high_frequency_mask(
     }
 
 
+def correct_high_frequency_bursts(
+    eeg_values: np.ndarray,
+    high_frequency_mask: np.ndarray,
+    sample_rate_hz: float,
+    config: EEGArtifactCleaningConfig,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Attenuate only 30–45 Hz content inside adaptively detected burst intervals."""
+    values = _as_time_channels(eeg_values)
+    mask = np.asarray(high_frequency_mask, dtype=bool).reshape(-1)
+    if len(mask) != len(values):
+        raise ValueError(f"EEG/muscle-mask length mismatch: {len(values)} != {len(mask)}")
+    if config.muscle_action == "mask_only":
+        return values.copy(), {
+            "method": "mask_only",
+            "corrected_sample_fraction": 0.0,
+            "high_frequency_energy_reduction_in_mask": 0.0,
+        }
+    if config.muscle_action != "mask_gated_high_frequency_attenuation_v1":
+        raise ValueError(f"unsupported muscle_action: {config.muscle_action!r}")
+    high_frequency = _bandpass(values, sample_rate_hz, config.high_frequency_band_hz)
+    taper_samples = max(1, int(round(config.muscle_taper_s * sample_rate_hz)))
+    kernel = np.hanning(2 * taper_samples + 1)
+    if not np.any(kernel):
+        kernel = np.ones(2 * taper_samples + 1, dtype=np.float64)
+    envelope = np.convolve(mask.astype(np.float64), kernel / np.sum(kernel), mode="same")
+    envelope = np.clip(envelope, 0.0, 1.0)
+    strength = float(np.clip(config.muscle_attenuation_strength, 0.0, 1.0))
+    corrected = values - strength * envelope[:, None] * high_frequency
+    evaluation_mask = mask if np.any(mask) else np.ones(len(mask), dtype=bool)
+    before = float(np.mean(high_frequency[evaluation_mask] ** 2))
+    residual_high = _bandpass(corrected, sample_rate_hz, config.high_frequency_band_hz)
+    after = float(np.mean(residual_high[evaluation_mask] ** 2))
+    reduction = 1.0 - after / max(before, np.finfo(np.float64).eps)
+    return corrected, {
+        "method": config.muscle_action,
+        "attenuation_strength": strength,
+        "taper_s": float(config.muscle_taper_s),
+        "corrected_sample_fraction": float(np.mean(envelope > 0.0)),
+        "mean_attenuation_envelope": float(np.mean(envelope)),
+        "high_frequency_energy_before_in_mask": before,
+        "high_frequency_energy_after_in_mask": after,
+        "high_frequency_energy_reduction_in_mask": float(reduction),
+    }
+
+
 def _lagged_eog_design(
     eog_values: np.ndarray,
     sample_rate_hz: float,
@@ -451,8 +502,11 @@ def clean_single_trial_eeg(
     interpolated, interpolation_state = _interpolate_bad_channels(
         regressed, bad_mask, cfg.interpolation_neighbors, channel_positions
     )
-    correlation_after = _max_abs_eog_correlation(interpolated, eog_for_metrics)
-    metrics_after = compute_channel_quality_metrics(interpolated, sample_rate_hz)
+    corrected, muscle_correction_state = correct_high_frequency_bursts(
+        interpolated, high_frequency_mask, sample_rate_hz, cfg
+    )
+    correlation_after = _max_abs_eog_correlation(corrected, eog_for_metrics)
+    metrics_after = compute_channel_quality_metrics(corrected, sample_rate_hz)
     artifact_mask = ocular_mask | high_frequency_mask
     state = {
         "schema": cfg.schema,
@@ -472,6 +526,7 @@ def clean_single_trial_eeg(
         "metrics_after": {key: np.asarray(value, dtype=float).tolist() for key, value in metrics_after.items()},
         "ocular": ocular_state,
         "high_frequency": high_frequency_state,
+        "muscle_correction": muscle_correction_state,
         "eog_regression": regression_state,
         "interpolation": interpolation_state,
         "eog_correlation_before": correlation_before.tolist(),
@@ -481,10 +536,10 @@ def clean_single_trial_eeg(
         "artifact_fraction": float(np.mean(artifact_mask)),
         "reference_strategy": cfg.reference_strategy,
         "line_noise_action": "audit_only; 1-45 Hz passband makes a 50 Hz notch redundant",
-        "muscle_action": "mask_only_until_controlled-artifact admission",
+        "muscle_action": cfg.muscle_action,
     }
     return EEGArtifactCleaningResult(
-        cleaned_values=interpolated.astype(np.float32),
+        cleaned_values=corrected.astype(np.float32),
         filtered_raw_values=filtered.astype(np.float32),
         artifact_mask=artifact_mask,
         ocular_mask=ocular_mask,
@@ -496,10 +551,13 @@ def clean_single_trial_eeg(
 
 __all__ = [
     "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA",
+    "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2",
+    "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3",
     "EEGArtifactCleaningConfig",
     "EEGArtifactCleaningResult",
     "clean_single_trial_eeg",
     "compute_channel_quality_metrics",
+    "correct_high_frequency_bursts",
     "detect_bad_channels",
     "detect_high_frequency_mask",
     "detect_ocular_mask",

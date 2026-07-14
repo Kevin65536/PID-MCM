@@ -110,9 +110,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--eeg-signal-branch',
-        choices=('raw_with_ocular_artifact', 'single_trial_eeg_artifact_clean_v2'),
-        default='raw_with_ocular_artifact',
-        help='Single-Trial EEG branch to audit; the registry default remains raw until admission.',
+        choices=(
+            'raw_with_ocular_artifact',
+            'single_trial_eeg_artifact_clean_v2',
+            'single_trial_eeg_artifact_clean_v3',
+        ),
+        default='single_trial_eeg_artifact_clean_v3',
+        help='Single-Trial EEG branch to audit; v3 is the admitted registry default.',
     )
     parser.add_argument(
         '--list-datasets',

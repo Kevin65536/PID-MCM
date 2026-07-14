@@ -31,9 +31,9 @@ _Unified: 2026-07-14_
 - 四数据集统一事件/标签审计；
 - geometry-aware loader 和后续空间邻接扩展；
 - teacher-free fNIRS reconstruction/VQ smoke。
-- Single-Trial EEG 的 provenance-preserving raw/clean candidate branch、EOG
-  regression、bad-channel/artifact/analysis-valid masks 与 29-subject audit；该
-  candidate 尚未准入正式训练。
+- Single-Trial EEG 的 provenance-preserving raw/v2/v3 branches、EOG
+  regression、bad-channel/artifact/analysis-valid masks 与 29-subject audit；v3
+  已通过受控伪影循环移位 sham 对照并准入为默认分支。
 
 当前不支持：
 
@@ -151,8 +151,9 @@ contract 进入代码，但这是“保留原始测量语义并映射到可比�
 
 TU Berlin 两个数据集不能视为已去伪影：
 
-- Single-Trial 本地 EEG loader 与诊断读取 `with occular artifact` 文件；
-  2026-07-08 S19 artifact inspection 显示 11/30 EEG channels 有 EOG 相关污染。
+- Single-Trial 原始 EEG 来自 `with occular artifact` 文件；2026-07-08 S19
+  inspection 显示 11/30 EEG channels 有 EOG 相关污染。统一 loader 仍保留该 raw
+  provenance，但默认使用版本化 `single_trial_eeg_artifact_clean_v3` 缓存。
 - Simultaneous MATLAB 发布说明显示 MATLAB 数据主要是 downsample + format
   conversion，不能等同于已完成 motion/ocular artifact cleaning。
 
@@ -327,7 +328,7 @@ channels。
 仍需在训练入口补：
 
 1. split manifest 与 protected-test lock；
-2. 除 Single-Trial candidate 外，其余数据集的 dataset-specific
+2. 除 Single-Trial v3 外，其余数据集的 dataset-specific
    bad-channel/window rejection masks；
 3. physical teacher targets、uncertainty、valid mask，仅在科学 gate 允许后加入。
 
@@ -378,20 +379,20 @@ channels。
   --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260714_window20s
 ```
 
-审计 Single-Trial EEG cleaning candidate：
+审计并物化 Single-Trial EEG v3：
 
 ```bash
 .venv/bin/python experiments/audit_single_trial_eeg_artifact_v2.py \
   --workers 4 \
+  --cache-root data/cache/physiology_semantic_clean_v1/eeg_artifact_clean_v3 \
   --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/\
-single_trial_eeg_artifact_v2/full_29_subject_consensus_20260714
+single_trial_eeg_artifact_v3/full_29_subject_controlled_sham_cache_20260714
 
 .venv/bin/python experiments/scripts/visualize_dataset_quality.py \
-  --dataset eeg_fnirs_single_trial \
-  --eeg-signal-branch single_trial_eeg_artifact_clean_v2 \
+  --all \
   --window-duration-s 20 \
   --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/\
-single_trial_eeg_artifact_v2/unified_report_clean_v2_20260714
+final_four_dataset_check_v3_default_20260714
 ```
 
 `data/` 仍是 gitignored 本地 artifact。代码、测试和文档进入 git；缓存本体不进入 git。
@@ -410,11 +411,15 @@ single_trial_eeg_artifact_v2/unified_report_clean_v2_20260714
 
 - 因此直接声称四数据集 scientific equivalence 或 cross-dataset validity；
 - 把 post-conversion 数据称为完整 HOMER2-clean；
-- 在 admitted artifact branch、split lock、teacher-valid masks 未补齐前启动
-  physical-teacher-supervised training。
+- 在 split lock、teacher-valid masks 与对应科学 gate 未补齐前启动
+  physical-teacher-supervised training；Single-Trial v3 的软件/数据准入不等价于
+  physical teacher 获得科学准入。
 
 Single-Trial EEG 的污染处理不是通过把 PSD 异常“标准化掉”来解决。分阶段修复、
 对照分支、adaptive QC 和准入条件见
 [`10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)。
-当前 `single_trial_eeg_artifact_clean_v2` 已完成 29 subjects / 174 records 的
-候选审计，但因肌电 correction 尚无 sham/null 验证，registry 默认仍为 raw。
+当前 `single_trial_eeg_artifact_clean_v3` 已完成 29 subjects / 174 task records
+审计，并以 28 subjects 的 EMG、咬牙、张口受控记录完成循环移位 sham/null 验证。
+registry 默认已切换到 v3；raw 与 v2 仍保留用于诊断和消融。发布页没有给出动作
+持续时间，因此验证事件邻域来自 `mrk_artifact` marker 间隔的自适应估计，而不是
+未经证实的固定时长。

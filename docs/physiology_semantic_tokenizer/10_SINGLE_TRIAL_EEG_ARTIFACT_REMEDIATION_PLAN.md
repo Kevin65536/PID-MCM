@@ -2,14 +2,14 @@
 
 _Planned: 2026-07-14_
 
-_Execution status: candidate implemented and fully audited; not admitted_
+_Execution status: v3 implemented, cached, fully audited and admitted_
 
-## 当前判定
+## 最终判定
 
-Single-Trial EEG 当前不能被标记为 artifact-clean。统一 loader 仍从发布目录
-`with occular artifact/cnt.mat` 读取任务记录，只排除非 EEG channel，并执行
-1–45 Hz band-pass、200 Hz resample 与 full-record robust standardization；这些步骤
-不会去除传播到额区 EEG 的眨眼/眼动成分，也不会充分处理 30–45 Hz 的肌电污染。
+Single-Trial 原始 EEG 仍必须标记为 `raw_with_ocular_artifact`，但经过受控伪影
+记录校准、循环移位 sham 对照和 29-subject 审计后，
+`single_trial_eeg_artifact_clean_v3` 已准入为统一 loader 的默认分支。原始分支和
+历史 v2 mask-only 分支均保留，任何结果都可以回退或做 raw/clean ablation。
 
 现有证据包括：
 
@@ -18,8 +18,33 @@ Single-Trial EEG 当前不能被标记为 artifact-clean。统一 loader 仍从�
 - 当前四数据集质量报告的 EEG PSD 仍出现显著异常；
 - 每个被试另有 `cnt_artifact.mat`、`mrk_artifact.mat`、`mnt_artifact.mat` 控制伪影记录，包含 EOG、EMG、眨眼、咬牙和张口条件，可用于验证检测器，但不是任务数据的“clean 版本”。
 
-因此修复目标是生成可审计的 cleaned branch 和 artifact mask，同时保留 raw branch；
-不能用滤波或 robust-SD 后振幅看似接近作为清理成功证据。
+不能用滤波或 robust-SD 后振幅看似接近作为清理成功证据。本次准入依据是任务记录
+上的信号保留检查、受控动作相对等大小循环移位 sham 的特异性检查，以及统一
+loader 的事件/时钟/标签/fNIRS 不变性检查。
+
+## 发布页给出的 `cnt_artifact` 合同
+
+[TU Berlin hBCI 发布说明](https://doc.ml.tu-berlin.de/hBCI/contactthanks.php)
+明确说明，Dataset C 的 motion-artifact experiment 在所有 MI/MA 任务记录之后执行，
+artifact experiment 没有前后 resting period；EEG `cnt_artifact` 是五个独立记录：
+
+1. EOG；
+2. EMG；
+3. eye blinking；
+4. teeth clenching；
+5. mouth opening。
+
+相应的 `mrk_artifact` 保存 task-onset markers，`mnt_artifact` 保存 montage。发布数据
+除 MATLAB 转换、EEG/EEG-fNIRS 降采样及 linked-mastoid reference 外未做伪影清理。
+原始研究论文为 [Shin et al., IEEE TNSRE 2018](https://doi.org/10.1109/TNSRE.2016.2628057)。
+
+这里有两条严格边界：
+
+- 五个 `cnt_artifact` 是受控校准/验证记录，不是第五个数据集，也不是任务 EEG 的
+  clean target，绝不能逐点从任务记录相减；
+- 发布页只给出 onset marker，没有给出每次动作的精确持续时间。因此 v3 用每个
+  文件的 marker 间隔自适应确定事件邻域，并把这一点记录为实现推断，不声称是论文
+  规定的动作时长。
 
 ## 分阶段实现
 
@@ -98,7 +123,7 @@ signal-preservation 检查。
 - 汇总文件：`artifact_calibration.json`, `subject_session_qc.jsonl/.csv`,
   `raw_cleaned_psd_comparison.*`, `signal_preservation.json`, `admission_decision.yaml`。
 
-## 2026-07-14 执行结果
+## 2026-07-14 v2 执行结果（历史、已被 v3 取代）
 
 已完成 A0、A1 和保守版 A2：
 
@@ -149,10 +174,76 @@ experiments/runs/physiology_semantic_tokenizer/data_quality_audit/
   single_trial_eeg_artifact_v2/unified_report_clean_v2_20260714/
 ```
 
-### 当前准入决定
+### v2 准入决定
 
 **不准入正式训练。** 已通过全数据覆盖、无 silent loss、EOG reduction、控制记录
 隔离、控制特征方向、坏道饱和和非额区 alpha 保留检查；尚未通过
 `muscle_correction_validated_against_sham`。因此不物化正式 cleaned training cache，
 也不切换 registry 默认 branch。下一步只需围绕受控 EMG/咬牙/张口条件完成
 mask sensitivity、sham/null 与信号保留对照；通过后再生成版本化 cache 并复跑 gate。
+
+## 2026-07-14 v3 最终实现与准入
+
+v3 在 v2 的 EOG regression、坏道检测/插值和 artifact mask 基础上，只在自适应
+高频 burst mask 内对 30–45 Hz 分量做 Hann taper 的门控衰减。它不删除样本、不删除
+通道、不对全记录做宽带抑制；修正后的时间点仍保留在 `artifact_mask`，下游可选择
+使用 `analysis_valid_mask` 排除它们。受控验证对每种动作使用相同大小的循环移位
+mask 作为 sham，并在被试级聚合，避免仅凭“PSD 变平”准入算法。
+
+全量结果覆盖 29 subjects × 6 sessions = 174 task records：
+
+| 检查 | v3 结果 |
+| --- | ---: |
+| EEG sample/channel loss | 0 |
+| artifact-mask fraction | median 0.154; 5–95% 0.043–0.238 |
+| bad-channel count | median 3; 5–95% 0–6 |
+| median EOG correlation | raw 0.531 → v3 0.029 |
+| alpha-power ratio | median 0.877 |
+| non-frontal alpha topology correlation | median 0.967; 5–95% 0.635–0.997 |
+| negative non-frontal alpha-topology records | 0 / 174 |
+| masked 30–45 Hz energy reduction | median 0.977; 5% quantile 0.524 |
+| controlled-artifact availability | 28 / 29 subjects; subject 14 missing |
+
+受控动作相对 sham 的结果：
+
+| 条件 | event HF reduction | sham reduction | target > sham subjects | event coverage > circular null subjects |
+| --- | ---: | ---: | ---: | ---: |
+| EMG | 0.273 | 0.059 | 96.4% | 64.3% |
+| Teeth Clenching | 0.963 | 0.004 | 100% | 100% |
+| Mouth Opening | 0.350 | 0.026 | 78.6% | 67.9% |
+
+这些结果支持“受控条件对准的保守高频修正”，不支持“肌电已经被完全移除”。眼动
+污染继续由 EOG regression 处理；Eye Blinking 不被要求通过 30–45 Hz muscle gate。
+
+最终 admission gates 全部通过，registry 和 `UnifiedPhysiologyWindowDataset` 默认值
+已切换到 `single_trial_eeg_artifact_clean_v3`。版本化缓存位于：
+
+```text
+data/cache/physiology_semantic_clean_v1/eeg_artifact_clean_v3/
+  cache_manifest.json
+  subject_01/session_00.npz
+  ... 174 records
+```
+
+缓存 schema 为 `single_trial_eeg_artifact_cache_v3`，逐记录校验 join key、原始文件
+size/mtime、处理配置与代码 hash；不匹配时拒绝使用陈旧缓存。缓存与现场计算在真实
+S19/session_00 上 EEG 最大绝对差为 0，artifact/bad-channel masks、fNIRS 和统一
+窗口数量完全一致。
+
+最终审计与默认四数据集报告位于：
+
+```text
+experiments/runs/physiology_semantic_tokenizer/data_quality_audit/
+  single_trial_eeg_artifact_v3/full_29_subject_controlled_sham_cache_20260714/
+  final_four_dataset_check_v3_default_20260714/
+```
+
+重建命令：
+
+```bash
+.venv/bin/python experiments/audit_single_trial_eeg_artifact_v2.py \
+  --workers 4 \
+  --cache-root data/cache/physiology_semantic_clean_v1/eeg_artifact_clean_v3 \
+  --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/\
+single_trial_eeg_artifact_v3/full_29_subject_controlled_sham_cache_20260714
+```

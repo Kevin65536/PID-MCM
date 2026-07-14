@@ -14,8 +14,9 @@ not claim that volts and chromophore concentration are physically identical.
 from __future__ import annotations
 
 import csv
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from fractions import Fraction
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -29,6 +30,8 @@ from .clean_physiology_cache import CleanCacheRecord, CleanPhysiologyCacheIndex
 from .eeg_artifact_preprocessing import (
     EEGArtifactCleaningConfig,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
     clean_single_trial_eeg,
 )
 
@@ -50,7 +53,8 @@ CANONICAL_FNIRS_COMPONENTS = ("HbO", "HbR")
 DEFAULT_UNIFIED_WINDOW_DURATION_S = 20.0
 SINGLE_TRIAL_EEG_SIGNAL_BRANCHES = (
     "raw_with_ocular_artifact",
-    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
 )
 DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = frozenset({
     "stable_fixed_offset",
@@ -240,9 +244,22 @@ def preprocess_eeg_record_with_quality(
         "schema": "raw_with_ocular_artifact",
         "action": "no_artifact_removal",
     }
-    if signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA:
+    if signal_branch in {SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2, SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3}:
         if record.auxiliary_values is None or not record.auxiliary_channel_names:
-            raise ValueError("artifact_clean_v2 requires retained EOG auxiliary channels")
+            raise ValueError("Single-Trial artifact-clean branches require retained EOG auxiliary channels")
+        resolved_config = artifact_config or EEGArtifactCleaningConfig()
+        if signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2:
+            resolved_config = replace(
+                resolved_config,
+                schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+                muscle_action="mask_only",
+            )
+        else:
+            resolved_config = replace(
+                resolved_config,
+                schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                muscle_action="mask_gated_high_frequency_attenuation_v1",
+            )
         cleaned = clean_single_trial_eeg(
             finite,
             record.auxiliary_values,
@@ -250,7 +267,7 @@ def preprocess_eeg_record_with_quality(
             channel_names=record.channel_names,
             eog_channel_names=record.auxiliary_channel_names,
             channel_positions=channel_positions,
-            config=artifact_config,
+            config=resolved_config,
         )
         filtered = np.asarray(cleaned.cleaned_values, dtype=np.float64)
         artifact_mask = cleaned.artifact_mask
@@ -579,8 +596,9 @@ class UnifiedPhysiologyWindowDataset:
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_offset_s: float = 0.0,
-        eeg_signal_branch: str = "raw_with_ocular_artifact",
+        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
         eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
+        eeg_artifact_cache_root: str | Path | None = None,
         require_paired_timestamps: bool = True,
         include_event_types: set[str] | None = None,
         admissible_alignment_cases: set[str] | frozenset[str] | None = DEFAULT_ADMISSIBLE_ALIGNMENT_CASES,
@@ -602,6 +620,12 @@ class UnifiedPhysiologyWindowDataset:
             )
         self.eeg_signal_branch = eeg_signal_branch
         self.eeg_artifact_config = eeg_artifact_config
+        self.eeg_artifact_cache_root = (
+            Path(eeg_artifact_cache_root)
+            if eeg_artifact_cache_root is not None
+            else self.cache_root / "eeg_artifact_clean_v3"
+        )
+        self._artifact_cache_manifest: dict[str, Any] | None = None
         self.require_paired_timestamps = bool(require_paired_timestamps)
         self.include_event_types = include_event_types
         self.admissible_alignment_cases = None if admissible_alignment_cases is None else frozenset(admissible_alignment_cases)
@@ -660,25 +684,33 @@ class UnifiedPhysiologyWindowDataset:
             sample_rate_hz=record.sample_rate_hz,
             native_contract=record.manifest.get("native_contract", {}),
         )
-        eeg_native = load_native_eeg_record(self.project_root, record)
-        eeg_geometry = self.geometry_index.for_channels(
-            record=record, modality="eeg", channel_names=eeg_native.channel_names
-        )
-        eeg_positions = np.asarray(
-            [[row.get(axis) for axis in ("x", "y", "z")] for row in eeg_geometry],
-            dtype=np.float64,
-        )
         eeg_branch = self.eeg_signal_branch if record.dataset_id == "eeg_fnirs_single_trial" else "raw_with_ocular_artifact"
-        eeg, eeg_state, eeg_quality = preprocess_eeg_record_with_quality(
-            eeg_native,
-            signal_branch=eeg_branch,
-            artifact_config=self.eeg_artifact_config,
-            channel_positions=eeg_positions,
+        cached_eeg = self._load_cached_single_trial_eeg(record, eeg_branch)
+        if cached_eeg is not None:
+            eeg, eeg_names, eeg_state, eeg_quality = cached_eeg
+        else:
+            eeg_native = load_native_eeg_record(self.project_root, record)
+            eeg_names = eeg_native.channel_names
+            eeg_geometry_for_cleaning = self.geometry_index.for_channels(
+                record=record, modality="eeg", channel_names=eeg_names
+            )
+            eeg_positions = np.asarray(
+                [[row.get(axis) for axis in ("x", "y", "z")] for row in eeg_geometry_for_cleaning],
+                dtype=np.float64,
+            )
+            eeg, eeg_state, eeg_quality = preprocess_eeg_record_with_quality(
+                eeg_native,
+                signal_branch=eeg_branch,
+                artifact_config=self.eeg_artifact_config,
+                channel_positions=eeg_positions,
+            )
+        eeg_geometry = self.geometry_index.for_channels(
+            record=record, modality="eeg", channel_names=eeg_names
         )
         payload = {
             "eeg": eeg,
             "fnirs": fnirs,
-            "eeg_channel_names": eeg_native.channel_names,
+            "eeg_channel_names": eeg_names,
             "fnirs_channel_names": fnirs_names,
             "fnirs_component_roles": roles,
             "eeg_preprocessing_state": eeg_state,
@@ -691,6 +723,91 @@ class UnifiedPhysiologyWindowDataset:
             self._record_cache.pop(next(iter(self._record_cache)))
         self._record_cache[record.join_key] = payload
         return payload
+
+    def _load_cached_single_trial_eeg(
+        self,
+        record: CleanCacheRecord,
+        eeg_branch: str,
+    ) -> tuple[np.ndarray, tuple[str, ...], dict[str, Any], dict[str, np.ndarray]] | None:
+        if record.dataset_id != "eeg_fnirs_single_trial" or eeg_branch != SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3:
+            return None
+        path = (
+            self.eeg_artifact_cache_root
+            / record.canonical_subject_id
+            / f"{record.base_record_id}.npz"
+        )
+        if not path.exists():
+            return None
+        manifest = self._validated_artifact_cache_manifest()
+        expected_config = replace(
+            self.eeg_artifact_config or EEGArtifactCleaningConfig(),
+            schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+            muscle_action="mask_gated_high_frequency_attenuation_v1",
+        ).to_dict()
+        if manifest.get("cleaning_config") != expected_config:
+            return None
+        manifest_record = next(
+            (item for item in manifest.get("records", []) if item.get("join_key") == record.join_key),
+            None,
+        )
+        if manifest_record is None:
+            raise RuntimeError(f"EEG artifact cache manifest has no record for {record.join_key}")
+        with np.load(path, allow_pickle=False) as payload:
+            schema = str(np.asarray(payload["schema"]).item())
+            join_key = str(np.asarray(payload["join_key"]).item())
+            if schema != "single_trial_eeg_artifact_cache_v3" or join_key != record.join_key:
+                raise RuntimeError(
+                    f"stale/incompatible EEG artifact cache {path}: schema={schema!r}, join_key={join_key!r}"
+                )
+            source_path = self.project_root / str(np.asarray(payload["source_path"]).item())
+            source_stat = source_path.stat()
+            expected_size = int(np.asarray(payload["source_size_bytes"]).item())
+            expected_mtime = int(np.asarray(payload["source_mtime_ns"]).item())
+            if source_stat.st_size != expected_size or source_stat.st_mtime_ns != expected_mtime:
+                raise RuntimeError(f"source EEG changed after artifact cache build: {source_path}")
+            state = json.loads(str(np.asarray(payload["preprocessing_state_json"]).item()))
+            state["artifact_cache"] = {
+                "used": True,
+                "path": str(path),
+                "schema": schema,
+            }
+            return (
+                np.asarray(payload["eeg"], dtype=np.float32),
+                tuple(str(value) for value in np.asarray(payload["channel_names"]).tolist()),
+                state,
+                {
+                    "artifact_mask": np.asarray(payload["artifact_mask"], dtype=bool),
+                    "bad_channel_mask": np.asarray(payload["bad_channel_mask"], dtype=bool),
+                },
+            )
+
+    def _validated_artifact_cache_manifest(self) -> dict[str, Any]:
+        cached = getattr(self, "_artifact_cache_manifest", None)
+        if cached is not None:
+            return cached
+        path = self.eeg_artifact_cache_root / "cache_manifest.json"
+        if not path.exists():
+            raise RuntimeError(f"EEG artifact cache record exists without manifest: {path}")
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            manifest.get("schema") != "single_trial_eeg_artifact_cache_v3"
+            or manifest.get("signal_branch") != SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
+        ):
+            raise RuntimeError(f"stale/incompatible EEG artifact cache manifest: {path}")
+        code_root = Path(__file__).resolve().parents[2]
+        code_paths = {
+            "audit": code_root / "experiments/audit_single_trial_eeg_artifact_v2.py",
+            "cleaner": Path(clean_single_trial_eeg.__code__.co_filename).resolve(),
+        }
+        recorded_hashes = manifest.get("code_sha256", {})
+        for name, code_path in code_paths.items():
+            digest = hashlib.sha256(code_path.read_bytes()).hexdigest()
+            if recorded_hashes.get(name) != digest:
+                raise RuntimeError(
+                    f"EEG artifact cache code hash mismatch for {name}: rebuild {self.eeg_artifact_cache_root}"
+                )
+        self._artifact_cache_manifest = manifest
+        return manifest
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         ref = self.windows[index]

@@ -6,6 +6,8 @@ import pytest
 from src.data.eeg_artifact_preprocessing import (
     EEGArtifactCleaningConfig,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
     clean_single_trial_eeg,
 )
 from src.data.unified_physiology import NativeEEGRecord, preprocess_eeg_record_with_quality
@@ -67,7 +69,9 @@ def test_high_frequency_burst_is_masked_without_mass_channel_rejection():
     burst = result.high_frequency_mask[int(29.5 * sample_rate) : int(31.5 * sample_rate)]
     assert np.mean(burst) > 0.4
     assert np.count_nonzero(result.bad_channel_mask) <= 1
-    assert result.state["muscle_action"] == "mask_only_until_controlled-artifact admission"
+    assert result.state["schema"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
+    assert result.state["muscle_action"] == "mask_gated_high_frequency_attenuation_v1"
+    assert result.state["muscle_correction"]["high_frequency_energy_reduction_in_mask"] > 0.0
 
 
 def test_cleaning_is_deterministic():
@@ -113,6 +117,31 @@ def test_clean_branch_requires_eog_auxiliary_channels():
     )
     with pytest.raises(ValueError, match="retained EOG"):
         preprocess_eeg_record_with_quality(record, signal_branch=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA)
+
+
+def test_v2_remains_mask_only_and_v3_attenuates_detected_high_frequency_bursts():
+    eeg, eog, _, sample_rate = _synthetic_record(duration_s=40.0)
+    record = NativeEEGRecord(
+        values=eeg,
+        sample_rate_hz=sample_rate,
+        channel_names=tuple(f"C{index}" for index in range(eeg.shape[1])),
+        native_unit="uV",
+        source_path=Path("synthetic.mat"),
+        auxiliary_values=eog,
+        auxiliary_channel_names=("VEOG", "HEOG"),
+    )
+    v2, v2_state, v2_quality = preprocess_eeg_record_with_quality(
+        record, signal_branch=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2
+    )
+    v3, v3_state, v3_quality = preprocess_eeg_record_with_quality(
+        record, signal_branch=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
+    )
+    np.testing.assert_array_equal(v2_quality["artifact_mask"], v3_quality["artifact_mask"])
+    assert v2_state["artifact_cleaning"]["muscle_correction"]["method"] == "mask_only"
+    assert v3_state["artifact_cleaning"]["muscle_correction"]["method"] == (
+        "mask_gated_high_frequency_attenuation_v1"
+    )
+    assert not np.array_equal(v2, v3)
 
 
 def test_flat_channel_uses_geometry_aware_interpolation_when_positions_exist():

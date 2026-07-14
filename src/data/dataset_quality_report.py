@@ -249,7 +249,7 @@ class DatasetQualityReporter:
         max_channels: int = 8,
         samples_per_dataset: int = 4,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
-        eeg_signal_branch: str = "raw_with_ocular_artifact",
+        eeg_signal_branch: str = "single_trial_eeg_artifact_clean_v3",
     ) -> None:
         self.output_dir = Path(output_dir)
         self.figures_dir = self.output_dir / "figures"
@@ -329,6 +329,12 @@ class DatasetQualityReporter:
             "eeg_bad_channel_fraction": float(np.mean([np.mean(sample["bad_channel_mask"]["eeg"]) for sample in samples])),
             "eeg_signal_branch": str(first["eeg_signal_branch"]),
             "eeg_artifact_schema": str(first["preprocessing_state"]["eeg"].get("artifact_cleaning", {}).get("schema", "unavailable")),
+            "eeg_artifact_cache_used": bool(
+                first["preprocessing_state"]["eeg"].get("artifact_cache", {}).get("used", False)
+            ),
+            "eeg_artifact_cache_schema": str(
+                first["preprocessing_state"]["eeg"].get("artifact_cache", {}).get("schema", "not_applicable")
+            ),
             "fnirs_valid_fraction": float(np.mean([np.mean(sample["valid_mask"]["fnirs"]) for sample in samples])),
             "fnirs_component_set": sorted(set(first["component_roles"]["fnirs"])),
             "separate_modality_clocks_used": bool(first["alignment"]["separate_modality_clocks_used"]),
@@ -355,6 +361,12 @@ class DatasetQualityReporter:
             "finite_amplitudes": bool(np.isfinite(eeg).all() and np.isfinite(fnirs).all()),
             "full_window_coverage": snapshot.artifact_summary["eeg_valid_fraction"] == 1.0 and snapshot.artifact_summary["fnirs_valid_fraction"] == 1.0,
         }
+        if dataset_id == "eeg_fnirs_single_trial" and self.eeg_signal_branch == "single_trial_eeg_artifact_clean_v3":
+            snapshot.contract_checks["single_trial_v3_cache_loaded"] = bool(
+                snapshot.artifact_summary["eeg_artifact_cache_used"]
+                and snapshot.artifact_summary["eeg_artifact_cache_schema"]
+                == "single_trial_eeg_artifact_cache_v3"
+            )
         for check, passed in snapshot.contract_checks.items():
             if not passed:
                 snapshot.issues.append(f"contract check failed: {check}")

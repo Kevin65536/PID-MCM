@@ -139,10 +139,13 @@ from .unified_physiology import (
 )
 from .eeg_artifact_preprocessing import (
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
     EEGArtifactCleaningConfig,
     EEGArtifactCleaningResult,
     clean_single_trial_eeg,
     compute_channel_quality_metrics,
+    correct_high_frequency_bursts,
 )
 from .channel_geometry import (
     CHANNEL_GEOMETRY_SCHEMA,
@@ -264,10 +267,13 @@ __all__ = [
     'preprocess_eeg_record_with_quality',
     'preprocess_fnirs_record',
     'SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA',
+    'SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2',
+    'SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3',
     'EEGArtifactCleaningConfig',
     'EEGArtifactCleaningResult',
     'clean_single_trial_eeg',
     'compute_channel_quality_metrics',
+    'correct_high_frequency_bursts',
     'CHANNEL_GEOMETRY_SCHEMA',
     'ChannelGeometryRecord',
     'records_from_mnt',

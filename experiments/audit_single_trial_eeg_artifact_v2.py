@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the Single-Trial EEG artifact-cleaning candidate on complete records.
+"""Audit and materialize the admitted Single-Trial EEG v3 branch.
 
 The five ``cnt_artifact`` recordings are calibration controls only.  They are
 never emitted as task samples and never contribute labels or windows.
@@ -33,12 +33,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 from scipy.io import loadmat
-from scipy.signal import welch
+from scipy.signal import butter, sosfiltfilt, welch
 
 from src.data.eeg_artifact_preprocessing import (
     EEGArtifactCleaningConfig,
     clean_single_trial_eeg,
     compute_channel_quality_metrics,
+    correct_high_frequency_bursts,
+    detect_high_frequency_mask,
+)
+from src.data.unified_physiology import (
+    CANONICAL_EEG_BAND_HZ,
+    CANONICAL_EEG_SAMPLE_RATE_HZ,
+    _robust_standardize,
 )
 
 matplotlib.use("Agg")
@@ -113,12 +120,41 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     return float(numerator / max(denominator, np.finfo(np.float64).eps))
 
 
-def _audit_controlled(subject_dir: Path) -> tuple[list[dict[str, Any]], str]:
+def _circular_event_mask(
+    marker_times_ms: np.ndarray,
+    *,
+    sample_count: int,
+    sample_rate_hz: float,
+    half_window_s: float,
+) -> np.ndarray:
+    output = np.zeros(sample_count, dtype=bool)
+    radius = max(1, int(round(half_window_s * sample_rate_hz)))
+    offsets = np.arange(-radius, radius + 1)
+    for marker_ms in marker_times_ms:
+        center = int(round(float(marker_ms) / 1000.0 * sample_rate_hz))
+        output[(center + offsets) % sample_count] = True
+    return output
+
+
+def _high_frequency_signal(values: np.ndarray, sample_rate_hz: float, band_hz: tuple[float, float]) -> np.ndarray:
+    nyquist = 0.5 * sample_rate_hz
+    sos = butter(4, [band_hz[0] / nyquist, band_hz[1] / nyquist], btype="bandpass", output="sos")
+    return sosfiltfilt(sos, values, axis=0)
+
+
+def _audit_controlled(
+    subject_dir: Path,
+    config: EEGArtifactCleaningConfig,
+) -> tuple[list[dict[str, Any]], str]:
     path = subject_dir / "cnt_artifact.mat"
-    if not path.exists():
+    marker_path = subject_dir / "mrk_artifact.mat"
+    if not path.exists() or not marker_path.exists():
         return [], "missing_controlled_artifact_recordings"
     payload = loadmat(path, squeeze_me=True, struct_as_record=False)
     records = np.atleast_1d(payload.get("cnt_artifact", []))
+    markers = np.atleast_1d(
+        loadmat(marker_path, squeeze_me=True, struct_as_record=False).get("mrk_artifact", [])
+    )
     output = []
     for index, condition in enumerate(CONTROL_CONDITIONS):
         if index >= len(records):
@@ -127,6 +163,45 @@ def _audit_controlled(subject_dir: Path) -> tuple[list[dict[str, Any]], str]:
         values = np.asarray(record.x, dtype=np.float64)
         sample_rate_hz = float(record.fs)
         metrics = compute_channel_quality_metrics(values, sample_rate_hz)
+        high_frequency_mask, mask_state = detect_high_frequency_mask(values, sample_rate_hz, config)
+        corrected, correction_state = correct_high_frequency_bursts(
+            values, high_frequency_mask, sample_rate_hz, config
+        )
+        marker_times_ms = np.asarray(_cell(markers, index).time, dtype=np.float64).reshape(-1)
+        marker_intervals_s = np.diff(marker_times_ms) / 1000.0
+        if len(marker_intervals_s):
+            half_window_s = 0.25 * float(np.median(marker_intervals_s))
+        else:
+            half_window_s = 0.125 * len(values) / sample_rate_hz
+        event_mask = _circular_event_mask(
+            marker_times_ms,
+            sample_count=len(values),
+            sample_rate_hz=sample_rate_hz,
+            half_window_s=half_window_s,
+        )
+        seed = int(subject_dir.name.rsplit(" ", 1)[-1]) * 100 + index
+        rng = np.random.default_rng(seed)
+        null_coverages = []
+        duration_ms = len(values) / sample_rate_hz * 1000.0
+        for _ in range(128):
+            shifted_times = (marker_times_ms + rng.uniform(0.0, duration_ms)) % duration_ms
+            shifted_event_mask = _circular_event_mask(
+                shifted_times,
+                sample_count=len(values),
+                sample_rate_hz=sample_rate_hz,
+                half_window_s=half_window_s,
+            )
+            null_coverages.append(float(np.mean(high_frequency_mask[shifted_event_mask])))
+        shift_samples = max(1, int(round(0.5 * np.median(marker_intervals_s) * sample_rate_hz))) \
+            if len(marker_intervals_s) else len(values) // 2
+        sham_mask = np.roll(high_frequency_mask, shift_samples)
+        sham_corrected, _ = correct_high_frequency_bursts(values, sham_mask, sample_rate_hz, config)
+        high_before = _high_frequency_signal(values, sample_rate_hz, config.high_frequency_band_hz)
+        high_after = _high_frequency_signal(corrected, sample_rate_hz, config.high_frequency_band_hz)
+        high_sham = _high_frequency_signal(sham_corrected, sample_rate_hz, config.high_frequency_band_hz)
+        event_power_before = float(np.mean(high_before[event_mask] ** 2))
+        event_power_after = float(np.mean(high_after[event_mask] ** 2))
+        event_power_sham = float(np.mean(high_sham[event_mask] ** 2))
         output.append({
             "condition": condition,
             "sample_count": int(len(values)),
@@ -135,11 +210,89 @@ def _audit_controlled(subject_dir: Path) -> tuple[list[dict[str, Any]], str]:
             "high_frequency_ratio_median": float(np.median(metrics["high_frequency_ratio"])),
             "line_noise_ratio_median": float(np.median(metrics["line_noise_ratio"])),
             "robust_scale_median": float(np.median(metrics["robust_scale"])),
+            "marker_count": int(len(marker_times_ms)),
+            "adaptive_event_half_window_s": half_window_s,
+            "muscle_mask_fraction": float(mask_state["dilated_fraction"]),
+            "event_mask_coverage": float(np.mean(high_frequency_mask[event_mask])),
+            "time_shift_null_coverage_mean": float(np.mean(null_coverages)),
+            "event_coverage_above_time_shift_null": bool(
+                np.mean(high_frequency_mask[event_mask]) > np.mean(null_coverages)
+            ),
+            "event_high_frequency_reduction": float(
+                1.0 - event_power_after / max(event_power_before, np.finfo(np.float64).eps)
+            ),
+            "sham_event_high_frequency_reduction": float(
+                1.0 - event_power_sham / max(event_power_before, np.finfo(np.float64).eps)
+            ),
+            "target_reduction_above_sham": bool(event_power_after < event_power_sham),
+            "correction_method": correction_state["method"],
         })
     return output, "available" if len(output) == len(CONTROL_CONDITIONS) else "incomplete"
 
 
-def _audit_subject(subject_dir_text: str, config_payload: dict[str, Any]) -> dict[str, Any]:
+def _write_artifact_cache_record(
+    *,
+    cache_root: Path,
+    subject: str,
+    session_index: int,
+    cnt_path: Path,
+    channel_names: list[str],
+    result: Any,
+    config: EEGArtifactCleaningConfig,
+) -> dict[str, Any]:
+    base_record_id = f"session_{session_index:02d}"
+    join_key = f"eeg_fnirs_single_trial|{subject}|{base_record_id}"
+    canonical, standardization_state = _robust_standardize(result.cleaned_values)
+    source_stat = cnt_path.stat()
+    preprocessing_state = dict(standardization_state)
+    preprocessing_state.update({
+        "native_unit": "uV",
+        "native_sample_rate_hz": float(result.state["sample_rate_hz"]),
+        "canonical_sample_rate_hz": CANONICAL_EEG_SAMPLE_RATE_HZ,
+        "filter_band_hz": list(CANONICAL_EEG_BAND_HZ),
+        "filter_input_repaired_nonfinite_samples": int(
+            result.state["input_repaired_nonfinite_samples"]["eeg"]
+        ),
+        "source_path": str(cnt_path),
+        "signal_branch": config.schema,
+        "artifact_cleaning": result.state,
+    })
+    output_path = cache_root / subject / f"{base_record_id}.npz"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = output_path.with_suffix(".npz.tmp")
+    with temporary_path.open("wb") as handle:
+        np.savez_compressed(
+            handle,
+            schema=np.asarray("single_trial_eeg_artifact_cache_v3"),
+            signal_branch=np.asarray(config.schema),
+            join_key=np.asarray(join_key),
+            source_path=np.asarray(str(cnt_path.relative_to(REPO_ROOT))),
+            source_size_bytes=np.asarray(source_stat.st_size, dtype=np.int64),
+            source_mtime_ns=np.asarray(source_stat.st_mtime_ns, dtype=np.int64),
+            eeg=canonical,
+            artifact_mask=np.asarray(result.artifact_mask, dtype=bool),
+            bad_channel_mask=np.asarray(result.bad_channel_mask, dtype=bool),
+            channel_names=np.asarray(channel_names),
+            preprocessing_state_json=np.asarray(json.dumps(preprocessing_state, ensure_ascii=False)),
+        )
+    temporary_path.replace(output_path)
+    return {
+        "join_key": join_key,
+        "subject": subject,
+        "base_record_id": base_record_id,
+        "cache_path": str(output_path.relative_to(REPO_ROOT)),
+        "source_path": str(cnt_path.relative_to(REPO_ROOT)),
+        "sample_count": int(canonical.shape[0]),
+        "channel_count": int(canonical.shape[1]),
+        "artifact_fraction": float(np.mean(result.artifact_mask)),
+    }
+
+
+def _audit_subject(
+    subject_dir_text: str,
+    config_payload: dict[str, Any],
+    cache_root_text: str | None,
+) -> dict[str, Any]:
     subject_dir = Path(subject_dir_text)
     subject = subject_dir.name.replace(" ", "_")
     source_dir = subject_dir / "with occular artifact"
@@ -150,6 +303,7 @@ def _audit_subject(subject_dir_text: str, config_payload: dict[str, Any]) -> dic
     config = EEGArtifactCleaningConfig(**config_payload)
     rows: list[dict[str, Any]] = []
     psd_rows: list[dict[str, Any]] = []
+    cache_records: list[dict[str, Any]] = []
     for session_index in range(len(cnt)):
         record = _cell(cnt, session_index)
         values = np.asarray(record.x, dtype=np.float64)
@@ -168,6 +322,16 @@ def _audit_subject(subject_dir_text: str, config_payload: dict[str, Any]) -> dic
             channel_positions=positions,
             config=config,
         )
+        if cache_root_text is not None:
+            cache_records.append(_write_artifact_cache_record(
+                cache_root=Path(cache_root_text),
+                subject=subject,
+                session_index=session_index,
+                cnt_path=cnt_path,
+                channel_names=eeg_names,
+                result=result,
+                config=config,
+            ))
         raw_alpha = _band_power(result.filtered_raw_values, float(record.fs), 8.0, 13.0)
         clean_alpha = _band_power(result.cleaned_values, float(record.fs), 8.0, 13.0)
         topology_corr = float(np.corrcoef(np.log1p(raw_alpha), np.log1p(clean_alpha))[0, 1])
@@ -208,6 +372,10 @@ def _audit_subject(subject_dir_text: str, config_payload: dict[str, Any]) -> dic
             "median_eog_correlation_after": after,
             "eog_correlation_ratio": _safe_ratio(after, before),
             "median_removed_variance_fraction": float(np.median(removed)),
+            "muscle_high_frequency_energy_reduction": float(
+                result.state["muscle_correction"]["high_frequency_energy_reduction_in_mask"]
+            ),
+            "muscle_correction_method": str(result.state["muscle_correction"]["method"]),
             "alpha_power_ratio_median": float(np.median(clean_alpha / np.maximum(raw_alpha, 1e-18))),
             "alpha_topology_correlation": topology_corr,
             "nonfrontal_channel_count": int(np.count_nonzero(nonfrontal)),
@@ -224,13 +392,14 @@ def _audit_subject(subject_dir_text: str, config_payload: dict[str, Any]) -> dic
             "raw_density": raw_density.tolist(),
             "clean_density": clean_density.tolist(),
         })
-    controls, control_status = _audit_controlled(subject_dir)
+    controls, control_status = _audit_controlled(subject_dir, config)
     return {
         "subject": subject,
         "rows": rows,
         "psd": psd_rows,
         "controlled_artifacts": controls,
         "controlled_artifact_status": control_status,
+        "cache_records": cache_records,
     }
 
 
@@ -256,14 +425,14 @@ def _write_rows(rows: list[dict[str, Any]], output_dir: Path) -> None:
         writer.writerows({key: row.get(key) for key in scalar_keys} for row in rows)
 
 
-def _plot_psd(psd_rows: list[dict[str, Any]], output_dir: Path) -> None:
+def _plot_psd(psd_rows: list[dict[str, Any]], output_dir: Path, clean_branch: str) -> None:
     frequencies = np.asarray(psd_rows[0]["frequencies_hz"], dtype=float)
     raw = np.asarray([row["raw_density"] for row in psd_rows], dtype=float)
     clean = np.asarray([row["clean_density"] for row in psd_rows], dtype=float)
     selected = (frequencies >= 1.0) & (frequencies <= 45.0)
     figure, axis = plt.subplots(figsize=(10, 6))
     axis.semilogy(frequencies[selected], np.median(raw[:, selected], axis=0), label="raw filtered")
-    axis.semilogy(frequencies[selected], np.median(clean[:, selected], axis=0), label="artifact_clean_v2")
+    axis.semilogy(frequencies[selected], np.median(clean[:, selected], axis=0), label=clean_branch)
     axis.fill_between(
         frequencies[selected],
         np.quantile(clean[:, selected], 0.05, axis=0),
@@ -295,7 +464,11 @@ def run(args: argparse.Namespace) -> Path:
     config = EEGArtifactCleaningConfig()
     results = []
     with ProcessPoolExecutor(max_workers=min(args.workers, len(subjects))) as executor:
-        futures = {executor.submit(_audit_subject, str(path), asdict(config)): path.name for path in subjects}
+        cache_root = None if not args.cache_root else str(Path(args.cache_root).resolve())
+        futures = {
+            executor.submit(_audit_subject, str(path), asdict(config), cache_root): path.name
+            for path in subjects
+        }
         for future in as_completed(futures):
             result = future.result()
             results.append(result)
@@ -304,7 +477,7 @@ def run(args: argparse.Namespace) -> Path:
     rows = [row for result in results for row in result["rows"]]
     psd_rows = [row for result in results for row in result["psd"]]
     _write_rows(rows, output_dir)
-    _plot_psd(psd_rows, output_dir)
+    _plot_psd(psd_rows, output_dir, config.schema)
 
     controlled = [
         {"subject": result["subject"], **row}
@@ -319,9 +492,25 @@ def run(args: argparse.Namespace) -> Path:
             "low_frequency_ratio": _quantiles(row["low_frequency_ratio_median"] for row in condition_rows),
             "high_frequency_ratio": _quantiles(row["high_frequency_ratio_median"] for row in condition_rows),
             "robust_scale": _quantiles(row["robust_scale_median"] for row in condition_rows),
+            "event_mask_coverage": _quantiles(row["event_mask_coverage"] for row in condition_rows),
+            "time_shift_null_coverage": _quantiles(
+                row["time_shift_null_coverage_mean"] for row in condition_rows
+            ),
+            "event_high_frequency_reduction": _quantiles(
+                row["event_high_frequency_reduction"] for row in condition_rows
+            ),
+            "sham_event_high_frequency_reduction": _quantiles(
+                row["sham_event_high_frequency_reduction"] for row in condition_rows
+            ),
+            "event_coverage_above_null_subject_fraction": float(np.mean([
+                row["event_coverage_above_time_shift_null"] for row in condition_rows
+            ])),
+            "target_reduction_above_sham_subject_fraction": float(np.mean([
+                row["target_reduction_above_sham"] for row in condition_rows
+            ])),
         } if condition_rows else {"subject_count": 0}
     calibration = {
-        "schema": "single_trial_controlled_artifact_calibration_v2",
+        "schema": "single_trial_controlled_artifact_calibration_v3",
         "role": "detector_calibration_only_not_a_task_dataset",
         "conditions": by_condition,
         "subject_status": {result["subject"]: result["controlled_artifact_status"] for result in results},
@@ -346,7 +535,7 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     preservation = {
-        "schema": "single_trial_eeg_signal_preservation_v2",
+        "schema": "single_trial_eeg_signal_preservation_v3",
         "record_count": len(rows),
         "subject_count": len(results),
         "artifact_fraction": _quantiles(row["artifact_fraction"] for row in rows),
@@ -366,6 +555,9 @@ def run(args: argparse.Namespace) -> Path:
         "median_removed_variance_fraction": _quantiles(
             row["median_removed_variance_fraction"] for row in rows
         ),
+        "muscle_high_frequency_energy_reduction": _quantiles(
+            row["muscle_high_frequency_energy_reduction"] for row in rows
+        ),
         "bad_channel_count": _quantiles(row["bad_channel_count"] for row in rows),
         "all_sample_counts_unchanged": all(row["sample_count_unchanged"] for row in rows),
         "all_channel_counts_unchanged": all(row["channel_count_unchanged"] for row in rows),
@@ -375,6 +567,14 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     expected_sessions = len(subjects) * 6
+    muscle_conditions = [by_condition[name] for name in ("EMG", "Teeth Clenching", "Mouth Opening")]
+    muscle_correction_validated = all(
+        condition.get("target_reduction_above_sham_subject_fraction", 0.0) > 0.5
+        and condition.get("event_coverage_above_null_subject_fraction", 0.0) > 0.5
+        and condition["event_high_frequency_reduction"]["median"]
+        > condition["sham_event_high_frequency_reduction"]["median"]
+        for condition in muscle_conditions
+    )
     gates = {
         "selected_subject_coverage": len(results) == len(subjects),
         "six_sessions_per_selected_subject": len(rows) == expected_sessions,
@@ -389,23 +589,26 @@ def run(args: argparse.Namespace) -> Path:
         "nonfrontal_alpha_topology_has_no_negative_outliers": preservation[
             "nonfrontal_alpha_topology_negative_record_count"
         ] == 0,
-        "muscle_correction_validated_against_sham": False,
+        "muscle_correction_validated_against_sham": muscle_correction_validated,
         "full_29_subject_audit": len(results) == 29 and len(rows) == 174,
     }
     decision = {
-        "schema": "single_trial_eeg_artifact_admission_v2",
+        "schema": "single_trial_eeg_artifact_admission_v3",
         "decision": "admitted" if all(gates.values()) else "not_admitted",
-        "default_eeg_signal_branch": "artifact_clean_v2" if all(gates.values()) else "raw_with_ocular_artifact",
+        "default_eeg_signal_branch": config.schema if all(gates.values()) else "raw_with_ocular_artifact",
         "gates": gates,
         "blocking_reasons": [name for name, passed in gates.items() if not passed],
-        "note": "High-frequency muscle activity remains mask-only until controlled-artifact and sham validation are complete.",
+        "note": (
+            "Muscle correction attenuates only 30-45 Hz content inside adaptively detected bursts; "
+            "controlled event windows are compared with equal-mask circular-shift sham correction."
+        ),
     }
     (output_dir / "admission_decision.yaml").write_text(
         yaml.safe_dump(decision, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
 
     manifest = {
-        "schema": "single_trial_eeg_artifact_audit_manifest_v2",
+        "schema": "single_trial_eeg_artifact_audit_manifest_v3",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
@@ -424,6 +627,23 @@ def run(args: argparse.Namespace) -> Path:
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    if args.cache_root:
+        artifact_cache_root = Path(args.cache_root).resolve()
+        cache_records = [record for result in results for record in result["cache_records"]]
+        cache_manifest = {
+            "schema": "single_trial_eeg_artifact_cache_v3",
+            "created_at": manifest["created_at"],
+            "signal_branch": config.schema,
+            "record_count": len(cache_records),
+            "subject_count": len(results),
+            "cleaning_config": config.to_dict(),
+            "code_sha256": manifest["code_sha256"],
+            "records": cache_records,
+        }
+        artifact_cache_root.mkdir(parents=True, exist_ok=True)
+        (artifact_cache_root / "cache_manifest.json").write_text(
+            json.dumps(cache_manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     return output_dir
 
 
@@ -434,6 +654,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subjects", nargs="*", type=int)
     parser.add_argument("--subject-limit", type=int, default=0)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--cache-root",
+        default="",
+        help="Optional versioned EEG artifact-cache output root.",
+    )
     return parser.parse_args()
 
 
