@@ -1,56 +1,64 @@
 # Target architecture: physiology-semantic multimodal tokenizer
 
-_Approved architecture contract; implementation pending as of 2026-07-01_
+_Revised architecture contract; measurement-first input boundary approved 2026-07-14_
 
 ---
 
 ## 📋 Architecture status
 
-This document specifies the target architecture that replaces reconstruction-centered source-token coupling. It is a forward contract for code changes and experiments, not a description of the current runtime.
+This document specifies the target architecture that replaces reconstruction-centered source-token coupling. It is a forward contract for code changes and experiments, not a description of the current runtime. The 2026-07-14 revision removes the earlier assumption that a Croce-2017 five-state decomposition or one shared neural driver defines the model input or the meaning of every token.
 
 The maintained current-runtime SVG and its implementation-status legend are available in [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md). The SVG is generated from a versioned JSON specification and must accompany future modification plans through a plan-specific change overlay.
 
+The current revision is annotated against that runtime diagram in the
+[`measurement-first input-contract plan SVG`](figures/plans/measurement_first_input_contract_plan.svg).
+
 The target has four separable layers:
 
-1. a frozen or stop-gradient **physical state teacher**;
+1. a mandatory, provenance-preserving **unified measurement loader**;
 2. independent EEG and fNIRS **semantic tokenizers**;
 3. modality-private **residual representations** for information preservation;
-4. a frozen-token **sequence-to-distribution coupling model** and whole-brain downstream backbone.
+4. optional, replaceable **auxiliary teachers** plus a frozen-token sequence/downstream layer.
 
 ## 🎯 Non-negotiable invariants
 
 | Invariant | Required behavior | Prohibited shortcut |
 | --- | --- | --- |
 | Independent inference | EEG tokens use EEG only; fNIRS tokens use fNIRS only | Feeding EEG features into the fNIRS tokenizer in the mainline |
-| State-level semantics | Codewords decode teacher-state summaries | Treating waveform reconstruction as sufficient semantics |
+| Measurement-first input | Tokenizers receive measured EEG or fNIRS plus masks/metadata | Requiring a Croce state, source/observation split, or shared driver as model input |
+| Evidence-defined semantics | Codeword meaning is established by held-out probes and interventions | Declaring a teacher coordinate to be token truth before validation |
 | Structured output | Return ID, posterior, prototype embedding, and residual | Exporting only hard IDs |
 | Delayed correspondence | Model EEG sequence to future fNIRS distribution | Forcing equal indices or diagonal alignment |
 | Incremental coupling | Compare against fNIRS history and lag marginals | Interpreting raw conditional probability as EEG evidence |
-| Uncertainty-aware teacher | Weight state supervision by teacher uncertainty | Treating posterior means as exact labels |
-| Additive signal contract | Preserve one consistent raw-space normalization | Normalizing source and residual independently before summation |
-| Paired optical mainline | Use both available optical components where compatible | Calling highWL-only input a complete hemodynamic representation |
+| Optional teacher boundary | Every auxiliary target is named, replaceable, masked, and stop-gradient | Making one teacher family a prerequisite for all experiments |
+| Provenance-preserving normalization | Preserve native measurement family and reversible transform metadata | Claiming that numerical standardization makes physical units identical |
+| Paired chromophore mainline | Use canonical HbO/HbR components where available | Calling highWL-only input a complete hemodynamic representation |
 
 ## 🏗️ Component architecture
 
 ```mermaid
 flowchart LR
     accTitle: Physiology semantic tokenizer architecture
-    accDescr: The target architecture uses a joint physical teacher during training, independent modality semantic tokenizers, private residual paths, and a frozen-token sequence coupling model.
+    accDescr: The target architecture uses one unified measurement loader, independent modality semantic tokenizers, optional replaceable teachers, private residual paths, and frozen sequence models.
 
-    subgraph teacher_layer ["Physical teacher"]
-        joint_observations["Joint EEG and optical observations"] --> state_posterior["State posterior mean and covariance"]
-        state_posterior --> patch_state["Patch state summaries"]
+    subgraph data_layer ["Mandatory measurement boundary"]
+        raw_records["Four original datasets"] --> unified_loader["UnifiedPhysiologyWindowDataset"]
+        unified_loader --> eeg_signal["EEG context + mask + geometry"]
+        unified_loader --> fnirs_signal["HbO/HbR context + mask + geometry"]
     end
 
     subgraph tokenizer_layer ["Independent tokenizers"]
-        eeg_signal["EEG local window"] --> eeg_encoder["EEG encoder"] --> eeg_semantic["EEG semantic VQ"]
-        fnirs_signal["Paired optical window"] --> fnirs_encoder["fNIRS encoder"] --> fnirs_semantic["fNIRS semantic VQ"]
+        eeg_signal --> eeg_encoder["EEG encoder"] --> eeg_semantic["EEG semantic VQ"]
+        fnirs_signal --> fnirs_encoder["fNIRS encoder"] --> fnirs_semantic["fNIRS semantic VQ"]
         eeg_encoder --> eeg_residual["EEG residual latent"]
         fnirs_encoder --> fnirs_residual["fNIRS residual latent"]
     end
 
-    patch_state -.-> eeg_semantic
-    patch_state -.-> fnirs_semantic
+    subgraph auxiliary_layer ["Optional auxiliary targets"]
+        teacher_bank["Self-supervised, task, dynamical, or physics teacher"] --> auxiliary_targets["Named targets + uncertainty + masks"]
+    end
+    auxiliary_targets -.-> eeg_semantic
+    auxiliary_targets -.-> fnirs_semantic
 
     subgraph sequence_layer ["Frozen sequence models"]
         eeg_semantic --> coupling_head["EEG sequence to fNIRS distribution"]
@@ -61,56 +69,54 @@ flowchart LR
         fnirs_residual --> wholebrain_model
     end
 
-    classDef teacher fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef data fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef teacher fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
     classDef tokenizer fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
     classDef residual fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
     classDef sequence fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
 
-    class joint_observations,state_posterior,patch_state teacher
+    class raw_records,unified_loader data
+    class teacher_bank,auxiliary_targets teacher
     class eeg_signal,eeg_encoder,eeg_semantic,fnirs_signal,fnirs_encoder,fnirs_semantic tokenizer
     class eeg_residual,fnirs_residual residual
     class coupling_head,wholebrain_model sequence
 ```
 
-## 📥 Input and teacher contracts
+## 📥 Measurement input and auxiliary-target contracts
 
-### Current-compatible local window
+### Mandatory unified measurement window
 
-The first implementation keeps the validated 20-second local-anchor grid:
+Every newly planned E0–E9 experiment reads the four original datasets through `UnifiedPhysiologyWindowDataset`. `croce_local_cache` is a derived supervision artifact and is never counted as a dataset or used as the default signal entrance.
 
-| Tensor | Current-compatible shape | Target mainline shape |
-| --- | ---: | ---: |
-| EEG input | `[B, 6, 4000]` | `[B, 6, 4000]` |
-| fNIRS input | `[B, 1, 200]` highWL | `[B, 2, 200]` paired optical |
-| EEG patches | `[B, 10, 6, 400]` | `[B, 10, 6, 400]` |
-| fNIRS patches | `[B, 10, 1, 20]` | `[B, 10, 2, 20]` |
+The default event-anchored observation context is **20 seconds**. This is long enough to include a meaningful part of the slow hemodynamic response and matches the existing pilot configuration family; it does not fully resolve the 0.01 Hz filter edge, so spectral-quality estimation must use record-level segments of at least 100 seconds. The model may subdivide a 20-second context into ten two-second patches, but patch duration is an encoder choice rather than a loader constraint.
 
-HighWL-only remains an explicit ablation and compatibility path. It is not the target mainline because the cache and physical solver already contain paired optical observations.
-
-### Physical teacher output
-
-The minimum teacher interface is:
-
-| Field | Shape | Meaning |
+| Field | Shape or type | Contract |
 | --- | ---: | --- |
-| `state_mean` | `[B, 200, 5]` | Posterior mean for `(s, delta_f, delta_hbo, delta_hb, r)` |
-| `state_var` | `[B, 200, 5]` | Diagonal posterior variance |
-| `state_cov` | optional `[B, 200, 5, 5]` | Full or low-rank covariance |
-| `neural_driver_eeg_rate` | `[B, 4000, 1]` | EEG-rate estimate of `r(t)` |
-| `eeg_clean_mean` | `[B, 6, 4000]` | Teacher clean EEG observation |
-| `fnirs_clean_mean` | `[B, 2, 200]` | Teacher clean paired optical observation |
-| `teacher_valid_mask` | `[B, 200]` | Valid support after history and boundary handling |
+| `eeg` | `[B,C_E,4000]` | 200 Hz, canonical numerical coordinate; channel count remains dataset/record specific |
+| `fnirs` | `[B,C_F,200]` | 10 Hz, interleaved canonical HbO/HbR components |
+| `valid_mask.eeg` | `[B,4000]` | False for boundary padding or rejected support |
+| `valid_mask.fnirs` | `[B,200]` | False for boundary padding or rejected support |
+| `alignment` | metadata | Separate EEG/fNIRS clocks, anchor times, offset and alignment case |
+| `label` | mapping | `canonical_task_label_v1`; task, condition, class and event role remain separate |
+| `channel_geometry` | row lists | `canonical_channel_geometry_v1` with missing coordinates retained explicitly |
+| preprocessing/provenance | metadata | Native unit/family, source path, transform and canonical preprocessing state |
 
-Patch pooling creates a state target:
+Numerical `robust_standard_deviation` units make amplitudes comparable for model optimization and quality checks; they do not assert that EEG voltage and chromophore concentration are the same physical quantity. Dataset, task, measurement family, channel identity and geometry are never discarded.
 
-\[
-U_t = [\operatorname{mean}(x_t),\operatorname{slope}(x_t),\log\operatorname{var}(x_t)]
-\in\mathbb R^{15}
-\]
+### Optional auxiliary-target interface
 
-and therefore `patch_state_summary: [B, 10, 15]`.
+An experiment may attach a self-supervised target, task target, data-driven dynamical teacher, physics-regularized hybrid, or Croce-2017 diagnostic. Every such target uses the same generic sidecar:
 
-The teacher runs on continuous sessions or complete event windows. The student receives a crop plus a mask that removes fNIRS targets whose causal EEG history lies outside the visible context.
+| Field | Meaning |
+| --- | --- |
+| `target_family` / `target_version` | Exact generating method and immutable version |
+| `target_value` | Family-specific tensor; no globally fixed five-state dimension |
+| `target_uncertainty` | Optional calibrated uncertainty, never assumed valid by presence alone |
+| `target_valid_mask` | Receptive-field, solver and support validity |
+| `target_provenance` | Generator commit, parameters, source records and transform history |
+| `identifiability_scope` | Which modality, history and population can identify the target |
+
+No auxiliary target may change `eeg`, `fnirs`, event alignment, or tokenizer inference signatures. Croce `(s, delta_f, delta_hbo, delta_hb, r)`, clean means and source/observation decompositions remain admissible only as named ablation/diagnostic fields. A shared neural driver is a hypothesis to test against modality-private and delayed alternatives, not an input-contract invariant.
 
 ## 🧠 Semantic tokenizer contract
 
@@ -128,28 +134,28 @@ The teacher runs on continuous sessions or complete event windows. The student r
 | EEG/fNIRS hard ID | `[B, 10]` each |
 | EEG/fNIRS expected embedding | `[B, 10, 64]` each |
 
-`D=64` is the starting point because the explicit state target is low-dimensional and the residual path carries high-fidelity detail. `D in {48, 64, 128}` remains a preregistered capacity ablation.
+`D=64` remains a starting point rather than a consequence of a five-dimensional physical state. `D in {48, 64, 128}` remains a preregistered capacity ablation, and the residual path carries information that the discrete vocabulary does not preserve.
 
 ### Token semantics
 
-The two source vocabularies do not represent the same raw variables:
+The two vocabularies need not represent the same latent variables:
 
-| Vocabulary | Primary identifiable state | Secondary context |
+| Vocabulary | Required evidence | Prohibited interpretation |
 | --- | --- | --- |
-| EEG semantic token | Fast neural driver and vasoactive signal `(r, s)` | Local spectral and temporal context |
-| fNIRS semantic token | Hemodynamic state `(delta_f, delta_hbo, delta_hb)` | Delayed neural history and vascular context |
+| EEG semantic token | Reproducible EEG-local structure plus held-out task/physiology probe results | Automatically equating a token with Croce `r` or `s` |
+| fNIRS semantic token | Reproducible HbO/HbR-local and delayed temporal structure plus held-out probes | Automatically equating a token with Croce flow or hemoglobin states |
 
-Each codeword has a decoded physical signature:
+Each codeword may have multiple decoded signatures:
 
 \[
-\mu_k^m = G_m(e_k^m)
+\mu_{k,j}^m = G_{m,j}(e_k^m),
 \]
 
-where `G_E` predicts EEG-identifiable teacher coordinates and `G_F` predicts fNIRS-identifiable coordinates. Equal token indices have no privileged meaning.
+where `j` names a registered probe or auxiliary target family. Signature claims are family-specific and require held-out validation. Equal token indices across modalities have no privileged meaning, and failure of a Croce probe does not invalidate a teacher-free tokenizer that passes its own information and downstream gates.
 
 ### Temporal context boundary
 
-Semantic token identity is patch-local: quantization of a two-second patch cannot depend on another patch or its absolute position inside a crop. Sequence context is modeled after quantization by a separate causal module. For target patch `t`, the first implementation uses exactly the five preceding tokens (`t-5` through `t-1`), corresponding to ten seconds of history. Targets before index 5 are masked from context losses, and context representations never replace exported tokenizer IDs.
+Semantic token identity is patch-local: quantization of a two-second patch cannot depend on another patch or its absolute position inside a crop. Sequence context is modeled after quantization by a separate causal module. The 20-second loader context yields ten two-second tokens. History length is an experiment parameter; the existing five-token/ten-second history remains a baseline, while fNIRS experiments must compare longer histories within record support. Targets without complete declared history are masked, and context representations never replace exported tokenizer IDs.
 
 ### Quantizer correctness requirements
 
@@ -166,7 +172,7 @@ Cosine-only assignment is an ablation. The mainline must preserve amplitude or l
 
 ## 💾 Private and residual representation
 
-The private/residual branch preserves information that the physical semantic model cannot explain. It must not be called noise by default.
+The private/residual branch preserves information that the discrete semantic branch cannot explain. It must not be called noise by default.
 
 The first formal experiment keeps residual latents continuous:
 
@@ -175,7 +181,7 @@ The first formal experiment keeps residual latents continuous:
 | EEG residual latent | `[B, 10, 64]` |
 | fNIRS residual latent | `[B, 10, 32]` |
 
-RVQ or FSQ is introduced only after the semantic branch passes state and information-retention gates. This isolates whether failures come from semantic organization or a second quantizer.
+RVQ or FSQ is introduced only after the semantic branch passes its registered semantic and information-retention gates. This isolates whether failures come from semantic organization or a second quantizer.
 
 The decoder contract is:
 
@@ -189,30 +195,26 @@ with auxiliary semantic-only and residual-only reconstructions for attribution.
 
 ### Tokenizer stage
 
-The tokenizer objective is:
+The tokenizer objective is a registered combination of information-preserving and optional auxiliary terms:
 
 \[
 \mathcal L_{tok}=
-\lambda_{state}\mathcal L_{state}
-+\lambda_{proto}\mathcal L_{proto}
-+\lambda_{masked}\mathcal L_{masked\_state}
-+\lambda_{recon}\mathcal L_{recon}
+\lambda_{recon}\mathcal L_{recon}
 +\lambda_{vq}\mathcal L_{vq}
 +\lambda_{private}\mathcal L_{private}
++\sum_j \lambda_j\mathcal L_{aux,j}.
 \]
 
-The physical-state term is uncertainty weighted:
+When auxiliary target `j` exposes calibrated uncertainty, its loss may be uncertainty weighted:
 
 \[
-\mathcal L_{state}^m =
-(\hat u_t^m-\mu_t^m)^\top
-(\Sigma_t^m+\epsilon I)^{-1}
-(\hat u_t^m-\mu_t^m)
+\mathcal L_{aux,j}^m =
+(\hat u_{t,j}^m-\mu_{t,j}^m)^\top
+(\Sigma_{t,j}^m+\epsilon I)^{-1}
+(\hat u_{t,j}^m-\mu_{t,j}^m).
 \]
 
-The prototype term applies the same target to `G_m(e_k^m)`, forcing codebook geometry rather than only the continuous encoder output to represent state.
-
-The masked-state objective predicts teacher state summaries from unmasked temporal context. It is the primary semantic sequence objective; raw reconstruction is the information-preservation objective.
+An auxiliary prototype or masked-target loss is enabled only after its target family passes modality- and receptive-field-specific validation. Reconstruction/self-supervision and residual attribution provide the teacher-free mainline. No loss is enabled merely because a field exists in a Croce cache.
 
 ### Coupling stage
 
@@ -244,7 +246,7 @@ Each semantic token export must contain:
 | Posterior or top-k posterior | `[N, 10, 128]` | `[N, A, 2, 10, 128]` or sparse equivalent |
 | Expected codebook embedding | `[N, 10, 64]` | `[N, A, 2, 10, 64]` |
 | Residual latent | branch-specific | `[N, A, 2, 10, D_r]` |
-| Teacher state summary | `[N, 10, 15]` | `[N, A, 10, 15]` |
+| Auxiliary signatures | optional family-specific | optional family-specific |
 | Masks and metadata | sample-specific | anchor, time, history, subject, source |
 
 The whole-brain backbone must support four representation modes:
@@ -261,8 +263,8 @@ The comparison between these modes is a required information-retention result, n
 Publication visualizations must obey the following rules:
 
 - do not use expected token index as a physiological scalar;
-- order tokens using train-only physical signatures and lock the order for validation/test;
-- align seeds with Hungarian matching on physical signatures, not raw IDs;
+- order tokens using a named train-only signature family and lock the order for validation/test;
+- align seeds with Hungarian matching on that registered signature family, not raw IDs;
 - display conditional excess probability or incremental log likelihood rather than raw conditionals alone;
 - include uncertainty intervals and marginal/history baselines;
 - aggregate 128 tokens into a small number of physiological meta-states for the main figure while retaining full matrices in supplementary artifacts;
@@ -270,7 +272,7 @@ Publication visualizations must obey the following rules:
 
 ## 🔐 Claim boundary
 
-The architecture can support the claim that tokens represent state regions and that EEG token sequences predict future fNIRS token distributions only after the corresponding gates pass. It cannot by itself support claims of causal neurovascular coupling, universal task invariance, or one-to-one token correspondence.
+The architecture can support the claim that tokens preserve reproducible measurement structure and that EEG token sequences predict future fNIRS token distributions only after the corresponding gates pass. A particular physical-state interpretation requires a separately validated target/probe family. The architecture cannot by itself support claims of a single shared neural driver, causal neurovascular coupling, universal task invariance, or one-to-one token correspondence.
 
 Differences between task-specific coupling patterns are a secondary, non-blocking research objective. Their absence does not invalidate controlled incremental coupling, and their presence supports only a qualified secondary finding; it does not change any gate decision in the current approved program.
 
@@ -283,4 +285,4 @@ Differences between task-specific coupling patterns are a secondary, non-blockin
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Current runtime architecture`](../ARCHITECTURE.md)
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-14_

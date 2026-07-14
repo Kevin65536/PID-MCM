@@ -1,7 +1,7 @@
 # 数据规范化、HOMER2 对齐与统一缓存规范
 
 _Created: 2026-07-08_
-_Unified: 2026-07-10_
+_Unified: 2026-07-14_
 
 ## 当前结论
 
@@ -272,6 +272,22 @@ signal branch 统计：
 - `DatasetQualityReporter` / `visualize_dataset_quality.py`：只审计四原始数据集，
   Croce cache 仅记录为派生监督目标。
 
+registry 已与实现同步：
+
+| Registry ID | `loader_status` | `primary_loader` | 已声明 interface |
+| --- | --- | --- | --- |
+| `eeg_fnirs_single_trial` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified、legacy、continuous visualization |
+| `refed` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified |
+| `visual_cognitive_motivation` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified |
+| `simultaneous_eeg_nirs` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified、legacy、continuous visualization |
+| `croce_local_cache` | `implemented` | `CroceLocalCacheDataset` | derived cache、legacy；`resource_kind=derived_supervision_cache` |
+
+interface 分开记录是为了不把 REFED/Visual 的统一加载成功误报成旧
+`create_continuous_visualization_dataset` 已实现。Visual registry 的 native sampling
+与通道信息也已按本地 EDF/CSV 同步为 EEG 500 Hz、fNIRS 10 Hz、30 EEG channels
+和 24 个 fNIRS base channels；统一输出仍为 200/10 Hz 和 48 个 HbO/HbR component
+channels。
+
 统一输出：
 
 - `eeg`, `fnirs`: channel-first event window；
@@ -291,7 +307,12 @@ signal branch 统计：
   缺失位置保留 null/provenance，不虚构坐标；
 - native unit、原始路径、full-record robust location/scale、filter/resample state。
 
-2026-07-10 8 秒首窗 smoke：
+统一 loader 的默认观测窗为 **20 秒**：EEG `(C_E, 4000)`，fNIRS
+`(C_F, 200)`。20 秒用于覆盖较慢的血流动力学响应并与现有 pilot 配置一致；
+2 秒 patch 只是模型内部划分。0.01 Hz 频率边缘的 PSD/质量估计仍必须使用至少
+100 秒的 record-level 片段，不能用单个 20 秒训练窗估计。
+
+2026-07-10 8 秒首窗 smoke（历史报告，证明当时的 shape/contract；不再代表默认窗）：
 
 | 数据集 | paired windows | EEG shape | fNIRS shape | finite/full-window |
 | --- | ---: | --- | --- | --- |
@@ -349,8 +370,8 @@ signal branch 统计：
 ```bash
 .venv/bin/python experiments/scripts/visualize_dataset_quality.py --all \
   --samples-per-dataset 4 \
-  --window-duration-s 8 \
-  --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710
+  --window-duration-s 20 \
+  --output-dir experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260714_window20s
 ```
 
 `data/` 仍是 gitignored 本地 artifact。代码、测试和文档进入 git；缓存本体不进入 git。
@@ -371,3 +392,7 @@ signal branch 统计：
 - 把 post-conversion 数据称为完整 HOMER2-clean；
 - 在 artifact masks、split lock、teacher-valid masks 未补齐前启动
   physical-teacher-supervised training。
+
+Single-Trial EEG 的污染处理不是通过把 PSD 异常“标准化掉”来解决。分阶段修复、
+对照分支、adaptive QC 和准入条件见
+[`10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)。

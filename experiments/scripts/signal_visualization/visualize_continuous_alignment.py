@@ -722,7 +722,7 @@ def main() -> None:
     args = parse_args()
     config = apply_data_overrides(load_experiment_config(args.config), args)
     data_cfg = config['data']
-    require_dataset_loader(data_cfg['dataset'])
+    require_dataset_loader(data_cfg['dataset'], interface='continuous_visualization')
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     output_dir = (Path(args.output_dir) if args.output_dir else PROJECT_ROOT / 'logs' / 'continuous_alignment' / timestamp).resolve()

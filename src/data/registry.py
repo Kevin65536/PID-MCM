@@ -39,6 +39,9 @@ class DatasetRegistration:
     documentation: Sequence[DocumentationReference]
     notes: Sequence[str]
     resource_kind: str = 'raw_dataset'
+    primary_loader: str = ''
+    loader_contract: str = ''
+    loader_interfaces: Sequence[str] = ()
 
     def runtime_metadata(self, data_root: str) -> Dict[str, Any]:
         metadata = {
@@ -64,6 +67,9 @@ class DatasetRegistration:
             ],
             'notes': list(self.notes),
             'resource_kind': self.resource_kind,
+            'primary_loader': self.primary_loader,
+            'loader_contract': self.loader_contract,
+            'loader_interfaces': list(self.loader_interfaces),
         }
         contracts = DATASET_FNIRS_CONTRACTS.get(self.dataset_id)
         if contracts:
@@ -100,10 +106,13 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         ),
         notes=(
             'Each sample is one fNIRS spatial anchor with its local six-channel EEG neighbourhood.',
-            'The current tokenizer training contract uses highWL only as an optical measurement-space HbO-sensitive proxy.',
-            'lowWL remains in the cache and is explicitly ignored by the highWL-only training dataset.',
+            'This is a derived Croce-2017 supervision cache, not a fifth raw dataset.',
+            'It is not the primary input of any newly planned experiment; use is limited to named historical or teacher ablations.',
         ),
         resource_kind='derived_supervision_cache',
+        primary_loader='CroceLocalCacheDataset',
+        loader_contract='croce_source_observation_cache',
+        loader_interfaces=('derived_cache', 'legacy_multimodal'),
     ),
     'eeg_fnirs_single_trial': DatasetRegistration(
         dataset_id='eeg_fnirs_single_trial',
@@ -140,6 +149,9 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'EEG and fNIRS triggers are delivered simultaneously through a parallel port.',
             'fNIRS keeps direct lowWL/highWL optical measurements at 760/850 nm in the checked repository files.',
         ),
+        primary_loader='UnifiedPhysiologyWindowDataset',
+        loader_contract='unified_physiology_window_v1',
+        loader_interfaces=('unified_physiology', 'legacy_multimodal', 'continuous_visualization'),
     ),
     'refed': DatasetRegistration(
         dataset_id='refed',
@@ -153,7 +165,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         fnirs_channels=51,
         default_task='emotion_recognition',
         sync_strategy='continuous_annotation_alignment',
-        loader_status='planned',
+        loader_status='implemented',
         documentation=(
             DocumentationReference(
                 title='Original dataset README',
@@ -171,6 +183,9 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'Dynamic valence/arousal annotations are aligned by time instead of discrete trial IDs.',
             'fNIRS includes direct optical-domain Abs 780/805/830 channels in addition to HbO/HbR/HbT.',
         ),
+        primary_loader='UnifiedPhysiologyWindowDataset',
+        loader_contract='unified_physiology_window_v1',
+        loader_interfaces=('unified_physiology',),
     ),
     'visual_cognitive_motivation': DatasetRegistration(
         dataset_id='visual_cognitive_motivation',
@@ -182,13 +197,13 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'kyushu_visual_cognitive',
         ),
         supported_modalities=('eeg', 'fnirs', 'both'),
-        eeg_sample_rate_hz=None,
-        fnirs_sample_rate_hz=None,
-        eeg_channels=31,
-        fnirs_channels=None,
+        eeg_sample_rate_hz=500.0,
+        fnirs_sample_rate_hz=10.0,
+        eeg_channels=30,
+        fnirs_channels=24,
         default_task='memory_motivation',
         sync_strategy='cross_device_event_reconstruction',
-        loader_status='planned',
+        loader_status='implemented',
         documentation=(
             DocumentationReference(
                 title='Original dataset readme',
@@ -206,6 +221,9 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'fNIRS is stored as per-part/per-probe Oxy/Deoxy CSV files and must be aligned with reconstructed events.',
             'The checked CSV exports do not include direct optical-domain channels, but preserve ETG-7100 695/830 nm metadata in their headers.',
         ),
+        primary_loader='UnifiedPhysiologyWindowDataset',
+        loader_contract='unified_physiology_window_v1',
+        loader_interfaces=('unified_physiology',),
     ),
     'simultaneous_eeg_nirs': DatasetRegistration(
         dataset_id='simultaneous_eeg_nirs',
@@ -249,6 +267,9 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'Training-ready loaders now cover single-modality windows plus task-dependent multimodal segmentation for n-back and WG.',
             'DSR is deprecated in this repository and excluded from training-ready loaders until a stable alignment/use case is defined.',
         ),
+        primary_loader='UnifiedPhysiologyWindowDataset',
+        loader_contract='unified_physiology_window_v1',
+        loader_interfaces=('unified_physiology', 'legacy_multimodal', 'continuous_visualization'),
     ),
 }
 
@@ -479,13 +500,19 @@ def load_experiment_config(
     return normalize_experiment_config(merged_config)
 
 
-def dataset_loader_is_implemented(dataset_id: str) -> bool:
-    return get_dataset_registration(dataset_id).loader_status == 'implemented'
-
-
-def require_dataset_loader(dataset_id: str) -> None:
+def dataset_loader_is_implemented(dataset_id: str, interface: str | None = None) -> bool:
     registration = get_dataset_registration(dataset_id)
     if registration.loader_status != 'implemented':
+        return False
+    if interface is None:
+        return True
+    return interface in registration.loader_interfaces
+
+
+def require_dataset_loader(dataset_id: str, interface: str | None = None) -> None:
+    registration = get_dataset_registration(dataset_id)
+    if not dataset_loader_is_implemented(dataset_id, interface=interface):
+        interface_note = '' if interface is None else f" for interface {interface!r}"
         raise NotImplementedError(
-            f"Dataset '{registration.dataset_id}' is registered, but its loader adapter is not implemented yet."
+            f"Dataset '{registration.dataset_id}' is registered, but its loader adapter{interface_note} is not implemented."
         )

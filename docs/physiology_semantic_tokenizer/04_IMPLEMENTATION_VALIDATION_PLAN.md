@@ -1,6 +1,6 @@
 # Implementation and validation plan
 
-_Approved execution plan; the full P1-P5 runtime is implemented, while E0 blocks physical-state supervision_
+_Revised execution plan; unified measurement loading is mandatory and physical teachers are optional_
 
 ---
 
@@ -10,7 +10,13 @@ This plan converts the target architecture into independently testable modules. 
 
 Scientific gates use adaptive, versioned evidence calibration rather than permanent numerical cutoffs. Deterministic software invariants remain fixed, while data-dependent health ranges and effect criteria are learned from synthetic references, training-only pilots, matched baselines, and null distributions. The calibration procedure and protected-data boundary are fixed before the corresponding formal test evaluation; newly discovered metrics remain diagnostic or secondary until a new evaluation version.
 
-The existing `source_observation` and X3 cross-modal-exchange paths remain runnable baselines. The redesign is introduced behind new configuration names and output schemas; archival runs are never rewritten in place.
+The existing `source_observation` and X3 cross-modal-exchange paths remain runnable historical baselines. The redesign is introduced behind new configuration names and output schemas; archival runs are never rewritten in place.
+
+### Mandatory data entrance for every planned experiment
+
+All newly planned P1–P7 and E0–E9 dry runs, smokes, formal runs, ablations and figure regenerations must construct samples through `UnifiedPhysiologyWindowDataset` using `unified_physiology_window_v1`. Direct reads from dataset-specific loaders are allowed only inside the unified adapter or in a named adapter-validation diagnostic. `croce_local_cache` may be joined as an optional, versioned teacher sidecar in a named ablation; it cannot replace the measured EEG/fNIRS input and cannot be counted as a fifth dataset.
+
+The default observation context is 20 seconds. A suite may override it only in its resolved config with a physiological/task rationale and a boundary-mask audit. Two-second token patches and shorter event labels are model/annotation semantics, not reasons to shorten the loader default.
 
 ## 🧭 Dependency order
 
@@ -21,9 +27,10 @@ flowchart LR
 
     archive["P0: Freeze evidence and baselines"] --> contracts["P1: Data and tensor contracts"]
     contracts --> quantizer["P2: Correct quantizer"]
-    contracts --> teacher["P3: Physical teacher interface"]
+    contracts --> teacher["P3: Optional target adapters"]
     quantizer --> tokenizer["P4: Semantic and residual tokenizer"]
-    teacher --> tokenizer
+    contracts --> tokenizer
+    teacher -. "named ablation" .-> tokenizer
     tokenizer --> export["P5: Export and whole-brain consumers"]
     export --> coupling["P6: Frozen sequence coupling"]
     coupling --> figures["P7: Stable publication figures"]
@@ -46,9 +53,9 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 | Quantization | `src/tokenizers/ema_vector_quantizer.py` **new** | Add count-and-sum EMA and full quantizer diagnostics without changing the legacy quantizer | Archived compatibility code continues to use its unchanged quantizer |
 | Tokenizer | `src/tokenizers/physiology_semantic_tokenizer.py` **new** | Independent semantic VQ and continuous residual branches | No cross-modal feature is accepted by either tokenizer inference API |
 | Registry | `src/tokenizers/registry.py` | Register a new target architecture name | Existing names and checkpoint loading remain unchanged |
-| Cache loader | `src/data/croce_local_cache_dataset.py` | Return paired optical channels, state posterior, uncertainty, masks, and one normalization contract | Preserve highWL-only compatibility mode |
-| Cache generator | `croce_validation/scripts/generate_target_cache.py` | Persist state mean, variance/covariance, solver metadata, and validity support | Existing cache schema is read-only and versioned |
-| Teacher adapter | `src/teachers/physical_state_teacher.py` **new** | Convert cached solver outputs into causal patch targets | Teacher tensors are stop-gradient and mask-aware |
+| Unified loader | `src/data/unified_physiology.py` | Mandatory four-dataset EEG/fNIRS measurement input, 20-second default context, labels, masks, alignment and geometry | Dataset-specific readers stay behind this contract |
+| Optional cache adapter | `src/data/croce_local_cache_dataset.py` | Join named Croce targets as a derived sidecar for historical/teacher ablations | Never replace measured inputs or enter the dataset count |
+| Optional teacher adapter | `src/teachers/physical_state_teacher.py` | Convert any admitted teacher family into named targets, uncertainty and masks | No globally required five-state shape; tensors are stop-gradient |
 | Losses | `src/losses/physiology_semantic.py` **new** | State, prototype, masked-state, private-attribution, and uncertainty-weighted losses | Every term can be disabled for ablation |
 | Training entry | `experiments/train_physiology_semantic_tokenizer.py` **new** | Resolve config, train independent branches, emit validation artifacts | Dry-run and CPU/small-batch smoke modes are mandatory |
 | Export | `experiments/scripts/export_physiology_semantic_tokens.py` **new** | Export IDs, posterior, transferred embedding, residual, state target, and masks | Schema version and checkpoint hash are embedded |
@@ -81,13 +88,13 @@ pilot cache still contains 29 mutually exclusive subject-held-out records, with 
 train, 5 validation, and 6 protected-test subjects. The protected test remains
 unopened because validation did not pass.
 
-**Implementation:** add a versioned loader output containing paired optical data, teacher posterior statistics, causal-valid masks, and sample metadata. Apply a single raw-space normalization before any source/residual decomposition.
+**Implementation:** use the versioned unified loader output containing measured EEG, paired HbO/HbR, separate clocks, validity masks, canonical labels/geometry and preprocessing provenance. Auxiliary teacher fields are separate joins, never required signal fields.
 
 **Correctness checks:**
 
 - assert all shapes, dtypes, units, sampling rates, and masks;
-- verify `raw_normalized ≈ source_normalized + residual_normalized` only when the decomposition is defined as additive;
-- verify that crop boundaries invalidate teacher targets requiring unseen history;
+- verify crop boundaries and rejected samples are reflected by modality-specific validity masks;
+- verify optional targets requiring unseen history are invalidated without changing measurement tensors;
 - verify no train-derived normalization statistic is fitted on validation or test subjects;
 - compare cached arrays against solver output on deterministic samples.
 
@@ -110,23 +117,23 @@ unopened because validation did not pass.
 
 **Validity gate:** on a fixed latent stream, active-code fraction, effective rank, nearest-neighbor cosine, assignment entropy, and prototype drift remain consistent with health ranges calibrated from synthetic references and training-only pilots, without repeated mass revival. These ranges may change by modality, dataset, or phase and must retain their calibration provenance. They are health checks, not semantic evidence.
 
-### P3 — Expose the physical state teacher
+### P3 — Evaluate optional target/teacher adapters
 
 **Implementation status (2026-07-03):** merged and scientifically evaluated through E0-v2 validation. Cache validity now controls local state/prototype supervision independently of the causal-history mask; only context supervision requires both cache validity and a complete 10-second history. Cross-dataset measurement, local observability, K=128 transmissibility, and continuous coupling checks passed. fNIRS physical-observation prediction and synthetic-truth posterior calibration failed numerical and visual review. No protected-test sample was evaluated.
 
-**Implementation:** wrap the Croce solver cache as a frozen teacher returning patch state mean, uncertainty, clean observations, neural driver, and masks. Provide identifiable coordinate subsets for EEG and fNIRS.
+**Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics.
 
 **Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
 
 **Execution boundary:** physical-state-supervised tokenizer optimization remains blocked until a new versioned E0 protocol passes validation. The blocked decision cannot be bypassed with a boolean configuration flag. A teacher-free reconstruction-plus-VQ baseline may optimize because it does not consume the failed teacher endpoint.
 
-**Validity gate:** held-out teacher posterior predictive checks must outperform a mean/history-only baseline for the observed modalities. State coordinates that fail observability or calibration checks are removed from semantic supervision rather than treated as ground truth.
+**Validity gate:** a target family may supervise a named experiment only when held-out predictive/identifiability checks beat its declared baselines. Failed coordinates or families are removed from that experiment; their failure does not block the teacher-free tokenizer mainline.
 
 ### P4 — Train independent semantic and residual branches
 
 **Implementation status (2026-07-03):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The physical-state-supervised objective remains blocked by E0, so this is software-readiness evidence rather than target-semantic validation.
 
-**Implementation:** add patch-local state decoding from continuous latents and codebook prototypes, post-quantization fixed-history masked-state prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch; a separate context module predicts patch `t` from the five preceding tokens and never changes exported IDs. Start with continuous residuals.
+**Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization context prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
 
 **Correctness checks:**
 
@@ -137,7 +144,7 @@ unopened because validation did not pass.
 - teacher uncertainty and validity masks produce zero contribution where invalid;
 - permutation of token IDs leaves all ID-invariant metrics unchanged.
 
-**Validity gate:** the semantic branch must improve held-out state decoding and prototype stability over reconstruction-only VQ under the versioned evidence protocol, while semantic-plus-residual reconstruction and downstream information remain consistent with the calibrated continuous-latent reference. G2 information retention and G3 state semantics are co-equal gates; failure of either side blocks coupling experiments.
+**Validity gate:** the semantic branch must improve its preregistered held-out signature/probe and prototype stability over the matched teacher-free reference under the versioned evidence protocol, while semantic-plus-residual reconstruction and downstream information remain consistent with the calibrated continuous-latent reference. G2 information retention and G3 registered semantics are co-equal gates; failure of either side blocks coupling experiments.
 
 ### P5 — Export representations and update consumers
 
@@ -230,7 +237,7 @@ experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/
 The redesign is implemented only when all of the following are true:
 
 1. current and target architecture documents match the merged code;
-2. all P1–P5 correctness checks and validity gates pass;
+2. P1, P2, P4 and P5 correctness checks pass; each optional P3 target used by a formal run passes its own scoped validity gate;
 3. frozen coupling P6 has a complete marginal/history-controlled result, whether positive or negative;
 4. the experiment matrix has immutable manifests and run-level summaries;
 5. figures are regenerated from saved tables, not notebook-only state;
@@ -246,5 +253,6 @@ The redesign is implemented only when all of the following are true:
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Code migration plan`](07_CODE_MIGRATION_PLAN.md)
 - [`Data normalization, HOMER2 alignment, and unified cache spec`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md)
+- [`Single-Trial EEG artifact remediation plan`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-14_

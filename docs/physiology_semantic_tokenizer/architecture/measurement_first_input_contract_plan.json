@@ -1,0 +1,66 @@
+{
+  "schema": "physiology_semantic_architecture_changes_v1",
+  "plan_id": "measurement_first_input_contract_plan",
+  "summary": "Replace the Croce-constrained entrance with the four-dataset unified measurement loader and make all teacher families optional sidecars.",
+  "changes": [
+    {
+      "node_id": "loader",
+      "kind": "modify",
+      "note": "Use UnifiedPhysiologyWindowDataset for every newly planned experiment"
+    },
+    {
+      "node_id": "eeg_input",
+      "kind": "modify",
+      "note": "Accept dataset-specific EEG channels with masks, geometry and provenance"
+    },
+    {
+      "node_id": "fnirs_input",
+      "kind": "modify",
+      "note": "Accept canonical HbO/HbR measurements without requiring a Croce observation split"
+    },
+    {
+      "node_id": "cache_teacher",
+      "kind": "modify",
+      "note": "Demote Croce cache from required entrance to a named derived target sidecar"
+    },
+    {
+      "node_id": "teacher_adapter",
+      "kind": "modify",
+      "note": "Generalize to replaceable target families with scoped validation"
+    },
+    {
+      "node_id": "eeg_target",
+      "kind": "remove",
+      "note": "Remove the fixed Croce r/s target shape from the architecture invariant"
+    },
+    {
+      "node_id": "fnirs_target",
+      "kind": "remove",
+      "note": "Remove the fixed Croce hemodynamic target shape from the architecture invariant"
+    },
+    {
+      "node_id": "semantic_losses",
+      "kind": "modify",
+      "note": "Keep teacher-free losses active and enable auxiliary losses only by named target family"
+    }
+  ],
+  "add_nodes": [
+    {
+      "id": "optional_target_bank",
+      "label": "Optional target bank",
+      "details": [
+        "self-supervised / task / dynamical / physics",
+        "family-specific value · uncertainty · mask"
+      ],
+      "x": 350,
+      "y": 590,
+      "width": 240,
+      "height": 82,
+      "status": "planned"
+    }
+  ],
+  "add_edges": [
+    {"from": "loader", "to": "optional_target_bank"},
+    {"from": "optional_target_bank", "to": "semantic_losses"}
+  ]
+}

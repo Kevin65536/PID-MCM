@@ -42,6 +42,7 @@ CANONICAL_FNIRS_SAMPLE_RATE_HZ = 10.0
 CANONICAL_EEG_BAND_HZ = (1.0, 45.0)
 CANONICAL_FNIRS_BAND_HZ = (0.01, 0.2)
 CANONICAL_FNIRS_COMPONENTS = ("HbO", "HbR")
+DEFAULT_UNIFIED_WINDOW_DURATION_S = 20.0
 DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = frozenset({
     "stable_fixed_offset",
     "piecewise_constant_offset",
@@ -493,14 +494,21 @@ class ChannelGeometryIndex:
 
 
 class UnifiedPhysiologyWindowDataset:
-    """Event-aligned EEG/fNIRS windows for the four original datasets."""
+    """Event-aligned EEG/fNIRS windows for the four original datasets.
+
+    The 20-second default is an observation-context contract, not a claim that
+    every event lasts 20 seconds.  Event labels remain anchored at the event
+    timestamp and ``valid_mask`` identifies record-boundary padding.  Models
+    may subdivide the returned context into shorter patches without changing
+    the loader contract.
+    """
 
     def __init__(
         self,
         cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
         *,
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
-        window_duration_s: float = 8.0,
+        window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_offset_s: float = 0.0,
         require_paired_timestamps: bool = True,
         include_event_types: set[str] | None = None,

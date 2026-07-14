@@ -40,6 +40,7 @@ gantt
         P2-P5 software migration          :milestone, 2026-07-02, 0d
         E0 gate + full trainer             :milestone, 2026-07-03, 0d
         E0-v2 teacher contract audit       :milestone, 2026-07-03, 0d
+        Measurement-first input revision   :milestone, 2026-07-14, 0d
 ```
 
 ## Change Records
@@ -56,6 +57,7 @@ gantt
 | 8 | 2026-07-02 | Phase 3 P2-P5 | [P2-P5 Physiology-Semantic Code Migration](2026-07-02_p2_p5_physiology_semantic_code_migration.md) | corrected EMA VQ, physical teacher, independent tokenizer, gated trainer, export/consumers | Merged |
 | 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Merged; teacher supervision blocked |
 | 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Merged; validation blocked |
+| 11 | 2026-07-14 | Phase 3 input contract | [Measurement-first Input Contract and Optional Teacher Boundary](2026-07-14_measurement_first_input_contract.md) | unified loader, target architecture, experiment matrix, registry | Merged |
 
 ## How to Add a New Entry
 

@@ -1,12 +1,12 @@
 # Physiology-semantic tokenizer experiment log
 
-_Active run registry for experiments executed under the 2026-07-01 target contract_
+_Active run registry; historical runs retain their original contracts, new runs use the 2026-07-14 measurement-first revision_
 
 ---
 
 ## 📋 Current status
 
-The complete tokenizer training loop is runnable, but E0-v2 remains blocked at validation. The cross-dataset measurement adapter, local target observability, K=128 target transmissibility, and continuous coupling upper bound passed their declared validation checks. The fNIRS physical-observation mean and posterior uncertainty calibration failed both numerical and visual review. The protected test was not opened, and physical-state-supervised training remains blocked. A teacher-free reconstruction-plus-VQ smoke completed two CUDA optimizer steps and resumed to four; it is eligible for an E1 short-formal software/quantizer pilot but does not validate semantic supervision.
+The complete tokenizer training loop is runnable, but the Croce E0-v2 target remains blocked at validation. The 2026-07-14 contract no longer treats that target as the architecture input or universal token semantics. All new experiments must use `UnifiedPhysiologyWindowDataset`; teacher-free objectives may proceed through their own gates, and each optional target family requires an independent scoped admission. Historical runs below retain their original loader/teacher contract and are not retroactively relabeled.
 
 | Date | ID | Suite | Status | Result root |
 | --- | --- | --- | --- | --- |
@@ -22,6 +22,8 @@ The complete tokenizer training loop is runnable, but E0-v2 remains blocked at v
 | 2026-07-08 | `PST-E0-D3-LIN2024-SUBJECT-HRF` | Lin 2024 inspired subject-specific NVC diagnostic | Diagnostic complete; subject-specific HRF path remains weak; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_113000_lin2024_subject_specific_nvc_v1/` |
 | 2026-07-08 | `PST-E0-D4-LIN2024-RAW-TRTD` | Lin 2024 raw continuous session TRTD diagnostic | Diagnostic complete; in-sample upper bound remains weak; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_160736_lin2024_raw_session_trtd_s19_sess2/` |
 | 2026-07-08 | `PST-E0-D5-LIN2024-SIM-RAW-TRTD` | Lin 2024 Simultaneous EEG&NIRS raw TRTD confirmation | Diagnostic complete; Simultaneous concentration data show same weak EEG-to-fNIRS recovery; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_170809_lin2024_simultaneous_raw_trtd_vp001_wg/` |
+| 2026-07-10 | `PST-P1-FOUR-DATASET-QUALITY` | Four-dataset unified loader and quality audit | Correctness passed; 8-second report is historical and does not imply artifact-clean data | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/` |
+| 2026-07-14 | `PST-INPUT-CONTRACT-REVISION` | Architecture decision | Measurement-first entrance approved; all new E0-E9 runs require unified loader | Not applicable |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -95,4 +97,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-14_

@@ -7,10 +7,12 @@ import numpy as np
 
 from src.data.factory import create_configured_multimodal_dataloaders
 from src.data.registry import (
+    dataset_loader_is_implemented,
     get_dataset_registration,
     list_raw_datasets,
     load_experiment_config,
     normalize_data_config,
+    require_dataset_loader,
 )
 from src.data.simultaneous_eeg_nirs_dataset import classify_alignment_pattern, detect_offset_blocks
 from src.data.validation import build_dataset_validation_plan
@@ -21,6 +23,18 @@ class DatasetRegistryTests(unittest.TestCase):
         self.assertEqual(len(list_raw_datasets()), 4)
         self.assertNotIn('croce_local_cache', {item.dataset_id for item in list_raw_datasets()})
         self.assertEqual(get_dataset_registration('croce_local_cache').resource_kind, 'derived_supervision_cache')
+
+    def test_all_four_raw_datasets_use_the_unified_primary_loader(self):
+        for registration in list_raw_datasets():
+            self.assertEqual(registration.loader_status, 'implemented')
+            self.assertEqual(registration.primary_loader, 'UnifiedPhysiologyWindowDataset')
+            self.assertEqual(registration.loader_contract, 'unified_physiology_window_v1')
+            self.assertTrue(dataset_loader_is_implemented(registration.dataset_id, 'unified_physiology'))
+
+    def test_loader_interfaces_do_not_overstate_legacy_visualization_support(self):
+        self.assertFalse(dataset_loader_is_implemented('refed', 'continuous_visualization'))
+        with self.assertRaises(NotImplementedError):
+            require_dataset_loader('visual_cognitive_motivation', 'continuous_visualization')
 
     @staticmethod
     def _write_multimodal_config(root: Path) -> Path:

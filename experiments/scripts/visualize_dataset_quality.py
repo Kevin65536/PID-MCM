@@ -34,7 +34,7 @@ from src.data.dataset_quality_report import DatasetQualityReporter
 from src.data.registry import (
     get_dataset_registration,
 )
-from src.data.unified_physiology import RAW_DATASET_IDS
+from src.data.unified_physiology import DEFAULT_UNIFIED_WINDOW_DURATION_S, RAW_DATASET_IDS
 
 DEFAULT_OUTPUT_BASE = (
     PROJECT_ROOT / 'experiments' / 'runs' / 'physiology_semantic_tokenizer' / 'data_quality_audit'
@@ -102,8 +102,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--window-duration-s',
         type=float,
-        default=8.0,
-        help='Aligned window duration in seconds.',
+        default=DEFAULT_UNIFIED_WINDOW_DURATION_S,
+        help=(
+            'Aligned observation-context duration in seconds '
+            f'(default: {DEFAULT_UNIFIED_WINDOW_DURATION_S:g}).'
+        ),
     )
     parser.add_argument(
         '--list-datasets',

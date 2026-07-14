@@ -41,7 +41,7 @@ The Croce-style state vector used by the current cache solver is:
 x_t=(s_t,\delta f_t,\delta HbO_t,\delta Hb_t,r_t)
 \]
 
-The target architecture does not require this five-state model to be exact. It requires the teacher to provide a testable, uncertainty-aware low-dimensional account of the shared neural-to-hemodynamic dynamics.[^1]
+The target architecture does not require this five-state model, or any single shared neural driver, as an input or semantic truth. Croce is one testable auxiliary hypothesis among self-supervised, task, dynamical and other physics-informed targets. Every target family must establish its own identifiability and uncertainty scope before it can supervise tokens.[^1]
 
 ## 🎯 How task information reaches tokens
 
@@ -74,9 +74,9 @@ The information paths are complementary:
 
 | Representation element | Information retained | Primary role |
 | --- | --- | --- |
-| Hard ID | State-region membership | Counting, transition statistics, interpretability |
-| Posterior | Boundary uncertainty and secondary states | Robust coupling and downstream inference |
-| Prototype embedding | Geometry among state regions | Transfer to sequence models |
+| Hard ID | Learned measurement-region membership | Counting, transition statistics, interpretability after probing |
+| Posterior | Assignment uncertainty and secondary prototypes | Robust coupling and downstream inference |
+| Prototype embedding | Geometry among learned regions | Transfer to sequence models |
 | Residual latent | Model-private physiology and reconstruction detail | Information preservation |
 | Contextual sequence state | Duration, transition, and spatial grammar | Fine-grained task prediction |
 
@@ -88,7 +88,7 @@ Assume the task decision depends on a physiological trajectory `S_1:T` through a
 \|\hat S_{1:T}-S_{1:T}\| < \frac{\gamma}{2L}
 \]
 
-This is not a guarantee that the tokenizer will meet the bound. It identifies the correct empirical question: compare teacher-state and task-decision error against quantization distortion rather than relying on signal reconstruction alone.
+This is not a guarantee that the tokenizer will meet the bound. It identifies the correct empirical question: compare registered signature/probe and task-decision error against quantization distortion rather than relying on signal reconstruction alone.
 
 ### Why sequence context is required
 
@@ -196,7 +196,7 @@ Let `H_t^F` denote available fNIRS history and nuisance controls. The physiologi
 
 A positive global mean is insufficient. Evidence must be positive on held-out subjects and remain positive within prespecified dataset/task scopes. Time-shift and spatial-null controls must remove the gain.
 
-## ⚙️ Why the physical teacher changes semantics
+## ⚙️ How an optional target can change semantics
 
 ### Waveform target versus state target
 
@@ -208,17 +208,17 @@ The current cache pathway supervises decoded waveforms:
 
 This strongly constrains the decoder output but leaves many latent/codebook organizations equivalent. A flexible decoder can reconstruct the PF waveform even when codeword identity has no stable physical meaning.
 
-The state teacher adds:
+A validated auxiliary target may add:
 
 \[
 G_m(e_{K_t^m})\approx \mu_t^m
 \]
 
-which constrains each prototype to cover a teacher-state region. The state target is lower dimensional and less restrictive at the waveform surface, but stronger at the semantic bottleneck.
+which constrains each prototype to cover a target-defined region. This can be stronger at the semantic bottleneck, but the interpretation is scoped to target family `j` and is not an architecture-level truth.
 
-| Property | Cached source-waveform supervision | Physical-state teacher supervision | Target decision |
+| Property | Reconstruction/self-supervision | Optional target supervision | Target decision |
 | --- | --- | --- | --- |
-| Supervised object | Decoded clean EEG/fNIRS waveform | Posterior state summary and uncertainty | Use state for semantics; waveform for fidelity |
+| Supervised object | Measured EEG/fNIRS or masked/context objective | Family-specific signature and optional uncertainty | Use only targets admitted for the named experiment |
 | Where constraint acts | Mainly decoder output | Continuous semantic latent and codebook prototype | Constrain the bottleneck explicitly |
 | Constraint dimensionality | High-dimensional and pointwise | Low-dimensional and structured | State target is weaker on samples, stronger on meaning |
 | Equivalent latent solutions | Many rotations/code permutations can reconstruct equally | Fewer solutions if prototypes must decode the same state coordinates | Measure prototype/state stability across seeds |
@@ -226,11 +226,11 @@ which constrains each prototype to cover a teacher-state region. The state targe
 | Misspecification risk | Forces the teacher waveform decomposition into the decoder | Can over-organize tokens around an incorrect physical model | Preserve residual and compare shuffled/self-supervised controls |
 | Physiological claim supported alone | Clean-component reconstruction only | Teacher-defined state-region discretization after validation | Neither alone proves causal coupling |
 
-The state teacher is therefore not “stronger” in every sense. It is less prescriptive about exact waveform samples but more prescriptive about the semantic coordinates represented by the codebook. The hybrid objective intentionally uses these non-equivalent constraints together.
+An auxiliary target is therefore not “stronger” in every sense. It is more prescriptive about selected semantic coordinates and can be actively harmful when misspecified. The teacher-free measurement objective is the mainline; hybrid objectives are named ablations until their scoped gates pass.
 
 ### Uncertainty weighting
 
-Teacher posterior uncertainty defines which examples should strongly organize the codebook:
+When calibrated, target uncertainty defines which examples should strongly organize the codebook:
 
 \[
 \mathcal L_{state}^m=
@@ -239,11 +239,11 @@ Teacher posterior uncertainty defines which examples should strongly organize th
 (\hat u_t^m-\mu_t^m)
 \]
 
-Low-confidence teacher states receive weaker influence. This prevents ambiguous inverse solutions from acting as exact labels.
+Low-confidence targets receive weaker influence. Uncalibrated uncertainty cannot be used merely because a covariance field exists.
 
 ### Privileged-information boundary
 
-The joint teacher may use EEG and paired optical observations during training. The modality student must use only its own input. This is privileged-information distillation, not cross-modal inference leakage, provided that:
+An optional joint target generator may use EEG and fNIRS during training. The modality student must use only its own input. This is privileged-information distillation, not cross-modal inference leakage, provided that:
 
 1. teacher outputs are stop-gradient;
 2. EEG and fNIRS students have independent forward paths;
@@ -278,11 +278,11 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 | Claim | Required observation | Observation that falsifies it |
 | --- | --- | --- |
-| Semantic tokens retain physical state | Prototype-to-state error beats reconstruction-only and shuffled-teacher controls | No improvement or unstable signatures across seeds |
+| Semantic tokens retain a registered signature | Prototype-to-signature error beats teacher-free and shuffled-target controls | No improvement or unstable signatures across seeds |
 | Residual preserves omitted information | Semantic plus residual recovers task/reconstruction information lost by hard ID | Residual adds no information or only source leakage |
 | EEG sequence predicts fNIRS response | Held-out incremental NLL gain over the matched fNIRS-history/marginal and nuisance-controlled baseline | Gain disappears under subject holdout or after source/history/marginal controls |
 | Correspondence is physiological | Gain peaks at plausible lags and is destroyed by time/spatial nulls | Gain survives nulls or follows dataset position only |
-| Tokens generalize | Physical signatures and task utility remain stable across subjects and seeds | Token matching is arbitrary and downstream gains are source-specific |
+| Tokens generalize | Registered signatures and task utility remain stable across subjects and seeds | Token matching is arbitrary and downstream gains are source-specific |
 | Paired optical input is informative | It improves teacher state confidence or downstream retention over highWL-only | No reproducible improvement under matched capacity |
 
 ## 🔐 Allowed and prohibited paper language

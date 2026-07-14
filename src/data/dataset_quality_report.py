@@ -30,6 +30,7 @@ from .signal_visualization import compute_power_spectrum
 from .unified_physiology import (
     CANONICAL_EEG_SAMPLE_RATE_HZ,
     CANONICAL_FNIRS_COMPONENTS,
+    DEFAULT_UNIFIED_WINDOW_DURATION_S,
     CANONICAL_FNIRS_SAMPLE_RATE_HZ,
     CANONICAL_PREPROCESSING,
     CANONICAL_UNIT,
@@ -247,7 +248,7 @@ class DatasetQualityReporter:
         embed_images: bool = True,
         max_channels: int = 8,
         samples_per_dataset: int = 4,
-        window_duration_s: float = 8.0,
+        window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.figures_dir = self.output_dir / "figures"
@@ -314,6 +315,9 @@ class DatasetQualityReporter:
         snapshot.artifact_summary = {
             "audited_window_count": len(samples),
             "available_paired_window_count": len(dataset),
+            "window_duration_s": self.window_duration_s,
+            "eeg_window_samples": int(first["eeg"].shape[1]),
+            "fnirs_window_samples": int(first["fnirs"].shape[1]),
             "eeg_finite_fraction": float(np.isfinite(eeg).mean()),
             "fnirs_finite_fraction": float(np.isfinite(fnirs).mean()),
             "eeg_valid_fraction": float(np.mean([np.mean(sample["valid_mask"]["eeg"]) for sample in samples])),
@@ -330,6 +334,10 @@ class DatasetQualityReporter:
                 "eeg": CANONICAL_EEG_SAMPLE_RATE_HZ,
                 "fnirs": CANONICAL_FNIRS_SAMPLE_RATE_HZ,
             },
+            "configured_window_length": (
+                first["eeg"].shape[1] == int(round(self.window_duration_s * CANONICAL_EEG_SAMPLE_RATE_HZ))
+                and first["fnirs"].shape[1] == int(round(self.window_duration_s * CANONICAL_FNIRS_SAMPLE_RATE_HZ))
+            ),
             "fnirs_hbo_hbr_components": set(first["component_roles"]["fnirs"]) == set(CANONICAL_FNIRS_COMPONENTS),
             "paired_timestamps": first["event"].get("eeg_time_ms") is not None and first["event"].get("fnirs_time_ms") is not None,
             "alignment_admission_filter": bool(first_alignment_cases) and not set(first_alignment_cases).isdisjoint(dataset.admissible_alignment_cases or set()),
@@ -446,6 +454,11 @@ class DatasetQualityReporter:
                 "croce_cache_role": "derived_source_observation_supervision_only",
                 "derived_targets_excluded_from_dataset_count": list(DERIVED_TARGET_IDS),
             },
+            "loader_contract": {
+                "loader_class": "UnifiedPhysiologyWindowDataset",
+                "schema": "unified_physiology_window_v1",
+                "window_duration_s": self.window_duration_s,
+            },
             "canonical_preprocessing_contract": CANONICAL_PREPROCESSING.to_dict(),
             "all_contract_checks_passed": all(snapshot.contract_passed for snapshot in snapshots),
             "datasets": [snapshot.to_dict() for snapshot in snapshots],
@@ -483,6 +496,7 @@ class DatasetQualityReporter:
             "<h1>Four-Dataset Unified Physiology Quality Audit</h1>",
             f"<p>Generated {escape(datetime.now().isoformat(timespec='seconds'))}</p>",
             "<div class='notice'><strong>Scope:</strong> exactly four original datasets. Croce caches are derived EEG/fNIRS source/observation supervision targets and are excluded from the dataset count.</div>",
+            f"<div class='notice'><strong>Loader:</strong> UnifiedPhysiologyWindowDataset · unified_physiology_window_v1 · {self.window_duration_s:g} s observation context.</div>",
             "<h2>Final contract status</h2>",
             _dict_list_to_html_table(rows),
             "<h2>Canonical preprocessing</h2>",
@@ -534,6 +548,8 @@ class DatasetQualityReporter:
             f"Generated: {datetime.now().isoformat(timespec='seconds')}",
             "",
             "Scope: the four original EEG-fNIRS datasets only. `croce_local_cache` is a derived Croce-2017 source/observation supervision cache, not a dataset.",
+            "",
+            f"Loader: `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; observation context: **{self.window_duration_s:g} s**.",
             "",
             "## Final status",
             "",

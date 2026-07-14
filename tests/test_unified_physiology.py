@@ -1,18 +1,26 @@
 import numpy as np
 import json
+import inspect
 
 from src.data.unified_physiology import (
     CANONICAL_EEG_SAMPLE_RATE_HZ,
     CANONICAL_FNIRS_COMPONENTS,
     CANONICAL_FNIRS_SAMPLE_RATE_HZ,
     CANONICAL_UNIT,
+    DEFAULT_UNIFIED_WINDOW_DURATION_S,
     NativeEEGRecord,
+    UnifiedPhysiologyWindowDataset,
     canonical_fnirs_channel_names,
     canonical_label,
     fnirs_component_roles,
     preprocess_eeg_record,
     preprocess_fnirs_record,
 )
+
+
+def test_unified_loader_default_observation_window_is_twenty_seconds():
+    default = inspect.signature(UnifiedPhysiologyWindowDataset).parameters["window_duration_s"].default
+    assert default == DEFAULT_UNIFIED_WINDOW_DURATION_S == 20.0
 
 
 def test_fnirs_names_are_unified_to_hbo_hbr_components():

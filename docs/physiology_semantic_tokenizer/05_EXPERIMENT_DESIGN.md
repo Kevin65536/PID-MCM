@@ -1,6 +1,6 @@
 # Redesigned experiment program
 
-_Final experiment logic for the approved target architecture, updated 2026-07-03_
+_Revised experiment logic for the measurement-first target architecture, updated 2026-07-14_
 
 ---
 
@@ -11,11 +11,11 @@ The program tests a chain of claims rather than searching for an attractive coup
 ```mermaid
 flowchart LR
     accTitle: Scientific claim gate hierarchy
-    accDescr: Data validity and quantizer correctness precede two co-equal tokenizer gates for information retention and state semantics; both are required before controlled coupling or downstream utility is evaluated.
+    accDescr: Data validity and quantizer correctness precede two co-equal tokenizer gates for information retention and registered semantics; both are required before controlled coupling or downstream utility is evaluated.
 
-    g0["G0 Data and teacher validity"] --> g1["G1 Quantizer correctness"]
+    g0["G0 Unified data validity"] --> g1["G1 Quantizer correctness"]
     g1 --> g2["G2 Information retention"]
-    g1 --> g3["G3 State semantics"]
+    g1 --> g3["G3 Registered semantics"]
     g2 --> g4
     g3 --> g4["G4 Controlled coupling"]
     g2 --> g5
@@ -49,11 +49,30 @@ Numerical thresholds are dataset-, phase-, modality-, and representation-depende
 
 Each suite writes `decision_protocol.yaml`, `metric_registry.json`, and `evidence_calibration.json`. These files identify the primary endpoint, protected data boundary, calibration data, baseline/null construction, uncertainty method, current metric roles, and all changes. Revising a threshold or promoting a metric after viewing protected-test outcomes requires a new evaluation version and fresh protected evidence.
 
+### Unified-loader requirement for the complete experiment matrix
+
+The following is a blocking software invariant for every newly created run. It applies to baseline, ablation, smoke, formal, export and visualization jobs alike.
+
+| Suite | Mandatory measured-data entrance | Optional joined sidecar |
+| --- | --- | --- |
+| E0 data/target validity | `UnifiedPhysiologyWindowDataset` | Any named teacher candidate, including Croce |
+| E1 quantizer geometry | `UnifiedPhysiologyWindowDataset` | None required |
+| E2 semantic objectives | `UnifiedPhysiologyWindowDataset` | Only the target family named by the ablation |
+| E3 temporal learning | `UnifiedPhysiologyWindowDataset` | Optional context target |
+| E4 residual strategy | `UnifiedPhysiologyWindowDataset` | None required |
+| E5 fNIRS representation | `UnifiedPhysiologyWindowDataset` | None required |
+| E6 information ladder | `UnifiedPhysiologyWindowDataset` | Optional probe labels from the same sample IDs |
+| E7 frozen coupling | `UnifiedPhysiologyWindowDataset` | None required |
+| E8 downstream utility | Unified-loader-derived versioned token export | Optional task covariates from canonical labels |
+| E9 visualization | Immutable artifacts generated from the above unified-loader runs | Named signature/probe tables only |
+
+Every manifest records `loader_class=UnifiedPhysiologyWindowDataset`, `loader_contract=unified_physiology_window_v1`, cache/index hashes, admitted alignment cases, window duration and preprocessing contract. A missing or different loader identity blocks the run. Historical Croce-cache and dataset-specific-loader runs remain comparison artifacts and are not relabeled as conformant.
+
 ## 🎯 Hypotheses and falsifiers
 
 | ID | Hypothesis | Primary falsifier |
 | --- | --- | --- |
-| H1 | Uncertainty-aware physical-state supervision organizes token prototypes by identifiable physiological state | State/prototype decoding does not improve over reconstruction-only VQ on held-out subjects under the calibrated evidence protocol |
+| H1 | A validated auxiliary target family can organize token prototypes beyond reconstruction/self-supervision | Registered target/prototype decoding does not improve over the teacher-free baseline on held-out subjects |
 | H2 | A separate residual branch preserves task information that a small semantic vocabulary discards | Semantic-plus-residual does not improve over semantic-only or remains inconsistent with the calibrated continuous-latent reference |
 | H3 | Masked state/context prediction improves sequence semantics beyond pointwise reconstruction | It provides no reproducible held-out state, transfer, or stability gain under matched capacity |
 | H4 | EEG history adds predictive information about future fNIRS token distributions beyond fNIRS history and marginals | Incremental held-out likelihood is non-positive or disappears under subject-, source-, history-, or marginal-controlled evaluation |
@@ -67,20 +86,20 @@ Task-specific coupling is retained as secondary research question S1, formerly H
 | --- | --- | --- |
 | B0 | Archived X3 causal cross-adapter, current quantizer behavior | Historical strongest-exchange reference |
 | B1 | Independent reconstruction-only tokenizer with corrected EMA | Isolate quantizer correctness from semantic supervision |
-| B2 | Corrected tokenizer supervised by reconstructed source waveforms | Test the current cache-supervision idea fairly |
-| B3 | Corrected tokenizer supervised by physical-state posterior | Test explicit semantic organization |
-| B4 | Physical-state supervision plus reconstruction and continuous residual | Target hybrid model |
+| B2 | Corrected tokenizer with a named self-supervised temporal target | Teacher-free semantic reference |
+| B3 | Corrected tokenizer with one admitted auxiliary teacher family | Test target-specific semantic organization |
+| B4 | Best admitted semantic objective plus reconstruction and continuous residual | Target hybrid selected by validation, not fixed to Croce |
 | B5 | Continuous encoder latent without quantization | Information and downstream upper-reference, not a deployable token baseline |
 
 All architecture comparisons match encoder capacity, local windows, training samples, optimizer budget, early-stopping rule, and subject splits unless a suite explicitly studies one of those variables.
 
-## 🧪 E0 — Cache and teacher validity
+## 🧪 E0 — Unified data and optional-target validity
 
 ### Status and scope boundary
 
-E0-v1 is preserved as a failed validation result: its fNIRS clean-waveform endpoint did not outperform the two-second history baseline, so physical-state-supervised optimization remains blocked and the protected test remains unopened. The analysis below defines the replacement E0-v2 protocol; it does not reinterpret E0-v1 as passed.
+E0-v1 and E0-v2 are preserved as failed historical Croce-target validations. They block reuse of those exact physical-state targets, not teacher-free optimization and not alternative teacher families. The protected test for those historical protocols remains unopened.
 
-E0-v2 treats the Croce state-space dynamics as the fixed physical prior. It does not re-evaluate whether those equations are physiologically valid. It evaluates whether each dataset's measurement semantics, unit/scale adapter, teacher posterior, and tokenizer-facing target projections form a valid information-transfer contract.
+The active E0 begins with the unified measured-data contract and then evaluates each optional target family independently. No family is the fixed physical prior for the architecture. The Croce-specific E0-v2 equations and results below are retained as historical rationale for this change; they are not the new input contract.
 
 ### Dataset measurement contract
 
@@ -108,7 +127,7 @@ I(K^m;D\mid Z^m)\approx 0,
 
 meaning that dataset identity should add little token information after the physiological state is fixed.
 
-### Teacher information-transfer contract
+### Historical E0-v2 teacher information-transfer contract
 
 For each independent modality student:
 
@@ -209,7 +228,7 @@ I(Z^E_{hist};Z_t^F\mid Z^F_{hist})
 
 If this conditional covariance reduction is absent, no quantizer can create valid coupling evidence. If it is present, the local/prototype targets must preserve the state directions responsible for it. Slow fNIRS level alone may be physiologically meaningful yet add little coupling information when it is already predictable from fNIRS history; transition and innovation sensitivity must therefore be reported separately.
 
-### E0-v2 execution order
+### Historical E0-v2 execution order
 
 ```mermaid
 flowchart TD
@@ -288,19 +307,19 @@ No dataset produced a positive cross-inferable shared fraction at five seconds. 
 
 **Pass condition:** all deterministic correctness tests pass; the observed health profile is supported by the versioned pilot/reference calibration before formal protected-test evaluation.
 
-## 🧠 E2 — What should supervise semantic tokens?
+## 🧠 E2 — Which objectives produce useful semantic tokens?
 
-**Question:** Is reconstructed waveform supervision, physical-state supervision, or a hybrid objective best for physiological semantic tokens?
+**Question:** Do reconstruction, self-supervised temporal targets, task probes, data-driven dynamical targets, or an admitted physical teacher produce the most reproducible and informative token geometry?
 
-**Method:** compare B1–B4 under matched codebook size and latent dimension. Decode teacher state from continuous latents, hard IDs, posterior, and codebook embeddings using train-fitted probes. Measure prototype-state consistency on held-out subjects.
+**Method:** compare B1–B4 under matched codebook size and latent dimension. Decode every registered target separately from continuous latents, hard IDs, posterior, and codebook embeddings using train-fitted probes. Measure prototype-signature consistency on held-out subjects without treating any candidate signature as universal truth.
 
-**Primary endpoint:** held-out uncertainty-normalized error for identifiable state coordinates decoded from the hard token or its saved codebook vector.
+**Primary endpoint:** held-out performance for the preregistered signature family decoded from the hard token or its saved codebook vector, reported together with the teacher-free information-retention endpoint.
 
 **Secondary metrics:** mutual-information lower bounds, neighborhood continuity, token occupancy by state region, reconstruction, task probes, and seed-matched prototype stability.
 
 **Artifacts:** `state_decoding.json`, `prototype_signatures.parquet`, `prototype_stability.json`, `objective_ablation.csv`, and state-manifold figures.
 
-**Pass condition:** B3 or B4 improves the primary endpoint over B1 and B2 on held-out subjects, with subject-level uncertainty, seed consistency, and null sensitivity supporting the comparison under the versioned evidence protocol. This passes G3 independently; admission to coupling still requires the separate E6/G2 information-retention gate.
+**Pass condition:** B3 or B4 improves its preregistered target endpoint over the matched teacher-free baseline on held-out subjects, with subject-level uncertainty, seed consistency, null sensitivity and no loss of the E6/G2 information-retention requirement. The conclusion is scoped to that target family.
 
 ## 🕰️ E3 — Masked temporal semantic learning
 
@@ -446,7 +465,7 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 | --- | --- |
 | E0 measurement adapter fails | Repair the dataset adapter or exclude that dataset; do not pool its scale with admitted datasets |
 | E0 local/context target fails | Remove, regroup, or move the coordinate to the receptive field that can identify it |
-| E0 continuous coupling upper bound fails | Do not expect token coupling to create incremental information; keep E7 blocked |
+| One teacher's continuous coupling upper bound fails | Reject that teacher bridge; E7 may proceed only from a separately preregistered teacher-free or alternative-target premise |
 | E0-v2 validation admitted | Freeze admitted targets and calibration, then open fresh protected evidence once; teacher-supervised optimization remains blocked until G0 passes |
 | E1 fails | Stop all expensive training; quantizer results are uninterpretable |
 | E2 fails, E6 passes | Retain information-preserving tokenizer but drop physiological-semantic token claims |
@@ -465,4 +484,4 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-14_

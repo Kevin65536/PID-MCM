@@ -10,10 +10,11 @@ _Decision-complete migration boundary for P2 through P5; P6 coupling is excluded
 
 This migration replaces the archived reconstruction-centered `source_observation` mainline with independently inferable EEG and fNIRS semantic tokenizers. The migration is complete at P5 export compatibility. It does not implement or evaluate P6 sequence coupling.
 
-The following rules are fixed:
+The following rules are fixed for all new work after the 2026-07-14 input-contract revision:
 
-- formal E0 teacher validation starts only after the P3 adapter passes deterministic correctness tests and a real-data dry run;
-- physical-state-supervised training does not start before E0 establishes valid teacher prediction and admissible coordinates;
+- every new run gets measured EEG/fNIRS from `UnifiedPhysiologyWindowDataset`;
+- formal validation of an optional target starts only after its adapter passes deterministic correctness tests and a real-data dry run;
+- target-supervised training does not start before its scoped E0 establishes valid prediction and admissible coordinates;
 - an explicit teacher-free reconstruction-plus-VQ baseline may optimize after a blocked E0 because it consumes no teacher target;
 - legacy aliases, four-branch source/observation quantization, and pre-VQ cross-modal exchange remain archive-only;
 - smoke success is software evidence, not a scientific gate decision.
@@ -46,25 +47,25 @@ flowchart LR
 
 ## 📥 Runtime data contract
 
-The strict `physiology_semantic_v2` loader remains the only active data entry for this architecture.
+`UnifiedPhysiologyWindowDataset` with contract `unified_physiology_window_v1` is the only active measured-data entry for newly planned experiments. The earlier `physiology_semantic_v2` Croce cache contract remains a historical/optional target adapter.
 
 | Field | Shape | Consumer | Inference input |
 | --- | ---: | --- | :---: |
-| `eeg` | `[B, 6, 4000]` | EEG tokenizer | Yes |
-| `fnirs` | `[B, 2, 200]` | fNIRS tokenizer | Yes |
-| `teacher.state_mean` | `[B, 200, 5]` | Teacher adapter and losses | No |
-| `teacher.state_var` | `[B, 200, 5]` | Teacher adapter and losses | No |
-| `teacher.neural_driver_eeg_rate` | `[B, 4000, 1]` | Teacher adapter | No |
-| `teacher.teacher_valid_mask` | `[B, 200]` | Teacher adapter and losses | No |
-| `decomposition.*` | Modality-aligned | Attribution diagnostics | No |
+| `eeg` | `[B, C_E, 4000]` | EEG tokenizer | Yes |
+| `fnirs` | `[B, C_F, 200]` | fNIRS tokenizer | Yes |
+| `valid_mask.*` | modality time axis | Tokenizer, losses and export | No |
+| `alignment` | Sample metadata | Temporal model and audit | No |
+| `label` | Canonical mapping | Probe/downstream suites | No |
+| `channel_geometry` | Variable row lists | Spatial adapter and audit | No |
+| `auxiliary_target.*` | Family-specific and optional | Named target adapter/loss only | No |
 | normalization/provenance | Sample metadata | Audit and export | No |
 
-Both signals are divided into ten non-overlapping two-second patches:
+The default 20-second context may be divided into ten non-overlapping two-second patches:
 
-- EEG: `[B, 10, 6, 400]`;
-- fNIRS: `[B, 10, 2, 20]`.
+- EEG: `[B, 10, C_E, 400]`;
+- fNIRS: `[B, 10, C_F, 20]`.
 
-The model-facing APIs are `encode_eeg(eeg)` and `encode_fnirs(fnirs)`. Passing the other modality, teacher tensors, or decomposition fields is a schema error.
+The model-facing APIs are `encode_eeg(eeg)` and `encode_fnirs(fnirs)`. Passing the other modality, auxiliary targets, or decomposition fields is a schema error.
 
 ## 🧠 Temporal representation boundary
 
@@ -106,9 +107,9 @@ The quantizer stores codebook weights, assignment-count EMA, vector-sum EMA, ini
 
 Checkpoint reload must reproduce logits, posterior, IDs, embeddings, EMA buffers, and health counters exactly in evaluation mode.
 
-## 🧪 P3 physical teacher adapter
+## 🧪 P3 optional target adapters
 
-The adapter pools cached posterior values into deterministic patch targets and returns detached tensors.
+Every adapter converts one named target family into deterministic, detached patch/context targets with provenance, uncertainty when calibrated, and a validity mask. No adapter changes the measured inputs or tokenizer inference API.
 
 For each state coordinate and patch, compute:
 
@@ -116,11 +117,11 @@ For each state coordinate and patch, compute:
 - least-squares slope against time in seconds;
 - `log(mean posterior variance + temporal variance of posterior means + eps)`.
 
-The EEG target is six-dimensional: summary statistics for `r` from the EEG-rate neural driver and `s` from the state posterior. The fNIRS target is nine-dimensional: summary statistics for `delta_f`, `delta_hbo`, and `delta_hb`.
+The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope.
 
 A target patch is valid only if every underlying cache-valid and causal-valid fNIRS sample is valid and all required means and variances are finite. The first five patches are therefore ineligible under the fixed ten-second history contract. Invalid targets and their uncertainty weights are finite placeholders with a false mask; they must contribute exactly zero loss.
 
-P3 correctness requires constant and ramp trajectories, uncertainty propagation, mask contraction, stop-gradient behavior, shape assertions, and a one-sample real-cache dry run. E0 remains blocked until all checks pass.
+P3 correctness requires family-specific reference trajectories, uncertainty propagation where applicable, mask contraction, stop-gradient behavior, shape assertions, and a one-sample unified-loader join dry run. Only use of that target family remains blocked until its checks pass.
 
 ## 🧩 P4 tokenizer, losses, and training
 
@@ -133,13 +134,13 @@ Each branch performs:
 3. apply a patch-local projection/MLP with no cross-patch operation;
 4. split into a 64-dimensional semantic latent and a continuous residual latent;
 5. quantize the semantic latent;
-6. decode state from the continuous semantic latent and from codebook embeddings;
+6. decode registered signatures from the continuous semantic latent and codebook embeddings when the corresponding objective is enabled;
 7. reconstruct normalized raw patches from semantic-plus-residual, semantic-only, and residual-only inputs.
 
-| Modality | Encoder output | Semantic latent | Residual latent | State target |
+| Modality | Encoder output | Semantic latent | Residual latent | Optional target |
 | --- | ---: | ---: | ---: | ---: |
-| EEG | 256 | 64 | 64 | 6 |
-| fNIRS | 160 | 64 | 32 | 9 |
+| EEG | 256 | 64 | 64 | family-specific |
+| fNIRS | 160 | 64 | 32 | family-specific |
 
 The registry name is `physiology_semantic`. It is registered by the active tokenizer package without importing compatibility registration.
 
@@ -163,7 +164,7 @@ The versioned export stores, per modality:
 - full posterior or configured top-k posterior;
 - expected codebook embedding;
 - continuous residual;
-- pooled teacher target, uncertainty, and validity mask;
+- optional family-specific target/signature, uncertainty, and validity mask;
 - subject, source, task, anchor, crop, cache schema, checkpoint hash, and sample-order hash.
 
 Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_residual`. `codebook` indexes the checkpoint codebook directly; creating a fresh embedding table is an error. Round-trip validation reloads the checkpoint and requires identical IDs and posteriors for the exported sample order.
@@ -176,12 +177,12 @@ Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_
 | Causality | Future or target-patch changes do not alter a fixed-history prediction |
 | Modality independence | Changing EEG cannot alter fNIRS outputs and vice versa |
 | Gradient isolation | No branch gradient reaches the other modality encoder or codebook |
-| Teacher mask | Invalid targets contribute exactly zero supervised loss |
+| Auxiliary-target mask | Invalid targets contribute exactly zero to that supervised loss |
 | Quantizer state | Zero-assignment stability, EMA arithmetic, revival logging, and reload equivalence pass |
 | Pipeline | Loader → teacher → tokenizer → loss → checkpoint → export passes on CPU |
 | Consumer | Export modes use checkpoint-native codebook geometry and preserve sample order |
 
-The execution sequence is unit tests, integration tests, dry run, E0, then objective-specific smoke and short formal. A failed E0 blocks every teacher-supervised objective, while an explicitly teacher-free baseline remains available for quantizer and reconstruction characterization. P6 remains blocked until tokenizer freeze and the G2/G3 information-retention and state-semantics gates pass.
+The execution sequence is unit tests, integration tests, unified-loader dry run, scoped target validation when applicable, then objective-specific smoke and short formal. A failed target validation blocks only objectives that consume that target. P6 remains blocked until tokenizer freeze and the G2/G3 information-retention and registered-semantics gates pass.
 
 ## 🔗 References
 
