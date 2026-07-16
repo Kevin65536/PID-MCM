@@ -26,6 +26,7 @@ The complete tokenizer training loop is runnable, but the Croce E0-v2 target rem
 | 2026-07-14 | `PST-INPUT-CONTRACT-REVISION` | Architecture decision | Measurement-first entrance approved; all new E0-E9 runs require unified loader | Not applicable |
 | 2026-07-15 | `PST-E0-D6-UNIFIED-SHARED-DRIVER` | Unified-loader Croce/Lin raw-vs-clean retest | Diagnostic complete; artifact correction does not resolve fNIRS amplitude/variance failure; target families remain blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260715_shared_neural_driver_unified_formal_v3/` |
 | 2026-07-16 | `PST-E0-D7-ADAPTIVE-SHARED-SSM` | Local adaptive five-state fixed-interval shared-driver test | Diagnostic complete; joint compromise restores HbO variance/cycles while retaining EEG fit; candidate soft teacher retained, formal admission pending | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_shared_neural_ssm_formal_v2/` |
+| 2026-07-16 | `PST-E0-D8-TASK-PARAMETER-AUDIT` | Within-subject adaptive-SSM task-parameter audit | Diagnostic complete; no parameter survives FDR; nominal differences concentrate in driver/noise terms, not identified hemodynamic constants | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_ssm_task_parameter_audit_v1/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -87,6 +88,32 @@ The revised candidate restores one paired HbO/HbR spatial anchor plus its six ne
 Local joint leave-one-trial inference reached HbO R2/PCC/variance ratio of `0.187/0.804/0.744` on the five clean Single-Trial subjects and `0.106/0.767/0.614` on the three Simultaneous subjects, while retaining EEG-proxy R2 of `0.754/0.726`. Joint drivers remain correlated `0.927/0.936` with their EEG-only counterparts but shift by `0.357/0.329` EEG-only standard deviations when fNIRS is admitted, quantitatively realizing the requested multimodal compromise. Driver monotonic fractions are about `0.52`; reconstructed HbO contains multiple turns and no longer retains only the slow climb. Local inference improves HbO R2 over all-scalp inference by `+0.241/+0.216` with negligible EEG-R2 cost.
 
 The strict EEG-only HbO path remains poor, and frequent bounded-parameter solutions show that the physiological parameter values are not independently identifiable. E0-D7 therefore retains the joint state as a privileged soft-teacher candidate rather than a recovered physical source or admitted E0 target. Full analysis: [`analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md`](analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md).
+
+### Task dependence of adaptive SSM parameters
+
+E0-D8 fitted one full adaptive SSM per subject and dataset-native task condition,
+using nine events per condition. The primary path held the pooled fNIRS anchor,
+six local EEG channels, normalization, and EEG PCA projection fixed across
+tasks. It covered all 29 Single-Trial subjects for `MA/BL_MA/LMI/RMI` and 25
+Simultaneous subjects for `WG/BL_WG/0BACK/2BACK/3BACK/DSR`; VP005 was excluded
+because its DSR record is not admitted by the unified loader.
+
+No fitted parameter passed the prespecified within-family BH-FDR threshold. The
+closest fixed-coordinate signals were Simultaneous driver persistence `phi`
+(`W=0.126`, permutation `p=0.0063`, `q=0.1014`) and process-noise multiplier
+`q_scale` (`W=0.122`, `p=0.0070`, `q=0.0974`). No hemodynamic-shape coefficient
+showed an adjusted task effect. Task-specific spatial reselection also produced
+no passing parameter and changed the fNIRS anchor for every subject, exposing a
+strong spatial-selection confound.
+
+All 532 optimizations converged numerically, but fixed-coordinate boundary rates
+were `33-47%` for `kas/kaf/tau0`; the smallest fNIRS-noise multiplier was chosen
+in `75.0%/94.7%` of Single-Trial/Simultaneous fits. The result therefore means
+that robust task dependence has not been demonstrated, not that physiological
+parameters are proven task invariant. Current evidence favors shared or
+hierarchically shrunk hemodynamic mapping parameters with task variation routed
+through the neural trajectory and observation/noise adapters. Full analysis:
+[`analysis/E0_D8_ADAPTIVE_SSM_TASK_PARAMETER_AUDIT.md`](analysis/E0_D8_ADAPTIVE_SSM_TASK_PARAMETER_AUDIT.md).
 
 ## 🚦 Scientific-result admission rule
 
