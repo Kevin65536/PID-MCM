@@ -24,6 +24,7 @@ The complete tokenizer training loop is runnable, but the Croce E0-v2 target rem
 | 2026-07-08 | `PST-E0-D5-LIN2024-SIM-RAW-TRTD` | Lin 2024 Simultaneous EEG&NIRS raw TRTD confirmation | Diagnostic complete; Simultaneous concentration data show same weak EEG-to-fNIRS recovery; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_170809_lin2024_simultaneous_raw_trtd_vp001_wg/` |
 | 2026-07-10 | `PST-P1-FOUR-DATASET-QUALITY` | Four-dataset unified loader and quality audit | Correctness passed; 8-second report is historical and does not imply artifact-clean data | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/` |
 | 2026-07-14 | `PST-INPUT-CONTRACT-REVISION` | Architecture decision | Measurement-first entrance approved; all new E0-E9 runs require unified loader | Not applicable |
+| 2026-07-15 | `PST-E0-D6-UNIFIED-SHARED-DRIVER` | Unified-loader Croce/Lin raw-vs-clean retest | Diagnostic complete; artifact correction does not resolve fNIRS amplitude/variance failure; target families remain blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260715_shared_neural_driver_unified_formal_v3/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -68,6 +69,14 @@ E0-D5 repeated the raw-record Lin-style diagnostic on Simultaneous EEG&NIRS subj
 
 The top active oxy channels were `C5h`, `CCP3`, and `C4h`. The optimized TRTD+HRF in-sample upper bound reached only `R2=0.004`, `PCC=0.060`, and amplitude ratio `0.060`. Leave-one-trial optimized TRTD+HRF reached `R2=-0.616`, `PCC=0.150`, and amplitude ratio `0.063`, while fNIRS self-persistence reached `R2=0.992`. The waveform overlay and all-trial heatmap again show compressed EEG-derived predictions and residual-dominant fNIRS structure. This confirms that the core problem is not just optical conversion; the candidate one-dimensional EEG-HRF shared trajectory is not a sufficient fNIRS semantic state for the current data.
 
+### Unified-loader Croce/Lin raw-versus-clean retest
+
+E0-D6 reran the Croce-2017-inspired SMC and Lin-2024-inspired TRTD/HRF paths through `UnifiedPhysiologyWindowDataset`. Single-Trial validation subjects 19-23 used identical `session_01` MA events in paired raw and admitted v3-clean EEG conditions; Simultaneous VP019-VP021 provided a separate `WG` replication. Active HbO channels were selected inside each training fold, and the main evaluation was subject-specific leave-one-trial.
+
+Artifact correction improved Croce joint leave-one-trial R2 by `+0.1039` on average with a subject-bootstrap interval of `[0.0393, 0.1919]`, positive in `5/5` subjects. This relative change did not solve the endpoint. In the v3-clean condition, Croce joint/EEG-only and optimized Lin reached R2 of `-0.073/-0.184/-0.295`, amplitude ratios of `0.261/0.149/0.267`, and variance ratios of `0.069/0.022/0.080`. Baseline bias remained `0.32-0.38` canonical robust-SD units, trajectory-direction agreement remained near chance, and affine-oracle R2 stayed below `0.09`. Lin did not improve under cleaning. Simultaneous leave-one-trial R2 remained `-0.138/-0.239/-0.264` for the same three paths.
+
+The corrected in-sample model-family upper bounds also stayed weak: clean Single-Trial Croce joint/Lin R2 was `0.102/0.105`, and Simultaneous was `0.025/0.057`. In contrast, fNIRS self-persistence remained around `0.997` R2 with near-unit amplitude and variance. This supports a teacher/model-family limitation with strong fNIRS-private history, not a claim that the target waveform is generally unpredictable. The diagnostic is exploratory and does not open the historical protected E0 test, but it provides no support for admitting Croce/Lin shared-driver supervision. Full analysis: [`analysis/E0_D6_UNIFIED_SHARED_DRIVER_RETEST.md`](analysis/E0_D6_UNIFIED_SHARED_DRIVER_RETEST.md).
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
@@ -97,4 +106,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-15_
