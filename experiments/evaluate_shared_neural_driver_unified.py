@@ -60,6 +60,9 @@ class Trial:
     fnirs_channel_names: tuple[str, ...]
     fnirs_roles: tuple[str, ...]
     eeg_artifact_fraction: float
+    eeg_channel_names: tuple[str, ...] = ()
+    eeg_positions: np.ndarray | None = None
+    fnirs_positions: np.ndarray | None = None
 
 
 @dataclass
@@ -177,6 +180,15 @@ def _load_trials(config: Mapping[str, Any]) -> tuple[dict[str, dict[str, list[Tr
                 fnirs_channel_names=tuple(str(value) for value in sample["channel_names"]["fnirs"]),
                 fnirs_roles=tuple(str(value) for value in sample["component_roles"]["fnirs"]),
                 eeg_artifact_fraction=float(np.mean(artifact_mask)),
+                eeg_channel_names=tuple(str(value) for value in sample["channel_names"]["eeg"]),
+                eeg_positions=np.asarray([
+                    [row.get(axis, np.nan) for axis in ("x", "y", "z")]
+                    for row in sample["channel_geometry"]["eeg"]
+                ], dtype=np.float64),
+                fnirs_positions=np.asarray([
+                    [row.get(axis, np.nan) for axis in ("x", "y", "z")]
+                    for row in sample["channel_geometry"]["fnirs"]
+                ], dtype=np.float64),
             ))
         missing = sorted(allowed_subjects - set(per_subject))
         if missing:
@@ -376,11 +388,20 @@ def _croce_predictions(
         fnirs_observation = ((truth - fit["fnirs_mean"]) / fit["fnirs_std"])[:, None]
         result = model.filter(eeg_observation, fnirs_observation, return_particles=False)
         outputs = {
-            "croce_joint": result.fnirs_reconstructed[:, 0] * fit["fnirs_std"] + fit["fnirs_mean"],
-            "croce_eeg_only": _state_to_fnirs(model, result.eeg_only_state_mean, fit),
-            "croce_fnirs_only": _state_to_fnirs(model, result.fnirs_only_state_mean, fit),
+            "croce_joint": (
+                result.fnirs_reconstructed[:, 0] * fit["fnirs_std"] + fit["fnirs_mean"],
+                result.state_mean[:, 0],
+            ),
+            "croce_eeg_only": (
+                _state_to_fnirs(model, result.eeg_only_state_mean, fit),
+                result.eeg_only_state_mean[:, 0],
+            ),
+            "croce_fnirs_only": (
+                _state_to_fnirs(model, result.fnirs_only_state_mean, fit),
+                result.fnirs_only_state_mean[:, 0],
+            ),
         }
-        for name, estimate in outputs.items():
+        for name, (estimate, driver) in outputs.items():
             predictions.append(Prediction(
                 condition_id=condition_id,
                 dataset_id=trial.dataset_id,
@@ -392,7 +413,7 @@ def _croce_predictions(
                 truth=truth,
                 estimate=np.asarray(estimate),
                 selected_channels=selected_names,
-                driver=np.asarray(result.state_mean[:, 0]),
+                driver=np.asarray(driver),
             ))
     return predictions
 
@@ -435,20 +456,23 @@ def _fit_shared_cp(tensors: np.ndarray, rank: int, iterations: int, seed: int) -
     temporal = [rng.normal(size=(t_count, rank)) for _ in range(len(tensors))]
     eps = 1e-8
     for _ in range(iterations):
-        kr = _khatri_rao(spatial, frequency)
+        # C-order [T,F,C] flattening uses compound index f*C+c.
+        kr = _khatri_rao(frequency, spatial)
         gram = (spatial.T @ spatial) * (frequency.T @ frequency) + eps * np.eye(rank)
         temporal = [tensor.reshape(t_count, f_count * c_count) @ kr @ np.linalg.pinv(gram) for tensor in tensors]
         gram_acc = np.zeros((rank, rank), dtype=np.float64)
         numerator = np.zeros((c_count, rank), dtype=np.float64)
         for tensor, time_factor in zip(tensors, temporal):
-            kr = _khatri_rao(frequency, time_factor)
+            # [C,T,F] flattening uses compound index t*F+f.
+            kr = _khatri_rao(time_factor, frequency)
             gram_acc += (time_factor.T @ time_factor) * (frequency.T @ frequency)
             numerator += tensor.transpose(2, 0, 1).reshape(c_count, t_count * f_count) @ kr
         spatial = np.maximum(numerator @ np.linalg.pinv(gram_acc + eps * np.eye(rank)), eps)
         gram_acc.fill(0.0)
         numerator = np.zeros((f_count, rank), dtype=np.float64)
         for tensor, time_factor in zip(tensors, temporal):
-            kr = _khatri_rao(spatial, time_factor)
+            # [F,T,C] flattening uses compound index t*C+c.
+            kr = _khatri_rao(time_factor, spatial)
             gram_acc += (time_factor.T @ time_factor) * (spatial.T @ spatial)
             numerator += tensor.transpose(1, 0, 2).reshape(f_count, t_count * c_count) @ kr
         frequency = np.maximum(numerator @ np.linalg.pinv(gram_acc + eps * np.eye(rank)), eps)
@@ -466,7 +490,7 @@ def _fit_shared_cp(tensors: np.ndarray, rank: int, iterations: int, seed: int) -
 
 def _project_temporal(tensor: np.ndarray, spatial: np.ndarray, frequency: np.ndarray) -> np.ndarray:
     t_count, f_count, c_count = tensor.shape
-    kr = _khatri_rao(spatial, frequency)
+    kr = _khatri_rao(frequency, spatial)
     gram = (spatial.T @ spatial) * (frequency.T @ frequency)
     return tensor.reshape(t_count, f_count * c_count) @ kr @ np.linalg.pinv(gram + 1e-8 * np.eye(gram.shape[0]))
 

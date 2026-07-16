@@ -1,0 +1,47 @@
+experiment:
+  name: adaptive_shared_neural_ssm_v1
+  scope: exploratory_validation_only
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  window_duration_s: 20.0
+  window_offset_s: -5.0
+  baseline_duration_s: 5.0
+  task_duration_s: 10.0
+  conditions:
+    - condition_id: single_trial_clean_v3
+      dataset_id: eeg_fnirs_single_trial
+      subjects: [subject_19, subject_20, subject_21, subject_22, subject_23]
+      record_id: session_01
+      target_label: MA
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v3
+      max_trials_per_subject: 10
+    - condition_id: simultaneous_unified
+      dataset_id: simultaneous_eeg_nirs
+      subjects: [VP019, VP020, VP021]
+      record_id: cnt_wg
+      target_label: WG
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v3
+      max_trials_per_subject: 10
+
+analysis:
+  # One spatial anchor contributes the paired HbO/HbR observations: two
+  # fNIRS channels in the local Croce-style protocol.
+  fnirs_active_hbo_channels: 1
+  local_eeg_channels: 6
+  spatial_modes: [local, global]
+  validation: leave_one_trial_within_subject
+  seed: 20260716
+  workers: 3
+  bootstrap_iterations: 2000
+  representative_samples: 2
+  ssm:
+    fs_hz: 10.0
+    prior_strength: 0.03
+    max_iterations: 60
+    q_scale_candidates: [0.5, 1.0, 2.0]
+    fnirs_noise_scale_candidates: [0.25, 0.5, 1.0, 2.0, 4.0]
+    balance_penalty: 0.25
+    max_flow_perturbation: 0.25
+
+legacy_reference_dir: experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_shared_neural_driver_unified_corrected_v4

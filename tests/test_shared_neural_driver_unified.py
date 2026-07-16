@@ -2,6 +2,7 @@ import numpy as np
 
 from experiments.evaluate_shared_neural_driver_unified import (
     Trial,
+    _fit_shared_cp,
     _select_active_hbo,
     _waveform_metrics,
 )
@@ -47,3 +48,21 @@ def test_active_channel_selection_only_returns_hbo_channels():
     assert names == ("b_HbO",)
     assert scores.shape == (2,)
 
+
+def test_shared_cp_respects_c_order_tensor_axes():
+    rng = np.random.default_rng(4)
+    trials, time, frequency_count, channel_count, rank = 3, 24, 5, 4, 2
+    spatial = rng.uniform(0.2, 1.0, size=(channel_count, rank))
+    frequency = rng.uniform(0.2, 1.0, size=(frequency_count, rank))
+    temporal = [rng.normal(size=(time, rank)) for _ in range(trials)]
+    tensors = np.stack([
+        np.einsum("tr,fr,cr->tfc", factor, frequency, spatial)
+        for factor in temporal
+    ])
+    fit = _fit_shared_cp(tensors, rank=rank, iterations=100, seed=3)
+    reconstructed = np.stack([
+        np.einsum("tr,fr,cr->tfc", factor, fit["frequency"], fit["spatial"])
+        for factor in fit["temporal"]
+    ])
+    relative_error = np.linalg.norm(reconstructed - tensors) / np.linalg.norm(tensors)
+    assert relative_error < 1e-3

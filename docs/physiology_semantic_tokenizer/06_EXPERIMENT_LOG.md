@@ -25,6 +25,7 @@ The complete tokenizer training loop is runnable, but the Croce E0-v2 target rem
 | 2026-07-10 | `PST-P1-FOUR-DATASET-QUALITY` | Four-dataset unified loader and quality audit | Correctness passed; 8-second report is historical and does not imply artifact-clean data | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/` |
 | 2026-07-14 | `PST-INPUT-CONTRACT-REVISION` | Architecture decision | Measurement-first entrance approved; all new E0-E9 runs require unified loader | Not applicable |
 | 2026-07-15 | `PST-E0-D6-UNIFIED-SHARED-DRIVER` | Unified-loader Croce/Lin raw-vs-clean retest | Diagnostic complete; artifact correction does not resolve fNIRS amplitude/variance failure; target families remain blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260715_shared_neural_driver_unified_formal_v3/` |
+| 2026-07-16 | `PST-E0-D7-ADAPTIVE-SHARED-SSM` | Local adaptive five-state fixed-interval shared-driver test | Diagnostic complete; joint compromise restores HbO variance/cycles while retaining EEG fit; candidate soft teacher retained, formal admission pending | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_shared_neural_ssm_formal_v2/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -77,6 +78,16 @@ Artifact correction improved Croce joint leave-one-trial R2 by `+0.1039` on aver
 
 The corrected in-sample model-family upper bounds also stayed weak: clean Single-Trial Croce joint/Lin R2 was `0.102/0.105`, and Simultaneous was `0.025/0.057`. In contrast, fNIRS self-persistence remained around `0.997` R2 with near-unit amplitude and variance. This supports a teacher/model-family limitation with strong fNIRS-private history, not a claim that the target waveform is generally unpredictable. The diagnostic is exploratory and does not open the historical protected E0 test, but it provides no support for admitting Croce/Lin shared-driver supervision. Full analysis: [`analysis/E0_D6_UNIFIED_SHARED_DRIVER_RETEST.md`](analysis/E0_D6_UNIFIED_SHARED_DRIVER_RETEST.md).
 
+### Adaptive physiology-constrained shared state
+
+E0-D7 first corrected two implementation defects in the old comparison: sequential particle weights and stationary initial covariance in Croce SMC, and the C-order Khatri-Rao axis ordering in Lin CP-ALS. The corrected legacy rerun remained weak: clean Single-Trial Croce joint and optimized Lin variance ratios were `0.014/0.101`, with R2 `-0.077/-0.186`; Simultaneous reached `0.016/0.078`, with R2 `-0.093/-0.329`.
+
+The revised candidate restores one paired HbO/HbR spatial anchor plus its six nearest scalp EEG channels. It replaces the scalar causal fixed-HRF filter with an exactly discretized Croce-linearized five-state model and whole-window RTS smoothing. Hemodynamic shape, AR dynamics, observation gains/noise, and modality balance are fitted only inside each nine-trial training fold. Event baseline remains the zero rest coordinate, and an explicit scale gauge keeps the linearized relative-flow state positive.
+
+Local joint leave-one-trial inference reached HbO R2/PCC/variance ratio of `0.187/0.804/0.744` on the five clean Single-Trial subjects and `0.106/0.767/0.614` on the three Simultaneous subjects, while retaining EEG-proxy R2 of `0.754/0.726`. Joint drivers remain correlated `0.927/0.936` with their EEG-only counterparts but shift by `0.357/0.329` EEG-only standard deviations when fNIRS is admitted, quantitatively realizing the requested multimodal compromise. Driver monotonic fractions are about `0.52`; reconstructed HbO contains multiple turns and no longer retains only the slow climb. Local inference improves HbO R2 over all-scalp inference by `+0.241/+0.216` with negligible EEG-R2 cost.
+
+The strict EEG-only HbO path remains poor, and frequent bounded-parameter solutions show that the physiological parameter values are not independently identifiable. E0-D7 therefore retains the joint state as a privileged soft-teacher candidate rather than a recovered physical source or admitted E0 target. Full analysis: [`analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md`](analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md).
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
@@ -106,4 +117,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-16_

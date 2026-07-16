@@ -19,14 +19,20 @@ import math
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from scipy.linalg import solve_discrete_lyapunov
 
 
-def _systematic_resample(particles: np.ndarray, weights: np.ndarray) -> np.ndarray:
+def _systematic_resample(
+    particles: np.ndarray,
+    weights: np.ndarray,
+    rng: np.random.RandomState | None = None,
+) -> np.ndarray:
     """Systematic resampling — lower variance than multinomial."""
     N = len(weights)
     cumsum = np.cumsum(weights)
     cumsum[-1] = 1.0  # avoid floating point drift
-    u0 = np.random.uniform(0, 1.0 / N)
+    generator = rng if rng is not None else np.random
+    u0 = generator.uniform(0, 1.0 / N)
     positions = u0 + np.arange(N) / N
     indices = np.searchsorted(cumsum, positions)
     return indices
@@ -185,7 +191,7 @@ class NeurovascularSMCFilter:
         history_buffers: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Systematic resample with small post-resample jitter."""
-        idx = _systematic_resample(particles, weights)
+        idx = _systematic_resample(particles, weights, self.rng)
         new_particles = np.ascontiguousarray(particles[idx])
         new_buffers = np.ascontiguousarray(history_buffers[idx])
 
@@ -227,8 +233,15 @@ class NeurovascularSMCFilter:
         if init_state_mean is None:
             init_state_mean = np.zeros(self.K_dim, dtype=np.float64)
         if init_state_cov is None:
-            # Stationary covariance of AR(1): solve P = A P A^T + Q
-            init_state_cov = self.Q.copy()
+            # Stationary covariance: solve P = A P A^T + Q.  Returning Q
+            # itself strongly under-disperses persistent states at every
+            # independently filtered event boundary.
+            try:
+                init_state_cov = solve_discrete_lyapunov(self.A, self.Q)
+            except Exception:
+                init_state_cov = self.Q.copy()
+            init_state_cov = (init_state_cov + init_state_cov.T) * 0.5
+            init_state_cov += np.eye(self.K_dim, dtype=np.float64) * 1e-9
 
         init_chol = np.linalg.cholesky(init_state_cov)
         particles = (
@@ -266,7 +279,8 @@ class NeurovascularSMCFilter:
                 history_buffers[:, :, 0] = particles
 
             # ---- update weights ----
-            log_weights = np.zeros(self.N, dtype=np.float64)
+            # Carry the previous posterior unless resampling reset it.
+            log_weights = np.log(np.maximum(weights, 1e-300))
 
             # EEG likelihood
             eeg_obs_t = np.asarray(eeg_observations[t], dtype=np.float64)
@@ -366,7 +380,7 @@ class NeurovascularSMCFilter:
                 history_buffers[:, :, 1:] = history_buffers[:, :, :-1]
                 history_buffers[:, :, 0] = particles
 
-            log_weights = np.zeros(self.N, dtype=np.float64)
+            log_weights = np.log(np.maximum(weights, 1e-300))
             obs_t = np.asarray(observations[t], dtype=np.float64)
 
             if modality == 'eeg':
@@ -391,7 +405,7 @@ class NeurovascularSMCFilter:
             ess = _effective_sample_size(weights)
 
             if ess < self.N * self.resample_threshold:
-                idx = _systematic_resample(particles, weights)
+                idx = _systematic_resample(particles, weights, self.rng)
                 particles = np.ascontiguousarray(particles[idx])
                 history_buffers = np.ascontiguousarray(history_buffers[idx])
                 jitter_scale = np.sqrt(np.diag(self.Q)) * 0.1 / np.sqrt(self.N)
