@@ -78,6 +78,25 @@ class AdaptiveSmootherResult:
     innovation_log_likelihood: float
 
 
+@dataclass(frozen=True)
+class AdaptiveStateGaugeResult:
+    """Fold-aligned target coordinates and their transformed uncertainty.
+
+    The dynamical state remains available in :class:`AdaptiveSmootherResult`.
+    This view only maps the two chromophore coordinates through observation
+    gains and train-fold scales into the canonical measurement space used by
+    the tokenizer input.  It is therefore an observation-aligned target gauge,
+    not a claim that the independently scaled coordinates remain a physical
+    five-state trajectory.
+    """
+
+    states: np.ndarray
+    state_std: np.ndarray
+    scales: np.ndarray
+    offsets: np.ndarray
+    reconstruction_max_abs_delta: float
+
+
 def _flow_extraction_slope(e0: float) -> float:
     """Derivative of f*E(f)/E0 at resting flow f=1."""
 
@@ -495,6 +514,59 @@ def apply_adaptive_ssm(
     )
 
 
+def measurement_aligned_state_gauge(
+    result: AdaptiveSmootherResult,
+    fit: AdaptiveSSMFit,
+) -> AdaptiveStateGaugeResult:
+    """Return a train-fold observation-aligned gauge for teacher targets.
+
+    ``hbo_gain``, ``hbr_gain``, and the chromophore scales are learned only
+    from the training trials.  The event-baseline offset is the same declared
+    deterministic transform already applied to the held-out reconstruction.
+    Applying the gauge must therefore reproduce the emitted HbO/HbR clean
+    means exactly while leaving the underlying smoother and reconstruction
+    unchanged.
+    """
+
+    states = np.asarray(result.states, dtype=np.float64)
+    state_std = np.asarray(result.state_std, dtype=np.float64)
+    if states.ndim != 2 or states.shape[1] != 5 or state_std.shape != states.shape:
+        raise ValueError("adaptive state gauge expects matching [time, 5] state arrays")
+
+    scales = np.ones(5, dtype=np.float64)
+    scales[2] = float(fit.hbo_gain) * float(fit.hbo_std)
+    scales[3] = float(fit.hbr_gain) * float(fit.hbr_std)
+    if not np.all(np.isfinite(scales)) or np.any(np.abs(scales[[2, 3]]) < 1e-12):
+        raise ValueError("chromophore observation gauge is non-finite or singular")
+
+    offsets = np.zeros(5, dtype=np.float64)
+    offsets[2] = float(fit.hbo_mean)
+    offsets[3] = float(fit.hbr_mean)
+    if int(fit.baseline_samples) > 0:
+        stop = min(int(fit.baseline_samples), len(states))
+        offsets[2] -= float(np.mean(states[:stop, 2]) * scales[2])
+        offsets[3] -= float(np.mean(states[:stop, 3]) * scales[3])
+
+    aligned = states * scales[None, :] + offsets[None, :]
+    aligned_std = state_std * np.abs(scales)[None, :]
+    reconstruction_delta = max(
+        float(np.max(np.abs(aligned[:, 2] - np.asarray(result.hbo_reconstructed)))),
+        float(np.max(np.abs(aligned[:, 3] - np.asarray(result.hbr_reconstructed)))),
+    )
+    if reconstruction_delta > 1e-8:
+        raise RuntimeError(
+            "observation-aligned gauge changed the physical reconstruction "
+            f"(max abs delta={reconstruction_delta:.3e})"
+        )
+    return AdaptiveStateGaugeResult(
+        states=aligned,
+        state_std=aligned_std,
+        scales=scales,
+        offsets=offsets,
+        reconstruction_max_abs_delta=reconstruction_delta,
+    )
+
+
 def fit_to_mapping(fit: AdaptiveSSMFit) -> Mapping[str, float | bool]:
     """Return the scalar fitted parameters for CSV/manifest serialization."""
 
@@ -511,6 +583,12 @@ def fit_to_mapping(fit: AdaptiveSSMFit) -> Mapping[str, float | bool]:
         "fnirs_noise_scale": fit.fnirs_noise_scale,
         "hbo_gain": fit.hbo_gain,
         "hbr_gain": fit.hbr_gain,
+        "hbo_mean": fit.hbo_mean,
+        "hbo_std": fit.hbo_std,
+        "hbr_mean": fit.hbr_mean,
+        "hbr_std": fit.hbr_std,
+        "hbo_state_measurement_scale": fit.hbo_gain * fit.hbo_std,
+        "hbr_state_measurement_scale": fit.hbr_gain * fit.hbr_std,
         "eeg_noise": fit.eeg_noise,
         "hbo_noise_base": fit.hbo_noise_base,
         "hbr_noise_base": fit.hbr_noise_base,

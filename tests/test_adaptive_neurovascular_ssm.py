@@ -7,6 +7,7 @@ from src.inference.adaptive_neurovascular_ssm import (
     apply_adaptive_ssm,
     continuous_hemodynamic_matrices,
     fit_adaptive_ssm,
+    measurement_aligned_state_gauge,
     simulate_hemodynamics,
 )
 from src.inference.neurovascular_smc import NeurovascularSMCFilter
@@ -42,6 +43,18 @@ def test_joint_smoother_recovers_delayed_signal_without_erasing_eeg():
     assert np.var(result.hbo_reconstructed) / np.var(hbo) > 0.6
     assert np.corrcoef(driver, result.eeg_reconstructed)[0, 1] > 0.9
     assert np.min(1.0 + result.states[:, 1]) > 0.0
+
+    gauge = measurement_aligned_state_gauge(result, fit)
+    np.testing.assert_allclose(gauge.states[:, 2], result.hbo_reconstructed, atol=1e-10)
+    np.testing.assert_allclose(gauge.states[:, 3], result.hbr_reconstructed, atol=1e-10)
+    np.testing.assert_allclose(
+        gauge.state_std[:, 2],
+        result.state_std[:, 2] * abs(fit.hbo_gain * fit.hbo_std),
+    )
+    assert gauge.reconstruction_max_abs_delta < 1e-10
+    # The synthetic HbR observation intentionally uses a negative gain.  The
+    # observation-aligned target must absorb that sign without changing output.
+    assert gauge.scales[3] < 0.0
 
 
 def test_local_protocol_selects_nearest_six_eeg_channels():

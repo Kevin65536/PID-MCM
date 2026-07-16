@@ -56,6 +56,7 @@ from src.inference.adaptive_neurovascular_ssm import (
     apply_adaptive_ssm,
     fit_adaptive_ssm,
     fit_to_mapping,
+    measurement_aligned_state_gauge,
 )
 
 
@@ -89,6 +90,12 @@ class AdaptivePrediction:
     eeg_observation: np.ndarray
     eeg_reconstruction: np.ndarray
     states: np.ndarray
+    state_std: np.ndarray
+    target_states: np.ndarray
+    target_state_std: np.ndarray
+    gauge_scales: np.ndarray
+    gauge_offsets: np.ndarray
+    gauge_reconstruction_max_abs_delta: float
     selected_fnirs_channels: tuple[str, ...]
     selected_eeg_channels: tuple[str, ...]
 
@@ -280,6 +287,7 @@ def _run_subject(
                     "adaptive_eeg_only": apply_adaptive_ssm(test_driver, fit),
                 }
                 for model, result in outputs.items():
+                    gauge = measurement_aligned_state_gauge(result, fit)
                     predictions.append(AdaptivePrediction(
                         condition_id=condition_id,
                         dataset_id=test_trial.dataset_id,
@@ -294,6 +302,12 @@ def _run_subject(
                         eeg_observation=test_driver,
                         eeg_reconstruction=result.eeg_reconstructed,
                         states=result.states,
+                        state_std=result.state_std,
+                        target_states=gauge.states,
+                        target_state_std=gauge.state_std,
+                        gauge_scales=gauge.scales,
+                        gauge_offsets=gauge.offsets,
+                        gauge_reconstruction_max_abs_delta=gauge.reconstruction_max_abs_delta,
                         selected_fnirs_channels=tuple(hbo_names + hbr_names),
                         selected_eeg_channels=adapter.channel_names,
                     ))
@@ -422,17 +436,35 @@ def _save_trajectories(path: Path, predictions: Sequence[AdaptivePrediction]) ->
                 "hbr_estimate": prediction.estimate_hbr[index],
             }
             row.update({name: prediction.states[index, state_index] for state_index, name in enumerate(STATE_NAMES)})
+            row.update({
+                f"{name}_std": prediction.state_std[index, state_index]
+                for state_index, name in enumerate(STATE_NAMES)
+            })
+            row.update({
+                f"target_{name}": prediction.target_states[index, state_index]
+                for state_index, name in enumerate(STATE_NAMES)
+            })
+            row.update({
+                f"target_{name}_std": prediction.target_state_std[index, state_index]
+                for state_index, name in enumerate(STATE_NAMES)
+            })
+            row.update({
+                f"gauge_{name}_scale": prediction.gauge_scales[state_index]
+                for state_index, name in enumerate(STATE_NAMES)
+            })
+            row.update({
+                f"gauge_{name}_offset": prediction.gauge_offsets[state_index]
+                for state_index, name in enumerate(STATE_NAMES)
+            })
+            row["gauge_reconstruction_max_abs_delta"] = prediction.gauge_reconstruction_max_abs_delta
             rows.append(row)
     _write_csv(path, rows)
 
 
 def _plot_summary(summary: Sequence[Mapping[str, Any]], run_dir: Path) -> str:
-    conditions = ["single_trial_clean_v3", "simultaneous_unified"]
-    paths = [
-        ("adaptive_joint", "local"), ("adaptive_eeg_only", "local"),
-        ("adaptive_joint", "global"), ("adaptive_eeg_only", "global"),
-    ]
-    labels = ["joint local", "EEG-only local", "joint global", "EEG-only global"]
+    conditions = list(dict.fromkeys(str(row["condition_id"]) for row in summary))
+    paths = list(dict.fromkeys((str(row["model"]), str(row["spatial_mode"])) for row in summary))
+    labels = [f"{model.replace('adaptive_', '').replace('_', '-')} {spatial}" for model, spatial in paths]
     lookup = {(row["condition_id"], row["model"], row["spatial_mode"]): row for row in summary}
     metrics = [("r2", "HbO R²"), ("pcc", "HbO correlation"), ("variance_ratio", "HbO variance ratio"), ("eeg_r2", "EEG-proxy R²")]
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -441,7 +473,8 @@ def _plot_summary(summary: Sequence[Mapping[str, Any]], run_dir: Path) -> str:
     for axis, (metric, title) in zip(axes.flat, metrics):
         for path_index, ((model, spatial_mode), label) in enumerate(zip(paths, labels)):
             values = [float(lookup[(condition, model, spatial_mode)][metric]) for condition in conditions]
-            axis.bar(x + (path_index - 1.5) * width, values, width=width, label=label)
+            offset = path_index - (len(paths) - 1) / 2.0
+            axis.bar(x + offset * width, values, width=width, label=label)
         axis.axhline(0.0, color="black", linewidth=0.8)
         if metric == "variance_ratio":
             axis.axhline(1.0, color="black", linestyle="--", linewidth=1.0)
@@ -470,6 +503,11 @@ def _plot_representative(
         if row["model"] == "adaptive_joint" and row["spatial_mode"] == "local"
         and float(row["pcc"]) > 0.0 and float(row["variance_ratio"]) > 0.0
     ]
+    if not candidates:
+        candidates = [
+            row for row in fold_rows
+            if row["model"] == "adaptive_joint" and row["spatial_mode"] == "local"
+        ]
     candidates.sort(key=lambda row: abs(np.log(float(row["variance_ratio"]))))
     selected_rows = candidates[: int(count)]
     lookup = {

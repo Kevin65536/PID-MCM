@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import yaml
 
 
 COLORS = ("#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9")
@@ -120,7 +121,15 @@ def target_observability(run_dir: Path) -> list[str]:
     axes[0].set_ylabel("R2 against train-mean baseline")
     axes[0].set_title("Patch-local teacher target observability")
     axes[0].legend(frameon=False)
-    trace_key = next((key for key, row in zip(data["traces"], rows) if row["admitted_local_target"] and row["modality"] == "fnirs"), next(iter(data["traces"])))
+    admitted_fnirs = next(
+        (row for row in rows if row["admitted_local_target"] and row["modality"] == "fnirs"),
+        None,
+    )
+    trace_key = (
+        f"{admitted_fnirs['modality']}:{admitted_fnirs['coordinate']}"
+        if admitted_fnirs is not None
+        else next(iter(data["traces"]))
+    )
     trace = data["traces"][trace_key]
     target = np.asarray(trace["target"])
     prediction = np.asarray(trace["prediction"])
@@ -135,6 +144,40 @@ def target_observability(run_dir: Path) -> list[str]:
     for axis in axes:
         axis.grid(alpha=0.2)
     return _save(fig, run_dir, "target_observability")
+
+
+def gauge_alignment(run_dir: Path) -> list[str]:
+    data = _load(run_dir / "figure_data" / "gauge_alignment.json")
+    rows = [row for row in data["gain_rows"] if row["modality"] == "fnirs"]
+    folds = data["fold_rows"]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.2), constrained_layout=True)
+    labels = [row["coordinate"] for row in rows]
+    x = np.arange(len(rows))
+    width = 0.36
+    axes[0].bar(x - width / 2, [row["r2_pre_gauge"] for row in rows], width, color="#999999", label="Raw latent")
+    axes[0].bar(x + width / 2, [row["r2_post_gauge"] for row in rows], width, color=COLORS[2], label="Gauge corrected")
+    axes[0].axhline(0.0, color="black", linewidth=0.8)
+    axes[0].set_xticks(x, labels, rotation=35, ha="right", fontsize=8)
+    axes[0].set_ylabel("Held-out patch-local R2")
+    axes[0].set_title("Target observability before and after gauge")
+    axes[0].legend(frameon=False)
+
+    for offset, (coordinate, color) in enumerate((("hbo", COLORS[0]), ("hbr", COLORS[1]))):
+        scales = np.asarray([row[f"{coordinate}_scale"] for row in folds], dtype=float)
+        index = np.arange(len(scales), dtype=float) + (offset - 0.5) * 0.18
+        axes[1].scatter(
+            index, np.log10(np.maximum(np.abs(scales), 1e-12)),
+            c=np.where(scales >= 0.0, color, COLORS[4]), s=13, alpha=0.65,
+            label=f"{coordinate.upper()} abs scale; red=negative",
+        )
+    axes[1].set_xlabel("Train/validation leave-one-trial fold")
+    axes[1].set_ylabel("log10 |state-to-measurement scale|")
+    axes[1].set_title("Train-fold gauge scales and sign orientation")
+    axes[1].legend(frameon=False, fontsize=8)
+    axes[1].grid(alpha=0.2)
+    axes[0].grid(alpha=0.2)
+    fig.suptitle(data.get("mode", "target gauge alignment"), fontsize=12)
+    return _save(fig, run_dir, "gauge_alignment")
 
 
 def uncertainty_calibration(run_dir: Path) -> list[str]:
@@ -242,6 +285,9 @@ def main() -> None:
     parser.add_argument("--run-dir", required=True)
     args = parser.parse_args()
     run_dir = Path(args.run_dir).resolve()
+    summary = _load(run_dir / "summary.json")
+    review_path = run_dir / "visual_review.yaml"
+    review = yaml.safe_load(review_path.read_text(encoding="utf-8")) if review_path.is_file() else {}
     builders: list[tuple[str, Callable[[Path], list[str]], str]] = [
         ("measurement_alignment", measurement_alignment, "figure_data/measurement_audit.json"),
         ("physical_teacher_overlay", physical_overlay, "figure_data/physical_teacher_overlay.json"),
@@ -251,16 +297,19 @@ def main() -> None:
         ("continuous_coupling_upper_bound", coupling, "figure_data/continuous_coupling_upper_bound.json"),
         ("teacher_mask_coverage", mask_coverage, "teacher_mask_coverage.csv"),
     ]
+    if (run_dir / "figure_data" / "gauge_alignment.json").is_file():
+        builders.insert(3, ("gauge_alignment", gauge_alignment, "figure_data/gauge_alignment.json"))
     entries = []
     for name, builder, source in builders:
         paths = builder(run_dir)
-        entries.append({"name": name, "source_data": source, "artifacts": paths, "review_status": "pending"})
+        review_status = review.get("figures", {}).get(name, {}).get("status", "pending")
+        entries.append({"name": name, "source_data": source, "artifacts": paths, "review_status": review_status})
     for entry in entries:
         entry["sha256"] = {
             path: hashlib.sha256((run_dir / path).read_bytes()).hexdigest() for path in entry["artifacts"]
         }
     manifest = {
-        "schema": "physiology_semantic_e0_v2_visual_audit",
+        "schema": f"{summary.get('schema', 'physiology_semantic_e0_v2')}_visual_audit",
         "figures": entries,
         "review_checklist": [
             "No unit or semantics label contradicts source metadata.",
@@ -268,11 +317,15 @@ def main() -> None:
             "Teacher clean traces track plausible observed structure without copying residual noise.",
             "Shared neural/hemodynamic states show no solver discontinuity or boundary artifact.",
             "Observability is not driven by a single subject or monotonic ordering artifact.",
+            "Any target gauge uses training-fold parameters, is finite/non-singular, and leaves physical reconstruction invariant.",
             "Vocabulary geometry has no severe collapse hidden by aggregate R2.",
             "EEG-history coupling gain is visible in transition traces and not only a logdet scalar.",
             "Teacher masks exclude unsupported intervals and do not erase a specific subject.",
         ],
-        "protected_test_may_open": False,
+        "protected_test_may_open": bool(
+            review.get("overall_pass", False)
+            and summary.get("validation", {}).get("machine_validation_pass", False)
+        ),
     }
     (run_dir / "visual_audit_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 

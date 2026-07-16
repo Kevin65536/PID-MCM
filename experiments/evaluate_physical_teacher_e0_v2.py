@@ -372,9 +372,11 @@ def _vocabulary_audit(
             random_r2.append(1.0 - np.sum(np.square(val_z - random_reconstruction)) / max(np.sum(np.square(val_z)), 1e-12))
         threshold = float(np.quantile(random_r2, quantile))
         occupancy = np.bincount(codes, minlength=codebook_size)
-        pca = PCA(n_components=2, random_state=0).fit(train_z)
+        pca = PCA(n_components=min(2, train_z.shape[1]), random_state=0).fit(train_z)
         keep = min(3000, len(val_z))
         coordinates = pca.transform(val_z[:keep])
+        if coordinates.shape[1] == 1:
+            coordinates = np.column_stack((coordinates[:, 0], np.zeros(len(coordinates))))
         rows.append({
             "modality": modality, "codebook_size": codebook_size, "validation_global_r2": float(global_r2),
             "random_reference_q": threshold, "above_random_reference": bool(global_r2 > threshold),
