@@ -154,7 +154,7 @@ The fixed-history context module predicts state at `t` from the five preceding e
 
 The active training script supports `--dry-run`, `--smoke`, `--train`, and `--resume`. It implements epoch training and validation, AMP, gradient clipping, AdamW, warm-up/cosine scheduling, early stopping, best/last checkpoints, and complete optimizer/scheduler/scaler state restoration. A run saves resolved configuration, environment, split/cache manifest, JSONL metrics, quantizer health, teacher diagnostics, completion status, and hashes required by the run artifact contract.
 
-The 2026-07-03 E0 pilot blocked physical-state supervision at validation, so that objective cannot take optimizer steps. The trainer verifies the concrete E0 decision artifact, split hash, data contract, cache roots, and admitted coordinates. The teacher-free reconstruction-plus-VQ path completed CUDA smoke and checkpoint resume; it may proceed to an E1 short-formal pilot without implying that E0 or semantic supervision passed.
+The 2026-07-03 E0 pilot blocked the historical Croce physical-state objective, so that exact objective cannot take optimizer steps. The 2026-07-16 design decision separately admits the gauge-corrected adaptive joint proxy for development; its new decision artifact, cache sidecar and loss routing must be implemented before optimizer use. The trainer continues to verify the concrete decision artifact, split hash, data contract, cache roots and admitted coordinates. The teacher-free reconstruction-plus-VQ path remains independently runnable.
 
 ## 📤 P5 export and consumer contract
 
@@ -190,4 +190,4 @@ The execution sequence is unit tests, integration tests, unified-loader dry run,
 [^2]: Jiang, W.-B., Wang, Y., Lu, B.-L., & Li, D. (2025). “NeuroLM: A Universal Multi-task Foundation Model for Bridging the Gap between Language and EEG Signals.” https://arxiv.org/abs/2409.00101
 [^3]: Jiang, W.-B. et al. (2024). “Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI.” https://proceedings.iclr.cc/paper_files/paper/2024/file/47393e8594c82ce8fd83adc672cf9872-Paper-Conference.pdf
 
-_Last updated: 2026-07-03_
+_Last updated: 2026-07-16_

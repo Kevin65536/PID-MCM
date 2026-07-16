@@ -119,19 +119,19 @@ unopened because validation did not pass.
 
 ### P3 — Evaluate optional target/teacher adapters
 
-**Implementation status (2026-07-03):** merged and scientifically evaluated through E0-v2 validation. Cache validity now controls local state/prototype supervision independently of the causal-history mask; only context supervision requires both cache validity and a complete 10-second history. Cross-dataset measurement, local observability, K=128 transmissibility, and continuous coupling checks passed. fNIRS physical-observation prediction and synthetic-truth posterior calibration failed numerical and visual review. No protected-test sample was evaluated.
+**Implementation status (updated 2026-07-16):** the generic adapter is merged. The historical Croce E0-v2 target remains blocked. The gauge-corrected adaptive joint SSM has passed the optional target-family development gate as a physiology-shaped multimodal consensus proxy, but its sidecar/cache schema and runtime adapter are not yet connected to this training path. No protected-test sample was evaluated.
 
 **Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics.
 
 **Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
 
-**Execution boundary:** physical-state-supervised tokenizer optimization remains blocked until a new versioned E0 protocol passes validation. The blocked decision cannot be bypassed with a boolean configuration flag. A teacher-free reconstruction-plus-VQ baseline may optimize because it does not consume the failed teacher endpoint.
+**Execution boundary:** the old Croce physical-state objective remains blocked and cannot be bypassed with a boolean flag. Adaptive proxy supervision may begin only after its admitted coordinates, detached joint-teacher provenance, uniform/non-uncertainty-weighted loss role, and independent student paths are implemented and pass integration tests. This is an implementation boundary after E0 target-family admission, not a new scientific veto of the proxy.
 
 **Validity gate:** a target family may supervise a named experiment only when held-out predictive/identifiability checks beat its declared baselines. Failed coordinates or families are removed from that experiment; their failure does not block the teacher-free tokenizer mainline.
 
 ### P4 — Train independent semantic and residual branches
 
-**Implementation status (2026-07-03):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The physical-state-supervised objective remains blocked by E0, so this is software-readiness evidence rather than target-semantic validation.
+**Implementation status (updated 2026-07-16):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The adaptive proxy target is scientifically admitted for development, but its runtime schema/loss route has not yet passed this implementation stage; the existing trainer still represents software-readiness rather than an adaptive-teacher training result.
 
 **Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization context prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
 
@@ -255,4 +255,4 @@ The redesign is implemented only when all of the following are true:
 - [`Data normalization, HOMER2 alignment, and unified cache spec`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md)
 - [`Single-Trial EEG artifact remediation plan`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-16_

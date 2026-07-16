@@ -101,6 +101,26 @@ E0-v1 and E0-v2 are preserved as failed historical Croce-target validations. The
 
 The active E0 begins with the unified measured-data contract and then evaluates each optional target family independently. No family is the fixed physical prior for the architecture. The Croce-specific E0-v2 equations and results below are retained as historical rationale for this change; they are not the new input contract.
 
+### Adaptive joint-teacher admission decision
+
+The 2026-07-16 design review defines the adaptive local fixed-interval SSM as a
+`physiology_shaped_multimodal_consensus_proxy`, not as a uniquely recovered
+neural source. A joint target generator may use paired held-out EEG/HbO/HbR as
+privileged information. E0 admission requires that its train-fold transforms
+are auditable, its declared local targets are learnable from the corresponding
+student modality, and its finite target geometry is non-degenerate. It does not
+require the complete joint posterior or fNIRS waveform to be recovered from EEG
+alone.
+
+For this target family, the blocking development-gate coordinates are EEG
+`r_mean/r_slope` and observation-aligned fNIRS HbO/HbR mean/slope. Flow remains
+context-only. Raw-signal physical gain, EEG-only fNIRS reconstruction, and
+individual physiological-parameter recovery are retained as diagnostics that
+limit paper claims; they are not target-family admission endpoints. Posterior
+uncertainty is optional and cannot weight training until separately calibrated.
+The full decision and evidence ledger are recorded in
+[`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+
 ### Dataset measurement contract
 
 For modality $m$, dataset $d$, and subject/session $s$, the recorded value is represented as:
@@ -291,7 +311,7 @@ At five dimensions, validation-oracle descriptor reconstruction reached EEG/fNIR
 
 The next diagnostic tested a three-dimensional lagged CCA state after removing each modality's own three-second history, trial phase, and condition. Two subjects from each of Single-Trial, REFED, Simultaneous EEG&NIRS, and Visual Cognitive Motivation were evaluated with reciprocal one-subject train/one-subject validation folds. Five seconds was the fixed primary EEG-leading lag; 0–10 seconds was exploratory.
 
-No dataset produced a positive cross-inferable shared fraction at five seconds. A joint state using both modalities gave balanced innovation ceilings of `3.97%`, `0.62%`, `1.63%`, and `2.56%`, respectively, but independent EEG-only and fNIRS-only states both clipped to `0%` in every dataset. The joint ceiling cannot supervise token identity because it includes target-modality information. Full methods and evidence boundaries are archived in [`archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md).
+No dataset produced a positive cross-inferable shared fraction at five seconds. A joint state using both modalities gave balanced innovation ceilings of `3.97%`, `0.62%`, `1.63%`, and `2.56%`, respectively, but independent EEG-only and fNIRS-only states both clipped to `0%` in every dataset. This historical result prevents the joint ceiling itself from being treated as independent coupling evidence or a uniquely identifiable shared cause. Under the revised privileged-information boundary, it does not prohibit a separately validated joint proxy from serving as an optional teacher for independent students. Full methods and evidence boundaries are archived in [`archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md).
 
 ## ⚙️ E1 — Quantizer implementation and geometry
 
@@ -467,6 +487,7 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 | E0 local/context target fails | Remove, regroup, or move the coordinate to the receptive field that can identify it |
 | One teacher's continuous coupling upper bound fails | Reject that teacher bridge; E7 may proceed only from a separately preregistered teacher-free or alternative-target premise |
 | E0-v2 validation admitted | Freeze admitted targets and calibration, then open fresh protected evidence once; teacher-supervised optimization remains blocked until G0 passes |
+| Adaptive joint-proxy development gate admitted | Freeze its scoped coordinates and claim boundary; implement the sidecar/loss route, then compare against teacher-free and matched non-physiological targets without reading the protected split |
 | E1 fails | Stop all expensive training; quantizer results are uninterpretable |
 | E2 fails, E6 passes | Retain information-preserving tokenizer but drop physiological-semantic token claims |
 | E2 passes, E6 fails | Increase or redesign residual capacity; do not use hard tokens alone downstream |
@@ -484,4 +505,4 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-16_

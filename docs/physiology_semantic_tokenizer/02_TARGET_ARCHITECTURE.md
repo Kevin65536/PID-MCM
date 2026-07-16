@@ -118,6 +118,23 @@ An experiment may attach a self-supervised target, task target, data-driven dyna
 
 No auxiliary target may change `eeg`, `fnirs`, event alignment, or tokenizer inference signatures. Croce `(s, delta_f, delta_hbo, delta_hb, r)`, clean means and source/observation decompositions remain admissible only as named ablation/diagnostic fields. A shared neural driver is a hypothesis to test against modality-private and delayed alternatives, not an input-contract invariant.
 
+### Joint privileged-teacher scope
+
+An optional teacher may condition jointly on paired EEG and fNIRS during
+offline target generation. This does not violate independent inference: the
+EEG and fNIRS students still receive only their own measured modality, and the
+teacher is detached and absent from tokenizer inference. E0 admission of such a
+teacher asks whether it yields a stable, non-degenerate, learnable
+physiology-shaped multimodal consensus proxy. It does **not** require the full
+joint posterior to be independently recoverable from EEG alone or fNIRS alone.
+
+Independent single-modality recovery has a different role. It is required when
+claiming that a latent is independently identifiable from that modality, and
+independently generated student tokens are required for the later frozen
+EEG-history-to-fNIRS-distribution coupling evaluation. A joint teacher may
+organize both tokenizers as privileged information, but its own fused posterior
+is never used as evidence that coupling was independently discovered.
+
 ## 🧠 Semantic tokenizer contract
 
 ### Recommended first formal dimensions
@@ -285,4 +302,4 @@ Differences between task-specific coupling patterns are a secondary, non-blockin
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Current runtime architecture`](../ARCHITECTURE.md)
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-16_

@@ -250,6 +250,21 @@ An optional joint target generator may use EEG and fNIRS during training. The mo
 3. coupling evaluation uses independently produced tokens;
 4. teacher targets and hyperparameters are fitted without test-subject information.
 
+The full joint teacher posterior need not be recoverable from either modality
+alone. Requiring that property would replace the intended multimodal-consensus
+estimand with a single-modality translation estimand. The distinction is:
+
+| Question | Required evidence |
+| --- | --- |
+| May a joint proxy supervise an optional tokenizer experiment? | Stable train-only target generation, declared gauge/support, target observability from each student's receptive field, and non-degenerate finite-vocabulary geometry |
+| Is the proxy a uniquely recovered physical source? | Parameter/state identifiability and competing-model controls; optional-target admission alone is insufficient |
+| Does EEG contain incremental information about future fNIRS tokens? | Frozen independently generated tokens, fNIRS-history/marginal controls, subject holdout, and time/spatial nulls |
+
+Consequently, poor EEG-only reconstruction of the teacher's complete fNIRS
+trajectory is a translation/identifiability diagnostic, not an automatic veto
+of a joint privileged teacher. It remains decisive only for claims that require
+EEG-only recovery.
+
 ## 🔍 Identifiability and competing explanations
 
 ### Shared/private non-identifiability
@@ -289,6 +304,8 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 ### Allowed after the corresponding gates pass
 
+- “We use a physiology-constrained multimodal consensus proxy as a privileged
+  teacher for independent EEG and fNIRS tokenizers.”
 - “The tokenizer discretizes teacher-defined neural and hemodynamic state regions.”
 - “EEG token sequences provide incremental held-out information about future fNIRS token distributions.”
 - “In a secondary analysis, coupling patterns differed across the examined task conditions.” This language requires direct uncertainty and confound-control evidence but is not a primary gate claim.
@@ -314,4 +331,4 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 [^5]: Barmpas, K., et al. (2025). “NeuroRVQ: Multi-Scale EEG Tokenization for Generative Large Brainwave Models.” https://arxiv.org/abs/2510.13068
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-16_

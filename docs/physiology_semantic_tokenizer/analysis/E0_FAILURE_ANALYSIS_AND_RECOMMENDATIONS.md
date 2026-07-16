@@ -4,11 +4,24 @@ _Analysis of why the project is blocked at E0 and what should change, 2026-07-09
 
 ---
 
+> **Historical-scope notice (2026-07-16):** This report records the Croce
+> E0-v1/v2 and E0-D1–D5 failure state as it stood on 2026-07-09. Its numerical
+> findings and warnings against physical-source overclaiming remain valid. It
+> does not represent the current status of the later gauge-corrected adaptive
+> joint SSM, which has been admitted for optional development only as a
+> `physiology_shaped_multimodal_consensus_proxy`. See
+> [`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md)
+> for the active decision and claim boundary.
+
 ## Executive Summary
 
 The project has been blocked at E0 (cache and teacher validity) through two formal validation attempts (E0-v1, E0-v2) and five follow-up diagnostics (E0-D1 through E0-D5). The **core problem is not software** — the full training loop, quantizer, data contracts, and export pipeline are implemented and passing correctness checks. The problem is **scientific**: the current Croce-style five-dimensional shared-state teacher does not provide a sufficiently valid supervision signal for fNIRS, making it unsafe to use as the foundation for tokenizer semantic training.
 
-The deep research paper ([Deep Research on Physiology-Semantic Tokenization for EEG–fNIRS Coupling.pdf](../paper_pdf/Deep%20Research%20on%20Physiology-Semantic%20Tokenization%20for%20EEG–fNIRS%20Coupling.pdf)) independently reaches the same conclusion and provides a literature-grounded framework for revision. This document integrates that research with the project's own diagnostic evidence.
+The project deep-research report, *Deep Research on Physiology-Semantic
+Tokenization for EEG–fNIRS Coupling*, independently reached the same conclusion
+and provided a literature-grounded framework for revision. The PDF is not part
+of the current checkout; this document preserves the report's conclusions
+alongside the project's own diagnostic evidence.
 
 ---
 
@@ -347,7 +360,8 @@ Diagnostic archives:
 - [Lin 2024 Simultaneous Raw TRTD](../archive/diagnostics/20260708_lin2024_simultaneous_raw_trtd_diagnostic.md)
 
 External:
-- [Deep Research on Physiology-Semantic Tokenization for EEG–fNIRS Coupling](../paper_pdf/Deep%20Research%20on%20Physiology-Semantic%20Tokenization%20for%20EEG–fNIRS%20Coupling.pdf)
+- *Deep Research on Physiology-Semantic Tokenization for EEG–fNIRS Coupling*
+  (project deep-research report; PDF not present in this checkout)
 - Croce et al. (2017) — Bayesian sequential Monte Carlo for EEG-fNIRS
 - Lin et al. (2024) — Subject-specific EEG-fNIRS NVC by task-related tensor decomposition
 - EFRM (2025) — Multimodal EEG-fNIRS representation learning

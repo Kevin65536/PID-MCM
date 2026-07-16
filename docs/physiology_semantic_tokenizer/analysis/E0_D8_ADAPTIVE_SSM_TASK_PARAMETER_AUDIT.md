@@ -208,9 +208,16 @@ For the next model revision:
 4. Preregister a small contrast set such as MA-versus-baseline, WG-versus-
    baseline, and n-back load trend before using labels in model selection.
 
-This result does not alter the E0-D7 status: the joint shared state remains a
-candidate privileged soft teacher, not an admitted or uniquely identified
-physical source.
+At the time of this audit, this result did not alter the E0-D7 status: the
+joint shared state remained a candidate privileged soft teacher, not an
+admitted or uniquely identified physical source.
+
+**Subsequent admission interpretation:** the E0-v3 design review no longer
+requires uniquely identified physiological coefficients for an optional joint
+proxy. These boundary rates still prohibit interpreting fitted parameters as
+subject physiology, but they do not block a teacher whose declared role is a
+physiology-shaped regularizer. The scoped decision is recorded in
+[`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
 
 ## 🔗 Artifacts
 
@@ -223,5 +230,6 @@ physical source.
 - [Resolved configuration](../../../experiments/configs/physiology_semantic_tokenizer/adaptive_ssm_task_parameter_audit.yaml)
 
 **Status:** exploratory task-parameter audit complete; no FDR-confirmed task
-effect; task-specific physiological parameter supervision is not supported.
-
+effect; task-specific physiological parameter supervision is not supported;
+parameter-level physical claims remain blocked, while proxy-level E0 admission
+is governed separately.

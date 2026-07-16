@@ -1,14 +1,14 @@
 # Physiology-semantic tokenizer redesign archive
 
-_Approved design baseline; full trainer implemented, E0-v2 physical-teacher validation blocked_
+_Approved design baseline; full trainer implemented; adaptive joint-proxy target admitted for development_
 
 ---
 
 ## 📋 Status and authority
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. E0-v2 passed measurement, local-target, vocabulary, and continuous-coupling validation but failed the fNIRS physical-observation and posterior-calibration layers; physical-state-supervised optimization and target promotion remain blocked, and the protected test was not opened.
+This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. The historical Croce E0-v2 physical-state target remains blocked. The 2026-07-16 decision admits the gauge-corrected adaptive joint SSM for development as an optional `physiology_shaped_multimodal_consensus_proxy`; it does not admit physical-source, parameter-identification, causal-coupling, or protected-test claims. Adaptive cache/runtime integration remains pending.
 
-Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active summary remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md), and E0 remains blocked.
+Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active status remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md); the scoped adaptive admission and its claim boundary are in [`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
 
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
@@ -78,4 +78,4 @@ These findings motivate the target design. They do not prove that the physical-s
 - [`Archived physiological coupling plan`](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 - [`Archived workflow reconstruction`](../archive/pre_physiology_semantic_20260701/research/workflow-reconstruction-cn/00_WORKFLOW_ARCHITECTURE.md)
 
-_Last updated: 2026-07-08_
+_Last updated: 2026-07-16_

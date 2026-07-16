@@ -11,10 +11,11 @@ of an EEG-only driver standard deviation, while the joint trajectory remains
 strongly correlated with and reconstructs the EEG observation.
 
 This supports continuing with a physiology-constrained shared-state teacher as
-a **soft multimodal candidate**.  It does not admit a new physical teacher into
-E0 yet.  The strict EEG-only path remains poor, several fitted physiological
-parameters are not independently identifiable, and the present fixed-interval
-smoother is an offline teacher rather than a causal inference model.
+a **soft multimodal candidate**. At the time of this diagnostic it did not by
+itself admit a new target into E0. The subsequent gauge-corrected validation and
+estimand review admit it for development as a physiology-shaped multimodal
+consensus proxy. The strict EEG-only path, parameter non-identifiability and
+offline smoothing remain claim boundaries rather than joint-teacher vetoes.
 
 Final run:
 [`20260716_adaptive_shared_neural_ssm_formal_v2`](../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_shared_neural_ssm_formal_v2/)
@@ -204,13 +205,19 @@ identified mechanistic explanation.
 
 ## Decision and next use
 
-The supported decision is:
+The decision at the time of this diagnostic was:
 
 > Keep the physiology-constrained path.  Use the local fixed-interval joint
 > driver as a candidate privileged/soft tokenizer guide, with explicit
 > uncertainty and modality-private residual paths.  Do not call it a recovered
 > physical neural source, and do not promote it through E0 from this post-hoc
 > exploratory run alone.
+
+This historical caution remains valid for physical-source and causal claims.
+It is superseded only for the narrower optional target-family development gate
+by
+[`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md),
+which explicitly treats the joint state as a privileged consensus proxy.
 
 Before formal admission, the next version should preregister the modality-noise
 range, reduce parameter freedom or use hierarchical shrinkage, add an fNIRS-
@@ -228,6 +235,9 @@ the offline smoother, but causal performance must be assessed separately.
 - Replay: [`evaluate_adaptive_shared_neural_ssm.py`](../../../experiments/evaluate_adaptive_shared_neural_ssm.py)
 - Model: [`adaptive_neurovascular_ssm.py`](../../../src/inference/adaptive_neurovascular_ssm.py)
 
-**Status: model-revision diagnostic complete; slow-only/monotonic reconstruction
-failure resolved for joint inference; candidate soft teacher retained, formal E0
-admission still pending.**
+**Status at the time of E0-D7:** model-revision diagnostic complete;
+slow-only/monotonic reconstruction failure resolved for joint inference;
+candidate soft teacher retained, formal E0 admission pending. **Current scoped
+status:** the later gauge-corrected target passed the optional target-family
+development gate as a multimodal consensus proxy; physical-source and causal
+claims remain unadmitted.
