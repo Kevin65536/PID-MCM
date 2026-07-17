@@ -1,12 +1,23 @@
 {
-  "schema": "physiology_semantic_architecture_changes_v1",
+  "schema": "physiology_semantic_architecture_changes_v2",
   "plan_id": "example_plan",
-  "summary": "Example only: highlight the components affected by a future modification plan.",
+  "title": "Proposed After-State · Example Plan",
+  "subtitle": "Example only · copy this file and replace every placeholder",
+  "banner": "PLAN, not runtime · this example has no implementation or evidence standing.",
+  "summary": "Example only: compose an explicit proposed after-state without modifying the canonical runtime specification.",
   "changes": [
-    {"node_id": "eeg_quantizer", "kind": "modify", "note": "Example quantizer modification"},
-    {"node_id": "fnirs_quantizer", "kind": "modify", "note": "Example quantizer modification"},
-    {"node_id": "p6_coupling", "kind": "add", "note": "Example activation after gate approval"}
+    {
+      "node_id": "eeg_quantizer",
+      "kind": "modify",
+      "note": "Describe the architectural effect rather than only a file or class name.",
+      "replace": {
+        "label": "Proposed EEG vocabulary",
+        "details": ["after-state detail", "after-state boundary"],
+        "implementation": "planned"
+      }
+    }
   ],
   "add_nodes": [],
+  "edge_changes": [],
   "add_edges": []
 }

@@ -27,8 +27,8 @@ __pycache__
 # temp log directory    
 /logs
 
-# comparative methods' runs
-/comparative_methods/UMAP/runs
+# comparative methods
+/comparative_methods
 
 # temporarily sealed local archive for retired Copilot agent guidance
 /docs/archive
