@@ -13,6 +13,16 @@ _Analysis of why the project is blocked at E0 and what should change, 2026-07-09
 > [`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md)
 > for the active decision and claim boundary.
 
+> **Comparative-method audit notice (2026-07-17):** Sections 4.3 and the
+> priority-2/priority-7 EFRM and STA-Net recommendations below are preserved as
+> historical proposals. The later checkout audit found that neither source tree
+> is integrated with the unified loader, downstream target contract, shared
+> subject splits, regression metrics, or active artifact schema. The earlier
+> “one training run” and “low implementation impact” estimates are superseded by
+> [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](../11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md).
+> Both methods remain candidates; availability of source code does not admit
+> either as an E0 control or downstream SOTA baseline.
+
 ## Executive Summary
 
 The project has been blocked at E0 (cache and teacher validity) through two formal validation attempts (E0-v1, E0-v2) and five follow-up diagnostics (E0-D1 through E0-D5). The **core problem is not software** — the full training loop, quantizer, data contracts, and export pipeline are implemented and passing correctness checks. The problem is **scientific**: the current Croce-style five-dimensional shared-state teacher does not provide a sufficiently valid supervision signal for fNIRS, making it unsafe to use as the foundation for tokenizer semantic training.

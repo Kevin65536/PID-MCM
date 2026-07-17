@@ -82,6 +82,8 @@ Task-specific coupling is retained as secondary research question S1, formerly H
 
 ## 🧰 Common baselines
 
+The B0–B5 definitions below are internal architecture/representation controls. External named methods are governed separately by [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md); they do not enter this table merely because source code is locally available.
+
 | Baseline | Description | Purpose |
 | --- | --- | --- |
 | B0 | Archived X3 causal cross-adapter, current quantizer behavior | Historical strongest-exchange reference |
@@ -92,6 +94,12 @@ Task-specific coupling is retained as secondary research question S1, formerly H
 | B5 | Continuous encoder latent without quantization | Information and downstream upper-reference, not a deployable token baseline |
 
 All architecture comparisons match encoder capacity, local windows, training samples, optimizer budget, early-stopping rule, and subject splits unless a suite explicitly studies one of those variables.
+
+### External comparison boundary
+
+The downstream comparison program uses the same four measured datasets through `UnifiedPhysiologyWindowDataset`, with three discrete-label dataset families and REFED as the continuous valence/arousal family. Dataset-native tasks remain separate. `simultaneous_eeg_nirs:dsr` is prohibited even though the current default unified-loader cache still exposes DSR windows; formal comparison is blocked until a preflight guard proves zero selected DSR samples.
+
+STA-Net and EFRM remain candidate methods rather than admitted baselines. STA-Net belongs primarily to a paired supervised classification track; EFRM belongs to pretrained transfer, linear-probe, and fine-tune tracks. Their source-protocol results, subject-independent shared-protocol results, in-domain pretraining, and external pretraining must remain in separately labeled tables. The exact task contract, adapter gates, metrics, artifacts, and implementation order are defined in the comparative-method workflow.
 
 ## 🧪 E0 — Unified data and optional-target validity
 
@@ -504,5 +512,6 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Theoretical foundations`](03_THEORETICAL_FOUNDATIONS.md)
 - [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
+- [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_

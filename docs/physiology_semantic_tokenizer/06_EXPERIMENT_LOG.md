@@ -30,6 +30,7 @@ The complete tokenizer training loop is runnable. The original Croce E0-v2 physi
 | 2026-07-16 | `PST-E0-V3-ADAPTIVE-VALIDATION` | Original layered E0 contract with variable-parameter adaptive SSM | Historical machine conjunction blocked under the original physical-source rule; later superseded for scoped target-family admission | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_validation_formal_v1/` |
 | 2026-07-16 | `PST-E0-V3-GAUGE-RECALIBRATION` | Train-fold observation-aligned chromophore gauge and strict local-target contract | Required local/gauge/vocabulary layers pass; source run remains immutable; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_gauge_corrected_validation_v1/` |
 | 2026-07-16 | `PST-E0-V3-ADMISSION-DECISION` | Adaptive joint-teacher estimand and claim-boundary review | **E0 optional target-family development gate passed** for a physiology-shaped multimodal consensus proxy; runtime integration pending; protected test unopened | `docs/physiology_semantic_tokenizer/analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md` |
+| 2026-07-17 | `PST-COMPARE-READINESS-AUDIT` | Comparative-method documentation and checkout audit | Preparation workflow frozen; formal comparison blocked on DSR guard, REFED target adapter, shared splits, and method admission | `docs/physiology_semantic_tokenizer/11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -222,6 +223,28 @@ rates and posterior coverage constrain later claims and loss routing but do not
 reverse this scoped admission. The authoritative decision record is
 [`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
 
+### Comparative-method readiness audit
+
+The checkout audit confirmed that all four measured datasets enter through
+`UnifiedPhysiologyWindowDataset`, but downstream comparison is not yet runnable
+under a defensible shared protocol. The current default loader exposes 449
+admitted Simultaneous DSR windows despite the registry's deprecation note, and
+REFED valence/arousal streams remain nested in event metadata rather than the
+window-level canonical label. These are blocking contract gaps, not reasons to
+replace the unified measured-data entrance.
+
+STA-Net and EFRM source trees are present as ignored nested Git repositories,
+but neither is integrated with the unified loader, shared subject splits,
+classification/regression metric API, or active artifact contract. STA-Net is
+fixed to binary paired classification and a method-specific subject/session
+runner; the checked EFRM downstream path is classification-only and its
+pretraining data regime differs materially from a supervised STA-Net run. The
+audit therefore retains both as candidates and separates paired supervised,
+in-domain pretrained, external-pretrained, linear-probe, and full-fine-tune
+tracks. No experiment or protected evaluation ran. The authoritative workflow
+and blockers are recorded in
+[`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md).
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
@@ -248,7 +271,8 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Experiment design](05_EXPERIMENT_DESIGN.md)
 - [Implementation and validation plan](04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [Code migration plan](07_CODE_MIGRATION_PLAN.md)
+- [Comparative-method experiment workflow](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_

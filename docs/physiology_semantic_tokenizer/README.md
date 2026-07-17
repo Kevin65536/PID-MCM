@@ -21,6 +21,7 @@ The currently runnable implementation remains documented in [`docs/ARCHITECTURE.
 | How should code and tests change? | [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](04_IMPLEMENTATION_VALIDATION_PLAN.md) |
 | Which experiments can validate or falsify it? | [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md) |
 | Which target-architecture experiments have run? | [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) |
+| How are external comparative methods admitted and evaluated? | [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) |
 | What exact code migration should be executed? | [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) |
 | What does the current implementation look like? | [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) |
 | Which target-architecture diagnostic records are archived? | [`archive/diagnostics/`](archive/diagnostics/) |
@@ -74,8 +75,9 @@ These findings motivate the target design. They do not prove that the physical-s
 ## 🔗 Related records
 
 - [`2026-07-01 physiology-semantic redesign`](../architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md)
+- [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 - [`Archived tokenizer coupling responsibility boundary`](../archive/pre_physiology_semantic_20260701/source_observation/TOKENIZER_COUPLING_RESPONSIBILITY.md)
 - [`Archived physiological coupling plan`](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 - [`Archived workflow reconstruction`](../archive/pre_physiology_semantic_20260701/research/workflow-reconstruction-cn/00_WORKFLOW_ARCHITECTURE.md)
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_
