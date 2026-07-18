@@ -62,6 +62,8 @@ DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = frozenset({
     "skip_aligned_piecewise_constant_offset",
     "shared_segment_index_no_marker_stream",
 })
+FORBIDDEN_TASK_NAMESPACES = frozenset({"simultaneous_eeg_nirs:dsr"})
+FORBIDDEN_TASK_POLICY = "unified_training_hard_exclusion_v1"
 
 VISUAL_CONDITION_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
 
@@ -630,6 +632,8 @@ class UnifiedPhysiologyWindowDataset:
         self.include_event_types = include_event_types
         self.admissible_alignment_cases = None if admissible_alignment_cases is None else frozenset(admissible_alignment_cases)
         self.excluded_alignment_records: dict[str, str] = {}
+        self.excluded_forbidden_task_counts = {namespace: 0 for namespace in FORBIDDEN_TASK_NAMESPACES}
+        self.excluded_forbidden_task_records: set[str] = set()
         self.windows = self._build_windows()
         self._record_cache: dict[str, dict[str, Any]] = {}
 
@@ -644,6 +648,14 @@ class UnifiedPhysiologyWindowDataset:
     def _build_windows(self) -> list[UnifiedWindowRef]:
         windows = []
         for record in self._selected_records():
+            admitted_events = []
+            for event in self.index.events_by_join_key.get(record.join_key, []):
+                namespace = canonical_label(event, record.dataset_id)["namespace"]
+                if namespace in FORBIDDEN_TASK_NAMESPACES:
+                    self.excluded_forbidden_task_counts[namespace] += 1
+                    self.excluded_forbidden_task_records.add(record.join_key)
+                    continue
+                admitted_events.append(event)
             reports = self.index.reports_by_join_key.get(record.join_key, [])
             if self.admissible_alignment_cases is not None:
                 cases = {str(report.get("alignment_case", "")) for report in reports}
@@ -651,7 +663,7 @@ class UnifiedPhysiologyWindowDataset:
                 if not reports or not cases.intersection(self.admissible_alignment_cases) or not label_match:
                     self.excluded_alignment_records[record.join_key] = ",".join(sorted(cases)) or "missing_alignment_report"
                     continue
-            for event in self.index.events_by_join_key.get(record.join_key, []):
+            for event in admitted_events:
                 if self.include_event_types is not None and str(event.get("event_type")) not in self.include_event_types:
                     continue
                 eeg_time = event.get("eeg_time_ms")
@@ -889,6 +901,12 @@ class UnifiedPhysiologyWindowDataset:
             "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
             "dataset_ids": list(self.dataset_ids),
             "derived_targets_excluded": ["croce_local_cache"],
+            "forbidden_task_policy": FORBIDDEN_TASK_POLICY,
+            "forbidden_task_namespaces": sorted(FORBIDDEN_TASK_NAMESPACES),
+            "excluded_forbidden_task_window_count": sum(self.excluded_forbidden_task_counts.values()),
+            "excluded_forbidden_task_window_count_by_namespace": dict(self.excluded_forbidden_task_counts),
+            "excluded_forbidden_task_record_count": len(self.excluded_forbidden_task_records),
+            "excluded_forbidden_task_records": sorted(self.excluded_forbidden_task_records),
             "window_count_by_dataset": counts,
             "admissible_alignment_cases": sorted(self.admissible_alignment_cases or []),
             "excluded_alignment_record_count": len(self.excluded_alignment_records),

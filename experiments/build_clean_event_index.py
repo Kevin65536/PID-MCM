@@ -26,6 +26,7 @@ from src.data.event_alignment import (  # noqa: E402
     align_paired_marker_streams,
     normalize_marker_struct,
     read_xlsx_rows,
+    visual_stimulus_onsets_from_dc9,
 )
 from src.data.clean_physiology_cache import with_canonical_fields  # noqa: E402
 from src.utils.io import write_json  # noqa: E402
@@ -61,6 +62,16 @@ VISUAL_MARK_LABELS = {
 }
 VISUAL_VALID_EPOCH_TYPES = {"RR", "RF", "FF", "FR"}
 VISUAL_EPOCH_TYPE_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
+VISUAL_TIMING_CONTRACT = {
+    "schema": "visual_dc9_stimulus_timing_v1",
+    "eeg_trigger": "DC9",
+    "eeg_stimulus_onset_rule": "dc9_followed_by_stimulus_offset_at_3000ms",
+    "stimulus_duration_ms": 3_000.0,
+    "tolerance_ms": 10.0,
+    "fnirs_stimulus_onset_mark": 1,
+    "duplicate_eeg_timestamps": "deduplicate_before_semantic_pair_detection",
+    "source": "dataset_readme_and_data_in_brief_2024_110260",
+}
 
 SIMULTANEOUS_SESSION_CODEBOOKS = {
     "nback": {
@@ -387,14 +398,8 @@ def _visual_type_map(subject_dir: Path) -> dict[int, str]:
     return mapping
 
 
-def _read_visual_eeg_onsets(path: Path) -> list[float]:
-    """Read the EDF trigger sidecar and return stimulus-onset times in ms.
-
-    The visual dataset records every trial as three sequential DC9 triggers
-    (appearance, disappearance, decision).  The text sidecar stores only DC9,
-    so the first trigger in each triplet is the unambiguous cross-device
-    anchor corresponding to fNIRS Mark=1.
-    """
+def _read_visual_eeg_onsets(path: Path) -> tuple[list[float], dict[str, Any]]:
+    """Read Visual DC9 annotations and identify documented stimulus onsets."""
     onsets_s: list[float] = []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[1:]:
         parts = line.split("\t")
@@ -404,7 +409,12 @@ def _read_visual_eeg_onsets(path: Path) -> list[float]:
             onsets_s.append(float(parts[1]))
         except ValueError:
             continue
-    return [float(value * 1000.0) for value in onsets_s[::3]]
+    onsets_ms, diagnostics = visual_stimulus_onsets_from_dc9(
+        [float(value * 1000.0) for value in onsets_s],
+        stimulus_duration_ms=VISUAL_TIMING_CONTRACT["stimulus_duration_ms"],
+        tolerance_ms=VISUAL_TIMING_CONTRACT["tolerance_ms"],
+    )
+    return onsets_ms.astype(float).tolist(), diagnostics
 
 
 def _visual_annotation_path(subject_dir: Path, record_id: str) -> Path | None:
@@ -452,7 +462,7 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list
                 )
                 continue
 
-            eeg_onsets_ms = _read_visual_eeg_onsets(annotation_path)
+            eeg_onsets_ms, eeg_trigger_diagnostics = _read_visual_eeg_onsets(annotation_path)
             eeg_marker = {
                 "time": np.asarray(eeg_onsets_ms, dtype=np.float64),
                 "y": np.ones((1, len(eeg_onsets_ms)), dtype=np.float32),
@@ -512,7 +522,8 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list
                         **report.to_dict(),
                         "metadata": {
                             **dict(report.metadata),
-                            "eeg_annotation_trigger_count": len(eeg_onsets_ms) * 3,
+                            **eeg_trigger_diagnostics,
+                            "eeg_annotation_trigger_count": eeg_trigger_diagnostics["raw_dc9_count"],
                             "eeg_stimulus_count": len(eeg_onsets_ms),
                             "fnirs_stimulus_count": len(stimulus_marks),
                             "source_files": source_files,
@@ -560,6 +571,9 @@ def main() -> None:
             "key_fields": ["dataset_id", "canonical_subject_id", "base_record_id"],
             "join_key": "dataset_id|canonical_subject_id|base_record_id",
             "signal_branch": "separates multiple signal exports for the same canonical record",
+        },
+        "dataset_timing_contracts": {
+            "visual_cognitive_motivation": VISUAL_TIMING_CONTRACT,
         },
         "parameters": {
             "datasets": args.datasets,

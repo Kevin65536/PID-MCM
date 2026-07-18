@@ -10,6 +10,7 @@ from src.data.event_alignment import (
     drift_slope_ms_per_min,
     normalize_marker_targets,
     read_xlsx_rows,
+    visual_stimulus_onsets_from_dc9,
 )
 
 
@@ -78,6 +79,27 @@ def test_detect_offset_blocks_splits_large_jumps():
 
 def test_drift_slope_returns_none_for_single_event():
     assert drift_slope_ms_per_min(np.asarray([1.0]), np.asarray([2.0])) is None
+
+
+def test_visual_dc9_onsets_use_documented_three_second_stimulus_pair():
+    # Trial 2 has no response annotation. Taking every third row would shift
+    # trial 3, while the appearance->disappearance relation remains intact.
+    triggers_ms = [2_000, 5_000, 6_200, 14_700, 17_698, 27_400, 30_400, 32_100]
+
+    onsets, diagnostics = visual_stimulus_onsets_from_dc9(triggers_ms)
+
+    np.testing.assert_allclose(onsets, [2_000, 14_700, 27_400])
+    assert diagnostics["extraction_rule"] == "dc9_followed_by_stimulus_offset_at_3000ms"
+    assert diagnostics["stimulus_onset_candidate_count"] == 3
+
+
+def test_visual_dc9_onsets_remove_duplicated_annotation_rows():
+    triggers_ms = [2_000, 2_000, 5_000, 5_000, 6_200, 6_200, 14_700, 14_700, 17_700, 17_700]
+
+    onsets, diagnostics = visual_stimulus_onsets_from_dc9(triggers_ms)
+
+    np.testing.assert_allclose(onsets, [2_000, 14_700])
+    assert diagnostics["duplicate_dc9_count"] == 5
 
 
 def test_read_xlsx_rows_uses_stdlib(tmp_path: Path):

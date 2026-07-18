@@ -167,6 +167,42 @@ def drift_slope_ms_per_min(eeg_time_ms: np.ndarray, residual_ms: np.ndarray) -> 
     return float(np.dot(x0, y - float(np.mean(y))) / denom)
 
 
+def visual_stimulus_onsets_from_dc9(
+    trigger_onsets_ms: Sequence[float],
+    *,
+    stimulus_duration_ms: float = 3_000.0,
+    tolerance_ms: float = 10.0,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Recover Visual stimulus onsets from the untyped EEG DC9 stream.
+
+    The source dataset emits the same DC9 annotation for stimulus appearance,
+    stimulus disappearance, and participant response.  Appearance is the DC9
+    event followed by the fixed three-second disappearance event.  Detecting
+    that semantic pair is robust to a missing response annotation and to the
+    duplicated annotation rows present in S15 Part1; taking every third row is
+    not.
+    """
+    raw = np.asarray(trigger_onsets_ms, dtype=np.float64).reshape(-1)
+    finite = raw[np.isfinite(raw)]
+    distinct = np.unique(finite)
+    if distinct.size < 2:
+        onsets = np.asarray([], dtype=np.float64)
+    else:
+        intervals = np.diff(distinct)
+        onset_mask = np.abs(intervals - float(stimulus_duration_ms)) <= float(tolerance_ms)
+        onsets = distinct[:-1][onset_mask]
+    return onsets, {
+        "extraction_rule": "dc9_followed_by_stimulus_offset_at_3000ms",
+        "stimulus_duration_ms": float(stimulus_duration_ms),
+        "tolerance_ms": float(tolerance_ms),
+        "raw_dc9_count": int(raw.size),
+        "finite_dc9_count": int(finite.size),
+        "distinct_dc9_count": int(distinct.size),
+        "duplicate_dc9_count": int(finite.size - distinct.size),
+        "stimulus_onset_candidate_count": int(onsets.size),
+    }
+
+
 def classify_alignment(
     residual_ms: np.ndarray,
     blocks: Sequence[Mapping[str, Any]],

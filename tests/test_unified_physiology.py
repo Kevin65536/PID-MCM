@@ -14,6 +14,7 @@ from src.data.unified_physiology import (
     CANONICAL_FNIRS_SAMPLE_RATE_HZ,
     CANONICAL_UNIT,
     DEFAULT_UNIFIED_WINDOW_DURATION_S,
+    FORBIDDEN_TASK_NAMESPACES,
     NativeEEGRecord,
     UnifiedPhysiologyWindowDataset,
     canonical_fnirs_channel_names,
@@ -128,6 +129,56 @@ def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
     assert len(strict) == 0
     assert len(strict.excluded_alignment_records) == 1
     assert len(diagnostic) == 1
+
+
+def test_unified_loader_hard_excludes_dsr_and_reports_contract_evidence(tmp_path):
+    cache = tmp_path / "cache"
+    (cache / "event_index").mkdir(parents=True)
+    record = {
+        "dataset_id": "simultaneous_eeg_nirs",
+        "subject": "VP001",
+        "record_id": "cnt_dsr",
+        "sample_rate_hz": 10.0,
+        "record_npz": str(cache / "unused.npz"),
+        "metadata": {},
+    }
+    (cache / "cache_manifest.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
+    (cache / "event_index/event_manifest.json").write_text("{}", encoding="utf-8")
+    event = {
+        "dataset_id": "simultaneous_eeg_nirs",
+        "subject": "VP001",
+        "record_id": "cnt_dsr",
+        "event_type": "session_block",
+        "label": "session",
+        "eeg_time_ms": 0.0,
+        "fnirs_time_ms": 0.0,
+        "onset_ms": 0.0,
+        "metadata": {"task": "dsr"},
+    }
+    report = {
+        "dataset_id": "simultaneous_eeg_nirs",
+        "subject": "VP001",
+        "record_id": "cnt_dsr",
+        "alignment_case": "stable_fixed_offset",
+        "label_sequence_match": True,
+    }
+    (cache / "event_index/events.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
+    (cache / "event_index/alignment_reports.jsonl").write_text(json.dumps(report) + "\n", encoding="utf-8")
+
+    dataset = UnifiedPhysiologyWindowDataset(
+        cache,
+        dataset_ids=["simultaneous_eeg_nirs"],
+        admissible_alignment_cases=None,
+    )
+    summary = dataset.contract_summary()
+
+    assert FORBIDDEN_TASK_NAMESPACES == frozenset({"simultaneous_eeg_nirs:dsr"})
+    assert len(dataset) == 0
+    assert summary["forbidden_task_policy"] == "unified_training_hard_exclusion_v1"
+    assert summary["excluded_forbidden_task_window_count_by_namespace"] == {
+        "simultaneous_eeg_nirs:dsr": 1
+    }
+    assert summary["excluded_forbidden_task_record_count"] == 1
 
 
 def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_path):

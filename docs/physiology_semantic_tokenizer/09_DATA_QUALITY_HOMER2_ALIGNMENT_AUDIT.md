@@ -1,7 +1,7 @@
 # 数据规范化、HOMER2 对齐与统一缓存规范
 
 _Created: 2026-07-08_
-_Unified: 2026-07-14_
+_Unified: 2026-07-17_
 
 ## 当前结论
 
@@ -34,6 +34,10 @@ _Unified: 2026-07-14_
 - Single-Trial EEG 的 provenance-preserving raw/v2/v3 branches、EOG
   regression、bad-channel/artifact/analysis-valid masks 与 29-subject audit；v3
   已通过受控伪影循环移位 sham 对照并准入为默认分支。
+- `simultaneous_eeg_nirs:dsr` 已成为统一 loader 的不可覆盖禁用项；原始事件
+  仍留在 event index 中供 provenance/诊断使用，但不会进入训练窗口。
+- Visual EEG DC9 已按原始三事件语义解析，统一入口当前接纳 54/55 records、
+  7,750 windows 和 16/16 subjects；S06 Part1 继续隔离。
 
 当前不支持：
 
@@ -117,6 +121,54 @@ data/cache/physiology_semantic_clean_v1/event_index/
 alignment report 记录 EEG/fNIRS 事件数、label match、offset mean/std、
 piecewise offset blocks、skipped marker、drift slope 等。Simultaneous 中
 `wg`、`nback`、`dsr` 的事件粒度不能强行视为同一种 trial。
+
+### 1.4 DSR 禁用契约
+
+`simultaneous_eeg_nirs:dsr` 是 `UnifiedPhysiologyWindowDataset` 的永久禁用
+namespace，不是调用方可以打开的配置项：
+
+```text
+forbidden_task_policy = unified_training_hard_exclusion_v1
+forbidden_task_namespaces = [simultaneous_eeg_nirs:dsr]
+```
+
+边界如下：
+
+- 原始 DSR signal、event rows 与 alignment reports 保留，用于数据完整性、
+  provenance 和历史诊断；
+- 统一 loader 在窗口构建阶段、split 或模型 adapter 之前硬排除 DSR；
+- `contract_summary()` 必须报告禁用 namespace、被排除窗口数与 record 数；
+- 即使调用方设置 `admissible_alignment_cases=None`，也不能重新接纳 DSR；
+- 当前正式 event index 下，loader 记录并排除 467 个 DSR source windows /
+  26 records，对外暴露 DSR windows 为 0；其中 449 个 windows / 25 records
+  曾满足 alignment gate，VP005 record 中的 18 个 session blocks 原本已因
+  不稳定 alignment 排除。
+
+底层 Simultaneous raw loader 的 `allow_deprecated=True` 仅保留给显式诊断工具，
+不属于统一训练数据协议。
+
+### 1.5 Visual 原始时序标记契约
+
+Visual 原始说明和数据论文一致声明：每个 trial 有三个事件；EEG 文本 sidecar
+用相同的 `DC9` 依次记录刺激出现、3 秒后的刺激消失和参与者反应，而 fNIRS CSV
+的 `Mark=1/2/3` 分别显式记录三者。[^1] 因此跨模态 anchor 是 EEG 中“其后约
+3,000 ms 出现下一 DC9”的事件与 fNIRS `Mark=1`，而不是机械选取 EEG sidecar
+的每第三行。
+
+当前解析规则为：
+
+1. 删除相同时间戳的重复 DC9 行；这修复 S15 Part1 的成对重复 annotation；
+2. 在 `3,000 ± 10 ms` 内紧随另一个 DC9 的事件识别为 stimulus onset；
+3. 与 fNIRS `Mark=1` 序列执行既有 skip-aware 对齐；
+4. 仍按既有 `stable_fixed_offset` 阈值准入，不放宽 alignment gate；
+5. 将原始、去重、候选 onset 与 duplicate counts 写入 alignment report。
+
+`event_manifest.json.dataset_timing_contracts.visual_cognitive_motivation` 固化
+上述规则及版本 `visual_dc9_stimulus_timing_v1`，避免重建时静默退回行号规则。
+
+重建后 55 条 Visual reports 中 54 条为 `stable_fixed_offset`，offset standard
+deviation 约为 28–37 ms；唯一未准入的 S06 Part1 Probe1 只有 108 个可识别
+EEG onset、但有 125 个 fNIRS onset，继续保留为 `continuous_drift` 诊断记录。
 
 ## 2. HOMER2 对齐状态
 
@@ -251,7 +303,7 @@ data/cache/physiology_semantic_clean_v1/
 
 - signal records: 1267
 - canonical record join keys: 787
-- events: 14545（Visual 由 1/2/3 三类原始 mark 改为与 EEG DC9 对齐的
+- events: 14547（Visual 由 1/2/3 三类原始 mark 改为与 EEG DC9 对齐的
   stimulus-onset trial；不再把三类 mark 当三个训练样本）
 - alignment reports: 787
 - `record_keys_without_events`: 0
@@ -307,6 +359,8 @@ channels。
   `skip_aligned_piecewise_constant_offset` 与
   `shared_segment_index_no_marker_stream`；continuous-drift/不稳定 record 留在
   sidecar 中供诊断，但不进入统一训练窗口；
+- 默认无条件排除 `simultaneous_eeg_nirs:dsr`，并在 contract summary 中给出
+  可审计的排除计数；
 - `channel_geometry`: EEG/fNIRS 均返回 `canonical_channel_geometry_v1` rows，
   缺失位置保留 null/provenance，不虚构坐标；
 - native unit、原始路径、full-record robust location/scale、filter/resample state。
@@ -324,6 +378,18 @@ channels。
 | REFED | 480 | `(64, 1600)` | `(102, 80)` | pass |
 | Visual | 3250（31/55 records 因不稳定 alignment 排除） | `(30, 1600)` | `(48, 80)` | pass |
 | Simultaneous | 2711（1/78 records 排除） | `(30, 1600)` | `(72, 80)` | pass |
+
+2026-07-17 当前 20 秒默认入口的 window-reference contract：
+
+| 数据集 | 准入 windows | Subjects | 排除说明 |
+| --- | ---: | ---: | --- |
+| Single-Trial | 3480 | 29 | 无 |
+| REFED | 480 | 32 | 无 |
+| Visual | 7750 | 16 | S06 Part1 Probe1 原始触发缺失 |
+| Simultaneous | 2262 | 26 | DSR 467 source windows 永久禁用；其中 1 个 record 同时 alignment 不稳定 |
+
+全入口共 13,972 windows；DSR 对外计数为 0。以上是 loader-reference 与数据
+协议验证，不是模型性能或科学有效性结果。
 
 仍需在训练入口补：
 
@@ -423,3 +489,7 @@ Single-Trial EEG 的污染处理不是通过把 PSD 异常“标准化掉”来�
 registry 默认已切换到 v3；raw 与 v2 仍保留用于诊断和消融。发布页没有给出动作
 持续时间，因此验证事件邻域来自 `mrk_artifact` marker 间隔的自适应估计，而不是
 未经证实的固定时长。
+
+## References
+
+[^1]: Phukhachee, T., et al. (2024). “A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults.” _Data in Brief_, 53, 110260. https://pmc.ncbi.nlm.nih.gov/articles/PMC10964074/

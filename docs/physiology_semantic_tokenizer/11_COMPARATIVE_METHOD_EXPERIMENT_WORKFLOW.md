@@ -6,7 +6,7 @@ _Four-dataset downstream benchmark contract and readiness audit, frozen 2026-07-
 
 ## 📋 Decision and current readiness
 
-The comparison program is approved to enter **preparation**, but it is not ready for formal training. The measured-data entrance is already available through `UnifiedPhysiologyWindowDataset`; the downstream target contract, DSR exclusion guard, shared split manifests, method adapters, and reproduction checks are not yet complete.
+The comparison program is approved to enter **preparation**, but it is not ready for formal training. The measured-data entrance and DSR exclusion guard are now available through `UnifiedPhysiologyWindowDataset`; the downstream target contract, shared split manifests, method adapters, and reproduction checks are not yet complete.
 
 This document fixes the workflow while leaving the final comparison-method set open. STA-Net and EFRM are admitted only as **candidates for integration audit**. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
 
@@ -16,14 +16,15 @@ This document fixes the workflow while leaving the final comparison-method set o
 | --- | --- | --- | --- |
 | Four measured datasets | Unified loader registers Single-Trial, REFED, Visual, and Simultaneous | Ready for adapter work | Freeze cache and contract hashes |
 | Three discrete / one continuous families | Dataset descriptions support this division | Partially ready | Promote REFED continuous targets into a versioned label adapter |
-| DSR removal | Registry calls DSR deprecated, but the default unified loader still exposes 449 admitted DSR windows in the current cache | Blocking mismatch | Add an explicit forbidden-task guard and test zero DSR samples |
+| DSR removal | Unified loader hard-excludes `simultaneous_eeg_nirs:dsr`; current contract reports 467 source windows excluded and 0 exposed | Ready | Preserve the invariant in every downstream adapter/preflight |
+| Visual timing | Documented DC9 appearance→3-second disappearance semantics replace every-third-row parsing | Ready; 54/55 records | Keep S06 Part1 excluded unless stronger raw evidence appears |
 | Subject-independent comparison | Subjects are present in the unified sample contract | Not implemented | Generate one shared split manifest per dataset/task |
 | STA-Net | Official code is present locally at revision `b6db8bb5eb2f6491a13f0938880ee70e32162ee7`; model and runner are fixed to paired, binary classification and method-specific tensors | Candidate only | Reproduce source behavior, then add unified-loader adapter and configurable head |
 | EFRM | Official code is present locally at revision `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; released downstream path uses classification heads and `CrossEntropyLoss` | Candidate only | Separate pretraining regimes and add a regression-capable evaluation head |
 | Method provenance | Both local candidates are ignored nested Git repositories rather than tracked project dependencies | Blocking for formal runs | Pin source URL, revision, patch, environment, and license status in a method manifest |
 | Fair result table | No common tasks, splits, data regimes, metrics, or seed policy are frozen | Not ready | Complete C0–C4 before any formal result |
 
-Read-only construction of the current default loader yields 9,921 admitted window references before task filtering:
+The pre-contract read-only audit yielded 9,921 window references, including DSR and only eight Visual subjects. It is retained below as historical evidence of the gaps that prompted this change:
 
 | Dataset/task | Windows | Subjects | Audit implication |
 | --- | ---: | ---: | --- |
@@ -33,9 +34,9 @@ Read-only construction of the current default loader yields 9,921 admitted windo
 | Visual / cognitive motivation | 3,250 | 8 | Subject-independent uncertainty requires special care |
 | Simultaneous / n-back | 702 | 26 | Discrete track available |
 | Simultaneous / WG | 1,560 | 26 | Discrete track available |
-| Simultaneous / DSR | 449 | 25 | Must be removed before split generation |
+| Simultaneous / DSR | 449 | 25 | Historical leakage; now hard-excluded |
 
-These counts are an audit snapshot, not permanent benchmark denominators. Every formal protocol records fresh counts and hashes from its pinned cache and admission policy.
+After the 2026-07-17 event-index rebuild and hard exclusion, the default loader exposes 13,972 windows: Single-Trial 3,480, REFED 480, Visual 7,750, and Simultaneous 2,262. Visual now covers 16 subjects, and DSR exposure is zero. These counts remain cache snapshots rather than permanent benchmark denominators; every formal protocol records fresh counts and hashes from its pinned cache and admission policy.
 
 > ⚠️ **Claim boundary:** Passing loader, adapter, reproduction, or smoke checks establishes software fidelity only. It does not establish that a method is a field-wide SOTA, that it is scientifically superior, or that a representation has discovered physiological coupling.
 
@@ -74,7 +75,7 @@ The default proposal is sequence-to-sequence prediction on the annotation suppor
 
 `simultaneous_eeg_nirs:dsr` is a forbidden namespace, not an optional config default. Every comparative job, including export, dry run, smoke, formal training, and visualization, must fail before model construction if any selected sample has `label.task == "dsr"` or the corresponding event metadata task is `dsr`.
 
-The required preflight evidence is:
+The loader now emits the required preflight evidence through `contract_summary()`:
 
 ```text
 forbidden_tasks: ["simultaneous_eeg_nirs:dsr"]
@@ -83,7 +84,7 @@ selected_sample_count_by_task:
 guard_status: passed
 ```
 
-Filtering DSR only in a vendor-specific adapter is insufficient because that would allow split and denominator drift before model construction.
+Filtering DSR only in a vendor-specific adapter remains insufficient because that would allow split and denominator drift before model construction. The hard exclusion is regression-tested even when alignment admission is placed in diagnostic mode.
 
 ## 🔍 Candidate-method audit
 
@@ -302,7 +303,7 @@ experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<metho
 | ---: | --- | --- |
 | 1 | `comparative_task_contract_v1` | Task namespaces, class names, REFED target definition, DSR prohibition |
 | 2 | Unified downstream label adapter | REFED continuous targets and masks |
-| 3 | Forbidden-task preflight and tests | Default loader's current DSR exposure |
+| 3 | Forbidden-task preflight and tests | **Complete:** loader reports 467 source windows excluded / 0 exposed DSR windows |
 | 4 | Shared subject split generator | Cross-method sample identity and leakage prevention |
 | 5 | Method provenance manifests | Ignored nested repositories and revision/license ambiguity |
 | 6 | Common prediction/metric API | Classification and regression result comparability |
