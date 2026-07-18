@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 from pathlib import Path
 import sys
 from typing import Any, Iterable
-from zipfile import ZipFile
-import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -23,7 +23,13 @@ from src.data.channel_geometry import (  # noqa: E402
     ChannelGeometryRecord,
     records_from_mnt,
     records_from_refed_coordinates,
+    records_from_template_montage_csv,
     records_from_visual_ced,
+    records_from_visual_fnirs_graphical_projection,
+)
+from src.data.channel_adjacency import (  # noqa: E402
+    build_eeg_adjacency_from_geometry,
+    build_fnirs_adjacency_from_shared_optodes,
 )
 from src.utils.io import write_json  # noqa: E402
 
@@ -33,6 +39,51 @@ DATA_ROOTS = {
     "refed": PROJECT_ROOT / "data/REFED-dataset",
     "visual_cognitive_motivation": PROJECT_ROOT / "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults",
     "simultaneous_eeg_nirs": PROJECT_ROOT / "data/Simultaneous EEG&NIRS",
+}
+REFED_EEG_TEMPLATE_ASSET = PROJECT_ROOT / "src/data/assets/refed_standard_1005_montage_v1.csv"
+VISUAL_FNIRS_TOPOLOGY_ASSET = PROJECT_ROOT / "src/data/assets/visual_fnirs_4x4_topology_v1.csv"
+REFED_EEG_TEMPLATE_PROVENANCE = {
+    "schema": "refed_standard_montage_geometry_v1",
+    "template_name": "fieldtrip_standard_1005_refed_1010_subset",
+    "upstream_repository": "https://github.com/fieldtrip/fieldtrip",
+    "upstream_commit": "462487e4dd6dd1c4caba626723d5650919b31e86",
+    "upstream_file": "template/electrode/standard_1005.elc",
+    "upstream_file_sha256": "1ee59197946d62de872db2ac7f2243a596662c231427366f6dc5d84ed237f853",
+    "exact_template_channel_count": 62,
+    "interpolated_channel_count": 2,
+    "interpolated_channels": {
+        "CB1": ["PO7", "O1"],
+        "CB2": ["PO8", "O2"],
+    },
+    "interpolation_rule": "arithmetic_3d_midpoint_v1",
+    "intended_use": "within_eeg_channel_adjacency_and_visualization_only",
+    "prohibited_interpretation": "participant_digitization_or_eeg_fnirs_coregistration",
+}
+VISUAL_FNIRS_TEMPLATE_PROVENANCE = {
+    "schema": "visual_fnirs_graphical_ced_projection_v1",
+    "layout": "bilateral Hitachi 4x4 optode grids with 24 channels per probe",
+    "channel_numbering_reference": {
+        "paper": "Iso et al. 2021, Figure 2",
+        "doi": "10.3389/fnhum.2021.603069",
+        "scope": "standard Hitachi 4x4 channel index topology only",
+        "not_used_as": "dataset coordinate or participant placement source",
+    },
+    "channel_topology_method": "shared_optode_line_graph_v1",
+    "coordinate_projection_method": "graph_laplacian_harmonic_ced_projection_v1",
+    "probe1_anchor_channel_count": 14,
+    "probe2_anchor_channel_count": 14,
+    "interpolated_channel_count_per_probe": 10,
+    "workbook_correction": {
+        "probe": "Probe2",
+        "channel": "CH13",
+        "raw_label": "FP4",
+        "resolved_label": "FC4",
+        "basis": "bilateral FC3/FC4 symmetry, Location.ced, and graphical head model",
+    },
+    "intended_use": "within_fnirs_adjacency_and_coarse_eeg_fnirs_alignment_only",
+    "prohibited_interpretation": (
+        "participant_digitization_source_detector_distance_or_exact_coregistration"
+    ),
 }
 
 
@@ -46,6 +97,14 @@ def parse_args() -> argparse.Namespace:
 
 def _rel(path: Path) -> str:
     return str(path.relative_to(PROJECT_ROOT) if path.is_relative_to(PROJECT_ROOT) else path)
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _jsonable(value: Any) -> Any:
@@ -129,74 +188,85 @@ def iter_simultaneous(root: Path) -> Iterable[ChannelGeometryRecord]:
             )
 
 
-def _xlsx_rows(path: Path) -> list[list[str]]:
-    ns = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-    with ZipFile(path) as archive:
-        shared: list[str] = []
-        if "xl/sharedStrings.xml" in archive.namelist():
-            root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
-            for item in root.findall("a:si", ns):
-                shared.append("".join(text.text or "" for text in item.findall(".//a:t", ns)))
-        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
-        rows: list[list[str]] = []
-        for row in root.findall(".//a:row", ns):
-            values: dict[int, str] = {}
-            for cell in row.findall("a:c", ns):
-                ref = cell.get("r", "")
-                col = _excel_column_index(ref)
-                node = cell.find("a:v", ns)
-                value = "" if node is None else str(node.text or "")
-                if cell.get("t") == "s" and value:
-                    value = shared[int(value)]
-                values[col] = value
-            if values:
-                rows.append([values.get(index, "") for index in range(max(values) + 1)])
+def refed_eeg_template_records(root: Path) -> list[ChannelGeometryRecord]:
+    channel_file = root / "EEG_channels.csv"
+    with channel_file.open("r", encoding="utf-8-sig", newline="") as handle:
+        expected_names = [str(row.get("ch_name", "")).strip() for row in csv.DictReader(handle)]
+    provenance = {
+        **REFED_EEG_TEMPLATE_PROVENANCE,
+        "refed_channel_file": _rel(channel_file),
+        "refed_channel_file_sha256": _sha256(channel_file),
+        "refed_reference_figure": _rel(root / "Figures/Figure_1.png"),
+        "refed_reference_figure_sha256": _sha256(root / "Figures/Figure_1.png"),
+    }
+    rows = records_from_template_montage_csv(
+        REFED_EEG_TEMPLATE_ASSET,
+        dataset_id="refed",
+        subject="all",
+        record_id="global_eeg_standard_1005_v1",
+        template_name=REFED_EEG_TEMPLATE_PROVENANCE["template_name"],
+        coordinate_system="fieldtrip_standard_1005_mni_template",
+        coordinate_units="mm",
+        source_file=_rel(REFED_EEG_TEMPLATE_ASSET),
+        provenance=provenance,
+    )
+    actual_names = [row.channel_name for row in rows]
+    if actual_names != expected_names:
+        raise ValueError(
+            "REFED standard montage asset must exactly match EEG_channels.csv order: "
+            f"expected={expected_names}, actual={actual_names}"
+        )
     return rows
 
 
-def _excel_column_index(cell_ref: str) -> int:
-    col = "".join(ch for ch in cell_ref if ch.isalpha())
-    value = 0
-    for char in col:
-        value = value * 26 + (ord(char.upper()) - ord("A") + 1)
-    return max(value - 1, 0)
+def _visual_mode_4x4_files(root: Path) -> list[Path]:
+    files = sorted(root.glob("S*/fNIRS/*.csv"))
+    invalid: list[str] = []
+    for path in files:
+        mode = None
+        with path.open("r", encoding="utf-8-sig", errors="replace") as handle:
+            for _, line in zip(range(40), handle):
+                if line.startswith("Mode,"):
+                    mode = line.strip().split(",", 1)[1]
+                    break
+        if mode != "4x4":
+            invalid.append(f"{_rel(path)}={mode!r}")
+    if not files or invalid:
+        raise ValueError(
+            "Visual fNIRS topology requires every raw export to declare Mode,4x4; "
+            f"file_count={len(files)}, invalid={invalid[:5]}"
+        )
+    return files
 
 
 def iter_visual(root: Path) -> Iterable[ChannelGeometryRecord]:
+    _visual_mode_4x4_files(root)
     ced = root / "Location.ced"
     if ced.exists():
         yield from records_from_visual_ced(ced, source_file=_rel(ced))
 
     reference = root / "fNIRS_to_EEG_channel_reference.xlsx"
-    if reference.exists():
-        for row_index, row in enumerate(_xlsx_rows(reference)[2:]):
-            for probe, fnirs_idx, eeg_idx in (("Probe1", 0, 1), ("Probe2", 2, 3)):
-                if len(row) <= fnirs_idx:
-                    continue
-                channel = str(row[fnirs_idx]).strip()
-                if not channel.startswith("CH"):
-                    continue
-                yield ChannelGeometryRecord(
-                    dataset_id="visual_cognitive_motivation",
-                    subject="all",
-                    record_id=probe,
-                    modality="fnirs",
-                    channel_name=channel,
-                    channel_role="fnirs_channel_to_eeg_reference",
-                    coordinate_system="referenced_to_visual_eeg_ced",
-                    coordinate_units="label_reference",
-                    source_file=_rel(reference),
-                    metadata={
-                        "nearest_eeg_label": str(row[eeg_idx]).strip() if len(row) > eeg_idx else "",
-                        "row_index": row_index,
-                    },
-                )
+    graphical_model = root / "Graphical_recording_head_model.pdf"
+    if reference.exists() and ced.exists() and graphical_model.exists():
+        yield from records_from_visual_fnirs_graphical_projection(
+            reference,
+            ced,
+            VISUAL_FNIRS_TOPOLOGY_ASSET,
+            graphical_model_path=graphical_model,
+            source_files={
+                "graphical_model": _rel(graphical_model),
+                "channel_reference": _rel(reference),
+                "eeg_ced": _rel(ced),
+                "topology_asset": _rel(VISUAL_FNIRS_TOPOLOGY_ASSET),
+            },
+        )
 
 
 def iter_records(datasets: list[str]) -> Iterable[ChannelGeometryRecord]:
     if "eeg_fnirs_single_trial" in datasets:
         yield from iter_single_trial(DATA_ROOTS["eeg_fnirs_single_trial"])
     if "refed" in datasets:
+        yield from refed_eeg_template_records(DATA_ROOTS["refed"])
         path = DATA_ROOTS["refed"] / "fNIRS_coordinates.csv"
         if path.exists():
             yield from records_from_refed_coordinates(path, source_file=_rel(path))
@@ -218,6 +288,53 @@ def main() -> None:
     rows = [record.to_dict() for record in iter_records(args.datasets)]
     channels_path = output_dir / "channels.jsonl"
     count = _write_jsonl(channels_path, rows)
+    files = {"channels_jsonl": _rel(channels_path)}
+    if "refed" in args.datasets:
+        refed_eeg_rows = [
+            {
+                **row,
+                "coordinate_status": row.get("metadata", {}).get("coordinate_status"),
+            }
+            for row in rows
+            if row["dataset_id"] == "refed" and row["modality"] == "eeg"
+        ]
+        adjacency = build_eeg_adjacency_from_geometry(
+            "refed",
+            refed_eeg_rows,
+            [row["channel_name"] for row in refed_eeg_rows],
+        )
+        adjacency_path = output_dir / "refed_eeg_adjacency.json"
+        write_json(adjacency_path, adjacency.to_serializable(), ensure_ascii=False)
+        files["refed_eeg_adjacency"] = _rel(adjacency_path)
+    if "visual_cognitive_motivation" in args.datasets:
+        visual_probes: dict[str, Any] = {}
+        for probe in ("Probe1", "Probe2"):
+            probe_rows = [
+                row
+                for row in rows
+                if row["dataset_id"] == "visual_cognitive_motivation"
+                and row["modality"] == "fnirs"
+                and row["base_record_id"] == probe
+            ]
+            adjacency = build_fnirs_adjacency_from_shared_optodes(
+                "visual_cognitive_motivation",
+                probe,
+                probe_rows,
+                [f"CH{index}" for index in range(1, 25)],
+            )
+            visual_probes[probe] = adjacency.to_serializable()
+        visual_adjacency_path = output_dir / "visual_fnirs_adjacency.json"
+        write_json(
+            visual_adjacency_path,
+            {
+                "schema": "visual_fnirs_bilateral_adjacency_v1",
+                "dataset_id": "visual_cognitive_motivation",
+                "probes": visual_probes,
+                "claim_boundary": VISUAL_FNIRS_TEMPLATE_PROVENANCE["prohibited_interpretation"],
+            },
+            ensure_ascii=False,
+        )
+        files["visual_fnirs_adjacency"] = _rel(visual_adjacency_path)
     counts: dict[str, int] = {}
     modality_counts: dict[str, int] = {}
     for row in rows:
@@ -226,14 +343,50 @@ def main() -> None:
         modality_counts[key] = modality_counts.get(key, 0) + 1
     manifest = {
         "schema": CHANNEL_GEOMETRY_SCHEMA,
-        "files": {"channels_jsonl": _rel(channels_path)},
+        "code_sha256": {
+            "builder": _sha256(Path(__file__).resolve()),
+            "channel_geometry": _sha256(PROJECT_ROOT / "src/data/channel_geometry.py"),
+            "channel_adjacency": _sha256(PROJECT_ROOT / "src/data/channel_adjacency.py"),
+        },
+        "files": files,
         "datasets": args.datasets,
         "record_count": count,
         "counts": counts,
         "modality_counts": modality_counts,
+        "refed_eeg_template_provenance": {
+            **REFED_EEG_TEMPLATE_PROVENANCE,
+            "asset": _rel(REFED_EEG_TEMPLATE_ASSET),
+            "asset_sha256": _sha256(REFED_EEG_TEMPLATE_ASSET),
+            "refed_channel_file_sha256": _sha256(DATA_ROOTS["refed"] / "EEG_channels.csv"),
+            "refed_reference_figure_sha256": _sha256(
+                DATA_ROOTS["refed"] / "Figures/Figure_1.png"
+            ),
+            "adjacency_method": "top_view_xy_delaunay_v1",
+        } if "refed" in args.datasets else None,
+        "visual_fnirs_template_provenance": {
+            **VISUAL_FNIRS_TEMPLATE_PROVENANCE,
+            "topology_asset": _rel(VISUAL_FNIRS_TOPOLOGY_ASSET),
+            "topology_asset_sha256": _sha256(VISUAL_FNIRS_TOPOLOGY_ASSET),
+            "graphical_model_sha256": _sha256(
+                DATA_ROOTS["visual_cognitive_motivation"] / "Graphical_recording_head_model.pdf"
+            ),
+            "channel_reference_sha256": _sha256(
+                DATA_ROOTS["visual_cognitive_motivation"] / "fNIRS_to_EEG_channel_reference.xlsx"
+            ),
+            "eeg_ced_sha256": _sha256(
+                DATA_ROOTS["visual_cognitive_motivation"] / "Location.ced"
+            ),
+            "raw_export_mode": "4x4",
+            "raw_export_file_count": len(
+                _visual_mode_4x4_files(DATA_ROOTS["visual_cognitive_motivation"])
+            ),
+        } if "visual_cognitive_motivation" in args.datasets else None,
         "notes": [
             "Coordinates preserve each dataset's native coordinate system and units.",
-            "Visual fNIRS rows are channel-to-EEG label references, not measured 3D optode coordinates.",
+            "Visual fNIRS coordinates are graphical/CED template projections, not measured 3D optode coordinates.",
+            "Visual projected coordinates are valid for within-fNIRS adjacency and coarse cross-modal alignment only.",
+            "REFED EEG coordinates are a standard-template topology proxy, not participant digitization.",
+            "REFED EEG adjacency is valid only as within-EEG neighborhood information.",
         ],
     }
     write_json(output_dir / "geometry_manifest.json", manifest, ensure_ascii=False)

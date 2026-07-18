@@ -1,12 +1,12 @@
 # Comparative-method experiment workflow
 
-_Four-dataset downstream benchmark contract and readiness audit, frozen 2026-07-17_
+_Four-dataset downstream benchmark contract and readiness audit, updated 2026-07-18_
 
 ---
 
 ## 📋 Decision and current readiness
 
-The comparison program is approved to enter **preparation**, but it is not ready for formal training. The measured-data entrance and DSR exclusion guard are now available through `UnifiedPhysiologyWindowDataset`; the downstream target contract, shared split manifests, method adapters, and reproduction checks are not yet complete.
+The comparison program is approved to enter **preparation**, but it is not ready for formal training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. Shared split manifests, method adapters, and reproduction checks are not yet complete.
 
 This document fixes the workflow while leaving the final comparison-method set open. STA-Net and EFRM are admitted only as **candidates for integration audit**. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
 
@@ -15,9 +15,11 @@ This document fixes the workflow while leaving the final comparison-method set o
 | Area | Checkout evidence | Verdict | Required action |
 | --- | --- | --- | --- |
 | Four measured datasets | Unified loader registers Single-Trial, REFED, Visual, and Simultaneous | Ready for adapter work | Freeze cache and contract hashes |
-| Three discrete / one continuous families | Dataset descriptions support this division | Partially ready | Promote REFED continuous targets into a versioned label adapter |
-| DSR removal | Unified loader hard-excludes `simultaneous_eeg_nirs:dsr`; current contract reports 467 source windows excluded and 0 exposed | Ready | Preserve the invariant in every downstream adapter/preflight |
+| Three discrete / one continuous families | `refed_continuous_va_sequence_v1` emits fixed-shape valence/arousal sequences and masks | Target adapter ready | Preserve subject/video grouping and prove every regression loss consumes the target mask |
+| DSR restoration | EEG codes 16/32 yield Go/No-go events; fNIRS times use admitted block anchors; default gate admits 8,980 windows/25 subjects | Ready with claim boundary | Use 2 s EEG epochs for ERP comparison and treat fNIRS as context, not symbol-native ground truth |
+| Simultaneous ocular repair | `simultaneous_eeg_eog_clean_v1` caches all 78 records as 28 scalp EEG channels; HEOG/VEOG are auxiliary-only | Ready | Preserve branch/hash provenance and report artifact masks |
 | Visual timing | Documented DC9 appearance→3-second disappearance semantics replace every-third-row parsing | Ready; 54/55 records | Keep S06 Part1 excluded unless stronger raw evidence appears |
+| Visual fNIRS geometry | PDF optode layout + 112 raw `Mode,4x4` exports + partial EEG anchors projected onto `Location.ced`; both probes have connected 24-node/52-edge graphs | Ready for adjacency inputs | Keep graphical-template provenance and prohibit exact distance/co-registration claims |
 | Subject-independent comparison | Subjects are present in the unified sample contract | Not implemented | Generate one shared split manifest per dataset/task |
 | STA-Net | Official code is present locally at revision `b6db8bb5eb2f6491a13f0938880ee70e32162ee7`; model and runner are fixed to paired, binary classification and method-specific tensors | Candidate only | Reproduce source behavior, then add unified-loader adapter and configurable head |
 | EFRM | Official code is present locally at revision `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; released downstream path uses classification heads and `CrossEntropyLoss` | Candidate only | Separate pretraining regimes and add a regression-capable evaluation head |
@@ -34,9 +36,21 @@ The pre-contract read-only audit yielded 9,921 window references, including DSR 
 | Visual / cognitive motivation | 3,250 | 8 | Subject-independent uncertainty requires special care |
 | Simultaneous / n-back | 702 | 26 | Discrete track available |
 | Simultaneous / WG | 1,560 | 26 | Discrete track available |
-| Simultaneous / DSR | 449 | 25 | Historical leakage; now hard-excluded |
+| Simultaneous / DSR | 449 | 25 | Historical session-block representation; superseded by stimulus-level contract |
 
-After the 2026-07-17 event-index rebuild and hard exclusion, the default loader exposes 13,972 windows: Single-Trial 3,480, REFED 480, Visual 7,750, and Simultaneous 2,262. Visual now covers 16 subjects, and DSR exposure is zero. These counts remain cache snapshots rather than permanent benchmark denominators; every formal protocol records fresh counts and hashes from its pinned cache and admission policy.
+After the 2026-07-18 DSR rebuild, the default loader exposes 22,952 windows: Single-Trial 3,480, REFED 480, Visual 7,750, and Simultaneous 11,242. The last count includes 8,980 DSR Go/No-go windows from 25 admitted subjects; VP005 DSR remains excluded for continuous clock drift. These counts remain cache snapshots rather than permanent benchmark denominators; every formal protocol records fresh counts and hashes from its pinned cache and admission policy.
+
+The post-restoration full audit traversed all 22,952 windows and confirmed finite amplitudes, stable 28-channel Simultaneous signatures, the EOG-clean branch on all three Simultaneous tasks, and the exact DSR distribution Go 2,694 / No-go 6,286. Readiness remains 7 pass / 7 block / 1 warn because DSR restoration does not solve Visual unknown labels/probe dependence, REFED/Visual QC, mask consumption, shared splits, or channel adapters. Evidence: [`final_unified_loader_audit_post_dsr_20260718`](../../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_post_dsr_20260718/quality_report.md).
+
+The pre-restoration 2026-07-18 full-loader audit checked all then-admitted 13,972 windows rather than a small signal sample. It remains historical evidence for finite loading, geometry, Visual label/probe dependence, and scale-review cases, but its DSR and Simultaneous-QC conclusions are superseded here. REFED's EEG-topology gap is closed for this benchmark: all 64 standard 10–10 labels have versioned template coordinates, with 62 exact `standard_1005` matches, two reference-figure-backed `CB1/CB2` interpolations, and a connected 168-edge within-EEG adjacency graph. Visual fNIRS position availability is also 100% under the documented graphical-template boundary. The historical evidence bundle is [`final_unified_loader_audit_20260718`](../../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_20260718/quality_report.md); the Simultaneous repair evidence is [`simultaneous_eog_clean_20260718`](../../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/simultaneous_eog_clean_20260718/report.md).
+
+The subsequent REFED adapter closes that audit's missing-target item. With the
+current event index, 480 video events expand to 2,720 non-overlapping 20-second
+windows; 480 final windows are partial, and the per-coordinate target mask
+retains 90.2941% of the padded target tensor (exactly the paired annotation
+support). The remaining formal blocker is no longer target construction itself,
+but split freezing and proof that each candidate regression head/loss consumes
+both signal and target masks.
 
 > ⚠️ **Claim boundary:** Passing loader, adapter, reproduction, or smoke checks establishes software fidelity only. It does not establish that a method is a field-wide SOTA, that it is scientifically superior, or that a representation has discovered physiological coupling.
 
@@ -50,41 +64,96 @@ The four raw datasets are fixed. `croce_local_cache` remains a derived optional 
 | --- | --- | --- | --- | --- |
 | `eeg_fnirs_single_trial` | `motor_imagery` | Discrete | `LMI` / `RMI` | Primary classification track |
 | `eeg_fnirs_single_trial` | `mental_arithmetic` | Discrete | `MA` / `BL` | Primary classification track |
-| `refed` | `emotion_video` | Continuous | time-aligned valence and arousal | Primary regression track; adapter required |
+| `refed` | `emotion_video` | Continuous | 1 Hz time-aligned valence and arousal sequences | Primary regression track; adapter implemented |
 | `visual_cognitive_motivation` | `visual_cognitive_motivation` | Discrete | `RR` / `RF` / `FF` / `FR` | Primary classification track; reject `unknown` |
 | `simultaneous_eeg_nirs` | `nback` | Discrete | semantic levels `0-back` / `2-back` / `3-back` | Primary classification track |
 | `simultaneous_eeg_nirs` | `wg` | Discrete | `WG` / `BL` | Primary classification track |
-| `simultaneous_eeg_nirs` | `dsr` | Prohibited | none | Permanently excluded from comparison preparation and execution |
+| `simultaneous_eeg_nirs` | `dsr` | Discrete, EEG-primary | `Go` / `No-go` from EEG codes 16/32 | Restored; 2 s EEG epoch recommended, fNIRS is synchronized context |
 
 The apparent class index order in a cache is not a semantic definition. Every task adapter must carry an explicit ordered `class_names` list and reject unknown or out-of-vocabulary labels before split generation.
 
 ### Continuous-target decision
 
-REFED is the only continuous-label dataset in the benchmark. The current event index retains valence/arousal streams inside `event.metadata.continuous_label_stream`, but `canonical_label()` emits only a video-level class index. Formal regression is therefore blocked until a target adapter:
+REFED is the only continuous-label dataset in the benchmark. The event index
+retains the released joystick streams inside
+`event.metadata.continuous_label_stream`; `REFEDContinuousSequenceDataset`
+promotes them under `refed_continuous_va_sequence_v1` with this fixed contract:
 
-1. aligns the annotation grid to the EEG and fNIRS clocks;
-2. emits window-level valence and arousal values plus target-validity masks;
-3. declares whether the target is endpoint, center, mean, or sequence prediction;
-4. fits any target scaling on training subjects only;
-5. tests boundary padding, missing annotations, and deterministic alignment;
-6. versions the resulting schema and records its source event-index hash.
+1. each video is expanded from its event-relative origin with a configurable
+   stride; the default is non-overlapping 20-second windows;
+2. `target` has shape `[2, 20]` at the default 1 Hz target rate, ordered
+   `[valence, arousal]`; batched shape is `[sample, 2, 20]`;
+3. the released approximately 1 Hz annotation grid is aligned by normalized
+   video time, absorbing only the nominal 47.62 Hz duration discrepancy;
+4. `target_valid_mask` is per coordinate and time step, excludes non-finite
+   labels and any time without both EEG and fNIRS support, and invalid values
+   are zero-filled;
+5. the final partial window is retained by default so every annotation is
+   addressable; the mask, not an unexplained deletion threshold, determines
+   regression support;
+6. joystick values remain in the native REFED coordinate. Any centering or
+   scaling is fit on training subjects only and recorded by the downstream
+   adapter;
+7. `video_context_label` retains the video category only as provenance. It is
+   not the regression target;
+8. the contract summary records the event-index SHA-256, source-rate range,
+   target coverage, window policy, required held-out split key `subject`, and
+   within-video dependency keys `subject, record_id`.
 
-The default proposal is sequence-to-sequence prediction on the annotation support within each observation window. A scalar window-level mean may be retained as a secondary sensitivity analysis, not silently substituted after seeing validation performance.
+PyTorch jobs must use `collate_refed_continuous_sequences`. It stacks EEG,
+fNIRS, signal masks, `[B,2,T]` targets, and target masks while retaining nullable
+geometry/event/preprocessing provenance as a per-sample list; using the default
+collator is prohibited because nullable provenance fields are not tensor data.
 
-### DSR exclusion invariant
+```python
+from torch.utils.data import DataLoader
+from src.data import (
+    REFEDContinuousSequenceDataset,
+    collate_refed_continuous_sequences,
+)
 
-`simultaneous_eeg_nirs:dsr` is a forbidden namespace, not an optional config default. Every comparative job, including export, dry run, smoke, formal training, and visualization, must fail before model construction if any selected sample has `label.task == "dsr"` or the corresponding event metadata task is `dsr`.
-
-The loader now emits the required preflight evidence through `contract_summary()`:
-
-```text
-forbidden_tasks: ["simultaneous_eeg_nirs:dsr"]
-selected_sample_count_by_task:
-  simultaneous_eeg_nirs:dsr: 0
-guard_status: passed
+dataset = REFEDContinuousSequenceDataset(
+    window_duration_s=20.0,
+    window_stride_s=20.0,
+    target_sample_rate_hz=1.0,
+    include_partial_windows=True,
+)
+loader = DataLoader(
+    dataset,
+    batch_size=32,
+    collate_fn=collate_refed_continuous_sequences,
+)
 ```
 
-Filtering DSR only in a vendor-specific adapter remains insufficient because that would allow split and denominator drift before model construction. The hard exclusion is regression-tested even when alignment admission is placed in diagnostic mode.
+Formal jobs wrap the dataset in indices from the frozen subject-grouped split
+manifest; the example above demonstrates only the loading contract.
+
+The primary endpoint is sequence-to-sequence prediction. A scalar window mean
+may be retained as a preregistered sensitivity analysis, not substituted after
+validation. Overlapping strides are allowed only when all windows from the same
+subject/video remain in one split and effective sample dependence is reported.
+Because the native joystick traces contain long plateaus and some individual
+coordinates are constant for an entire video, CCC is computed over concatenated
+valid support within each held-out subject/video aggregation, not averaged from
+potentially undefined per-window CCC values. MAE, RMSE, coordinate-specific
+coverage, and a train-mean predictor remain required companion reports.
+
+### DSR restoration invariant
+
+`simultaneous_eeg_nirs:dsr` is admitted only when labels are EEG-native `Go`/`No-go`, both modality timestamps are present, and the record passes the same alignment gate as other tasks. A session-only label, an inferred fNIRS symbol marker, or a block without an aligned anchor must fail before split generation.
+
+The loader/event index emit the required preflight evidence:
+
+```text
+forbidden_tasks: []
+selected_sample_count_by_task:
+  simultaneous_eeg_nirs:dsr: 8980
+class_names: [Go, No-go]
+fnirs_label_role: synchronized_context_not_symbol_native_marker
+alignment_exclusion: simultaneous_eeg_nirs|VP005|cnt_dsr
+```
+
+The paper states 180 trials per participant, while every released EEG marker stream contains 360 code-16/32 markers. The benchmark retains the released marker count and reports the discrepancy; no outcome-dependent deduplication or halving is allowed. Diagnostic alignment mode may inspect VP005 but does not silently promote it to the formal split.
 
 ## 🔍 Candidate-method audit
 
@@ -164,7 +233,7 @@ flowchart LR
 Create a versioned `benchmark_protocol.yaml` that records:
 
 - four dataset IDs and dataset/task namespaces;
-- the forbidden DSR namespace;
+- the DSR Go/No-go class order, EEG-primary label source, epoch policy, and fNIRS-context boundary;
 - discrete class names and REFED continuous-target schema;
 - loader class, loader contract, cache/index hashes, signal branches, masks, and window policy;
 - primary modality regime, label budget, split family, seed policy, and result aggregation rule;
@@ -174,7 +243,7 @@ Create a versioned `benchmark_protocol.yaml` that records:
 
 ### C1 — Generate shared subject splits
 
-Generate splits once, before method-specific tensors. The primary protocol is subject-independent, group-exclusive outer-fold evaluation with nested train/validation selection. Each dataset/task receives versioned fold manifests containing train, validation, and protected outer-test subjects plus hashes of ordered sample IDs. The fold count is frozen before outcome inspection from admitted subject count and task coverage rather than imposed as one universal number. The current eight-subject Visual entrance requires either leave-one-subject-out or a low-fold grouped design with correspondingly explicit uncertainty.
+Generate splits once, before method-specific tensors. The primary protocol is subject-independent, group-exclusive outer-fold evaluation with nested train/validation selection. Each dataset/task receives versioned fold manifests containing train, validation, and protected outer-test subjects plus hashes of ordered sample IDs. The fold count is frozen before outcome inspection from admitted subject count and task coverage rather than imposed as one universal number. The current 16-subject Visual entrance still requires a fold design with explicit subject-level uncertainty; Probe1/Probe2 views of the same semantic trial must remain grouped and cannot inflate the effective trial denominator.
 
 Rules:
 
@@ -208,7 +277,7 @@ Every transformation records:
 
 STA-Net's spatial grids and EFRM's fixed sampling/channel targets require explicit sensitivity controls because these transformations may materially change the task. Repeating channels, fabricating geometry, or discarding masks silently is prohibited.
 
-**Gate C3:** deterministic adapter tests, DSR rejection, no cross-split fitted state, sample-order round trip, and modality/time alignment checks pass on every task.
+**Gate C3:** deterministic adapter tests, DSR contract validation, no cross-split fitted state, sample-order round trip, and modality/time alignment checks pass on every task.
 
 ### C4 — Establish method fidelity
 
@@ -301,9 +370,9 @@ experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<metho
 
 | Priority | Deliverable | Blocking evidence resolved |
 | ---: | --- | --- |
-| 1 | `comparative_task_contract_v1` | Task namespaces, class names, REFED target definition, DSR prohibition |
+| 1 | `comparative_task_contract_v1` | Task namespaces, class names, REFED target definition, DSR restoration boundary |
 | 2 | Unified downstream label adapter | REFED continuous targets and masks |
-| 3 | Forbidden-task preflight and tests | **Complete:** loader reports 467 source windows excluded / 0 exposed DSR windows |
+| 3 | DSR event/preflight tests | **Complete:** 8,980 admitted Go/No-go windows; VP005 remains alignment-excluded |
 | 4 | Shared subject split generator | Cross-method sample identity and leakage prevention |
 | 5 | Method provenance manifests | Ignored nested repositories and revision/license ambiguity |
 | 6 | Common prediction/metric API | Classification and regression result comparability |
@@ -312,10 +381,12 @@ experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<metho
 | 9 | Source-fidelity reproductions | Named-method validity |
 | 10 | Shared train/validation smokes | End-to-end software readiness |
 
+The full-loader audit adds three prerequisites ahead of method tensor export: reject Visual unknown labels before split generation; freeze paired-probe grouping/fusion or weighting; and test that method adapters consume time-validity, analysis-valid, artifact, bad-channel, channel, and target masks while preserving geometry provenance and template-coordinate sensitivity controls.
+
 ### Preparation is complete when
 
-1. the four datasets and six admitted task tracks have machine-readable target contracts;
-2. every comparative entrance proves zero DSR and zero unknown labels;
+1. the four datasets and seven admitted task tracks have machine-readable target contracts;
+2. every comparative entrance proves valid DSR Go/No-go provenance and zero unknown labels;
 3. REFED continuous targets are aligned, masked, versioned, and tested;
 4. one shared subject split manifest is reused by all methods in each track;
 5. STA-Net and EFRM have pinned provenance, environment, license status, and source-fidelity results;
@@ -342,4 +413,4 @@ experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<metho
 
 [^4]: Jung, E., & An, J. “EFRM official implementation.” GitHub. https://github.com/EuijinMisp/EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
 
-_Last updated: 2026-07-17_
+_Last updated: 2026-07-18_

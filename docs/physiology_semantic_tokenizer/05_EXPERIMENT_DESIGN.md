@@ -66,7 +66,7 @@ The following is a blocking software invariant for every newly created run. It a
 | E8 downstream utility | Unified-loader-derived versioned token export | Optional task covariates from canonical labels |
 | E9 visualization | Immutable artifacts generated from the above unified-loader runs | Named signature/probe tables only |
 
-Every manifest records `loader_class=UnifiedPhysiologyWindowDataset`, `loader_contract=unified_physiology_window_v1`, cache/index hashes, admitted alignment cases, window duration and preprocessing contract. A missing or different loader identity blocks the run. Historical Croce-cache and dataset-specific-loader runs remain comparison artifacts and are not relabeled as conformant.
+Every manifest records the loader class and contract, cache/index hashes, admitted alignment cases, window duration and preprocessing contract. The standard entrance is `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; REFED downstream sequence regression must instead declare `REFEDContinuousSequenceDataset` / `refed_continuous_va_sequence_v1` together with its source unified-window schema, stride, target rate, mask policy, target coverage, and event-index hash. Any other or missing loader identity blocks the run. Historical Croce-cache and dataset-specific-loader runs remain comparison artifacts and are not relabeled as conformant.
 
 ## 🎯 Hypotheses and falsifiers
 
@@ -97,7 +97,7 @@ All architecture comparisons match encoder capacity, local windows, training sam
 
 ### External comparison boundary
 
-The downstream comparison program uses the same four measured datasets through `UnifiedPhysiologyWindowDataset`, with three discrete-label dataset families and REFED as the continuous valence/arousal family. Dataset-native tasks remain separate. `simultaneous_eeg_nirs:dsr` is prohibited even though the current default unified-loader cache still exposes DSR windows; formal comparison is blocked until a preflight guard proves zero selected DSR samples.
+The downstream comparison program uses the same four measured datasets through `UnifiedPhysiologyWindowDataset`, with REFED sequence regression provided by the contract-preserving `REFEDContinuousSequenceDataset` subclass. The discrete-label task families and REFED's continuous valence/arousal family remain separate. REFED's primary target is a 1 Hz `[valence, arousal, time]` sequence with per-coordinate validity mask under `refed_continuous_va_sequence_v1`; native joystick values are preserved in the loader and any scaling is fit on training subjects only. As of 2026-07-18, `simultaneous_eeg_nirs:dsr` is restored as EEG-native Go/No-go stimulus classification: EEG codes 16/32 provide the labels, and each symbol is projected to the fNIRS clock only through its own admitted block anchor. The fNIRS stream is synchronized hemodynamic context, not an independent symbol-level label source. The released files contain 360 symbol markers per participant rather than the paper's stated 180; this discrepancy is retained in provenance and must not be silently downsampled. VP005 DSR remains excluded by the ordinary `continuous_drift` alignment gate, not by a task ban. DSR comparison runs should use a preregistered short EEG epoch (the event contract recommends 2 s); the loader's general 20 s observation window is not an ERP-duration claim.
 
 STA-Net and EFRM remain candidate methods rather than admitted baselines. STA-Net belongs primarily to a paired supervised classification track; EFRM belongs to pretrained transfer, linear-probe, and fine-tune tracks. Their source-protocol results, subject-independent shared-protocol results, in-domain pretraining, and external pretraining must remain in separately labeled tables. The exact task contract, adapter gates, metrics, artifacts, and implementation order are defined in the comparative-method workflow.
 
@@ -514,4 +514,4 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 
-_Last updated: 2026-07-17_
+_Last updated: 2026-07-18_

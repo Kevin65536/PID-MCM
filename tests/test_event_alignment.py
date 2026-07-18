@@ -1,7 +1,10 @@
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import numpy as np
+
+from experiments.build_clean_event_index import _simultaneous_dsr_events
 
 from src.data.event_alignment import (
     EVENT_ALIGNMENT_SCHEMA,
@@ -48,6 +51,31 @@ def test_align_paired_marker_streams_records_fixed_offset():
     assert report.offset_mean_ms == 500.0
     assert report.label_sequence_match is True
     assert events[0].metadata["offset_ms"] == 500.0
+
+
+def test_dsr_projects_only_go_nogo_stimuli_from_aligned_block_anchors():
+    def marker(times, descriptions):
+        return SimpleNamespace(
+            time=np.asarray(times, dtype=np.float64),
+            y=np.ones((1, len(times)), dtype=np.float32),
+            className=np.asarray(["event"], dtype=object),
+            event=SimpleNamespace(desc=np.asarray(descriptions, dtype=np.uint8)),
+        )
+
+    eeg = marker([0, 100, 2100, 10_000, 10_100, 12_100], [48, 16, 32, 48, 32, 16])
+    fnirs = marker([500, 10_500], [3, 3])
+    events, report = _simultaneous_dsr_events(
+        subject="VP001",
+        record_id="cnt_dsr",
+        eeg_marker_struct=eeg,
+        fnirs_marker_struct=fnirs,
+        source_files=[],
+    )
+
+    assert [event.label for event in events] == ["Go", "No-go", "No-go", "Go"]
+    assert [event.fnirs_time_ms for event in events] == [600.0, 2600.0, 10_600.0, 12_600.0]
+    assert all(event.event_type == "stimulus" for event in events)
+    assert report.metadata["projected_stimulus_count"] == 4
 
 
 def test_alignment_reports_continuous_drift_slope():

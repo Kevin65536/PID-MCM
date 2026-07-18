@@ -1,7 +1,7 @@
 # 数据规范化、HOMER2 对齐与统一缓存规范
 
 _Created: 2026-07-08_
-_Unified: 2026-07-17_
+_Unified: 2026-07-18_
 
 ## 当前结论
 
@@ -34,10 +34,13 @@ _Unified: 2026-07-17_
 - Single-Trial EEG 的 provenance-preserving raw/v2/v3 branches、EOG
   regression、bad-channel/artifact/analysis-valid masks 与 29-subject audit；v3
   已通过受控伪影循环移位 sham 对照并准入为默认分支。
-- `simultaneous_eeg_nirs:dsr` 已成为统一 loader 的不可覆盖禁用项；原始事件
-  仍留在 event index 中供 provenance/诊断使用，但不会进入训练窗口。
+- Simultaneous EEG 已使用 HEOG/VEOG 辅助回归修复并在输出前排除两个眼动通道；
+  DSR 已按 EEG 16/32 标记恢复为 Go/No-go stimulus 事件，仍服从统一 alignment gate。
 - Visual EEG DC9 已按原始三事件语义解析，统一入口当前接纳 54/55 records、
   7,750 windows 和 16/16 subjects；S06 Part1 继续隔离。
+- REFED EEG 的 64 个标准 10–10 标签已映射到固定版本的 FieldTrip
+  `standard_1005` template，并物化仅用于 EEG 内部邻接的 64-node/168-edge
+  Delaunay graph；template provenance 与非实测坐标边界保留在 sidecar。
 
 当前不支持：
 
@@ -122,30 +125,35 @@ alignment report 记录 EEG/fNIRS 事件数、label match、offset mean/std、
 piecewise offset blocks、skipped marker、drift slope 等。Simultaneous 中
 `wg`、`nback`、`dsr` 的事件粒度不能强行视为同一种 trial。
 
-### 1.4 DSR 禁用契约
+### 1.4 DSR 恢复与标记契约（2026-07-18）
 
-`simultaneous_eeg_nirs:dsr` 是 `UnifiedPhysiologyWindowDataset` 的永久禁用
-namespace，不是调用方可以打开的配置项：
+此前的 `unified_training_hard_exclusion_v1` 已被下列可审计契约取代：
 
 ```text
-forbidden_task_policy = unified_training_hard_exclusion_v1
-forbidden_task_namespaces = [simultaneous_eeg_nirs:dsr]
+forbidden_task_policy = no_hard_exclusions_dsr_restored_v2
+forbidden_task_namespaces = []
+task = simultaneous_eeg_nirs:dsr
+labels = {16: Go, 32: No-go}
 ```
 
 边界如下：
 
-- 原始 DSR signal、event rows 与 alignment reports 保留，用于数据完整性、
-  provenance 和历史诊断；
-- 统一 loader 在窗口构建阶段、split 或模型 adapter 之前硬排除 DSR；
-- `contract_summary()` 必须报告禁用 namespace、被排除窗口数与 record 数；
-- 即使调用方设置 `admissible_alignment_cases=None`，也不能重新接纳 DSR；
-- 当前正式 event index 下，loader 记录并排除 467 个 DSR source windows /
-  26 records，对外暴露 DSR windows 为 0；其中 449 个 windows / 25 records
-  曾满足 alignment gate，VP005 record 中的 18 个 session blocks 原本已因
-  不稳定 alignment 排除。
-
-底层 Simultaneous raw loader 的 `allow_deprecated=True` 仅保留给显式诊断工具，
-不属于统一训练数据协议。
+- EEG 原始 code 48 与 fNIRS code 3 只作为 block 同步锚点；EEG code 16/32
+  才是 stimulus label source；
+- 每个 symbol 使用所属已对齐 block 的局部 offset 映射到 fNIRS clock。没有
+  fNIRS 锚点的 block 整体不生成 symbol window，禁止插值猜测；
+- fNIRS 是 synchronized hemodynamic context，不是独立的 symbol-level marker
+  或 2 秒级分类 ground truth；
+- 数据论文描述 180 个 symbol trials/participant，但发布 marker stream 对 26/26
+  participants 均给出 360 个 16/32 markers。event index 保留发布文件的 360，
+  并显式记录该 paper/release discrepancy，不擅自抽半；
+- VP001 缺一个 fNIRS block anchor，因此生成 340/360 个事件；其余 25 人生成
+  360 个。raw event index 合计 9,340（Go 2,802；No-go 6,538）；
+- 默认 alignment gate 排除 `continuous_drift` 的 VP005 DSR，最终准入 25 人、
+  8,980 windows（Go 2,694；No-go 6,286）。设置 diagnostic alignment 模式可
+  查看 VP005，但这不是绕过科学准入；
+- DSR 推荐 EEG epoch 为 2 秒（刺激显示 0.5 秒、约每 2 秒一次）；统一 loader
+  的 20 秒默认窗仍只是通用 multimodal context，不应直接冒充 ERP trial。
 
 ### 1.5 Visual 原始时序标记契约
 
@@ -207,7 +215,13 @@ TU Berlin 两个数据集不能视为已去伪影：
   inspection 显示 11/30 EEG channels 有 EOG 相关污染。统一 loader 仍保留该 raw
   provenance，但默认使用版本化 `single_trial_eeg_artifact_clean_v3` 缓存。
 - Simultaneous MATLAB 发布说明显示 MATLAB 数据主要是 downsample + format
-  conversion，不能等同于已完成 motion/ocular artifact cleaning。
+  conversion，不能等同于已完成 motion/ocular artifact cleaning。2026-07-18
+  新增 `simultaneous_eeg_eog_clean_v1`：HEOG/VEOG 仅作 0.5–15 Hz robust nuisance
+  regressors，逐通道移除方差上限为可配置的 0.5；该分支不做坏道插值，也不做
+  muscle-band attenuation。完整 78-record audit 的全通道 median EOG correlation
+  从 0.4517 降至 0.0221，眼周通道从 0.7972 降至 0.2209；眼动 mask 外 waveform
+  correlation 中位数为 0.9277，15–45 Hz variance ratio 中位数为 0.9965。
+  这些结果支持清理/保真软件契约，不证明所有眼动已消失或科学性能必然提升。
 
 此前 TRTD/teacher 诊断仍保留：
 
@@ -226,8 +240,8 @@ TU Berlin 两个数据集不能视为已去伪影：
 | --- | --- | --- |
 | Single-Trial | NIRS `mnt.mat`; EEG `mnt_artifact.mat`/`mnt.mat` | per-subject EEG electrode 与 fNIRS channel midpoint |
 | Simultaneous | per-subject/task `mnt_{task}.mat` for EEG/NIRS | per-subject per-task EEG electrode 与 fNIRS channel midpoint |
-| REFED | `fNIRS_coordinates.csv` | global fNIRS channel midpoint + source/detector index |
-| Visual | `Location.ced`; `fNIRS_to_EEG_channel_reference.xlsx` | EEG global CED 坐标；fNIRS channel-to-EEG reference label |
+| REFED | `EEG_channels.csv`、官方 `Figure_1.png`、`fNIRS_coordinates.csv` | EEG 标准-template topology；global fNIRS channel midpoint + source/detector index |
+| Visual | `Graphical_recording_head_model.pdf`; `Location.ced`; `fNIRS_to_EEG_channel_reference.xlsx`; raw CSV `Mode,4x4` | EEG global CED 坐标；双侧 4×4 fNIRS 图示/CED template projection + shared-optode adjacency |
 
 输出位置：
 
@@ -235,6 +249,8 @@ TU Berlin 两个数据集不能视为已去伪影：
 data/cache/physiology_semantic_clean_v1/channel_geometry/
   geometry_manifest.json
   channels.jsonl
+  refed_eeg_adjacency.json
+  visual_fnirs_adjacency.json
 ```
 
 当前全量 sidecar 统计：
@@ -242,12 +258,40 @@ data/cache/physiology_semantic_clean_v1/channel_geometry/
 | 数据集 | 条目数 | 说明 |
 | --- | ---: | --- |
 | `eeg_fnirs_single_trial` | 1884 | 1044 fNIRS + 840 EEG |
-| `refed` | 51 | fNIRS coordinates |
-| `visual_cognitive_motivation` | 55 | 31 EEG CED + 24 fNIRS-to-EEG reference |
+| `refed` | 115 | 64 EEG template coordinates + 51 fNIRS coordinates |
+| `visual_cognitive_motivation` | 79 | 31 EEG CED + Probe1/Probe2 各 24 个 fNIRS graphical-template coordinates |
 | `simultaneous_eeg_nirs` | 5148 | 2808 fNIRS + 2340 EEG |
 
-注意：Visual fNIRS 当前是 EEG 位置参考标签，不是真实 3D optode/source-detector
-坐标；不能用于精确 source-detector distance 或 MBLL replay。
+Visual 的 112 个原始 fNIRS CSV 均声明 `Mode,4x4`，每个 probe 含 CH1–CH24。
+原始 `fNIRS_to_EEG_channel_reference.xlsx` 对每侧 24 个通道给出 14 个 EEG
+位置锚点、10 个 `-`；`Graphical_recording_head_model.pdf` 给出双侧红/蓝 optode
+相对头皮与 EEG 电极布局。当前规范化采用固定的 4×4 shared-optode channel
+topology：14 个已标注通道直接继承 `Location.ced` 坐标，10 个未标注通道在
+24-channel line graph 上做 graph-Laplacian harmonic interpolation，并投影回 CED
+head radius。每侧生成 24-node/52-edge、连通、对称、无 self-loop 的邻接图。
+CH1–CH24 的 4×4 index topology 采用公开的 Hitachi 4×4 channel layout；它只定义
+共享 optode 关系，实际头皮位置仍完全由本数据集 PDF/xlsx/CED 决定。[^5]
+
+工作簿 Probe2 CH13 的原始标签为不存在于 `Location.ced` 和图示中的 `FP4`；根据
+Probe1 CH13=`FC3`、双侧图示与 CED 中的 `FC4` 显式修正为 `FC4`，原值与修正规则
+均写入 metadata。loader 现在还会按 record 后缀选择 Probe1/Probe2 geometry，
+避免旧实现把两侧同名 CH 通道混为一套坐标。
+
+该补全把 Visual fNIRS loader position availability 从 `54.17%` 提升到 `100%`，
+但它仍是 dataset-global graphical/CED template projection，不是真实逐被试 3D
+optode/source-detector digitization。只允许用于 within-fNIRS adjacency、图模型输入、
+可视化和 coarse EEG-fNIRS alignment；不得用于精确 source-detector distance、
+MBLL replay、个体源定位或 exact co-registration。数据论文也只把 PDF 定义为记录
+位置图、把 xlsx 定义为 fNIRS-channel/EEG-label mapping，而未声明个体三维测量。[^1]
+
+REFED EEG 不提供逐被试 digitization。本项目只需要通道邻接，因此采用固定
+FieldTrip commit `462487e4` 的 `standard_1005.elc` MNI-template 坐标：64 个
+REFED 标签中 62 个精确同名匹配；官方 Figure 1 中额外的 `CB1/CB2` 分别按
+`PO7–O1`、`PO8–O2` 的三维算术中点显式插值。[^2][^3] 顶视 `x/y`
+Delaunay 产生 168 条无向边，图连通，degree range 为 3–8。该坐标和邻接只允许
+用于 within-EEG topology、图模型和可视化；不得解释为被试实测电极位置、源定位
+精度或 EEG-fNIRS 共配准。标准 template montage 与个体 digitization 的区别也与
+MNE 的 montage 定义一致。[^4]
 
 montage 完整性：
 
@@ -257,12 +301,15 @@ montage 完整性：
 - Simultaneous EEG: 26/26 subjects have all three `mnt_dsr.mat`,
   `mnt_nback.mat`, `mnt_wg.mat` files。
 - Simultaneous NIRS: 26/26 subjects have all three task montage files。
-- REFED and Visual use dataset-global geometry/reference files rather than
-  per-subject montage files。
+- REFED EEG uses a versioned standard-template topology proxy；REFED fNIRS 与
+  Visual 使用 dataset-global geometry/reference files，而非 per-subject montage。
 
 实现位置：
 
 - `src/data/channel_geometry.py`
+- `src/data/channel_adjacency.py`
+- `src/data/assets/refed_standard_1005_montage_v1.csv`
+- `src/data/assets/visual_fnirs_4x4_topology_v1.csv`
 - `experiments/build_clean_channel_geometry.py`
 
 ## 5. Clean Cache Structure
@@ -333,7 +380,7 @@ registry 已与实现同步：
 | Registry ID | `loader_status` | `primary_loader` | 已声明 interface |
 | --- | --- | --- | --- |
 | `eeg_fnirs_single_trial` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified、legacy、continuous visualization |
-| `refed` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified |
+| `refed` | `implemented` | `UnifiedPhysiologyWindowDataset` / `REFEDContinuousSequenceDataset` | unified classification context / continuous sequence regression |
 | `visual_cognitive_motivation` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified |
 | `simultaneous_eeg_nirs` | `implemented` | `UnifiedPhysiologyWindowDataset` | unified、legacy、continuous visualization |
 | `croce_local_cache` | `implemented` | `CroceLocalCacheDataset` | derived cache、legacy；`resource_kind=derived_supervision_cache` |
@@ -359,8 +406,8 @@ channels。
   `skip_aligned_piecewise_constant_offset` 与
   `shared_segment_index_no_marker_stream`；continuous-drift/不稳定 record 留在
   sidecar 中供诊断，但不进入统一训练窗口；
-- 默认无条件排除 `simultaneous_eeg_nirs:dsr`，并在 contract summary 中给出
-  可审计的排除计数；
+- DSR 使用 EEG-native Go/No-go labels 与 block-anchor clock projection，并继续
+  受普通 alignment admission gate 约束；
 - `channel_geometry`: EEG/fNIRS 均返回 `canonical_channel_geometry_v1` rows，
   缺失位置保留 null/provenance，不虚构坐标；
 - native unit、原始路径、full-record robust location/scale、filter/resample state。
@@ -379,24 +426,116 @@ channels。
 | Visual | 3250（31/55 records 因不稳定 alignment 排除） | `(30, 1600)` | `(48, 80)` | pass |
 | Simultaneous | 2711（1/78 records 排除） | `(30, 1600)` | `(72, 80)` | pass |
 
-2026-07-17 当前 20 秒默认入口的 window-reference contract：
+2026-07-18 DSR 恢复并重建 event index 后的 20 秒默认入口 window-reference contract：
 
 | 数据集 | 准入 windows | Subjects | 排除说明 |
 | --- | ---: | ---: | --- |
 | Single-Trial | 3480 | 29 | 无 |
 | REFED | 480 | 32 | 无 |
 | Visual | 7750 | 16 | S06 Part1 Probe1 原始触发缺失 |
-| Simultaneous | 2262 | 26 | DSR 467 source windows 永久禁用；其中 1 个 record 同时 alignment 不稳定 |
+| Simultaneous | 11242 | 26 | 含 8,980 个 DSR Go/No-go windows；VP005 DSR 因 continuous drift 排除 |
 
-全入口共 13,972 windows；DSR 对外计数为 0。以上是 loader-reference 与数据
+重建后的全入口共 22,952 windows；DSR 对外计数为 8,980。以上是 loader-reference 与数据
 协议验证，不是模型性能或科学有效性结果。
+
+同日 DSR 恢复前的历史全量 audit 曾对 13,972 个 20 秒窗口完成逐任务统计；下表
+保留作为恢复前快照，不再代表当前入口。这里的 sample 数就是 loader window 数；幅值矩按模型实际看到的窗口加权，
+重叠窗口中的原始时间点会被重复计数，不应解释为去重后的 raw-record 总体估计。
+EEG 使用 `analysis_valid_mask`，fNIRS 使用 `valid_mask`；单位均为 canonical
+`robust_standard_deviation`：
+
+| 数据集 / 任务 | Subjects | Records | Samples | EEG / fNIRS channels | 标签分布 | EEG std / var | fNIRS std / var |
+| --- | ---: | ---: | ---: | --- | --- | ---: | ---: |
+| Single-Trial / mental arithmetic | 29 | 87 | 1,740 | 30 / 72 | BL 870；MA 870 | 1.0431 / 1.0880 | 1.0211 / 1.0427 |
+| Single-Trial / motor imagery | 29 | 87 | 1,740 | 30 / 72 | LMI 870；RMI 870 | 1.0291 / 1.0591 | 1.0208 / 1.0420 |
+| REFED / emotion video | 32 | 480 | 480 | 64 / 102 | 5 个 video categories 各 96 | 1.2359 / 1.5275 | 1.1146 / 1.2423 |
+| Simultaneous / n-back | 26 | 26 | 702 | 30 / 72 | 0/2/3-back 各 234 | 1.3676 / 1.8703 | 1.0786 / 1.1633 |
+| Simultaneous / WG | 26 | 26 | 1,560 | 30 / 72 | BL 780；WG 780 | 1.4006 / 1.9617 | 1.0616 / 1.1269 |
+| Visual / cognitive motivation | 16 | 54 | 7,750 | 30 / 48 | FF 1,378；FR 2,726；RF 860；RR 2,756；unknown 30 | 1.4301 / 2.0451 | 1.1799 / 1.3922 |
+
+全量信号值均 finite，所有任务内部的通道数与通道签名稳定，且所有被试都覆盖
+各任务的全部已知类别。幅值差异仍然明显：EEG global variance 从 1.0591 到
+2.0451，fNIRS 从 1.0420 到 1.3922；这要求 split 后、仅以 train subjects
+拟合的变换与数据集 provenance，不能据 canonical scaling 宣称物理同质。
+
+正式多数据集训练尚未准入，新增阻断证据如下：
+
+1. Visual 仍有 30 个 `unknown` 窗口；在恢复 source-backed 语义前必须在 split
+   generation 之前拒绝。
+2. Visual 的 Probe1/Probe2 形成 3,875 个共享 EEG trial/label、不同 fNIRS
+   hemisphere 的成对组；7,750 个 loader samples 不是 7,750 个独立 trial。
+   两个 probe 必须同 split，并采用 fusion 或显式 trial weighting。
+3. REFED 虽有 480/480 个合法 valence/arousal streams（长度 60–170，median
+   103），当前每个 video 只输出一个 20 秒 signal window，且 canonical label
+   仍是 video category；连续 regression 的 window/sequence target 与 mask 尚未实现。
+4. Visual 有 54 个 EEG 与 54 个 fNIRS 边界 padding 窗口。loader 已提供 mask，
+   但正式四数据集训练 adapter 尚未证明 loss/投影会消费这些 mask。
+5. REFED EEG topology 缺口已关闭：position availability 为 100%，其中 62 个
+   template exact、2 个 Figure-1-backed interpolation；64-node/168-edge 邻接通过。
+   这只准入 within-EEG adjacency，不准入个体坐标或跨模态物理距离声明。
+6. Visual fNIRS geometry 已达到 100% position availability：每侧 14 个 CED
+   anchors + 10 个 graph-harmonic interpolations，并生成 24-node/52-edge 邻接。
+   这只关闭 spatial-adapter 的缺失输入，不升级为个体 digitization 或精确物理距离。
+7. Single-Trial 使用 artifact-clean v3；Simultaneous 使用只针对眼动的
+   `simultaneous_eeg_eog_clean_v1` 并输出 28 个 scalp channels。REFED 与 Visual
+   仍是 `raw_with_ocular_artifact` 且 bad-channel mask 为默认零值，不能解释为无伪影。
+8. 以任务内 log(record std) 的 robust z、`|z| > 3.5` 自适应规则标记了 28/760
+   个 records；它们是复核队列，不是通用删除阈值。尤其需复查 REFED subject 30
+   video 15 fNIRS 与多个 Visual Probe1 的尺度异常。
+
+完整 Markdown/HTML、逐记录 CSV、逐标签/被试覆盖表、channel signature 与图位于
+[`final_unified_loader_audit_20260718`](../../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_20260718/quality_report.md)。
+
+DSR/EOG 契约更新后又对当前入口的 **22,952** 个窗口和 **7** 个 task
+namespaces 完成了全量复审：DSR 为 25 subjects / 25 records / 8,980 windows，
+标签 Go 2,694、No-go 6,286；Simultaneous 的 nback、wg、dsr 均稳定输出 28 EEG
+channels 和 `simultaneous_eeg_eog_clean_v1`。所有任务的载入幅值有限，DSR
+restoration check 为 pass；整体 readiness 仍为 7 pass / 7 block / 1 warn，未因
+恢复 DSR 自动解除 Visual labels/probe dependence、REFED/Visual QC、shared split
+和 adapter/mask blockers。当前证据位于
+[`final_unified_loader_audit_post_dsr_20260718`](../../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_post_dsr_20260718/quality_report.md)。
+报告记录 cache/event/alignment/geometry/adjacency/template/audit-script hashes；这些
+检查证明数据与软件 contract，不证明模型性能、跨模态耦合或生理有效性。
+
+### 6.6 REFED continuous regression adapter follow-up
+
+上述全量审计中的 REFED target 阻断项随后由
+`REFEDContinuousSequenceDataset` 关闭。原始 `*_label.mat` 实际数组为
+`[time, 2]`；两列按数据集说明依次解释为 valence/arousal。480 个 stream 的点数
+与视频时长秒数对应，原生频率范围为 0.999687–1.000013 Hz；loader 采用
+event-relative normalized video time 处理名义 47.62 Hz 带来的微小时长误差。
+
+版本化 schema 为 `refed_continuous_va_sequence_v1`。默认 20 秒无重叠窗口把
+480 个视频事件展开为 2,720 个 regression samples，目标形状固定为 `[2, 20]`；
+480 个末尾 partial windows 保留，target-valid fraction 为 0.902941。mask 按
+coordinate/time 排除非 finite 标注以及缺少任一 EEG/fNIRS 支持的时点，无效值
+置零。这样覆盖了全部 paired annotation support，同时没有引入一个固定删除阈值。
+视频 category 仅保存在 `video_context_label` 中，不再充当回归标签。
+
+全量 49,120 个 native annotation points 均 finite，valence/arousal 的观测范围均
+为 1–255；分别有 255/251 个 unique values。480 个视频中 464 个 valence stream
+与 456 个 arousal stream 非常数，逐秒 change fraction 分别为 0.0838/0.0898，
+说明 joystick 序列包含较长平台段。因而不能逐窗口计算后再平均可能对常数窗口
+未定义的 CCC；正式评估应先按 held-out subject/video 拼接 valid support，再报告
+CCC，并同时报告 MAE/RMSE 与各坐标 coverage。
+训练批必须使用 `collate_refed_continuous_sequences`：它只堆叠定长 signal、
+signal mask、target 与 target mask，并把包含 nullable geometry 的 provenance
+保留为逐样本列表，避免 PyTorch default collator 把元数据误当 tensor。
+
+该结果只关闭 target construction/data-contract 缺口。正式回归仍必须先按 subject
+分割，并保持同一 subject/video 的所有窗口同 split；任何 target scaling 只能由
+train subjects 拟合。STA-Net/EFRM 等方法还必须证明其 regression head 同时消费
+signal mask 与 target mask，才可进入正式训练。
 
 仍需在训练入口补：
 
-1. split manifest 与 protected-test lock；
-2. 除 Single-Trial v3 外，其余数据集的 dataset-specific
+1. split manifest、probe grouping 与 protected-test lock；
+2. unknown-label rejection，以及 REFED candidate regression loss 对 target mask
+   的强制消费与测试；
+3. channel/geometry adapter，并证明 time/channel/QC masks 被训练消费；
+4. 除 Single-Trial v3 外，其余数据集的 dataset-specific
    bad-channel/window rejection masks；
-3. physical teacher targets、uncertainty、valid mask，仅在科学 gate 允许后加入。
+5. physical teacher targets、uncertainty、valid mask，仅在科学 gate 允许后加入。
 
 ## 7. Rebuild Commands
 
@@ -493,3 +632,7 @@ registry 默认已切换到 v3；raw 与 v2 仍保留用于诊断和消融。发
 ## References
 
 [^1]: Phukhachee, T., et al. (2024). “A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults.” _Data in Brief_, 53, 110260. https://pmc.ncbi.nlm.nih.gov/articles/PMC10964074/
+[^2]: FieldTrip. “Template 3-D electrode sets: standard_1005.elc.” https://www.fieldtriptoolbox.org/template/electrode/
+[^3]: REFED dataset README, “The channel distribution of the joint EEG-fNIRS acquisition.” [`data/REFED-dataset/README.md`](../../data/REFED-dataset/README.md)
+[^4]: MNE-Python. “Working with sensor locations.” https://mne.tools/stable/auto_tutorials/intro/40_sensor_locations.html
+[^5]: Iso, N., et al. (2021). “Hemodynamic Signal Changes During Motor Imagery Task Performance Are Associated With the Degree of Motor Task Learning,” Figure 2, standard Hitachi 4×4 24-channel layout. https://pmc.ncbi.nlm.nih.gov/articles/PMC8081959/

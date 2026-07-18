@@ -44,6 +44,9 @@ RAW_DATASET_IDS: tuple[str, ...] = (
 )
 
 UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v1"
+REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v1"
+REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
+REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ = 1.0
 CANONICAL_UNIT = "robust_standard_deviation"
 CANONICAL_EEG_SAMPLE_RATE_HZ = 200.0
 CANONICAL_FNIRS_SAMPLE_RATE_HZ = 10.0
@@ -56,16 +59,37 @@ SINGLE_TRIAL_EEG_SIGNAL_BRANCHES = (
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
 )
+SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 = "simultaneous_eeg_eog_clean_v1"
+SUPPORTED_EEG_SIGNAL_BRANCHES = SINGLE_TRIAL_EEG_SIGNAL_BRANCHES + (
+    SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
+)
 DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = frozenset({
     "stable_fixed_offset",
     "piecewise_constant_offset",
     "skip_aligned_piecewise_constant_offset",
     "shared_segment_index_no_marker_stream",
 })
-FORBIDDEN_TASK_NAMESPACES = frozenset({"simultaneous_eeg_nirs:dsr"})
-FORBIDDEN_TASK_POLICY = "unified_training_hard_exclusion_v1"
+FORBIDDEN_TASK_NAMESPACES: frozenset[str] = frozenset()
+FORBIDDEN_TASK_POLICY = "no_hard_exclusions_dsr_restored_v2"
 
 VISUAL_CONDITION_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
+
+
+def simultaneous_eeg_eog_cleaning_config(
+    base: EEGArtifactCleaningConfig | None = None,
+) -> EEGArtifactCleaningConfig:
+    """Return the conservative, EOG-only Simultaneous dataset contract."""
+    return replace(
+        base or EEGArtifactCleaningConfig(),
+        schema=SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
+        bad_channel_robust_z=1.0e12,
+        bad_channel_extreme_robust_z=1.0e12,
+        max_bad_channel_fraction=0.0,
+        high_frequency_window_robust_z=1.0e12,
+        muscle_action="mask_only",
+        reference_strategy="native_reference_preserved_eog_auxiliary_excluded",
+        calibration_scope="record_robust_distribution_simultaneous_eog_v1",
+    )
 
 
 @dataclass(frozen=True)
@@ -113,6 +137,7 @@ class NativeEEGRecord:
 class UnifiedWindowRef:
     record: CleanCacheRecord
     event: Mapping[str, Any]
+    window_offset_s: float = 0.0
 
 
 def _first_mat_value(path: Path, key: str | None = None) -> Any:
@@ -237,7 +262,7 @@ def preprocess_eeg_record_with_quality(
     artifact_config: EEGArtifactCleaningConfig | None = None,
     channel_positions: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict[str, Any], dict[str, np.ndarray]]:
-    if signal_branch not in SINGLE_TRIAL_EEG_SIGNAL_BRANCHES:
+    if signal_branch not in SUPPORTED_EEG_SIGNAL_BRANCHES:
         raise ValueError(f"unsupported EEG signal branch: {signal_branch!r}")
     finite, repaired = _interpolate_nonfinite(record.values)
     artifact_mask = np.zeros(len(finite), dtype=bool)
@@ -246,11 +271,17 @@ def preprocess_eeg_record_with_quality(
         "schema": "raw_with_ocular_artifact",
         "action": "no_artifact_removal",
     }
-    if signal_branch in {SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2, SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3}:
+    if signal_branch in {
+        SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+        SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+        SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
+    }:
         if record.auxiliary_values is None or not record.auxiliary_channel_names:
-            raise ValueError("Single-Trial artifact-clean branches require retained EOG auxiliary channels")
+            raise ValueError("EEG artifact-clean branches require retained EOG auxiliary channels")
         resolved_config = artifact_config or EEGArtifactCleaningConfig()
-        if signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2:
+        if signal_branch == SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1:
+            resolved_config = simultaneous_eeg_eog_cleaning_config(resolved_config)
+        elif signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2:
             resolved_config = replace(
                 resolved_config,
                 schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
@@ -275,6 +306,38 @@ def preprocess_eeg_record_with_quality(
         artifact_mask = cleaned.artifact_mask
         bad_channel_mask = cleaned.bad_channel_mask
         cleaning_state = cleaned.state
+        stride = max(1, len(filtered) // 20_000)
+        preserved = ~np.asarray(cleaned.ocular_mask, dtype=bool)
+        preserved_indices = np.flatnonzero(preserved)[::stride]
+        if len(preserved_indices) < 2:
+            preserved_indices = np.arange(0, len(filtered), stride)
+        before_preserved = np.asarray(cleaned.filtered_raw_values, dtype=np.float64)[preserved_indices]
+        after_preserved = filtered[preserved_indices]
+        waveform_correlation = []
+        for channel in range(filtered.shape[1]):
+            correlation = np.corrcoef(
+                before_preserved[:, channel], after_preserved[:, channel]
+            )[0, 1]
+            waveform_correlation.append(float(correlation) if np.isfinite(correlation) else 0.0)
+        before_high = _bandpass(
+            np.asarray(cleaned.filtered_raw_values, dtype=np.float64),
+            record.sample_rate_hz,
+            (15.0, 45.0),
+        )[::stride]
+        after_high = _bandpass(filtered, record.sample_rate_hz, (15.0, 45.0))[::stride]
+        high_frequency_variance_ratio = np.var(after_high, axis=0) / np.maximum(
+            np.var(before_high, axis=0), np.finfo(np.float64).eps
+        )
+        cleaning_state["information_preservation"] = {
+            "scope": "samples_outside_detected_ocular_mask",
+            "evaluated_sample_count": int(len(preserved_indices)),
+            "waveform_correlation_by_channel": waveform_correlation,
+            "median_waveform_correlation": float(np.median(waveform_correlation)),
+            "minimum_waveform_correlation": float(np.min(waveform_correlation)),
+            "high_frequency_band_hz": [15.0, 45.0],
+            "high_frequency_variance_ratio_by_channel": high_frequency_variance_ratio.tolist(),
+            "median_high_frequency_variance_ratio": float(np.median(high_frequency_variance_ratio)),
+        }
     else:
         filtered = _bandpass(finite, record.sample_rate_hz, CANONICAL_EEG_BAND_HZ)
     resampled = _resample(filtered, record.sample_rate_hz, CANONICAL_EEG_SAMPLE_RATE_HZ)
@@ -351,12 +414,23 @@ def _single_trial_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEG
 def _simultaneous_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEGRecord:
     path = project_root / "data/Simultaneous EEG&NIRS" / f"{record.canonical_subject_id}-EEG" / f"{record.base_record_id}.mat"
     payload = _first_mat_value(path)
+    values = _as_time_channels(np.asarray(payload.x, dtype=np.float64))
+    names = _labels(payload.clab)
+    auxiliary = np.asarray(["EOG" in name.upper() for name in names], dtype=bool)
+    if not np.any(auxiliary):
+        raise ValueError(f"Simultaneous EEG record has no HEOG/VEOG reference channels: {path}")
     return NativeEEGRecord(
-        values=_as_time_channels(np.asarray(payload.x, dtype=np.float64)),
+        values=values[:, ~auxiliary],
         sample_rate_hz=float(payload.fs),
-        channel_names=tuple(canonical_channel_name(name) for name in _labels(payload.clab)),
+        channel_names=tuple(
+            canonical_channel_name(name) for name, selected in zip(names, ~auxiliary) if selected
+        ),
         native_unit=str(getattr(payload, "yUnit", "uV") or "uV"),
         source_path=path,
+        auxiliary_values=values[:, auxiliary],
+        auxiliary_channel_names=tuple(
+            canonical_channel_name(name) for name, selected in zip(names, auxiliary) if selected
+        ),
     )
 
 
@@ -542,10 +616,17 @@ class ChannelGeometryIndex:
         exact_record = [row for row in candidates if row.get("base_record_id") == record.base_record_id]
         if exact_record:
             candidates = exact_record
+        elif record.dataset_id == "visual_cognitive_motivation" and modality == "fnirs":
+            probe_match = re.search(r"Probe[12]", record.base_record_id, flags=re.IGNORECASE)
+            if probe_match:
+                probe = f"Probe{probe_match.group(0)[-1]}"
+                probe_rows = [row for row in candidates if row.get("base_record_id") == probe]
+                if probe_rows:
+                    candidates = probe_rows
         lookup = {canonical_channel_name(str(row.get("channel_name", ""))): row for row in candidates}
 
-        # Visual fNIRS positions are label references.  Resolve them onto the
-        # common visual EEG CED coordinates when possible.
+        # Legacy Visual sidecars may contain label references without explicit
+        # coordinates.  New graphical/CED projections already carry x/y/z.
         visual_eeg = {
             canonical_channel_name(str(row.get("channel_name", ""))): row
             for row in self.rows
@@ -563,6 +644,7 @@ class ChannelGeometryIndex:
                     if row.get(axis) is None and reference_row.get(axis) is not None:
                         row[axis] = reference_row[axis]
                 row["coordinate_system"] = "referenced_visual_eeg_head_coordinates"
+            metadata = dict(row.get("metadata", {}))
             output.append({
                 "schema": "canonical_channel_geometry_v1",
                 "channel_name": canonical,
@@ -577,8 +659,141 @@ class ChannelGeometryIndex:
                 "source_index": row.get("source_index"),
                 "detector_index": row.get("detector_index"),
                 "position_available": any(row.get(axis) is not None for axis in ("x", "y", "z")),
+                "coordinate_status": metadata.get(
+                    "coordinate_status",
+                    "source_geometry" if row else "unavailable",
+                ),
+                "measured_subject_coordinate": metadata.get("measured_subject_coordinate"),
+                "intended_use": metadata.get("intended_use"),
+                "source_file": row.get("source_file"),
             })
         return output
+
+
+def _refed_continuous_stream(event: Mapping[str, Any]) -> tuple[np.ndarray, float, float]:
+    """Return REFED targets as ``[time, target]`` plus duration and native rate.
+
+    REFED stores one joystick sample per video second in the current release.
+    The event index intentionally carries the values so that target construction
+    remains tied to the same event and modality-clock provenance as the signal
+    window.  Orientation is accepted from either the released ``[time, 2]``
+    arrays or the transposed layout described in the README.
+    """
+
+    metadata = event.get("metadata", {})
+    stream = metadata.get("continuous_label_stream", {}) if isinstance(metadata, Mapping) else {}
+    values = np.asarray(stream.get("values", []), dtype=np.float64)
+    names = tuple(str(value).strip().lower() for value in stream.get("names", ()))
+    if values.ndim != 2:
+        raise ValueError(f"REFED continuous targets must be two-dimensional, got shape={values.shape}")
+    if values.shape[1] == len(REFED_CONTINUOUS_TARGET_NAMES):
+        pass
+    elif values.shape[0] == len(REFED_CONTINUOUS_TARGET_NAMES):
+        values = values.T
+    else:
+        raise ValueError(f"REFED continuous targets must contain two coordinates, got shape={values.shape}")
+    if names:
+        if set(names) != set(REFED_CONTINUOUS_TARGET_NAMES):
+            raise ValueError(f"unexpected REFED continuous target names: {names}")
+        values = values[:, [names.index(name) for name in REFED_CONTINUOUS_TARGET_NAMES]]
+    if values.shape[0] == 0:
+        raise ValueError("REFED continuous target stream is empty")
+    declared_count = stream.get("sample_count")
+    if declared_count is not None and int(declared_count) != values.shape[0]:
+        raise ValueError(
+            "REFED continuous target sample_count does not match values: "
+            f"declared={declared_count}, actual={values.shape[0]}"
+        )
+    duration_s = float(event.get("duration_ms", 0.0)) / 1000.0
+    if not np.isfinite(duration_s) or duration_s <= 0.0:
+        raise ValueError(f"REFED event duration must be positive, got {duration_s}")
+    native_rate_hz = float(values.shape[0] / duration_s)
+    return values, duration_s, native_rate_hz
+
+
+def refed_continuous_target_window(
+    event: Mapping[str, Any],
+    *,
+    window_start_s: float,
+    window_duration_s: float,
+    target_sample_rate_hz: float = REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ,
+) -> dict[str, Any]:
+    """Build a fixed-shape valence/arousal target sequence for one REFED window.
+
+    Target timestamps are expressed on the event-relative clock.  The released
+    annotation grid is mapped to video time by normalized position, which
+    absorbs the sub-millisecond duration discrepancy caused by the nominal
+    47.62 Hz fNIRS rate.  Invalid time support and non-finite source values are
+    zero-filled and identified by a per-coordinate mask; callers must consume
+    that mask in the regression loss.
+    """
+
+    if not np.isfinite(window_start_s) or window_start_s < 0.0:
+        raise ValueError(f"window_start_s must be finite and non-negative, got {window_start_s}")
+    if not np.isfinite(window_duration_s) or window_duration_s <= 0.0:
+        raise ValueError(f"window_duration_s must be positive, got {window_duration_s}")
+    if not np.isfinite(target_sample_rate_hz) or target_sample_rate_hz <= 0.0:
+        raise ValueError(f"target_sample_rate_hz must be positive, got {target_sample_rate_hz}")
+    exact_count = window_duration_s * target_sample_rate_hz
+    target_count = int(round(exact_count))
+    if target_count <= 0 or not np.isclose(exact_count, target_count, rtol=0.0, atol=1e-6):
+        raise ValueError(
+            "window_duration_s * target_sample_rate_hz must be an integer for fixed-shape batching, "
+            f"got {exact_count}"
+        )
+
+    source, event_duration_s, native_rate_hz = _refed_continuous_stream(event)
+    target_time_s = window_start_s + np.arange(target_count, dtype=np.float64) / target_sample_rate_hz
+    metadata = event.get("metadata", {})
+    paired_signal_duration_s = event_duration_s
+    if isinstance(metadata, Mapping):
+        eeg_samples = metadata.get("eeg_samples")
+        fnirs_samples = metadata.get("fnirs_samples")
+        if eeg_samples is not None:
+            paired_signal_duration_s = min(paired_signal_duration_s, float(eeg_samples) / 1000.0)
+        if fnirs_samples is not None:
+            paired_signal_duration_s = min(paired_signal_duration_s, float(fnirs_samples) / 47.62)
+    time_valid = (target_time_s >= 0.0) & (target_time_s < paired_signal_duration_s)
+    source_position = np.clip(
+        target_time_s / event_duration_s * source.shape[0],
+        0.0,
+        float(source.shape[0] - 1),
+    )
+    left = np.floor(source_position).astype(np.int64)
+    right = np.minimum(left + 1, source.shape[0] - 1)
+    fraction = source_position - left
+
+    target = np.zeros((len(REFED_CONTINUOUS_TARGET_NAMES), target_count), dtype=np.float32)
+    valid_mask = np.zeros_like(target, dtype=bool)
+    for coordinate in range(len(REFED_CONTINUOUS_TARGET_NAMES)):
+        left_value = source[left, coordinate]
+        right_value = source[right, coordinate]
+        needs_right = fraction > 1e-7
+        coordinate_valid = time_valid & np.isfinite(left_value) & (~needs_right | np.isfinite(right_value))
+        interpolated = left_value.copy()
+        interpolation_mask = coordinate_valid & needs_right
+        interpolated[interpolation_mask] = (
+            left_value[interpolation_mask] * (1.0 - fraction[interpolation_mask])
+            + right_value[interpolation_mask] * fraction[interpolation_mask]
+        )
+        target[coordinate, coordinate_valid] = interpolated[coordinate_valid].astype(np.float32)
+        valid_mask[coordinate] = coordinate_valid
+
+    return {
+        "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+        "values": target,
+        "valid_mask": valid_mask,
+        "time_s": target_time_s.astype(np.float32),
+        "target_names": list(REFED_CONTINUOUS_TARGET_NAMES),
+        "target_sample_rate_hz": float(target_sample_rate_hz),
+        "source_sample_rate_hz": native_rate_hz,
+        "source_sample_count": int(source.shape[0]),
+        "event_duration_s": event_duration_s,
+        "paired_signal_duration_s": paired_signal_duration_s,
+        "value_coordinate": "refed_joystick_native",
+        "scaling_policy": "preserve_native_in_loader_fit_scaling_on_train_subjects_only",
+        "alignment_policy": "normalized_video_time_linear_interpolation_v1",
+    }
 
 
 class UnifiedPhysiologyWindowDataset:
@@ -601,6 +816,7 @@ class UnifiedPhysiologyWindowDataset:
         eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
         eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
         eeg_artifact_cache_root: str | Path | None = None,
+        simultaneous_eeg_cache_root: str | Path | None = None,
         require_paired_timestamps: bool = True,
         include_event_types: set[str] | None = None,
         admissible_alignment_cases: set[str] | frozenset[str] | None = DEFAULT_ADMISSIBLE_ALIGNMENT_CASES,
@@ -628,6 +844,12 @@ class UnifiedPhysiologyWindowDataset:
             else self.cache_root / "eeg_artifact_clean_v3"
         )
         self._artifact_cache_manifest: dict[str, Any] | None = None
+        self.simultaneous_eeg_cache_root = (
+            Path(simultaneous_eeg_cache_root)
+            if simultaneous_eeg_cache_root is not None
+            else self.cache_root / SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+        )
+        self._simultaneous_eeg_cache_manifest: dict[str, Any] | None = None
         self.require_paired_timestamps = bool(require_paired_timestamps)
         self.include_event_types = include_event_types
         self.admissible_alignment_cases = None if admissible_alignment_cases is None else frozenset(admissible_alignment_cases)
@@ -696,8 +918,15 @@ class UnifiedPhysiologyWindowDataset:
             sample_rate_hz=record.sample_rate_hz,
             native_contract=record.manifest.get("native_contract", {}),
         )
-        eeg_branch = self.eeg_signal_branch if record.dataset_id == "eeg_fnirs_single_trial" else "raw_with_ocular_artifact"
+        if record.dataset_id == "eeg_fnirs_single_trial":
+            eeg_branch = self.eeg_signal_branch
+        elif record.dataset_id == "simultaneous_eeg_nirs":
+            eeg_branch = SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+        else:
+            eeg_branch = "raw_with_ocular_artifact"
         cached_eeg = self._load_cached_single_trial_eeg(record, eeg_branch)
+        if cached_eeg is None:
+            cached_eeg = self._load_cached_simultaneous_eeg(record, eeg_branch)
         if cached_eeg is not None:
             eeg, eeg_names, eeg_state, eeg_quality = cached_eeg
         else:
@@ -821,10 +1050,86 @@ class UnifiedPhysiologyWindowDataset:
         self._artifact_cache_manifest = manifest
         return manifest
 
+    def _load_cached_simultaneous_eeg(
+        self,
+        record: CleanCacheRecord,
+        eeg_branch: str,
+    ) -> tuple[np.ndarray, tuple[str, ...], dict[str, Any], dict[str, np.ndarray]] | None:
+        if (
+            record.dataset_id != "simultaneous_eeg_nirs"
+            or eeg_branch != SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+        ):
+            return None
+        path = self.simultaneous_eeg_cache_root / record.canonical_subject_id / f"{record.base_record_id}.npz"
+        if not path.exists():
+            return None
+        manifest = self._validated_simultaneous_eeg_cache_manifest()
+        with np.load(path, allow_pickle=False) as payload:
+            schema = str(np.asarray(payload["schema"]).item())
+            join_key = str(np.asarray(payload["join_key"]).item())
+            if schema != "simultaneous_eeg_eog_cache_v1" or join_key != record.join_key:
+                raise RuntimeError(
+                    f"stale/incompatible Simultaneous EEG cache {path}: "
+                    f"schema={schema!r}, join_key={join_key!r}"
+                )
+            source_path = self.project_root / str(np.asarray(payload["source_path"]).item())
+            source_stat = source_path.stat()
+            if (
+                source_stat.st_size != int(np.asarray(payload["source_size_bytes"]).item())
+                or source_stat.st_mtime_ns != int(np.asarray(payload["source_mtime_ns"]).item())
+            ):
+                raise RuntimeError(f"source EEG changed after Simultaneous EOG cache build: {source_path}")
+            state = json.loads(str(np.asarray(payload["preprocessing_state_json"]).item()))
+            state["artifact_cache"] = {
+                "used": True,
+                "path": str(path),
+                "schema": schema,
+            }
+            return (
+                np.asarray(payload["eeg"], dtype=np.float32),
+                tuple(str(value) for value in np.asarray(payload["channel_names"]).tolist()),
+                state,
+                {
+                    "artifact_mask": np.asarray(payload["artifact_mask"], dtype=bool),
+                    "bad_channel_mask": np.asarray(payload["bad_channel_mask"], dtype=bool),
+                },
+            )
+
+    def _validated_simultaneous_eeg_cache_manifest(self) -> dict[str, Any]:
+        if self._simultaneous_eeg_cache_manifest is not None:
+            return self._simultaneous_eeg_cache_manifest
+        path = self.simultaneous_eeg_cache_root / "cache_manifest.json"
+        if not path.exists():
+            raise RuntimeError(f"Simultaneous EEG cache record exists without manifest: {path}")
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        expected_config = simultaneous_eeg_eog_cleaning_config(
+            self.eeg_artifact_config
+        ).to_dict()
+        if (
+            manifest.get("schema") != "simultaneous_eeg_eog_cache_v1"
+            or manifest.get("signal_branch") != SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+            or manifest.get("cleaning_config") != expected_config
+        ):
+            raise RuntimeError(f"stale/incompatible Simultaneous EEG cache manifest: {path}")
+        code_root = Path(__file__).resolve().parents[2]
+        code_paths = {
+            "builder": code_root / "experiments/build_simultaneous_eeg_eog_clean_cache.py",
+            "cleaner": Path(clean_single_trial_eeg.__code__.co_filename).resolve(),
+        }
+        for name, code_path in code_paths.items():
+            digest = hashlib.sha256(code_path.read_bytes()).hexdigest()
+            if manifest.get("code_sha256", {}).get(name) != digest:
+                raise RuntimeError(
+                    f"Simultaneous EEG cache code hash mismatch for {name}: "
+                    f"rebuild {self.simultaneous_eeg_cache_root}"
+                )
+        self._simultaneous_eeg_cache_manifest = manifest
+        return manifest
+
     def __getitem__(self, index: int) -> dict[str, Any]:
         ref = self.windows[index]
         record_data = self._load_canonical_record(ref.record)
-        offset_ms = self.window_offset_s * 1000.0
+        offset_ms = (self.window_offset_s + ref.window_offset_s) * 1000.0
         eeg_time_ms = float(ref.event.get("eeg_time_ms", ref.event.get("onset_ms"))) + offset_ms
         fnirs_time_ms = float(ref.event.get("fnirs_time_ms", ref.event.get("onset_ms"))) + offset_ms
         eeg, eeg_mask = _slice_window(
@@ -884,6 +1189,7 @@ class UnifiedPhysiologyWindowDataset:
                 "eeg_time_ms": eeg_time_ms,
                 "fnirs_time_ms": fnirs_time_ms,
                 "offset_ms": fnirs_time_ms - eeg_time_ms,
+                "event_relative_window_start_s": self.window_offset_s + ref.window_offset_s,
                 "separate_modality_clocks_used": True,
             },
             "preprocessing_contract": CANONICAL_PREPROCESSING.to_dict(),
@@ -917,3 +1223,237 @@ class UnifiedPhysiologyWindowDataset:
             "label_schema": "canonical_task_label_v1",
             "geometry_schema": "canonical_channel_geometry_v1",
         }
+
+
+class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
+    """Sliding multimodal REFED windows with valence/arousal sequence targets.
+
+    The loader expands each video event into deterministic, event-relative
+    windows.  By default the stride equals the observation duration, avoiding
+    duplicate signal support while exposing all of the video rather than only
+    its first window.  The final partial window is retained with signal and
+    target masks; it can be disabled explicitly without changing alignment.
+    Subject/video grouping must be applied before split generation.
+    """
+
+    def __init__(
+        self,
+        cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
+        *,
+        window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
+        window_stride_s: float | None = None,
+        target_sample_rate_hz: float = REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ,
+        include_partial_windows: bool = True,
+        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+        eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
+        eeg_artifact_cache_root: str | Path | None = None,
+        require_paired_timestamps: bool = True,
+        admissible_alignment_cases: set[str] | frozenset[str] | None = DEFAULT_ADMISSIBLE_ALIGNMENT_CASES,
+    ) -> None:
+        self.window_stride_s = float(window_duration_s if window_stride_s is None else window_stride_s)
+        self.target_sample_rate_hz = float(target_sample_rate_hz)
+        self.include_partial_windows = bool(include_partial_windows)
+        if not np.isfinite(self.window_stride_s) or self.window_stride_s <= 0.0:
+            raise ValueError(f"window_stride_s must be positive, got {self.window_stride_s}")
+        exact_target_count = float(window_duration_s) * self.target_sample_rate_hz
+        if (
+            not np.isfinite(self.target_sample_rate_hz)
+            or self.target_sample_rate_hz <= 0.0
+            or not np.isclose(exact_target_count, round(exact_target_count), rtol=0.0, atol=1e-6)
+        ):
+            raise ValueError(
+                "target_sample_rate_hz must be positive and produce an integer target length per window"
+            )
+        super().__init__(
+            cache_root,
+            dataset_ids=("refed",),
+            window_duration_s=window_duration_s,
+            window_offset_s=0.0,
+            eeg_signal_branch=eeg_signal_branch,
+            eeg_artifact_config=eeg_artifact_config,
+            eeg_artifact_cache_root=eeg_artifact_cache_root,
+            require_paired_timestamps=require_paired_timestamps,
+            include_event_types={"video_segment_with_continuous_labels"},
+            admissible_alignment_cases=admissible_alignment_cases,
+        )
+        source_events = tuple(self.windows)
+        self.source_event_count = len(source_events)
+        expanded: list[UnifiedWindowRef] = []
+        for ref in source_events:
+            _source, duration_s, _source_rate_hz = _refed_continuous_stream(ref.event)
+            starts = np.arange(0.0, duration_s, self.window_stride_s, dtype=np.float64)
+            for start_s in starts.tolist():
+                if not self.include_partial_windows and start_s + self.window_duration_s > duration_s + 1e-6:
+                    continue
+                expanded.append(replace(ref, window_offset_s=float(start_s)))
+        self.windows = expanded
+
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        sample = super().__getitem__(index)
+        ref = self.windows[index]
+        target = refed_continuous_target_window(
+            ref.event,
+            window_start_s=ref.window_offset_s,
+            window_duration_s=self.window_duration_s,
+            target_sample_rate_hz=self.target_sample_rate_hz,
+        )
+        relative_target_time_s = np.arange(target["values"].shape[1], dtype=np.float64) / self.target_sample_rate_hz
+        paired_window_mask = np.ones(relative_target_time_s.shape, dtype=bool)
+        for modality in ("eeg", "fnirs"):
+            modality_mask = np.asarray(sample["valid_mask"][modality], dtype=bool)
+            modality_indices = np.floor(
+                relative_target_time_s * float(sample["sample_rate_hz"][modality]) + 1e-9
+            ).astype(np.int64)
+            within = modality_indices < modality_mask.size
+            modality_valid = np.zeros_like(paired_window_mask)
+            modality_valid[within] = modality_mask[modality_indices[within]]
+            paired_window_mask &= modality_valid
+        target["valid_mask"] &= paired_window_mask[None, :]
+        target["values"][~target["valid_mask"]] = 0.0
+        target["paired_window_signal_valid_time_count"] = int(paired_window_mask.sum())
+        context_label = sample["label"]
+        event_payload = dict(sample["event"])
+        event_metadata = dict(event_payload.get("metadata", {}))
+        stream_metadata = dict(event_metadata.get("continuous_label_stream", {}))
+        stream_metadata.pop("values", None)
+        event_metadata["continuous_label_stream"] = stream_metadata
+        event_payload["metadata"] = event_metadata
+        sample["event"] = event_payload
+        event_index = int(ref.event.get("event_index", context_label.get("class_index", -1)))
+        start_ms = int(round(ref.window_offset_s * 1000.0))
+        sample.update(
+            {
+                "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+                "source_window_schema": UNIFIED_PHYSIOLOGY_SCHEMA,
+                "sample_id": f"{ref.record.join_key}|event={event_index}|start_ms={start_ms}",
+                "label": {
+                    "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+                    "namespace": "refed:emotion_video",
+                    "task": "emotion_video",
+                    "target_type": "continuous_sequence_regression",
+                    "target_names": list(REFED_CONTINUOUS_TARGET_NAMES),
+                },
+                "video_context_label": context_label,
+                "target": target["values"],
+                "target_valid_mask": target["valid_mask"],
+                "target_time_s": target["time_s"],
+                "target_names": target["target_names"],
+                "target_sample_rate_hz": target["target_sample_rate_hz"],
+                "target_metadata": {
+                    key: value
+                    for key, value in target.items()
+                    if key not in {"values", "valid_mask", "time_s", "target_names", "target_sample_rate_hz"}
+                },
+            }
+        )
+        return sample
+
+    def contract_summary(self) -> dict[str, Any]:
+        base = super().contract_summary()
+        event_path = self.cache_root / "event_index" / "events.jsonl"
+        event_index_sha256 = hashlib.sha256(event_path.read_bytes()).hexdigest() if event_path.exists() else None
+        partial_windows = 0
+        valid_target_values = 0
+        total_target_values = 0
+        source_rates = []
+        for ref in self.windows:
+            target = refed_continuous_target_window(
+                ref.event,
+                window_start_s=ref.window_offset_s,
+                window_duration_s=self.window_duration_s,
+                target_sample_rate_hz=self.target_sample_rate_hz,
+            )
+            source_rates.append(float(target["source_sample_rate_hz"]))
+            valid_target_values += int(target["valid_mask"].sum())
+            total_target_values += int(target["valid_mask"].size)
+            if not bool(target["valid_mask"].all()):
+                partial_windows += 1
+        base.update(
+            {
+                "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+                "source_window_schema": UNIFIED_PHYSIOLOGY_SCHEMA,
+                "source_event_count": self.source_event_count,
+                "window_count": len(self.windows),
+                "window_duration_s": self.window_duration_s,
+                "window_stride_s": self.window_stride_s,
+                "include_partial_windows": self.include_partial_windows,
+                "partial_window_count": partial_windows,
+                "target_type": "continuous_sequence_regression",
+                "label_schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+                "target_names": list(REFED_CONTINUOUS_TARGET_NAMES),
+                "target_shape": [len(REFED_CONTINUOUS_TARGET_NAMES), int(round(self.window_duration_s * self.target_sample_rate_hz))],
+                "target_sample_rate_hz": self.target_sample_rate_hz,
+                "source_target_sample_rate_hz_range": (
+                    [min(source_rates), max(source_rates)] if source_rates else []
+                ),
+                "valid_target_value_fraction": (
+                    valid_target_values / total_target_values if total_target_values else 0.0
+                ),
+                "value_coordinate": "refed_joystick_native",
+                "target_scaling_policy": "fit_on_train_subjects_only",
+                "split_group_keys": ["subject"],
+                "window_dependency_group_keys": ["subject", "record_id"],
+                "event_index_sha256": event_index_sha256,
+            }
+        )
+        return base
+
+
+def collate_refed_continuous_sequences(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Collate REFED regression samples without batching nullable provenance.
+
+    PyTorch's default collator cannot process the nullable coordinate/provenance
+    fields carried by the unified loader.  This adapter stacks only fixed-shape
+    model inputs and masks, keeps the shared channel contract once, and retains
+    sample-specific provenance as a list.
+    """
+
+    if not samples:
+        raise ValueError("cannot collate an empty REFED batch")
+    required = {
+        "eeg",
+        "fnirs",
+        "valid_mask",
+        "analysis_valid_mask",
+        "artifact_mask",
+        "bad_channel_mask",
+        "target",
+        "target_valid_mask",
+        "target_time_s",
+    }
+    missing = sorted(required - set(samples[0]))
+    if missing:
+        raise KeyError(f"REFED sample is missing batch fields: {missing}")
+    from torch.utils.data import default_collate
+
+    stacked = default_collate([{key: sample[key] for key in sorted(required)} for sample in samples])
+    first = samples[0]
+    stacked.update(
+        {
+            "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+            "label": dict(first["label"]),
+            "target_names": list(first["target_names"]),
+            "target_sample_rate_hz": float(first["target_sample_rate_hz"]),
+            "sample_rate_hz": dict(first["sample_rate_hz"]),
+            "channel_names": first["channel_names"],
+            "component_roles": first["component_roles"],
+            "channel_geometry": first["channel_geometry"],
+            "sample_id": [str(sample["sample_id"]) for sample in samples],
+            "dataset_id": [str(sample["dataset_id"]) for sample in samples],
+            "subject": [str(sample["subject"]) for sample in samples],
+            "record_id": [str(sample["record_id"]) for sample in samples],
+            "join_key": [str(sample["join_key"]) for sample in samples],
+            "provenance": [
+                {
+                    "event": sample["event"],
+                    "alignment": sample["alignment"],
+                    "target_metadata": sample["target_metadata"],
+                    "video_context_label": sample["video_context_label"],
+                    "preprocessing_state": sample["preprocessing_state"],
+                    "eeg_signal_branch": sample["eeg_signal_branch"],
+                }
+                for sample in samples
+            ],
+        }
+    )
+    return stacked

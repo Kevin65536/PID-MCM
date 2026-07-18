@@ -28,7 +28,11 @@ from .eeg_fnirs_dataset import (
 SUPPORTED_TASKS = ('nback', 'dsr', 'wg')
 SUPPORTED_MODALITIES = ('eeg', 'fnirs')
 SUPPORTED_FNIRS_SIGNALS = ('oxy', 'deoxy')
-DEPRECATED_TASKS = ('dsr',)
+# Kept as a public compatibility symbol.  DSR was restored after its released
+# Go/No-go EEG marker codebook and block-level EEG/fNIRS synchronization were
+# re-audited; no Simultaneous task is currently deprecated.
+DEPRECATED_TASKS: Tuple[str, ...] = ()
+DSR_STIMULUS_MARKER_CODES: Dict[int, str] = {16: 'Go', 32: 'No-go'}
 
 
 TASK_SEGMENTATION_MODES: Dict[str, Dict[str, str]] = {
@@ -43,7 +47,7 @@ TASK_SEGMENTATION_MODES: Dict[str, Dict[str, str]] = {
         'both': 'trial',
     },
     'dsr': {
-        'eeg': 'session',
+        'eeg': 'trial',
         'fnirs': 'session',
         'both': 'session',
     },
@@ -432,6 +436,30 @@ class SimultaneousCognitiveLoader:
             'event_desc': session_desc,
         }
 
+    def get_dsr_stimulus_markers(self, subject_id: int) -> Dict[str, Any]:
+        """Return only the EEG-native Go/No-go symbols, excluding block code 48."""
+        if self.task != 'dsr':
+            raise ValueError('DSR stimulus markers are only defined for task=dsr')
+        marker_info = self.load_subject_data(subject_id, 'eeg')[1]
+        event_desc = marker_info.get('event_desc')
+        if event_desc is None:
+            raise ValueError(f'DSR EEG marker stream has no event.desc for subject {subject_id}')
+        desc = np.asarray(event_desc, dtype=np.int64).reshape(-1)
+        mask = np.isin(desc, list(DSR_STIMULUS_MARKER_CODES))
+        selected_desc = desc[mask]
+        class_names = ['Go', 'No-go']
+        lookup = {name: index for index, name in enumerate(class_names)}
+        y = np.zeros((len(class_names), len(selected_desc)), dtype=np.float32)
+        for event_index, code in enumerate(selected_desc.tolist()):
+            y[lookup[DSR_STIMULUS_MARKER_CODES[int(code)]], event_index] = 1.0
+        return {
+            'time': np.asarray(marker_info['time'], dtype=np.float64)[mask],
+            'y': y,
+            'className': class_names,
+            'event_class_names': [DSR_STIMULUS_MARKER_CODES[int(code)] for code in selected_desc],
+            'event_desc': selected_desc,
+        }
+
     def align_session_markers(self, subject_id: int, jump_threshold_ms: float = 20_000.0) -> Dict[str, Any]:
         eeg_sessions = self.get_session_markers(subject_id, 'eeg')
         fnirs_sessions = self.get_session_markers(subject_id, 'fnirs')
@@ -613,6 +641,8 @@ class SimultaneousContinuousDataset:
         self._validate_session_idx(session_idx)
         if self.segmentation_mode == 'session':
             return self.loader.get_session_markers(subject_id, self.modality)
+        if self.task == 'dsr' and self.modality == 'eeg':
+            return self.loader.get_dsr_stimulus_markers(subject_id)
         return self.get_session_markers(subject_id, session_idx)
 
     def get_session_trial_regions(
@@ -725,6 +755,8 @@ class SimultaneousEEGfNIRSDataset(Dataset):
     def _get_marker_info(self, subject_id: int) -> Dict[str, Any]:
         if self.segmentation_mode == 'session':
             return self.loader.get_session_markers(subject_id, self.modality)
+        if self.task == 'dsr' and self.modality == 'eeg':
+            return self.loader.get_dsr_stimulus_markers(subject_id)
         return self.loader.load_subject_data(subject_id, self.modality)[1]
 
     def _build_trial_index(self) -> None:

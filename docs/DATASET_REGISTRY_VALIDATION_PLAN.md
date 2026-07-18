@@ -94,8 +94,9 @@ The validation plan below was derived from the original dataset documents under 
 - EEG and fNIRS task files are stored separately for n-back, DSR, and WG, with three sessions concatenated per task.
 - EEG markers and fNIRS markers use different numeric codes and need dataset-specific mapping.
 - Current adapter progress: src/data/simultaneous_eeg_nirs_dataset.py now exposes training-ready single-modality window datasets and task-dependent multimodal datasets through the shared factory in src/data/factory.py.
-- Updated alignment conclusion for n-back and DSR: the correct first step is session-level alignment, not trial-level alignment. For subject VP001, n-back session labels match exactly across EEG and fNIRS with three stable offset blocks of 9 sessions each. DSR also aligns at session level after skipping one extra EEG session marker, producing three stable offset blocks of 6, 5, and 6 sessions. This supports a blockwise session-alignment strategy derived from the original session-folder organization in the dataset documentation.
-- Updated usage conclusion: DSR is now explicitly deprecated in this repository and is excluded from training-ready loaders and future adaptation checks until a stable scientific use case is defined.
+- Updated alignment conclusion for n-back and DSR: block/session markers establish the cross-modal clock first. DSR then uses EEG-native code 16/32 stimulus markers as Go/No-go labels and projects them through the corresponding admitted block offset. A missing fNIRS block anchor removes that block rather than triggering guessed interpolation.
+- Updated usage conclusion (2026-07-18): DSR is restored. The default unified loader admits 8,980 Go/No-go windows from 25 subjects; VP005 remains excluded by the ordinary continuous-drift gate. fNIRS is synchronized context, not a symbol-native label source.
+- Simultaneous EEG now uses `simultaneous_eeg_eog_clean_v1`: HEOG/VEOG are auxiliary regression references and are excluded from the 28-channel scalp EEG output.
 - Updated segmentation conclusion:
 	- n-back uses trial-level segmentation for EEG-only loading, session-level segmentation for fNIRS-only loading, and session-level segmentation for multimodal loading.
 	- WG uses trial-level segmentation for EEG, fNIRS, and multimodal loading.
@@ -201,7 +202,7 @@ Current scope:
 - for simultaneous_eeg_nirs, the script now visualizes task segmentation directly:
 	- n-back: session-level segmentation regions
 	- WG: trial-level segmentation regions
-	- DSR: intentionally unsupported because the task is deprecated
+	- DSR: EEG Go/No-go stimulus markers projected through aligned block anchors
 
 Example:
 

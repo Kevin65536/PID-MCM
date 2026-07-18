@@ -10,7 +10,11 @@ from src.data.eeg_artifact_preprocessing import (
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
     clean_single_trial_eeg,
 )
-from src.data.unified_physiology import NativeEEGRecord, preprocess_eeg_record_with_quality
+from src.data.unified_physiology import (
+    SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
+    NativeEEGRecord,
+    preprocess_eeg_record_with_quality,
+)
 
 
 def _synthetic_record(duration_s: float = 60.0, sample_rate_hz: float = 200.0):
@@ -142,6 +146,27 @@ def test_v2_remains_mask_only_and_v3_attenuates_detected_high_frequency_bursts()
         "mask_gated_high_frequency_attenuation_v1"
     )
     assert not np.array_equal(v2, v3)
+
+
+def test_simultaneous_eog_branch_repairs_ocular_signal_without_other_interventions():
+    eeg, eog, _, sample_rate = _synthetic_record(duration_s=40.0)
+    record = NativeEEGRecord(
+        values=eeg,
+        sample_rate_hz=sample_rate,
+        channel_names=tuple(f"C{index}" for index in range(eeg.shape[1])),
+        native_unit="uV",
+        source_path=Path("synthetic.mat"),
+        auxiliary_values=eog,
+        auxiliary_channel_names=("VEOG", "HEOG"),
+    )
+    _, state, quality = preprocess_eeg_record_with_quality(
+        record, signal_branch=SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+    )
+    cleaning = state["artifact_cleaning"]
+    assert cleaning["schema"] == SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
+    assert cleaning["median_eog_correlation_after"] < cleaning["median_eog_correlation_before"]
+    assert cleaning["muscle_correction"]["method"] == "mask_only"
+    assert not np.any(quality["bad_channel_mask"])
 
 
 def test_flat_channel_uses_geometry_aware_interpolation_when_positions_exist():

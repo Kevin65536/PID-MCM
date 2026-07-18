@@ -31,7 +31,13 @@ The complete tokenizer training loop is runnable. The original Croce E0-v2 physi
 | 2026-07-16 | `PST-E0-V3-GAUGE-RECALIBRATION` | Train-fold observation-aligned chromophore gauge and strict local-target contract | Required local/gauge/vocabulary layers pass; source run remains immutable; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_gauge_corrected_validation_v1/` |
 | 2026-07-16 | `PST-E0-V3-ADMISSION-DECISION` | Adaptive joint-teacher estimand and claim-boundary review | **E0 optional target-family development gate passed** for a physiology-shaped multimodal consensus proxy; runtime integration pending; protected test unopened | `docs/physiology_semantic_tokenizer/analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md` |
 | 2026-07-17 | `PST-COMPARE-READINESS-AUDIT` | Comparative-method documentation and checkout audit | Preparation workflow frozen; formal comparison blocked on DSR guard, REFED target adapter, shared splits, and method admission | `docs/physiology_semantic_tokenizer/11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md` |
-| 2026-07-17 | `PST-DATA-DSR-VISUAL-CONTRACT` | DSR hard exclusion and Visual DC9 timing recovery | Correctness passed; DSR 467 source windows excluded / 0 exposed; Visual 7,750 windows across 16 subjects; S06 Part1 remains excluded | `docs/physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md` |
+| 2026-07-17 | `PST-DATA-DSR-VISUAL-CONTRACT` | DSR hard exclusion and Visual DC9 timing recovery | Historical correctness result; DSR exclusion was superseded on 2026-07-18, while Visual 7,750-window timing evidence remains active | `docs/physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md` |
+| 2026-07-18 | `PST-P1-FINAL-UNIFIED-LOADER-AUDIT` | Full six-task audit of every then-admitted 20-second loader window | Historical pre-restoration snapshot; finite/geometry evidence retained, DSR and Simultaneous-QC conclusions superseded by `PST-DATA-SIM-EOG-DSR-RESTORE` | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_20260718/` |
+| 2026-07-18 | `PST-DATA-REFED-EEG-TOPOLOGY` | Resolve REFED EEG adjacency from a versioned standard montage | Correctness passed; 64/64 positioned, 62 exact template matches + 2 explicit interpolations, connected 168-edge graph; adjacency-only claim boundary | `docs/physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md` |
+| 2026-07-18 | `PST-DATA-VISUAL-FNIRS-GEOMETRY` | Complete Visual fNIRS geometry from the dataset PDF, 4×4 raw mode, channel-reference workbook, and CED coordinates | Correctness passed; both probes 24/24 positioned, 14 anchors + 10 graph interpolations, connected 52-edge graphs; graphical-template-only claim boundary | `docs/physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md` |
+| 2026-07-18 | `PST-DATA-REFED-CONTINUOUS-VA` | Versioned REFED valence/arousal sequence-regression loader | Correctness passed; 480 videos expand to 2,720 masked 20-second windows, fixed `[2,20]` targets at 1 Hz, 90.2941% paired target support; no model performance evaluated | `src/data/unified_physiology.py` |
+| 2026-07-18 | `PST-DATA-SIM-EOG-DSR-RESTORE` | Simultaneous HEOG/VEOG repair, 28-channel loader contract, and DSR Go/No-go restoration | Correctness passed; 78/78 EEG records cached, median EOG correlation 0.4517→0.0221 with 15–45 Hz variance ratio 0.9965; default gate admits 8,980 DSR windows/25 subjects, VP005 remains drift-excluded | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/simultaneous_eog_clean_20260718/` |
+| 2026-07-18 | `PST-P1-POST-DSR-LOADER-AUDIT` | Full seven-task audit after DSR/EOG contract update | 22,952/22,952 windows traversed; DSR 2,694 Go + 6,286 No-go, all Simultaneous tasks 28-channel clean branch; readiness remains 7 pass / 7 block / 1 warn | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_post_dsr_20260718/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -252,6 +258,57 @@ tracks. No experiment or protected evaluation ran. The authoritative workflow
 and blockers are recorded in
 [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md).
 
+The 2026-07-18 final loader audit then traversed every admitted sample: 760
+records, 13,972 20-second windows, and six task namespaces. DSR exposure and
+non-finite amplitudes are both zero; every subject covers all admitted known
+classes and each task has a stable channel signature. This supports continued
+adapter preparation only. Formal unified training remains blocked by 30 Visual
+unknown windows, 3,875 paired-probe semantic trial groups, REFED's missing
+window-level continuous target, incomplete QC/mask consumption, unfrozen
+channel/split adapters, and 28 adaptively flagged record-scale review
+cases. The canonical evidence and claim boundary are recorded in
+[`09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md).
+
+The Visual geometry rebuild then verified all 112 raw exports declare
+`Mode,4x4`, materialized both Probe1 and Probe2 rather than only Probe1, and
+resolved every CH1–CH24 coordinate against the dataset graphical head model and
+`Location.ced`. Each probe contains 14 direct EEG-label anchors and 10
+graph-Laplacian interpolations with a connected 52-edge shared-optode graph.
+The rerun changed the geometry readiness check from block to pass and produced
+an overall readiness count of 7 pass / 7 block / 1 warn. This is a software/data
+geometry admission only; it does not establish participant-specific optode
+digitization, exact source-detector distance, or co-registration accuracy.
+
+The REFED follow-up then closed the audit's missing target-construction item
+with `refed_continuous_va_sequence_v1`. The released approximately 1 Hz
+joystick streams are now aligned on event-relative normalized video time and
+returned as fixed `[valence, arousal, time]` sequences with per-coordinate
+validity masks. At the default non-overlapping 20-second policy, 480 videos
+produce 2,720 windows and retain all paired annotation support; 480 partial
+final windows account for the 90.2941% valid fraction of the padded target
+tensor. Values remain in the native REFED coordinate, so downstream scaling
+must be train-subject-only. This is loader correctness, not evidence that a
+regression model predicts affect or that either candidate method is admitted.
+
+The Simultaneous follow-up supersedes only the earlier DSR-ban and raw-EOG
+entrance decisions; the historical audits remain unchanged. `HEOG` and `VEOG`
+are now auxiliary-only nuisance references, and the standard loader returns 28
+scalp channels from `simultaneous_eeg_eog_clean_v1`. The branch performs robust
+low-frequency EOG regression with a configurable per-channel removal cap, while
+disabling bad-channel interpolation and muscle-band attenuation. Across all 78
+records, median eye correlation changed from 0.4517 to 0.0221, the median
+waveform correlation outside detected ocular intervals was 0.9277, and the
+median 15–45 Hz variance ratio was 0.9965. These are repair and preservation
+checks, not proof that all ocular signal has vanished.
+
+DSR is restored from released EEG codes 16/32 as `Go`/`No-go`. Cross-modal time
+is inherited only from each event's aligned block anchor; fNIRS remains context,
+not an independent symbol label. The paper reports 180 trials, whereas all 26
+released marker streams contain 360 stimuli, so the loader preserves the raw
+360-count provenance. VP001 contributes 340 events because one fNIRS block
+anchor is absent; VP005 is rejected by the existing continuous-drift gate. The
+default entrance therefore exposes 8,980 DSR windows from 25 subjects.
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
@@ -282,4 +339,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-17_
+_Last updated: 2026-07-18_

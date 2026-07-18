@@ -123,8 +123,12 @@
 
 | 模态 | 通道数 | 采样率 | 信号类型 | 数据格式 |
 |------|-------|--------|---------|---------|
-| EEG | 64 | 1000 Hz | 标准10-20扩展系统 | `.mat` (channel × time) |
+| EEG | 64 | 1000 Hz | 标准10-10命名（含 M1/M2、CB1/CB2） | `.mat` (channel × time) |
 | fNIRS | 51 | 47.62 Hz | HbO, HbR, HbT, Abs 780/805/830nm | `.mat` (signal_type × channel × time) |
+
+EEG 原始文件未提供逐被试数字化坐标，但 `EEG_channels.csv` 与官方通道分布图
+给出固定 64-channel layout。当前 physiology-semantic sidecar 使用版本化标准
+montage 推导 within-EEG adjacency；它不是个体实测位置或 EEG-fNIRS 共配准。
 
 #### fNIRS 原始保存语义与单位
 - README 明确说明原始 fNIRS 张量同时包含 `HbO`, `HbR`, `HbT`, `Abs 780 nm`, `Abs 805 nm`, `Abs 830 nm` 六类信号。
@@ -207,6 +211,13 @@ REFED-dataset/
 - 但同一说明文件同时指出这些 CSV 仍是 Hitachi ETG-7100 的 raw export without further processing；CSV 头部保留了 `Wave[nm]=695,830` 等设备元数据。
 - 因此该数据集的当前保存语义应视为 Oxy/Deoxy 导出值，而不是 highWL/lowWL；不过原始文件未显式标出统一浓度单位，绝对幅值也明显大于 mmol/L 数据集，不能跨数据集直接按绝对数值对齐。
 
+#### fNIRS 空间几何契约
+
+- 112 个原始 fNIRS CSV 均声明 `Mode,4x4`，每个 Probe 含 CH1–CH24；`Graphical_recording_head_model.pdf` 给出双侧 optode 与 EEG 电极的相对头皮布局。
+- `fNIRS_to_EEG_channel_reference.xlsx` 每侧给出 14 个 channel-to-EEG anchors，剩余 10 个为 `-`；锚点坐标来自 `Location.ced`，未标注通道按共享 optode 的 24-channel graph 做 harmonic interpolation。
+- Probe1/Probe2 各生成 24 个完整 graphical-template channel coordinates 和 52 条无向邻接边；统一 loader 按 record 中的 probe 后缀选择对应侧 geometry。
+- 这些坐标不是逐被试 digitization，也不提供真实 source/detector 三维点。它们只允许用于通道邻接、图模型、可视化和 coarse EEG-fNIRS alignment，不能用于精确光程、MBLL replay 或 exact co-registration。
+
 #### 适用场景
 ✅ 记忆编码研究  
 ✅ 认知动机与注意力  
@@ -233,12 +244,14 @@ REFED-dataset/
 
 | 模态 | 设备 | 采样率 | 通道数 |
 |------|------|--------|-------|
-| EEG | BrainVision | 高采样 | 多通道 |
+| EEG | BrainVision | 200 Hz MATLAB导出 | 30（28 scalp EEG + HEOG + VEOG） |
 | fNIRS | NIRx | 10.4 Hz 原始采集, 10 Hz MATLAB导出 | 36个空间位置的 oxy/deoxy |
 
 #### 实验范式
-- **任务类型**: N-back、心算等认知任务
+- **任务类型**: N-back、DSR（discrimination/selection/response）、word generation
 - **认知负荷**: 不同难度等级
+- **DSR**: O/Go（EEG code 16）与 X/No-go（code 32）刺激；发布文件为每人
+  360 个 stimulus markers。论文正文写 180，当前协议保留并报告这一差异。
 
 #### 数据结构
 ```
@@ -261,6 +274,17 @@ Simultaneous EEG&NIRS/
 ✅ 工作记忆研究  
 ✅ EEG-fNIRS同步采集方法学
 
+#### 当前统一 EEG/DSR 契约
+
+- 标准 loader 使用 `simultaneous_eeg_eog_clean_v1`：HEOG/VEOG 只作 robust
+  nuisance regression 参考，输出中排除，最终为 28 个 scalp EEG channels；
+- 该分支不附带坏道插值或 muscle-band attenuation，避免把眼动修复扩张成
+  未单独论证的 EEG 重处理；
+- DSR 的 fNIRS marker 只提供 block-level clock anchor。Go/No-go label 来自 EEG，
+  fNIRS 仅作为同步血流动力学上下文；没有对齐 anchor 的 block 不生成样本；
+- 默认 alignment gate 接纳 25 人/8,980 个 DSR events，VP005 因 continuous
+  drift 保持隔离。
+
 ---
 
 ## 数据使用注意事项
@@ -278,7 +302,7 @@ Simultaneous EEG&NIRS/
 | EEG+NIRS Single-Trial | 数据已下采样; 使用前需要BBCI Toolbox; fNIRS 当前保存为 `lowWL/highWL` 波长通道，不要直接按 HbO/HbR 解释 |
 | REFED | 需同意非商业使用; fNIRS有6种信号类型且不共享单一单位，必须分别处理 |
 | Visual Cognitive Motivation | EEG预处理数据已去除眼动伪迹epoch; fNIRS 为 Oxy/Deoxy 原始导出，绝对幅值不可直接与 mmol/L 数据集比较 |
-| Simultaneous EEG&NIRS | 请参考PDF文档了解完整实验协议; MATLAB 版 fNIRS 已是 `oxy/deoxy`, 单位为 `mmol/L` |
+| Simultaneous EEG&NIRS | MATLAB fNIRS 为 `oxy/deoxy`、`mmol/L`；EEG 输出前用 HEOG/VEOG 修复并排除；DSR symbol label 是 EEG-native，fNIRS 仅有 block anchor |
 
 ---
 

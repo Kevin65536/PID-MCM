@@ -16,12 +16,17 @@ from src.data.unified_physiology import (
     DEFAULT_UNIFIED_WINDOW_DURATION_S,
     FORBIDDEN_TASK_NAMESPACES,
     NativeEEGRecord,
+    ChannelGeometryIndex,
+    REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+    REFEDContinuousSequenceDataset,
     UnifiedPhysiologyWindowDataset,
     canonical_fnirs_channel_names,
     canonical_label,
+    collate_refed_continuous_sequences,
     fnirs_component_roles,
     preprocess_eeg_record,
     preprocess_fnirs_record,
+    refed_continuous_target_window,
 )
 
 
@@ -89,6 +94,228 @@ def test_visual_label_separates_condition_from_event_role():
     assert label["event_role"] == "stimulus_onset"
 
 
+def _refed_continuous_event(duration_s=5.0, values=None):
+    if values is None:
+        values = [[float(index), float(100 + index)] for index in range(int(duration_s))]
+    return {
+        "dataset_id": "refed",
+        "subject": "1",
+        "record_id": "video_1",
+        "event_index": 0,
+        "event_type": "video_segment_with_continuous_labels",
+        "label": "positive",
+        "label_index": 0,
+        "eeg_time_ms": 0.0,
+        "fnirs_time_ms": 0.0,
+        "onset_ms": 0.0,
+        "duration_ms": duration_s * 1000.0,
+        "metadata": {
+            "task": "emotion_video",
+            "continuous_label_stream": {
+                "names": ["valence", "arousal"],
+                "values": values,
+                "sample_count": len(values),
+            },
+        },
+    }
+
+
+def test_refed_continuous_target_window_is_fixed_shape_and_time_aligned():
+    target = refed_continuous_target_window(
+        _refed_continuous_event(),
+        window_start_s=0.0,
+        window_duration_s=4.0,
+        target_sample_rate_hz=2.0,
+    )
+
+    assert target["schema"] == REFED_CONTINUOUS_SEQUENCE_SCHEMA
+    assert target["values"].shape == (2, 8)
+    assert target["valid_mask"].shape == (2, 8)
+    assert target["valid_mask"].all()
+    np.testing.assert_allclose(target["time_s"], np.arange(8) / 2.0)
+    np.testing.assert_allclose(target["values"][0], np.arange(8) / 2.0)
+    np.testing.assert_allclose(target["values"][1], 100.0 + np.arange(8) / 2.0)
+
+
+def test_refed_continuous_target_masks_partial_support_and_missing_values():
+    values = [[0.0, 100.0], [1.0, 101.0], [float("nan"), 102.0], [3.0, 103.0], [4.0, 104.0]]
+    target = refed_continuous_target_window(
+        _refed_continuous_event(values=values),
+        window_start_s=2.0,
+        window_duration_s=4.0,
+    )
+
+    assert target["values"].shape == (2, 4)
+    assert target["valid_mask"][0].tolist() == [False, True, True, False]
+    assert target["valid_mask"][1].tolist() == [True, True, True, False]
+    assert target["values"][0, 0] == 0.0
+    assert target["values"][1, 0] == 102.0
+
+
+def test_refed_continuous_dataset_expands_video_and_versions_target_contract(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    (cache / "event_index").mkdir(parents=True)
+    record = {
+        "dataset_id": "refed",
+        "subject": "1",
+        "record_id": "video_1_hbo_hbr",
+        "sample_rate_hz": 47.62,
+        "record_npz": str(cache / "unused.npz"),
+        "metadata": {},
+    }
+    event = _refed_continuous_event(
+        duration_s=45.0,
+        values=[[float(index), float(100 + index)] for index in range(45)],
+    )
+    report = {
+        "dataset_id": "refed",
+        "subject": "1",
+        "record_id": "video_1",
+        "alignment_case": "shared_segment_index_no_marker_stream",
+        "label_sequence_match": True,
+    }
+    (cache / "cache_manifest.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
+    (cache / "event_index/event_manifest.json").write_text("{}", encoding="utf-8")
+    (cache / "event_index/events.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
+    (cache / "event_index/alignment_reports.jsonl").write_text(json.dumps(report) + "\n", encoding="utf-8")
+
+    dataset = REFEDContinuousSequenceDataset(cache, window_duration_s=20.0)
+    summary = dataset.contract_summary()
+
+    assert len(dataset) == 3
+    assert [window.window_offset_s for window in dataset.windows] == [0.0, 20.0, 40.0]
+    assert summary["schema"] == REFED_CONTINUOUS_SEQUENCE_SCHEMA
+    assert summary["source_event_count"] == 1
+    assert summary["partial_window_count"] == 1
+    assert summary["target_shape"] == [2, 20]
+    assert summary["split_group_keys"] == ["subject"]
+    assert summary["window_dependency_group_keys"] == ["subject", "record_id"]
+    assert summary["event_index_sha256"]
+
+    monkeypatch.setattr(
+        UnifiedPhysiologyWindowDataset,
+        "__getitem__",
+        lambda self, index: {
+            "schema": "unified_physiology_window_v1",
+            "label": {"class_index": 0, "condition": "positive"},
+            "valid_mask": {
+                "eeg": np.ones(4000, dtype=bool),
+                "fnirs": np.ones(200, dtype=bool),
+            },
+            "sample_rate_hz": {"eeg": 200.0, "fnirs": 10.0},
+            "event": event,
+        },
+    )
+    sample = dataset[2]
+    assert sample["schema"] == REFED_CONTINUOUS_SEQUENCE_SCHEMA
+    assert sample["target"].shape == (2, 20)
+    assert sample["target_valid_mask"].sum() == 10
+    assert sample["target_time_s"][0] == 40.0
+    assert sample["label"]["target_type"] == "continuous_sequence_regression"
+    assert sample["video_context_label"]["condition"] == "positive"
+    assert sample["sample_id"].endswith("event=0|start_ms=40000")
+    assert "values" not in sample["event"]["metadata"]["continuous_label_stream"]
+
+    full_only = REFEDContinuousSequenceDataset(
+        cache,
+        window_duration_s=20.0,
+        include_partial_windows=False,
+    )
+    assert len(full_only) == 2
+
+
+def test_refed_continuous_collator_stacks_training_fields_and_keeps_provenance_list():
+    def sample(index):
+        return {
+            "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
+            "eeg": np.full((2, 4), index, dtype=np.float32),
+            "fnirs": np.full((3, 2), index, dtype=np.float32),
+            "valid_mask": {"eeg": np.ones(4, dtype=bool), "fnirs": np.ones(2, dtype=bool)},
+            "analysis_valid_mask": {"eeg": np.ones(4, dtype=bool), "fnirs": np.ones(2, dtype=bool)},
+            "artifact_mask": {"eeg": np.zeros(4, dtype=bool), "fnirs": np.zeros(2, dtype=bool)},
+            "bad_channel_mask": {"eeg": np.zeros(2, dtype=bool), "fnirs": np.zeros(3, dtype=bool)},
+            "target": np.full((2, 2), index, dtype=np.float32),
+            "target_valid_mask": np.ones((2, 2), dtype=bool),
+            "target_time_s": np.arange(2, dtype=np.float32),
+            "label": {"target_type": "continuous_sequence_regression"},
+            "target_names": ["valence", "arousal"],
+            "target_sample_rate_hz": 1.0,
+            "sample_rate_hz": {"eeg": 2.0, "fnirs": 1.0},
+            "channel_names": {"eeg": ["Fz", "Cz"], "fnirs": ["CH1", "CH2", "CH3"]},
+            "component_roles": {"eeg": ["electrical_potential"] * 2, "fnirs": ["HbO"] * 3},
+            "channel_geometry": {"eeg": [{"x": None}], "fnirs": [{"x": None}]},
+            "sample_id": f"sample-{index}",
+            "dataset_id": "refed",
+            "subject": "1",
+            "record_id": "video_1",
+            "join_key": "refed|1|video_1",
+            "event": {"event_index": 0},
+            "alignment": {"event_relative_window_start_s": float(index)},
+            "target_metadata": {"source_sample_rate_hz": 1.0},
+            "video_context_label": {"condition": "positive"},
+            "preprocessing_state": {"eeg": {}, "fnirs": {}},
+            "eeg_signal_branch": "raw_with_ocular_artifact",
+        }
+
+    batch = collate_refed_continuous_sequences([sample(0), sample(1)])
+
+    assert tuple(batch["eeg"].shape) == (2, 2, 4)
+    assert tuple(batch["fnirs"].shape) == (2, 3, 2)
+    assert tuple(batch["target"].shape) == (2, 2, 2)
+    assert batch["sample_id"] == ["sample-0", "sample-1"]
+    assert len(batch["provenance"]) == 2
+    assert batch["channel_geometry"]["eeg"][0]["x"] is None
+
+
+def test_visual_geometry_index_selects_the_probe_encoded_in_record_id(tmp_path):
+    geometry_dir = tmp_path / "channel_geometry"
+    geometry_dir.mkdir()
+    rows = []
+    for probe, x in (("Probe1", 1.0), ("Probe2", -1.0)):
+        rows.append(
+            {
+                "dataset_id": "visual_cognitive_motivation",
+                "canonical_subject_id": "all",
+                "record_id": probe,
+                "base_record_id": probe,
+                "modality": "fnirs",
+                "channel_name": "CH1",
+                "x": x,
+                "y": 0.0,
+                "z": 1.0,
+                "coordinate_system": "test",
+                "coordinate_units": "test",
+                "source_file": "test",
+                "metadata": {"coordinate_status": "test_probe_specific"},
+            }
+        )
+    (geometry_dir / "channels.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    index = ChannelGeometryIndex(tmp_path)
+    probe1 = index.for_channels(
+        record=SimpleNamespace(
+            dataset_id="visual_cognitive_motivation",
+            canonical_subject_id="S01",
+            base_record_id="S01_Part1_Probe1",
+        ),
+        modality="fnirs",
+        channel_names=("CH1_HbO",),
+    )
+    probe2 = index.for_channels(
+        record=SimpleNamespace(
+            dataset_id="visual_cognitive_motivation",
+            canonical_subject_id="S01",
+            base_record_id="S01_Part1_Probe2",
+        ),
+        modality="fnirs",
+        channel_names=("CH1_HbO",),
+    )
+
+    assert probe1[0]["x"] == 1.0
+    assert probe2[0]["x"] == -1.0
+
+
 def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)
@@ -131,7 +358,7 @@ def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
     assert len(diagnostic) == 1
 
 
-def test_unified_loader_hard_excludes_dsr_and_reports_contract_evidence(tmp_path):
+def test_unified_loader_admits_restored_dsr_stimulus_labels(tmp_path):
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)
     record = {
@@ -148,8 +375,9 @@ def test_unified_loader_hard_excludes_dsr_and_reports_contract_evidence(tmp_path
         "dataset_id": "simultaneous_eeg_nirs",
         "subject": "VP001",
         "record_id": "cnt_dsr",
-        "event_type": "session_block",
-        "label": "session",
+        "event_type": "stimulus",
+        "label": "Go",
+        "label_index": 0,
         "eeg_time_ms": 0.0,
         "fnirs_time_ms": 0.0,
         "onset_ms": 0.0,
@@ -172,13 +400,12 @@ def test_unified_loader_hard_excludes_dsr_and_reports_contract_evidence(tmp_path
     )
     summary = dataset.contract_summary()
 
-    assert FORBIDDEN_TASK_NAMESPACES == frozenset({"simultaneous_eeg_nirs:dsr"})
-    assert len(dataset) == 0
-    assert summary["forbidden_task_policy"] == "unified_training_hard_exclusion_v1"
-    assert summary["excluded_forbidden_task_window_count_by_namespace"] == {
-        "simultaneous_eeg_nirs:dsr": 1
-    }
-    assert summary["excluded_forbidden_task_record_count"] == 1
+    assert FORBIDDEN_TASK_NAMESPACES == frozenset()
+    assert len(dataset) == 1
+    assert dataset.windows[0].event["label"] == "Go"
+    assert summary["forbidden_task_policy"] == "no_hard_exclusions_dsr_restored_v2"
+    assert summary["excluded_forbidden_task_window_count_by_namespace"] == {}
+    assert summary["excluded_forbidden_task_record_count"] == 0
 
 
 def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_path):

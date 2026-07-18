@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.io as sio
+from scipy.spatial import Delaunay, QhullError
 import torch
 import torch.nn.functional as F
 
@@ -87,6 +88,223 @@ class SpatialAdjacencyInfo:
 
     def adjacency_tensor(self, *, device: Optional[torch.device] = None, dtype: torch.dtype = torch.float32) -> torch.Tensor:
         return torch.as_tensor(self.adjacency_matrix, dtype=dtype, device=device)
+
+
+@dataclass(frozen=True)
+class EEGAdjacencyInfo:
+    """Within-EEG topology derived from versioned channel geometry."""
+
+    dataset_id: str
+    channel_names: List[str]
+    adjacency_matrix: np.ndarray
+    edges: List[Tuple[int, int]]
+    positions_2d: np.ndarray
+    positions_3d: np.ndarray
+    method: str
+    coordinate_systems: List[str]
+    coordinate_status: List[str]
+
+    def to_serializable(self) -> Dict[str, Any]:
+        return {
+            "schema": "eeg_channel_adjacency_v1",
+            "dataset_id": self.dataset_id,
+            "channel_names": list(self.channel_names),
+            "adjacency_matrix": self.adjacency_matrix.tolist(),
+            "edges": [
+                {
+                    "source_index": source,
+                    "target_index": target,
+                    "source_channel": self.channel_names[source],
+                    "target_channel": self.channel_names[target],
+                }
+                for source, target in self.edges
+            ],
+            "positions_2d": self.positions_2d.tolist(),
+            "positions_3d": self.positions_3d.tolist(),
+            "method": self.method,
+            "coordinate_systems": list(self.coordinate_systems),
+            "coordinate_status": list(self.coordinate_status),
+            "includes_self_loops": False,
+            "intended_use": "within_eeg_channel_adjacency_only",
+        }
+
+    def adjacency_tensor(
+        self,
+        *,
+        device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
+    ) -> torch.Tensor:
+        return torch.as_tensor(self.adjacency_matrix, dtype=dtype, device=device)
+
+
+@dataclass(frozen=True)
+class FNIRSChannelAdjacencyInfo:
+    """Within-fNIRS topology for channels connected through a shared optode."""
+
+    dataset_id: str
+    probe: str
+    channel_names: List[str]
+    adjacency_matrix: np.ndarray
+    edges: List[Tuple[int, int]]
+    positions_3d: np.ndarray
+    optode_endpoints: List[Tuple[str, str]]
+    coordinate_status: List[str]
+    method: str = "shared_optode_line_graph_v1"
+
+    def to_serializable(self) -> Dict[str, Any]:
+        return {
+            "schema": "fnirs_channel_adjacency_v1",
+            "dataset_id": self.dataset_id,
+            "probe": self.probe,
+            "channel_names": list(self.channel_names),
+            "adjacency_matrix": self.adjacency_matrix.tolist(),
+            "edges": [
+                {
+                    "source_index": source,
+                    "target_index": target,
+                    "source_channel": self.channel_names[source],
+                    "target_channel": self.channel_names[target],
+                }
+                for source, target in self.edges
+            ],
+            "positions_3d": self.positions_3d.tolist(),
+            "optode_endpoints": [list(value) for value in self.optode_endpoints],
+            "coordinate_status": list(self.coordinate_status),
+            "method": self.method,
+            "includes_self_loops": False,
+            "intended_use": "within_fnirs_channel_adjacency_only",
+            "prohibited_interpretation": (
+                "participant_digitization_source_detector_distance_or_exact_coregistration"
+            ),
+        }
+
+
+def build_fnirs_adjacency_from_shared_optodes(
+    dataset_id: str,
+    probe: str,
+    channel_geometry: Sequence[Mapping[str, Any]],
+    channel_names: Sequence[str],
+) -> FNIRSChannelAdjacencyInfo:
+    """Build the line graph of an fNIRS optode grid from geometry metadata."""
+
+    lookup = {
+        canonicalize_channel_label(str(row.get("channel_name", ""))): row
+        for row in channel_geometry
+        if str(row.get("modality", "fnirs")) == "fnirs"
+        and str(row.get("base_record_id", row.get("record_id", ""))) == probe
+    }
+    rows: List[Mapping[str, Any]] = []
+    endpoints: List[Tuple[str, str]] = []
+    missing: List[str] = []
+    for name in channel_names:
+        row = lookup.get(canonicalize_channel_label(name))
+        raw_endpoints = row.get("metadata", {}).get("optode_endpoints", []) if row else []
+        if (
+            row is None
+            or any(row.get(axis) is None for axis in ("x", "y", "z"))
+            or len(raw_endpoints) != 2
+        ):
+            missing.append(str(name))
+            continue
+        rows.append(row)
+        endpoints.append((str(raw_endpoints[0]), str(raw_endpoints[1])))
+    if missing:
+        raise ValueError(
+            f"fNIRS shared-optode adjacency requires complete geometry; missing channels: {missing}"
+        )
+
+    edge_set: set[Tuple[int, int]] = set()
+    for left in range(len(channel_names)):
+        for right in range(left + 1, len(channel_names)):
+            if set(endpoints[left]) & set(endpoints[right]):
+                edge_set.add((left, right))
+    edges = sorted(edge_set)
+    adjacency = np.zeros((len(channel_names), len(channel_names)), dtype=np.float32)
+    for source, target in edges:
+        adjacency[source, target] = 1.0
+        adjacency[target, source] = 1.0
+    positions = np.asarray(
+        [[float(row[axis]) for axis in ("x", "y", "z")] for row in rows],
+        dtype=np.float32,
+    )
+    return FNIRSChannelAdjacencyInfo(
+        dataset_id=str(dataset_id),
+        probe=str(probe),
+        channel_names=[str(value) for value in channel_names],
+        adjacency_matrix=adjacency,
+        edges=edges,
+        positions_3d=positions,
+        optode_endpoints=endpoints,
+        coordinate_status=[
+            str(row.get("metadata", {}).get("coordinate_status", "unspecified"))
+            for row in rows
+        ],
+    )
+
+
+def build_eeg_adjacency_from_geometry(
+    dataset_id: str,
+    channel_geometry: Sequence[Mapping[str, Any]],
+    channel_names: Sequence[str],
+) -> EEGAdjacencyInfo:
+    """Build a deterministic symmetric EEG graph from a top-view Delaunay mesh.
+
+    The graph uses only relative template/measured electrode topology.  It does
+    not imply participant-specific digitization or EEG-fNIRS co-registration.
+    """
+
+    lookup = {
+        canonicalize_channel_label(str(row.get("channel_name", ""))): row
+        for row in channel_geometry
+        if str(row.get("modality", "eeg")) == "eeg"
+    }
+    rows: List[Mapping[str, Any]] = []
+    missing: List[str] = []
+    for name in channel_names:
+        row = lookup.get(canonicalize_channel_label(name))
+        if row is None or any(row.get(axis) is None for axis in ("x", "y", "z")):
+            missing.append(str(name))
+        else:
+            rows.append(row)
+    if missing:
+        raise ValueError(f"EEG adjacency requires complete geometry; missing channels: {missing}")
+    if len(rows) < 3:
+        raise ValueError("EEG adjacency requires at least three positioned channels")
+
+    positions_3d = np.asarray(
+        [[float(row[axis]) for axis in ("x", "y", "z")] for row in rows],
+        dtype=np.float64,
+    )
+    positions_2d = positions_3d[:, :2]
+    if np.linalg.matrix_rank(positions_2d - positions_2d.mean(axis=0, keepdims=True)) < 2:
+        raise ValueError("EEG top-view coordinates are degenerate")
+    try:
+        triangulation = Delaunay(positions_2d)
+    except QhullError as exc:
+        raise ValueError("could not triangulate EEG top-view coordinates") from exc
+
+    edge_set: set[Tuple[int, int]] = set()
+    for simplex in triangulation.simplices:
+        indices = [int(value) for value in simplex]
+        for left, right in ((0, 1), (1, 2), (0, 2)):
+            edge_set.add(tuple(sorted((indices[left], indices[right]))))
+    edges = sorted(edge_set)
+    adjacency = np.zeros((len(channel_names), len(channel_names)), dtype=np.float32)
+    for source, target in edges:
+        adjacency[source, target] = 1.0
+        adjacency[target, source] = 1.0
+
+    return EEGAdjacencyInfo(
+        dataset_id=str(dataset_id),
+        channel_names=[str(value) for value in channel_names],
+        adjacency_matrix=adjacency,
+        edges=edges,
+        positions_2d=positions_2d.astype(np.float32),
+        positions_3d=positions_3d.astype(np.float32),
+        method="top_view_xy_delaunay_v1",
+        coordinate_systems=[str(row.get("coordinate_system", "unknown")) for row in rows],
+        coordinate_status=[str(row.get("coordinate_status", "unspecified")) for row in rows],
+    )
 
 
 def canonicalize_channel_label(name: str) -> str:
@@ -842,8 +1060,10 @@ def plot_spatial_target_preview(
 
 __all__ = [
     'DEFAULT_1010_NEIGHBORS',
+    'EEGAdjacencyInfo',
     'SpatialAdjacencyInfo',
     'build_channel_adjacency',
+    'build_eeg_adjacency_from_geometry',
     'canonicalize_channel_label',
     'compute_fnirs_midpoint_diagnostics',
     'project_points_to_2d',

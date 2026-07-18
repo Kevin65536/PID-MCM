@@ -72,6 +72,17 @@ VISUAL_TIMING_CONTRACT = {
     "duplicate_eeg_timestamps": "deduplicate_before_semantic_pair_detection",
     "source": "dataset_readme_and_data_in_brief_2024_110260",
 }
+REFED_CONTINUOUS_TIMING_CONTRACT = {
+    "schema": "refed_continuous_annotation_timing_v1",
+    "targets": ["valence", "arousal"],
+    "released_layout": "time_by_target",
+    "native_grid": "approximately_1_hz",
+    "time_basis": "event_relative_normalized_video_time",
+    "signal_support": "intersection_of_eeg_fnirs_and_annotation_support",
+    "value_coordinate": "refed_joystick_native",
+    "scaling_policy": "fit_on_train_subjects_only",
+    "source": "data/REFED-dataset/README.md_and_annotations/*_label.mat",
+}
 
 SIMULTANEOUS_SESSION_CODEBOOKS = {
     "nback": {
@@ -82,6 +93,21 @@ SIMULTANEOUS_SESSION_CODEBOOKS = {
         "eeg": {48: "session"},
         "fnirs": {3: "session"},
     },
+}
+SIMULTANEOUS_DSR_STIMULUS_CODEBOOK = {
+    16: ("Go", 0),
+    32: ("No-go", 1),
+}
+SIMULTANEOUS_DSR_TIMING_CONTRACT = {
+    "schema": "simultaneous_dsr_go_nogo_timing_v1",
+    "eeg_stimulus_codes": {"16": "Go", "32": "No-go"},
+    "eeg_block_code": 48,
+    "fnirs_block_code": 3,
+    "stimulus_display_duration_ms": 500.0,
+    "stimulus_cycle_duration_ms": 2_000.0,
+    "recommended_eeg_epoch_duration_ms": 2_000.0,
+    "fnirs_role": "synchronized_hemodynamic_context_not_symbol_native_marker",
+    "source": "Shin_et_al_Scientific_Data_2018_and_released_marker_streams",
 }
 
 
@@ -216,6 +242,98 @@ def _simultaneous_marker_for_alignment(marker_struct: Any, task: str, modality: 
     }
 
 
+def _simultaneous_dsr_events(
+    *,
+    subject: str,
+    record_id: str,
+    eeg_marker_struct: Any,
+    fnirs_marker_struct: Any,
+    source_files: list[str],
+) -> tuple[list[CanonicalEvent], EventAlignmentReport]:
+    """Project EEG-native Go/No-go markers onto the synchronized fNIRS clock.
+
+    The released fNIRS marker stream is block-level only.  Therefore each
+    symbol uses the offset of its own aligned block anchor; a block whose
+    anchor was skipped during alignment contributes no symbol events.
+    """
+    eeg_raw = normalize_marker_struct(eeg_marker_struct)
+    eeg_blocks = _simultaneous_marker_for_alignment(eeg_marker_struct, "dsr", "eeg")
+    fnirs_blocks = _simultaneous_marker_for_alignment(fnirs_marker_struct, "dsr", "fnirs")
+    anchors, base_report = align_paired_marker_streams(
+        dataset_id="simultaneous_eeg_nirs",
+        subject=subject,
+        record_id=record_id,
+        eeg_marker=eeg_blocks,
+        fnirs_marker=fnirs_blocks,
+        event_type="session_block",
+    )
+    all_times = np.asarray(eeg_raw.get("time", []), dtype=np.float64).reshape(-1)
+    all_desc = np.asarray(eeg_raw.get("event_desc", []), dtype=np.int64).reshape(-1)
+    block_times = np.asarray(eeg_blocks.get("time", []), dtype=np.float64).reshape(-1)
+    output: list[CanonicalEvent] = []
+    per_block_counts: dict[str, int] = {}
+    for anchor in anchors:
+        block_index = int(np.argmin(np.abs(block_times - float(anchor.eeg_time_ms))))
+        block_start = float(block_times[block_index])
+        block_stop = (
+            float(block_times[block_index + 1])
+            if block_index + 1 < len(block_times)
+            else float("inf")
+        )
+        selected = (
+            (all_times >= block_start)
+            & (all_times < block_stop)
+            & np.isin(all_desc, list(SIMULTANEOUS_DSR_STIMULUS_CODEBOOK))
+        )
+        indices = np.flatnonzero(selected)
+        offset_ms = float(anchor.fnirs_time_ms) - float(anchor.eeg_time_ms)
+        per_block_counts[str(block_index)] = int(len(indices))
+        for source_index in indices:
+            code = int(all_desc[source_index])
+            label, label_index = SIMULTANEOUS_DSR_STIMULUS_CODEBOOK[code]
+            eeg_time_ms = float(all_times[source_index])
+            fnirs_time_ms = eeg_time_ms + offset_ms
+            output.append(CanonicalEvent(
+                dataset_id="simultaneous_eeg_nirs",
+                subject=subject,
+                record_id=record_id,
+                event_index=len(output),
+                event_type="stimulus",
+                label=label,
+                label_index=label_index,
+                eeg_time_ms=eeg_time_ms,
+                fnirs_time_ms=fnirs_time_ms,
+                onset_ms=fnirs_time_ms,
+                duration_ms=SIMULTANEOUS_DSR_TIMING_CONTRACT["stimulus_display_duration_ms"],
+                alignment_role="eeg_stimulus_projected_from_aligned_block_anchor",
+                metadata={
+                    "task": "dsr",
+                    "event_role": "stimulus_onset",
+                    "condition_label": label,
+                    "eeg_marker_code": code,
+                    "source_event_index": int(source_index),
+                    "block_index": block_index,
+                    "block_anchor_offset_ms": offset_ms,
+                    "timing_contract": SIMULTANEOUS_DSR_TIMING_CONTRACT,
+                    "source_files": source_files,
+                },
+            ))
+    report = EventAlignmentReport(**{
+        **base_report.to_dict(),
+        "metadata": {
+            **dict(base_report.metadata),
+            "dsr_contract": SIMULTANEOUS_DSR_TIMING_CONTRACT,
+            "released_eeg_stimulus_count": int(np.count_nonzero(
+                np.isin(all_desc, list(SIMULTANEOUS_DSR_STIMULUS_CODEBOOK))
+            )),
+            "projected_stimulus_count": len(output),
+            "projected_stimulus_count_by_eeg_block": per_block_counts,
+            "source_files": source_files,
+        },
+    })
+    return output, report
+
+
 def iter_simultaneous(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
     events: list[CanonicalEvent] = []
     reports: list[EventAlignmentReport] = []
@@ -226,14 +344,26 @@ def iter_simultaneous(root: Path, subject_limit: int, record_limit: int) -> tupl
             fnirs_path = root / f"VP{subject_id:03d}-NIRS" / f"mrk_{task}.mat"
             if not eeg_path.exists() or not fnirs_path.exists():
                 continue
-            session_events, report = align_paired_marker_streams(
-                dataset_id="simultaneous_eeg_nirs",
-                subject=f"VP{subject_id:03d}",
-                record_id=f"cnt_{task}",
-                eeg_marker=_simultaneous_marker_for_alignment(_mat_payload(eeg_path), task, "eeg"),
-                fnirs_marker=_simultaneous_marker_for_alignment(_mat_payload(fnirs_path), task, "fnirs"),
-                event_type="trial" if task == "wg" else "session_block",
-            )
+            source_files = [_rel(eeg_path), _rel(fnirs_path)]
+            eeg_marker_struct = _mat_payload(eeg_path)
+            fnirs_marker_struct = _mat_payload(fnirs_path)
+            if task == "dsr":
+                session_events, report = _simultaneous_dsr_events(
+                    subject=f"VP{subject_id:03d}",
+                    record_id=f"cnt_{task}",
+                    eeg_marker_struct=eeg_marker_struct,
+                    fnirs_marker_struct=fnirs_marker_struct,
+                    source_files=source_files,
+                )
+            else:
+                session_events, report = align_paired_marker_streams(
+                    dataset_id="simultaneous_eeg_nirs",
+                    subject=f"VP{subject_id:03d}",
+                    record_id=f"cnt_{task}",
+                    eeg_marker=_simultaneous_marker_for_alignment(eeg_marker_struct, task, "eeg"),
+                    fnirs_marker=_simultaneous_marker_for_alignment(fnirs_marker_struct, task, "fnirs"),
+                    event_type="trial" if task == "wg" else "session_block",
+                )
             events.extend(
                 CanonicalEvent(
                     **{
@@ -241,7 +371,7 @@ def iter_simultaneous(root: Path, subject_limit: int, record_limit: int) -> tupl
                         "metadata": {
                             **dict(event.metadata),
                             "task": task,
-                            "source_files": [_rel(eeg_path), _rel(fnirs_path)],
+                            "source_files": source_files,
                         },
                     }
                 )
@@ -295,6 +425,7 @@ def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[
             fnirs_len = int(np.asarray(fnirs_payload[key]).shape[-1])
             labels = np.asarray(label_payload.get(key, np.empty((0, 2))), dtype=np.float32)
             duration_ms = float(fnirs_len / 47.62 * 1000.0)
+            label_sample_count = int(labels.shape[0]) if labels.ndim == 2 else 0
             metadata = {
                 "task": "emotion_video",
                 "video_id": video,
@@ -303,8 +434,17 @@ def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[
                 "continuous_label_stream": {
                     "names": ["valence", "arousal"],
                     "values": labels.tolist(),
-                    "sample_count": int(labels.shape[0]) if labels.ndim else 0,
-                    "sampling_note": "annotation sample grid from REFED *_label.mat; align by normalized video time",
+                    "sample_count": label_sample_count,
+                    "layout": "time_by_target",
+                    "native_sample_rate_hz": (
+                        float(label_sample_count / (duration_ms / 1000.0)) if label_sample_count else None
+                    ),
+                    "time_basis": "event_relative_normalized_video_time",
+                    "value_coordinate": "refed_joystick_native",
+                    "sampling_note": (
+                        "released REFED annotation grid is approximately 1 Hz; "
+                        "align to the video by normalized event-relative time"
+                    ),
                 },
                 "eeg_samples": eeg_len,
                 "fnirs_samples": fnirs_len,
@@ -573,6 +713,7 @@ def main() -> None:
             "signal_branch": "separates multiple signal exports for the same canonical record",
         },
         "dataset_timing_contracts": {
+            "refed": REFED_CONTINUOUS_TIMING_CONTRACT,
             "visual_cognitive_motivation": VISUAL_TIMING_CONTRACT,
         },
         "parameters": {
