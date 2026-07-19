@@ -63,3 +63,36 @@ reports contain native-coordinate MAE/RMSE/R2/Pearson/CCC/bias, prediction and
 residual plots, and masked target-versus-prediction sequences. Figures are
 written as editable SVG and 300-DPI PNG; a suite overview compares all completed
 tasks without pooling incompatible endpoints.
+
+## Automated tuning and dual evaluation protocols
+
+The tuning path uses task-metric checkpoint selection and five multi-fidelity
+rungs: 2, 8, 20, 40, and 100 epochs. Optuna TPE proposes configurations and a
+Hyperband pruner prevents weak trials from consuming the 100-epoch budget. The
+launcher runs three trial lanes on GPU 0 and two on GPU 1 because a single
+STA-Net process leaves most RTX 4090 compute capacity idle:
+
+```bash
+.venv/bin/python comparative_methods/STA-Net-PyTorch/launch_tuning.py \
+  --study-id 20260719_sta_net_hpo_v1 --n-trials 12
+```
+
+Training uses only the public development split. A winner may be frozen only
+after it completes the 100-epoch rung:
+
+```bash
+.venv/bin/python comparative_methods/STA-Net-PyTorch/freeze_study.py \
+  --run-root comparative_methods/STA-Net-PyTorch/runs/tuning/20260719_sta_net_hpo_v1 \
+  --study-id 20260719_sta_net_hpo_v1 --task motor_imagery
+```
+
+`build_split_registry.py` creates separate public and protected manifests for
+single-subject nested folds and 5x3 cross-subject nested folds. `train.py`
+accepts only public manifests and rejects exposed protected indices.
+`evaluate_protocol.py` is the only protected-fold consumer and requires both a
+hash-pinned freeze manifest and the explicit `--unlock-protected-test` flag.
+
+Classification checkpoints maximize validation macro-F1; REFED checkpoints
+minimize masked scaled RMSE. Accuracy, balanced accuracy, macro-F1 and Kappa
+remain available for reporting. The composite STA-Net loss is an optimization
+diagnostic, not a checkpoint-selection endpoint.

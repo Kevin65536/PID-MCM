@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping, Sequence
 
@@ -332,9 +333,17 @@ class STANetSampleAdapter:
 class STANetUnifiedTaskDataset(Dataset):
     """Task-filtered unified-loader dataset with deterministic STA-Net adaptation."""
 
-    def __init__(self, spec: STANetTaskSpec, cache_root: str = "data/cache/physiology_semantic_clean_v1"):
+    def __init__(
+        self,
+        spec: STANetTaskSpec,
+        cache_root: str = "data/cache/physiology_semantic_clean_v1",
+        *,
+        adapted_cache_size: int = 0,
+    ):
         self.spec = spec
         self.adapter = STANetSampleAdapter(spec)
+        self.adapted_cache_size = max(0, int(adapted_cache_size))
+        self._adapted_cache: OrderedDict[int, dict[str, Any]] = OrderedDict()
         if spec.task_type == "regression":
             self.base = REFEDContinuousSequenceDataset(cache_root=cache_root)
             self.indices = list(range(len(self.base)))
@@ -361,7 +370,18 @@ class STANetUnifiedTaskDataset(Dataset):
         return len(self.indices)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
-        return self.adapter.adapt(self.base[self.indices[index]])
+        if self.adapted_cache_size:
+            cached = self._adapted_cache.get(int(index))
+            if cached is not None:
+                self._adapted_cache.move_to_end(int(index))
+                return cached
+        adapted = self.adapter.adapt(self.base[self.indices[index]])
+        if self.adapted_cache_size:
+            self._adapted_cache[int(index)] = adapted
+            self._adapted_cache.move_to_end(int(index))
+            while len(self._adapted_cache) > self.adapted_cache_size:
+                self._adapted_cache.popitem(last=False)
+        return adapted
 
     def fit_regression_target_scaler(self, dataset_indices: Sequence[int]) -> dict[str, Any]:
         """Fit per-coordinate standardization from training windows without loading signals."""
@@ -403,6 +423,8 @@ class STANetUnifiedTaskDataset(Dataset):
             "condition": str(label["condition"]),
             "class_index": label.get("class_index"),
             "window_offset_s": float(window.window_offset_s),
+            "event_index": int(window.event.get("event_index", -1)),
+            "trial_group": f"{window.record.join_key}|event={int(window.event.get('event_index', -1))}",
         }
 
     def contract_summary(self) -> dict[str, Any]:

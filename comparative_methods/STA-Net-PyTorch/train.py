@@ -38,6 +38,8 @@ from sta_net_pytorch import (
     get_sta_net_task_spec,
     task_contract_sha256,
 )
+from sta_net_pytorch.metrics import classification_metrics_from_confusion, improved, selection_value
+from sta_net_pytorch.splits import development_subject_split, validate_public_manifest
 
 SCHEMA = "sta_net_pytorch_training_v2"
 _STOP_REQUESTED = False
@@ -124,37 +126,30 @@ class RecordGroupedBatchSampler(Sampler[list[int]]):
         return sum(math.ceil(len(indices) / self.batch_size) for indices in self.groups.values())
 
 
+class PackedRecordBatchSampler(RecordGroupedBatchSampler):
+    """Keep record samples adjacent while filling batches across record boundaries."""
+
+    def __iter__(self) -> Iterator[list[int]]:
+        rng = random.Random(self.seed + self.epoch)
+        keys = sorted(self.groups)
+        if self.shuffle:
+            rng.shuffle(keys)
+        ordered: list[int] = []
+        for key in keys:
+            indices = list(self.groups[key])
+            if self.shuffle:
+                rng.shuffle(indices)
+            ordered.extend(indices)
+        for start in range(0, len(ordered), self.batch_size):
+            yield ordered[start : start + self.batch_size]
+        self.epoch += 1
+
+    def __len__(self) -> int:
+        return math.ceil(sum(len(indices) for indices in self.groups.values()) / self.batch_size)
+
+
 def grouped_subject_split(dataset: STANetUnifiedTaskDataset, seed: int) -> tuple[list[int], list[int], dict[str, Any]]:
-    metadata = [dataset.lightweight_metadata(index) for index in range(len(dataset))]
-    subjects = sorted({row["subject"] for row in metadata})
-    if len(subjects) < 3:
-        raise RuntimeError(f"{dataset.spec.key} requires at least three subjects for grouped splits")
-    rng = random.Random(seed)
-    rng.shuffle(subjects)
-    reserved_count = max(1, round(len(subjects) * 0.15))
-    validation_count = max(1, round(len(subjects) * 0.15))
-    if reserved_count + validation_count >= len(subjects):
-        reserved_count = validation_count = 1
-    reserved_subjects = sorted(subjects[:reserved_count])
-    validation_subjects = sorted(subjects[reserved_count : reserved_count + validation_count])
-    train_subjects = sorted(subjects[reserved_count + validation_count :])
-    train_set, validation_set, reserved_set = set(train_subjects), set(validation_subjects), set(reserved_subjects)
-    train_indices = [index for index, row in enumerate(metadata) if row["subject"] in train_set]
-    validation_indices = [index for index, row in enumerate(metadata) if row["subject"] in validation_set]
-    if not train_indices or not validation_indices:
-        raise RuntimeError(f"{dataset.spec.key} produced an empty training or validation split")
-    return train_indices, validation_indices, {
-        "schema": "sta_net_subject_split_v1",
-        "seed": seed,
-        "group_key": "canonical_subject_id",
-        "train_subjects": train_subjects,
-        "validation_subjects": validation_subjects,
-        "reserved_test_subjects": reserved_subjects,
-        "train_sample_count": len(train_indices),
-        "validation_sample_count": len(validation_indices),
-        "reserved_test_sample_count": sum(row["subject"] in reserved_set for row in metadata),
-        "reserved_test_opened": False,
-    }
+    return development_subject_split(dataset, seed)
 
 
 def make_loader(
@@ -165,8 +160,11 @@ def make_loader(
     workers: int,
     shuffle: bool,
     seed: int,
+    prefetch_factor: int = 2,
+    pack_record_batches: bool = False,
 ) -> tuple[DataLoader, RecordGroupedBatchSampler]:
-    sampler = RecordGroupedBatchSampler(
+    sampler_class = PackedRecordBatchSampler if pack_record_batches else RecordGroupedBatchSampler
+    sampler = sampler_class(
         dataset, indices, batch_size=batch_size, shuffle=shuffle, seed=seed
     )
     kwargs: dict[str, Any] = {
@@ -176,7 +174,7 @@ def make_loader(
         "collate_fn": collate_sta_net,
     }
     if workers > 0:
-        kwargs.update({"persistent_workers": True, "prefetch_factor": 2})
+        kwargs.update({"persistent_workers": True, "prefetch_factor": max(1, int(prefetch_factor))})
     return DataLoader(dataset, **kwargs), sampler
 
 
@@ -199,10 +197,15 @@ def checkpoint_payload(
     model_config: STANetConfig,
     model: STANet,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None,
+    grad_scaler: torch.amp.GradScaler,
     epoch: int,
     optimizer_step: int,
     target_scaler: Mapping[str, Any] | None,
     best_validation_loss: float,
+    selection_metric: str,
+    selection_mode: str,
+    best_validation_metric: float,
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -210,10 +213,21 @@ def checkpoint_payload(
         "model_config": asdict(model_config),
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": None if scheduler is None else scheduler.state_dict(),
+        "grad_scaler_state": grad_scaler.state_dict(),
         "epoch": epoch,
         "optimizer_step": optimizer_step,
         "target_scaler": target_scaler,
         "best_validation_loss": best_validation_loss,
+        "selection_metric": selection_metric,
+        "selection_mode": selection_mode,
+        "best_validation_metric": best_validation_metric,
+        "rng_state": {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+            "cuda": torch.cuda.get_rng_state_all(),
+        },
     }
 
 
@@ -224,12 +238,14 @@ def evaluate(
     loader: DataLoader,
     device: torch.device,
     task_type: str,
+    class_count: int,
     autocast_context: Any,
 ) -> dict[str, float]:
     model.eval()
     loss_sum = 0.0
     sample_count = 0
     correct = 0
+    confusion = np.zeros((class_count, class_count), dtype=np.int64) if task_type == "classification" else None
     valid_count = 0.0
     absolute_error = 0.0
     squared_error = 0.0
@@ -249,7 +265,11 @@ def evaluate(
             sample_count += current_batch
             prediction = outputs["prediction"]
             if task_type == "classification":
-                correct += int((prediction.argmax(dim=-1) == batch["target"]).sum().detach())
+                predicted = prediction.argmax(dim=-1)
+                correct += int((predicted == batch["target"]).sum().detach())
+                truth_np = batch["target"].detach().cpu().numpy().astype(np.int64)
+                predicted_np = predicted.detach().cpu().numpy().astype(np.int64)
+                np.add.at(confusion, (truth_np, predicted_np), 1)
             else:
                 weights = batch["target_valid_mask"].to(dtype=prediction.dtype)
                 error = prediction - batch["target"]
@@ -262,7 +282,7 @@ def evaluate(
         "elapsed_seconds": time.perf_counter() - started,
     }
     if task_type == "classification":
-        metrics["accuracy"] = correct / max(1, sample_count)
+        metrics.update(classification_metrics_from_confusion(confusion))
     else:
         metrics["masked_mae_scaled"] = absolute_error / max(1.0, valid_count)
         metrics["masked_rmse_scaled"] = math.sqrt(squared_error / max(1.0, valid_count))
@@ -273,6 +293,52 @@ def evaluate(
 def _handle_stop(_signum: int, _frame: Any) -> None:
     global _STOP_REQUESTED
     _STOP_REQUESTED = True
+
+
+def classification_weights(
+    dataset: STANetUnifiedTaskDataset,
+    indices: Sequence[int],
+    policy: str,
+) -> torch.Tensor | None:
+    if policy == "none":
+        return None
+    counts = np.zeros(dataset.spec.output_dim, dtype=np.float64)
+    class_to_index = {name: index for index, name in enumerate(dataset.spec.class_names)}
+    for index in indices:
+        condition = str(dataset.lightweight_metadata(int(index))["condition"])
+        counts[class_to_index[condition]] += 1.0
+    if (counts <= 0).any():
+        raise RuntimeError(f"training split omits a class: counts={counts.tolist()}")
+    if policy == "inverse_frequency":
+        weights = 1.0 / counts
+    elif policy == "inverse_sqrt":
+        weights = 1.0 / np.sqrt(counts)
+    else:
+        raise ValueError("class_weighting must be none, inverse_sqrt, or inverse_frequency")
+    weights /= weights.mean()
+    return torch.as_tensor(weights, dtype=torch.float32)
+
+
+def make_scheduler(
+    optimizer: torch.optim.Optimizer,
+    *,
+    name: str,
+    warmup_ratio: float,
+    total_steps: int,
+) -> torch.optim.lr_scheduler.LRScheduler | None:
+    if name == "constant" and warmup_ratio <= 0.0:
+        return None
+    if name not in {"constant", "cosine"}:
+        raise ValueError("scheduler must be constant or cosine")
+    warmup_steps = int(round(total_steps * warmup_ratio))
+    def lr_lambda(step: int) -> float:
+        if warmup_steps > 0 and step < warmup_steps:
+            return max(1e-3, (step + 1) / warmup_steps)
+        if name == "constant":
+            return 1.0
+        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return 0.5 * (1.0 + math.cos(math.pi * min(1.0, max(0.0, progress))))
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -303,8 +369,17 @@ def run(args: argparse.Namespace) -> None:
     torch.backends.cudnn.allow_tf32 = True
     torch.backends.cuda.matmul.allow_tf32 = True
 
-    dataset = STANetUnifiedTaskDataset(spec, cache_root=str(config["data"]["cache_root"]))
-    train_indices, validation_indices, split_manifest = grouped_subject_split(dataset, seed)
+    dataset = STANetUnifiedTaskDataset(
+        spec, cache_root=str(config["data"]["cache_root"]),
+        adapted_cache_size=int(train_cfg.get("adapted_sample_cache_size", 0)),
+    )
+    if args.split_manifest:
+        split_path = Path(args.split_manifest).resolve()
+        split_manifest = json.loads(split_path.read_text(encoding="utf-8"))
+        train_indices, validation_indices = validate_public_manifest(dataset, split_manifest)
+    else:
+        split_path = None
+        train_indices, validation_indices, split_manifest = grouped_subject_split(dataset, seed)
     scaler = dataset.fit_regression_target_scaler(train_indices) if spec.task_type == "regression" else None
     split_manifest["regression_target_scaler"] = scaler
     write_json(output_dir / "split_manifest.json", split_manifest)
@@ -312,11 +387,17 @@ def run(args: argparse.Namespace) -> None:
 
     batch_size = int(train_cfg.get("batch_size", 32))
     workers = int(train_cfg.get("num_workers", 2))
+    prefetch_factor = int(train_cfg.get("prefetch_factor", 2))
+    pack_record_batches = bool(train_cfg.get("pack_record_batches", False))
     train_loader, train_sampler = make_loader(
-        dataset, train_indices, batch_size=batch_size, workers=workers, shuffle=True, seed=seed
+        dataset, train_indices, batch_size=batch_size, workers=workers, shuffle=True, seed=seed,
+        prefetch_factor=prefetch_factor,
+        pack_record_batches=pack_record_batches,
     )
     validation_loader, _ = make_loader(
-        dataset, validation_indices, batch_size=batch_size, workers=workers, shuffle=False, seed=seed
+        dataset, validation_indices, batch_size=batch_size, workers=workers, shuffle=False, seed=seed,
+        prefetch_factor=prefetch_factor,
+        pack_record_batches=pack_record_batches,
     )
 
     model_cfg = config.get("model", {})
@@ -332,12 +413,21 @@ def run(args: argparse.Namespace) -> None:
     )
     model = STANet(resolved_model).to(device)
     loss_cfg = config.get("loss", {})
+    class_weight_policy = str(loss_cfg.get("class_weighting", "none"))
+    class_weight_tensor = (
+        classification_weights(dataset, train_indices, class_weight_policy)
+        if spec.task_type == "classification" else None
+    )
+    if class_weight_tensor is not None:
+        class_weight_tensor = class_weight_tensor.to(device)
     objective = STANetObjective(
         spec.task_type,
         main_weight=float(loss_cfg.get("main_weight", 1.0)),
         eeg_aux_weight=float(loss_cfg.get("eeg_aux_weight", 1.0)),
         alignment_weight=float(loss_cfg.get("alignment_weight", 1.0)),
         regression_loss=str(loss_cfg.get("regression_loss", "smooth_l1")),
+        class_weights=class_weight_tensor,
+        label_smoothing=float(loss_cfg.get("label_smoothing", 0.0)),
     ).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -356,18 +446,45 @@ def run(args: argparse.Namespace) -> None:
     validation_every = int(train_cfg.get("validation_every_epochs", 1))
     grad_clip = float(train_cfg.get("grad_clip_norm", 1.0))
     log_every = int(train_cfg.get("log_every_steps", 10))
+    selection_metric = str(train_cfg.get(
+        "selection_metric", "macro_f1" if spec.task_type == "classification" else "masked_rmse_scaled"
+    ))
+    selection_mode = str(train_cfg.get(
+        "selection_mode", "max" if spec.task_type == "classification" else "min"
+    ))
+    selection_min_delta = float(train_cfg.get("selection_min_delta", 0.0))
+    scheduler_name = str(train_cfg.get("scheduler", "constant"))
+    scheduler_total_epochs = int(train_cfg.get("scheduler_total_epochs", max(epochs, 100)))
+    scheduler = make_scheduler(
+        optimizer, name=scheduler_name, warmup_ratio=float(train_cfg.get("warmup_ratio", 0.0)),
+        total_steps=max(1, scheduler_total_epochs * len(train_loader)),
+    )
     global_step = 0
     start_epoch = 1
     best_validation_loss = math.inf
+    best_validation_metric = math.inf if selection_mode == "min" else -math.inf
     if args.resume:
         resumed = torch.load(Path(args.resume), map_location=device, weights_only=False)
         if resumed.get("schema") != SCHEMA or resumed.get("task", {}).get("key") != spec.key:
             raise ValueError("Resume checkpoint schema/task does not match this run")
         model.load_state_dict(resumed["model_state"])
         optimizer.load_state_dict(resumed["optimizer_state"])
+        if scheduler is not None and resumed.get("scheduler_state") is not None:
+            scheduler.load_state_dict(resumed["scheduler_state"])
+        if resumed.get("grad_scaler_state"):
+            grad_scaler.load_state_dict(resumed["grad_scaler_state"])
         start_epoch = int(resumed["epoch"]) + 1
         global_step = int(resumed["optimizer_step"])
         best_validation_loss = float(resumed.get("best_validation_loss", math.inf))
+        best_validation_metric = float(resumed.get("best_validation_metric", best_validation_metric))
+        rng = resumed.get("rng_state")
+        if rng:
+            random.setstate(rng["python"])
+            np.random.set_state(rng["numpy"])
+            # map_location=device also moves serialized RNG ByteTensors to CUDA,
+            # while both RNG restoration APIs require CPU ByteTensors.
+            torch.set_rng_state(rng["torch"].cpu())
+            torch.cuda.set_rng_state_all([state.cpu() for state in rng["cuda"]])
 
     manifest = {
         "schema": SCHEMA,
@@ -383,6 +500,9 @@ def run(args: argparse.Namespace) -> None:
         "epochs": epochs,
         "batch_size": batch_size,
         "num_workers": workers,
+        "prefetch_factor": prefetch_factor,
+        "adapted_sample_cache_size": int(train_cfg.get("adapted_sample_cache_size", 0)),
+        "pack_record_batches": pack_record_batches,
         "sampling": "record_grouped_batches_v1",
         "amp": amp_enabled,
         "amp_dtype": amp_name if amp_enabled else None,
@@ -396,6 +516,13 @@ def run(args: argparse.Namespace) -> None:
             "config": sha256(config_path),
         },
         "resume_checkpoint": args.resume,
+        "split_manifest_source": None if split_path is None else str(split_path),
+        "split_sha256": split_manifest.get("split_sha256"),
+        "selection_metric": selection_metric,
+        "selection_mode": selection_mode,
+        "class_weighting": class_weight_policy,
+        "label_smoothing": float(loss_cfg.get("label_smoothing", 0.0)),
+        "scheduler": scheduler_name,
         "started_at": utc_now(),
     }
     (output_dir / "config.yaml").write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -434,6 +561,8 @@ def run(args: argparse.Namespace) -> None:
             gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             grad_scaler.step(optimizer)
             grad_scaler.update()
+            if scheduler is not None:
+                scheduler.step()
             global_step += 1
             current_batch = int(batch["eeg"].shape[0])
             loss_value = float(losses["total"].detach())
@@ -467,16 +596,26 @@ def run(args: argparse.Namespace) -> None:
             validation_metrics = evaluate(
                 model=model, objective=objective, loader=validation_loader, device=device,
                 task_type=spec.task_type, autocast_context=autocast_context,
+                class_count=spec.output_dim,
             )
             validation_metrics.update({"time": utc_now(), "epoch": epoch, "optimizer_step": global_step})
             append_jsonl(output_dir / "metrics" / "validation_epochs.jsonl", validation_metrics)
-        validation_improved = validation_metrics is not None and validation_metrics["loss"] < best_validation_loss
-        if validation_improved:
-            best_validation_loss = validation_metrics["loss"]
+        validation_improved = False
+        if validation_metrics is not None:
+            best_validation_loss = min(best_validation_loss, float(validation_metrics["loss"]))
+            current_selection = selection_value(validation_metrics, selection_metric, selection_mode)
+            validation_improved = improved(
+                current_selection, best_validation_metric, selection_mode, selection_min_delta
+            )
+            if validation_improved:
+                best_validation_metric = current_selection
         payload = checkpoint_payload(
             spec=spec, model_config=resolved_model, model=model, optimizer=optimizer,
+            scheduler=scheduler, grad_scaler=grad_scaler,
             epoch=epoch, optimizer_step=global_step, target_scaler=scaler,
             best_validation_loss=best_validation_loss,
+            selection_metric=selection_metric, selection_mode=selection_mode,
+            best_validation_metric=best_validation_metric,
         )
         atomic_checkpoint(output_dir / "checkpoint_latest.pt", payload)
         if validation_improved:
@@ -493,6 +632,8 @@ def run(args: argparse.Namespace) -> None:
     manifest.update({
         "status": final_status, "completed_at": utc_now(), "optimizer_steps": global_step,
         "last_epoch": last_epoch, "best_validation_loss": None if math.isinf(best_validation_loss) else best_validation_loss,
+        "selection_metric": selection_metric, "selection_mode": selection_mode,
+        "best_validation_metric": None if math.isinf(best_validation_metric) else best_validation_metric,
     })
     write_json(output_dir / "manifest.json", manifest)
     write_json(status_path, manifest)
@@ -509,6 +650,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", default=None)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--split-manifest", default=None)
     return parser.parse_args()
 
 

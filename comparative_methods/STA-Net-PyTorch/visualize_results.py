@@ -324,7 +324,16 @@ def plot_regression_diagnostics(
         upper = float(max(truth.max(), estimate.max()))
         axes[0, coordinate].plot((lower, upper), (lower, upper), "--", color="#777777")
         axes[0, coordinate].set(title=f"{name}: prediction agreement", xlabel="Target (native)", ylabel="Prediction (native)")
-        axes[1, coordinate].hist(estimate - truth, bins=40, color=OKABE_ITO[1], alpha=0.8)
+        residual = estimate - truth
+        residual_span = float(np.ptp(residual))
+        residual_scale = max(1.0, float(np.max(np.abs(residual))))
+        if residual_span <= np.finfo(np.float64).eps * residual_scale * 8.0:
+            center = float(np.mean(residual))
+            half_width = max(1e-6, abs(center) * 1e-6)
+            histogram_bins: int | np.ndarray = np.linspace(center - half_width, center + half_width, 4)
+        else:
+            histogram_bins = min(40, max(5, int(np.sqrt(residual.size))))
+        axes[1, coordinate].hist(residual, bins=histogram_bins, color=OKABE_ITO[1], alpha=0.8)
         axes[1, coordinate].axvline(0, color="#000000", lw=1)
         axes[1, coordinate].set(title=f"{name}: residual distribution", xlabel="Prediction − target", ylabel="Count")
     for label, ax in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", axes.flat, strict=False):

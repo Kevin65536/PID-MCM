@@ -17,7 +17,10 @@ from sta_net_pytorch.data import (
     get_sta_net_task_spec,
 )
 from sta_net_pytorch.model import STANet, STANetConfig, STANetObjective, SamePadConv3d
-from train import RecordGroupedBatchSampler
+from train import PackedRecordBatchSampler, RecordGroupedBatchSampler, classification_weights
+from tune import RUNG_EPOCHS
+from sta_net_pytorch.metrics import classification_metrics as core_classification_metrics, improved
+from sta_net_pytorch.splits import development_subject_split, validate_public_manifest
 from visualize_results import classification_metrics, plot_regression_diagnostics, regression_metrics
 
 
@@ -135,6 +138,21 @@ def test_record_grouped_batch_sampler_preserves_record_locality():
     assert all(len({dataset.records[index] for index in batch}) == 1 for batch in batches)
 
 
+def test_packed_record_sampler_fills_batches_across_small_records():
+    class FakeDataset:
+        records = ("a", "a", "b", "b", "c", "c", "d", "d")
+
+        def lightweight_metadata(self, index):
+            return {"join_key": self.records[index]}
+
+    sampler = PackedRecordBatchSampler(
+        FakeDataset(), range(8), batch_size=5, shuffle=False, seed=7
+    )
+    batches = list(sampler)
+    assert [len(batch) for batch in batches] == [5, 3]
+    assert sorted(index for batch in batches for index in batch) == list(range(8))
+
+
 def test_reproduction_classification_metrics_include_confusion_and_calibration():
     target = np.asarray([0, 1, 2, 1])
     probability = np.asarray([
@@ -173,3 +191,54 @@ def test_reproduction_regression_plots_emit_vector_and_raster_files(tmp_path):
     )
     assert {Path(path).suffix for path in paths} == {".svg", ".png"}
     assert all(Path(path).is_file() and Path(path).stat().st_size > 0 for path in paths)
+
+
+def test_tuning_budget_keeps_a_100_epoch_rung():
+    assert RUNG_EPOCHS == (2, 8, 20, 40, 100)
+
+
+def test_checkpoint_metric_prefers_macro_f1_instead_of_lower_loss_proxy():
+    metrics = core_classification_metrics([0, 0, 1, 1], [0, 0, 0, 1], class_count=2)
+    assert np.isclose(metrics["macro_f1"], (0.8 + 2.0 / 3.0) / 2.0)
+    assert improved(metrics["macro_f1"], 0.5, "max")
+    assert not improved(metrics["macro_f1"], 0.9, "max")
+
+
+def test_public_split_manifest_never_exposes_protected_indices():
+    class Spec:
+        key = "fake"
+
+    class FakeDataset:
+        spec = Spec()
+        rows = [
+            {
+                "subject": f"s{index // 2}", "record_id": f"r{index // 2}",
+                "join_key": f"j{index // 2}", "condition": str(index % 2),
+                "class_index": index % 2, "window_offset_s": 0.0,
+                "event_index": index, "trial_group": f"g{index}",
+            }
+            for index in range(20)
+        ]
+
+        def __len__(self):
+            return len(self.rows)
+
+        def lightweight_metadata(self, index):
+            return dict(self.rows[index])
+
+    dataset = FakeDataset()
+    train_indices, validation_indices, manifest = development_subject_split(dataset, seed=7)
+    assert "test_indices" not in manifest
+    assert "reserved_test_indices" not in manifest
+    assert manifest["protected_test_opened"] is False
+    assert validate_public_manifest(dataset, manifest) == (train_indices, validation_indices)
+
+
+def test_none_class_weighting_returns_no_tensor():
+    class FakeDataset:
+        class Spec:
+            output_dim = 2
+            class_names = ("a", "b")
+        spec = Spec()
+
+    assert classification_weights(FakeDataset(), [0, 1], "none") is None

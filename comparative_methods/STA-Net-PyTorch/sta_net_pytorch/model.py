@@ -342,6 +342,8 @@ class STANetObjective(nn.Module):
         eeg_aux_weight: float = 1.0,
         alignment_weight: float = 1.0,
         regression_loss: Literal["mse", "smooth_l1"] = "smooth_l1",
+        class_weights: Tensor | None = None,
+        label_smoothing: float = 0.0,
     ):
         super().__init__()
         self.task_type = task_type
@@ -349,6 +351,10 @@ class STANetObjective(nn.Module):
         self.eeg_aux_weight = float(eeg_aux_weight)
         self.alignment_weight = float(alignment_weight)
         self.regression_loss = regression_loss
+        self.label_smoothing = float(label_smoothing)
+        if not 0.0 <= self.label_smoothing < 1.0:
+            raise ValueError("label_smoothing must be in [0, 1)")
+        self.register_buffer("class_weights", class_weights)
 
     def _masked_regression(self, prediction: Tensor, target: Tensor, mask: Tensor) -> Tensor:
         if prediction.shape != target.shape or target.shape != mask.shape:
@@ -374,8 +380,14 @@ class STANetObjective(nn.Module):
         if not isinstance(prediction, Tensor) or not isinstance(eeg_prediction, Tensor):
             raise TypeError("STA-Net predictions must be tensors")
         if self.task_type == "classification":
-            main = F.nll_loss(prediction.clamp_min(1e-8).log(), target.long())
-            eeg_aux = F.nll_loss(eeg_prediction.clamp_min(1e-8).log(), target.long())
+            main = F.cross_entropy(
+                prediction.clamp_min(1e-8).log(), target.long(),
+                weight=self.class_weights, label_smoothing=self.label_smoothing,
+            )
+            eeg_aux = F.cross_entropy(
+                eeg_prediction.clamp_min(1e-8).log(), target.long(),
+                weight=self.class_weights, label_smoothing=self.label_smoothing,
+            )
         else:
             if target_valid_mask is None:
                 raise ValueError("Regression STA-Net requires target_valid_mask")
