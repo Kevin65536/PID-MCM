@@ -27,8 +27,11 @@ __pycache__
 # temp log directory    
 /logs
 
-# comparative methods
-/comparative_methods
+# comparative methods: upstream checkouts stay local; the PyTorch STA-Net
+# integration code is tracked, while its large run artifacts stay local.
+/comparative_methods/*
+!/comparative_methods/STA-Net-PyTorch/
+/comparative_methods/STA-Net-PyTorch/runs/
 
 # temporarily sealed local archive for retired Copilot agent guidance
 /docs/archive

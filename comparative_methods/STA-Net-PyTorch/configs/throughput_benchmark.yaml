@@ -1,0 +1,38 @@
+schema: sta_net_pytorch_training_v2
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+
+model:
+  dropout: 0.5
+  embedding_dim: 256
+  attention_heads: 10
+  attention_key_dim: 256
+
+loss:
+  main_weight: 1.0
+  eeg_aux_weight: 1.0
+  alignment_weight: 1.0
+  regression_loss: smooth_l1
+
+training:
+  seed: 42
+  epochs: 40
+  batch_size: 32
+  num_workers: 8
+  torch_cpu_threads: 2
+  lr: 0.0001
+  weight_decay: 0.0001
+  grad_clip_norm: 1.0
+  log_every_steps: 10
+  max_steps: 100
+  validation_every_epochs: 0
+  amp: true
+  amp_dtype: bfloat16
+  fused_optimizer: true
+
+task_overrides:
+  refed_regression:
+    batch_size: 8
+  visual:
+    batch_size: 16

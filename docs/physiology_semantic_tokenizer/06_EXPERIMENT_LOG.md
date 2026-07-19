@@ -38,6 +38,9 @@ The complete tokenizer training loop is runnable. The original Croce E0-v2 physi
 | 2026-07-18 | `PST-DATA-REFED-CONTINUOUS-VA` | Versioned REFED valence/arousal sequence-regression loader | Correctness passed; 480 videos expand to 2,720 masked 20-second windows, fixed `[2,20]` targets at 1 Hz, 90.2941% paired target support; no model performance evaluated | `src/data/unified_physiology.py` |
 | 2026-07-18 | `PST-DATA-SIM-EOG-DSR-RESTORE` | Simultaneous HEOG/VEOG repair, 28-channel loader contract, and DSR Go/No-go restoration | Correctness passed; 78/78 EEG records cached, median EOG correlation 0.4517→0.0221 with 15–45 Hz variance ratio 0.9965; default gate admits 8,980 DSR windows/25 subjects, VP005 remains drift-excluded | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/simultaneous_eog_clean_20260718/` |
 | 2026-07-18 | `PST-P1-POST-DSR-LOADER-AUDIT` | Full seven-task audit after DSR/EOG contract update | 22,952/22,952 windows traversed; DSR 2,694 Go + 6,286 No-go, all Simultaneous tasks 28-channel clean branch; readiness remains 7 pass / 7 block / 1 warn | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_unified_loader_audit_post_dsr_20260718/` |
+| 2026-07-18 | `PST-COMPARE-STA-NET-PYTORCH-SMOKE` | PyTorch STA-Net FGSA/EGTA rewrite with seven task-specific heads/adapters | Correctness passed on CUDA for MI, MA, WG, n-back, DSR, Visual, and REFED regression; finite forward/backward plus one optimizer step; protected test unopened | `comparative_methods/STA-Net-PyTorch/runs/smoke/sta_net_pytorch_smoke_v1/20260718_cuda_all_tasks_smoke_v3/` |
+| 2026-07-19 | `PST-COMPARE-STA-NET-PYTORCH-TRAIN-V1` | Initial isolated seven-task STA-Net development training | Superseded incomplete throughput run: four tasks reached 40 epochs, DSR/Visual/REFED were terminated at their last complete checkpoints; window-level shuffling caused record-cache thrashing and validation was never executed | `comparative_methods/STA-Net-PyTorch/runs/training/20260719_sta_net_all_tasks_v2/supersession.json` |
+| 2026-07-19 | `PST-COMPARE-STA-NET-PYTORCH-TRAIN-V2` | Optimized frozen seven-task train/validation queues | Running: one task/GPU, record-grouped batches, BF16/TF32, persistent workers, frozen implementation hashes, per-epoch validation and best/latest checkpoints; DSR and Visual verified beyond the first optimizer step, DSR epoch-1 validation emitted | `comparative_methods/STA-Net-PyTorch/runs/training/20260719_sta_net_all_tasks_v4_optimized_frozen/` |
 | 2026-07-03 | `PST-TRAIN-DRYRUN-V1` | Full trainer dry-run | Passed; no optimizer step | `experiments/runs/physiology_semantic_tokenizer/tokenizer_training/20260703_164728_physiology_semantic_tokenizer_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
@@ -308,6 +311,57 @@ released marker streams contain 360 stimuli, so the loader preserves the raw
 360-count provenance. VP001 contributes 340 events because one fNIRS block
 anchor is absent; VP005 is rejected by the existing continuous-drift gate. The
 default entrance therefore exposes 8,980 DSR windows from 25 subjects.
+
+### PyTorch STA-Net implementation smoke
+
+The active comparison implementation no longer depends on TensorFlow. The
+PyTorch rewrite preserves the released STA-Net FGSA/EGTA backbone, EEG auxiliary
+branch, learned fusion/fNIRS prediction weighting, and alignment regularizers,
+then exposes explicit binary, multiclass, DSR-context, and masked sequence-
+regression variants. The unified adapter uses the released 16×16 grid for the
+matching Simultaneous channel inventory and otherwise projects versioned unified
+geometry; invalid time support is zeroed and bad channels are omitted before
+spatial interpolation.
+
+The all-task CUDA smoke used PyTorch 2.10.0+cu128 on an RTX 4090. MI, MA, WG,
+n-back, DSR, Visual, and REFED regression each completed finite forward and
+backward passes plus one optimizer step. The run emitted task contracts, adapter
+and split manifests, environment, losses, predictions, checkpoints, hashes, and
+claim calibration. Its smoke splits were deterministic and subject-disjoint but
+are not the frozen shared benchmark splits. Protected tests remained closed, and
+the reported smoke accuracy/MAE values are prohibited from performance tables.
+Source-protocol reproduction and formal train/validation pilots remain next.
+
+On 2026-07-19, the full implementation and artifact chain was isolated under
+`comparative_methods/STA-Net-PyTorch/`. The first seven-process training run is
+retained as superseded evidence rather than accepted performance output. Four
+tasks completed training, but DSR, Visual, and REFED remained active after 16
+hours; the unified loader's two-record cache was repeatedly invalidated by
+window-level random sampling, batches were only one or two samples, seven jobs
+oversubscribed CPU threads, and the constructed validation loader was never
+called. The remaining three PIDs were terminated after preserving their last
+complete-epoch checkpoints. Protected tests were never opened.
+
+The replacement `sta_net_pytorch_training_v2` protocol uses one active task per
+GPU with the other tasks in persistent queues, record-grouped batches, larger
+task-specific batches, eight bounded persistent workers, BF16/TF32, and fused
+AdamW. It performs validation every epoch and writes latest and best checkpoints.
+A 100-step n-back benchmark improved end-to-end step throughput by roughly 8×;
+the Visual path improved by roughly 30× over the observed old-run rate. The
+accepted in-progress launch is `20260719_sta_net_all_tasks_v4_optimized_frozen`;
+task manifests pin trainer, model, adapter, and configuration hashes. These are
+still development results until completion and common-protocol admission.
+
+A post-training reproduction-report tool now lives at
+`comparative_methods/STA-Net-PyTorch/visualize_results.py`. It reloads the best
+checkpoint and the validation indices already fixed by each task split, while
+leaving protected-test indices unopened. It emits raw predictions, JSON/CSV
+metrics, Markdown summaries, editable SVG and 300-DPI PNG figures covering
+training dynamics, classification confusion/per-class/ROC/PR/calibration,
+native-coordinate masked REFED regression, and STA-Net lag-attention/fusion
+behavior, plus a non-pooled suite overview. A completed one-epoch n-back
+engineering checkpoint exercised the full classification path; its scores are
+tool-correctness evidence only and are excluded from comparison tables.
 
 ## 🚦 Scientific-result admission rule
 

@@ -6,9 +6,9 @@ _Four-dataset downstream benchmark contract and readiness audit, updated 2026-07
 
 ## 📋 Decision and current readiness
 
-The comparison program is approved to enter **preparation**, but it is not ready for formal training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. Shared split manifests, method adapters, and reproduction checks are not yet complete.
+The comparison program is approved to enter **implementation smoke**, but it is not ready for formal performance training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. A task-configurable PyTorch STA-Net reimplementation and unified-loader adapter now pass correctness smoke on all seven task tracks. Shared formal split manifests, source-protocol reproduction, frozen performance protocols, and EFRM integration are not yet complete.
 
-This document fixes the workflow while leaving the final comparison-method set open. STA-Net and EFRM are admitted only as **candidates for integration audit**. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
+This document fixes the workflow while leaving the final comparison-method set open. STA-Net is admitted as an **implemented comparison candidate** for source-fidelity and shared-protocol development; EFRM remains a candidate for integration audit. The project explicitly permits task-specific classification and regression heads when the variant name and deviation manifest are preserved. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
 
 ### Audit verdict
 
@@ -21,9 +21,9 @@ This document fixes the workflow while leaving the final comparison-method set o
 | Visual timing | Documented DC9 appearance→3-second disappearance semantics replace every-third-row parsing | Ready; 54/55 records | Keep S06 Part1 excluded unless stronger raw evidence appears |
 | Visual fNIRS geometry | PDF optode layout + 112 raw `Mode,4x4` exports + partial EEG anchors projected onto `Location.ced`; both probes have connected 24-node/52-edge graphs | Ready for adjacency inputs | Keep graphical-template provenance and prohibit exact distance/co-registration claims |
 | Subject-independent comparison | Subjects are present in the unified sample contract | Not implemented | Generate one shared split manifest per dataset/task |
-| STA-Net | Official code is present locally at revision `b6db8bb5eb2f6491a13f0938880ee70e32162ee7`; model and runner are fixed to paired, binary classification and method-specific tensors | Candidate only | Reproduce source behavior, then add unified-loader adapter and configurable head |
+| STA-Net | Official revision is pinned; the independent PyTorch FGSA/EGTA reimplementation, unified spatial/temporal adapter, binary/multiclass heads, and masked sequence-regression head pass seven-task CUDA smoke | Implemented comparison candidate; correctness only | Freeze formal splits/protocol, reproduce a source task, then run train/validation pilots |
 | EFRM | Official code is present locally at revision `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; released downstream path uses classification heads and `CrossEntropyLoss` | Candidate only | Separate pretraining regimes and add a regression-capable evaluation head |
-| Method provenance | Both local candidates are ignored nested Git repositories rather than tracked project dependencies | Blocking for formal runs | Pin source URL, revision, patch, environment, and license status in a method manifest |
+| Method provenance | STA-Net smoke manifests pin source URL/revision and the PyTorch deviations; upstream still exposes no license. EFRM remains an ignored nested repository | Partially ready; blocking for release/formal admission | Resolve license status and add the same manifest boundary for EFRM |
 | Fair result table | No common tasks, splits, data regimes, metrics, or seed policy are frozen | Not ready | Complete C0–C4 before any formal result |
 
 The pre-contract read-only audit yielded 9,921 window references, including DSR and only eight Visual subjects. It is retained below as historical evidence of the gaps that prompted this change:
@@ -53,6 +53,20 @@ but split freezing and proof that each candidate regression head/loss consumes
 both signal and target masks.
 
 > ⚠️ **Claim boundary:** Passing loader, adapter, reproduction, or smoke checks establishes software fidelity only. It does not establish that a method is a field-wide SOTA, that it is scientifically superior, or that a representation has discovered physiological coupling.
+
+### Post-training visual audit
+
+Completed STA-Net task runs are summarized with
+`comparative_methods/STA-Net-PyTorch/visualize_results.py`. The tool re-evaluates
+only the split-manifest validation indices from the best checkpoint and stores
+the predictions needed to audit every plotted aggregate. It reports training
+and validation curves, runtime/throughput, confusion matrices, per-class and
+calibration diagnostics, native-coordinate masked regression diagnostics, and
+EGTA lag-attention/fusion-gate distributions. Both SVG and 300-DPI PNG are
+required so figures remain editable and reviewable. The suite overview keeps
+classification and regression endpoints in separate panels; it never pools
+them into a synthetic ranking. Protected-test figures may be generated only by
+the later frozen C5 evaluation path, not by this validation-report command.
 
 ## 🎯 Fixed benchmark scope
 
@@ -161,7 +175,7 @@ The paper states 180 trials per participant, while every released EEG marker str
 
 STA-Net is an end-to-end paired EEG–fNIRS decoder designed around fNIRS-guided spatial alignment and EEG-guided temporal alignment. Its paper evaluates binary MI, MA, and WG decoding with subject-specific evaluation on two public datasets.[^1] The checked official repository requires Python 3.9.7 and TensorFlow 2.10.[^2]
 
-The local implementation is not a drop-in four-dataset baseline:
+The untouched upstream implementation remains non-portable as a shared four-dataset baseline:
 
 - `sta.py` fixes EEG and fNIRS input tensors to method-specific 3D layouts;
 - the output layer is fixed to two classes;
@@ -170,7 +184,27 @@ The local implementation is not a drop-in four-dataset baseline:
 - there is no regression head or regression loss for REFED;
 - preprocessing and spatial projection currently live outside the unified-loader contract.
 
-STA-Net may enter the **paired supervised architecture track** after source-protocol reproduction and adapter conformance. Its original subject-specific results may be reported only in a separate method-fidelity table; they are not directly comparable to the subject-independent primary benchmark.
+The isolated comparison implementation is [`comparative_methods/STA-Net-PyTorch`](../../comparative_methods/STA-Net-PyTorch/README.md), with its model, unified-loader adapter, launchers, tests, provenance, configurations, and artifacts kept outside both `src/` and the project's `experiments/runs/` tree. It does not import TensorFlow. The reimplementation preserves the two FGSA blocks, EGTA cross-attention, EEG auxiliary prediction, fNIRS/fusion decision weighting, and three correlation regularizers, while exposing these explicitly named variants:
+
+| Variant family | Tasks | Head/temporal contract | Reporting name |
+| --- | --- | --- | --- |
+| Source-task PyTorch reimplementation | MI, MA, WG | Binary classification; source grid used when the released channel inventory matches | `sta_net_pytorch_source_task` |
+| Multiclass comparison adapter | n-back, Visual | Three/four-class heads; unified geometry projected to the STA-Net grid when needed | `sta_net_pytorch_multiclass_adapter` |
+| EEG-primary context sensitivity | DSR | Two-second EEG input; fNIRS retained only as synchronized context | `sta_net_pytorch_dsr_context_adapter` |
+| Masked sequence regression | REFED | `[valence, arousal, time]` output with per-coordinate target mask | `sta_net_pytorch_regression_adapter` |
+
+The seven-task CUDA smoke at [`20260718_cuda_all_tasks_smoke_v3`](../../comparative_methods/STA-Net-PyTorch/runs/smoke/sta_net_pytorch_smoke_v1/20260718_cuda_all_tasks_smoke_v3/) used real unified-loader samples, disjoint smoke train/validation subjects, finite forward/backward passes, one optimizer step, prediction files, checkpoints, manifests, implementation hashes, and metric artifacts. All seven task statuses are `smoke_passed`; protected tests remained closed. This proves software connectivity only. The smoke losses and accuracies/MAE are not performance estimates because each task used only a handful of deterministic samples and one update.
+
+The first full training launch was superseded after a throughput audit found
+window-shuffled record-cache thrashing, one/two-sample batches, seven-way CPU
+contention, and an unused validation loader. The replacement v2 protocol uses
+record-grouped batches and two sequential per-GPU task queues, performs
+validation every epoch, saves best/latest checkpoints, and pins implementation
+and configuration hashes. Its active run is
+[`20260719_sta_net_all_tasks_v4_optimized_frozen`](../../comparative_methods/STA-Net-PyTorch/runs/training/20260719_sta_net_all_tasks_v4_optimized_frozen/).
+It is in-progress development evidence, not an admitted performance result.
+
+STA-Net may therefore enter the **paired supervised architecture track** for public train/validation development. Source-protocol reproduction remains required before calling the PyTorch implementation a faithful named-method reproduction. Original subject-specific results, source-task PyTorch reproduction, and subject-independent adapted results must occupy separate tables.
 
 ### EFRM
 
@@ -339,7 +373,7 @@ The primary comparison concerns downstream prediction. Coupling heatmaps, attent
 ## 📦 Artifact and directory contract
 
 ```text
-experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<method_id>/<run_id>/
+comparative_methods/<method_id>/runs/<protocol_id>/<dataset_id>/<task_id>/<run_id>/
 ├── benchmark_protocol.yaml
 ├── method_manifest.yaml
 ├── adapter_manifest.json
@@ -374,12 +408,12 @@ experiments/runs/comparative_methods/<protocol_id>/<dataset_id>/<task_id>/<metho
 | 2 | Unified downstream label adapter | REFED continuous targets and masks |
 | 3 | DSR event/preflight tests | **Complete:** 8,980 admitted Go/No-go windows; VP005 remains alignment-excluded |
 | 4 | Shared subject split generator | Cross-method sample identity and leakage prevention |
-| 5 | Method provenance manifests | Ignored nested repositories and revision/license ambiguity |
-| 6 | Common prediction/metric API | Classification and regression result comparability |
-| 7 | STA-Net tensor/head adapter | Fixed binary tensors and subject-specific runner |
+| 5 | Method provenance manifests | **STA-Net smoke manifest complete;** upstream license unresolved and EFRM manifest pending |
+| 6 | Common prediction/metric API | **STA-Net classification/regression smoke API complete;** cross-method formal API pending |
+| 7 | STA-Net tensor/head adapter | **Complete:** PyTorch FGSA/EGTA, binary/multiclass/regression heads, unified geometry/mask adapter |
 | 8 | EFRM data/head adapter | Fixed pretraining layout and classification-only downstream path |
 | 9 | Source-fidelity reproductions | Named-method validity |
-| 10 | Shared train/validation smokes | End-to-end software readiness |
+| 10 | Shared train/validation smokes | **STA-Net complete on all seven tasks;** EFRM and formal frozen splits pending |
 
 The full-loader audit adds three prerequisites ahead of method tensor export: reject Visual unknown labels before split generation; freeze paired-probe grouping/fusion or weighting; and test that method adapters consume time-validity, analysis-valid, artifact, bad-channel, channel, and target masks while preserving geometry provenance and template-coordinate sensitivity controls.
 
