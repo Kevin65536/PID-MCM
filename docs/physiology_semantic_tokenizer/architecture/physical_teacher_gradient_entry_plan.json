@@ -1,0 +1,165 @@
+{
+  "schema": "physiology_semantic_architecture_changes_v2",
+  "plan_id": "physical_teacher_gradient_entry_plan",
+  "title": "Proposed After-State · Coupling-Aware Foundation Pipeline",
+  "subtitle": "Entry-routed physical teacher · tokenizer preservation · foundation discovery · frozen certificate",
+  "banner": "PLAN, not runtime · E0 development admission does not imply implementation or independent coupling evidence.",
+  "summary": "Route adaptive-proxy states by receptive field, preserve a delayed bridge during tokenizer training, discover contextual structure in foundation pretraining, and certify it with a fresh frozen evaluator.",
+  "changes": [
+    {
+      "node_id": "teacher_adapter",
+      "kind": "modify",
+      "note": "Replace the fixed five-state adapter contract with a versioned entry-specific target router.",
+      "replace": {
+        "label": "Entry-specific target router",
+        "details": ["local · prototype · context · coupling", "detached · standardized · versioned"],
+        "role": "teacher",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "admitted"
+      }
+    },
+    {
+      "node_id": "eeg_target",
+      "kind": "modify",
+      "note": "Keep r as required local/prototype semantics and expose s only as an optional ablation.",
+      "replace": {
+        "label": "EEG local / prototype",
+        "details": ["required r mean + slope", "optional s mean + slope"],
+        "role": "teacher",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "guarded"
+      }
+    },
+    {
+      "node_id": "fnirs_target",
+      "kind": "modify",
+      "note": "Route observation-aligned HbO/HbR to local/prototype losses while excluding flow from those entrances.",
+      "replace": {
+        "label": "fNIRS local / prototype",
+        "details": ["HbO / HbR mean + slope", "flow excluded locally"],
+        "role": "teacher",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "admitted"
+      }
+    },
+    {
+      "node_id": "valid_mask",
+      "kind": "modify",
+      "note": "Prevent one modality-level mask from authorizing losses with different receptive-field requirements.",
+      "replace": {
+        "label": "Per-entry masks + weights",
+        "details": ["local · prototype · context · coupling", "uniform until uncertainty is calibrated"],
+        "role": "teacher",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "guarded"
+      }
+    },
+    {
+      "node_id": "semantic_losses",
+      "kind": "modify",
+      "note": "Separate local, prototype, causal-context, and coupling-preservation objectives for T0-T4 ablations.",
+      "replace": {
+        "label": "Entry-routed objectives",
+        "details": ["local · prototype · causal context", "T0–T4 gradient audit"],
+        "role": "objective",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "guarded"
+      }
+    },
+    {
+      "node_id": "trainer_gate",
+      "kind": "modify",
+      "note": "Promote only after mask, gradient, causality, null, information-retention, and registered-semantics checks pass.",
+      "replace": {
+        "label": "Tokenizer promotion gate",
+        "details": ["gradient · mask · causal tests", "G2 retention + G3 semantics"],
+        "role": "lifecycle",
+        "scope": "governance",
+        "implementation": "planned",
+        "evidence": "guarded"
+      }
+    },
+    {
+      "node_id": "consumers",
+      "kind": "modify",
+      "note": "Add an explicit causal multimodal foundation objective instead of relying only on separate MLM and pooled contrastive alignment.",
+      "replace": {
+        "label": "Foundation causal core",
+        "details": ["multi-horizon q0 / q1", "MLM + InfoNCE as ablations"],
+        "role": "encoder",
+        "scope": "training_only",
+        "implementation": "planned",
+        "evidence": "guarded"
+      }
+    },
+    {
+      "node_id": "p6_coupling",
+      "kind": "modify",
+      "note": "Use a fresh frozen or cross-fitted evaluator after tokenizer and foundation selection.",
+      "replace": {
+        "label": "Independent certificate",
+        "details": ["fresh / cross-fitted q1 − q0", "history · marginal · shift nulls"],
+        "role": "evaluator",
+        "scope": "evaluation",
+        "implementation": "planned",
+        "evidence": "blocked"
+      },
+      "layout": {"x": 1340, "y": 830, "width": 200, "height": 90}
+    }
+  ],
+  "add_nodes": [
+    {
+      "id": "coupling_targets",
+      "label": "Future innovation targets",
+      "details": ["primary flow innovation", "HbO / HbR safeguards"],
+      "x": 350,
+      "y": 590,
+      "width": 240,
+      "height": 82,
+      "role": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded"
+    },
+    {
+      "id": "coupling_shaper",
+      "label": "Disposable causal shaper",
+      "details": ["fNIRS-history q0 + EEG q1", "gradient to EEG tokenizer only"],
+      "x": 1110,
+      "y": 820,
+      "width": 190,
+      "height": 100,
+      "role": "objective",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded"
+    }
+  ],
+  "edge_changes": [
+    {
+      "edge_id": "export--consumers",
+      "kind": "modify",
+      "note": "Foundation pretraining consumes only frozen, versioned independent-tokenizer exports.",
+      "replace": {"label": "frozen token export", "style": "data"}
+    },
+    {
+      "edge_id": "export--p6_coupling",
+      "kind": "remove",
+      "note": "The final certificate follows foundation selection rather than bypassing it directly from export."
+    }
+  ],
+  "add_edges": [
+    {"id": "teacher-router--coupling-targets", "from": "teacher_adapter", "to": "coupling_targets", "label": "context / coupling only", "style": "training"},
+    {"id": "coupling-targets--shaper", "from": "coupling_targets", "to": "coupling_shaper", "label": "detached future target", "style": "training"},
+    {"id": "eeg-quantizer--shaper-data", "from": "eeg_quantizer", "to": "coupling_shaper", "label": "causal EEG history", "style": "training"},
+    {"id": "shaper--eeg-gradient", "from": "coupling_shaper", "to": "eeg_quantizer", "label": "gradient allowlist", "style": "gradient"},
+    {"id": "fnirs-quantizer--shaper", "from": "fnirs_quantizer", "to": "coupling_shaper", "label": "detached history baseline", "style": "training"},
+    {"id": "shaper--trainer-gate", "from": "coupling_shaper", "to": "trainer_gate", "label": "T4 preservation loss", "style": "training"},
+    {"id": "foundation--certificate", "from": "consumers", "to": "p6_coupling", "label": "freeze then certify", "style": "evaluation"}
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "schema": "physiology_semantic_architecture_v1",
   "title": "Physiology-Semantic Tokenizer — Current Runtime Architecture",
-  "subtitle": "P1-P5 software implemented · E0-v2 validation blocked · protected test closed",
+  "subtitle": "P1-P5 software implemented · adaptive proxy admitted for development · runtime routing pending",
   "width": 1600,
   "height": 1060,
   "sections": [
@@ -37,7 +37,7 @@
 
     {"id": "semantic_losses", "label": "Semantic objectives", "details": ["state · prototype", "masked-state · VQ"], "x": 1130, "y": 200, "width": 190, "height": 86, "status": "training"},
     {"id": "reconstruction", "label": "Three reconstructions", "details": ["semantic + residual", "semantic-only · residual-only"], "x": 1350, "y": 200, "width": 190, "height": 86, "status": "training"},
-    {"id": "trainer_gate", "label": "Training lifecycle", "details": ["dry-run / smoke / resume", "E0 false → optimizer steps 0"], "x": 1240, "y": 360, "width": 200, "height": 92, "status": "guarded"},
+    {"id": "trainer_gate", "label": "Training lifecycle", "details": ["dry-run / smoke / resume", "teacher-free runnable · proxy route pending"], "x": 1240, "y": 360, "width": 200, "height": 92, "status": "guarded"},
     {"id": "checkpoint", "label": "Frozen checkpoint", "details": ["codebooks + model state", "hash + run manifest"], "x": 1240, "y": 510, "width": 200, "height": 78, "status": "output"},
     {"id": "export", "label": "P5 export v1", "details": ["IDs · posterior · expected", "residual · targets · provenance"], "x": 1130, "y": 670, "width": 190, "height": 92, "status": "output"},
     {"id": "consumers", "label": "Whole-brain inputs", "details": ["hard · codebook · soft", "semantic + residual"], "x": 1350, "y": 670, "width": 190, "height": 92, "status": "output"},

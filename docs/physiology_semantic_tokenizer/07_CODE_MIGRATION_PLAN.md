@@ -1,6 +1,6 @@
 # Physiology-semantic tokenizer code migration plan
 
-_Decision-complete migration boundary for P2 through P5; P6 coupling is excluded_
+_Decision-complete migration boundary from adaptive-teacher routing through the independent coupling certificate_
 
 > Maintenance note: subsequent modification plans must annotate their affected components on a plan-specific copy of the maintained SVG architecture. See [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md).
 
@@ -8,7 +8,7 @@ _Decision-complete migration boundary for P2 through P5; P6 coupling is excluded
 
 ## 📋 Objective and execution boundary
 
-This migration replaces the archived reconstruction-centered `source_observation` mainline with independently inferable EEG and fNIRS semantic tokenizers. The migration is complete at P5 export compatibility. It does not implement or evaluate P6 sequence coupling.
+This migration replaces the archived reconstruction-centered `source_observation` mainline with independently inferable EEG and fNIRS semantic tokenizers, an explicitly coupling-aware tokenizer-training ablation, a causal multimodal foundation stage, and an independent frozen certificate. Earlier P2–P5 work remains the implemented base; the 2026-07-19 batches below define the next code order.
 
 The following rules are fixed for all new work after the 2026-07-14 input-contract revision:
 
@@ -21,8 +21,8 @@ The following rules are fixed for all new work after the 2026-07-14 input-contra
 
 ```mermaid
 flowchart LR
-    accTitle: P2 Through P5 Migration Order
-    accDescr: Code migration begins with isolated quantizer and teacher contracts, permits E0 only after teacher correctness, and then proceeds through tokenizer training and export integration.
+    accTitle: Teacher routing through coupling certificate migration order
+    accDescr: Code migration routes admitted teacher coordinates by entrance, verifies asymmetric preservation gradients, exports frozen tokens, pretrains the causal foundation core, and ends with a fresh frozen certificate.
 
     p1(["P1 data contract"]) --> p2["P2 corrected quantizer"]
     p1 --> p3["P3 teacher adapter"]
@@ -33,15 +33,18 @@ flowchart LR
     p2 --> p4["P4 tokenizer and losses"]
     e0 --> p4
     p4 --> p5(["P5 export and consumers"])
+    p5 --> p6a["P6A causal foundation core"]
+    p6a --> p6b["P6B fresh frozen certificate"]
+    p6b --> p7(["P7 publication figures"])
 
     classDef foundation fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
     classDef decision fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
     classDef valid fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
     classDef blocked fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
 
-    class p1,p2,p3,p4 foundation
+    class p1,p2,p3,p4,p6a foundation
     class check decision
-    class e0,p5 valid
+    class e0,p5,p6b,p7 valid
     class repair blocked
 ```
 
@@ -109,7 +112,7 @@ Checkpoint reload must reproduce logits, posterior, IDs, embeddings, EMA buffers
 
 ## 🧪 P3 optional target adapters
 
-Every adapter converts one named target family into deterministic, detached patch/context targets with provenance, uncertainty when calibrated, and a validity mask. No adapter changes the measured inputs or tokenizer inference API.
+Every adapter converts one named target family into deterministic, detached local, prototype, context, and coupling target groups with provenance and entry-specific masks. Uncertainty is metadata until calibrated for the exact coordinate and entrance. No adapter changes the measured inputs or tokenizer inference API.
 
 For each state coordinate and patch, compute:
 
@@ -117,9 +120,9 @@ For each state coordinate and patch, compute:
 - least-squares slope against time in seconds;
 - `log(mean posterior variance + temporal variance of posterior means + eps)`.
 
-The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope.
+The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope. The adaptive proxy registers required EEG `r_mean/r_slope`, optional EEG `s_mean/s_slope`, required observation-aligned HbO/HbR mean/slope, and context/coupling-only flow coordinates.
 
-A target patch is valid only if every underlying cache-valid and causal-valid fNIRS sample is valid and all required means and variances are finite. The first five patches are therefore ineligible under the fixed ten-second history contract. Invalid targets and their uncertainty weights are finite placeholders with a false mask; they must contribute exactly zero loss.
+A target patch is valid only if every underlying cache-valid and causal-valid fNIRS sample is valid and all required means and variances are finite. The first five patches are therefore ineligible under the fixed ten-second history contract. Invalid targets and their weights are finite placeholders with a false mask; they must contribute exactly zero loss. `local_mask`, `prototype_mask`, `context_mask`, and `coupling_mask` are distinct fields and cannot silently fall back to one modality-wide mask.
 
 P3 correctness requires family-specific reference trajectories, uncertainty propagation where applicable, mask contraction, stop-gradient behavior, shape assertions, and a one-sample unified-loader join dry run. Only use of that target family remains blocked until its checks pass.
 
@@ -146,9 +149,15 @@ The registry name is `physiology_semantic`. It is registered by the active token
 
 ### Loss routing
 
-The loss module exposes independently weighted state, prototype, masked-state, reconstruction, VQ, and private terms. State-related terms are uncertainty weighted and masked. The private term exists in configuration and metrics but defaults to zero until its scientific ablation is specified.
+The loss module exposes independently weighted state, prototype, causal-context, coupling-preservation, reconstruction, VQ, and private terms. State-related terms are train-fold standardized, uniformly weighted, and entry-masked by default. `calibrated_inverse_variance` is a separate future mode that fails closed without a matching calibration artifact. The private term exists in configuration and metrics but defaults to zero until its scientific ablation is specified.
 
-The fixed-history context module predicts state at `t` from the five preceding expected embeddings. It uses relative lag embeddings only. Perturbing patch `t` or any future patch must not change its context prediction.
+The fixed-history context module predicts state at `t` from the five preceding expected embeddings. It uses relative lag embeddings only. Perturbing patch `t` or any future patch must not change its context prediction. This objective is named `causal_context_state`; it is not called masked modeling unless tokens are actually masked.
+
+The optional coupling-preservation module fits a frozen fNIRS-history baseline
+and a low-capacity EEG-incremental predictor for future flow and aligned
+chromophore innovations. Its only student gradient reaches the EEG semantic
+path. The fNIRS tokenizer, target, baseline, and teacher are detached. The
+module is excluded from export and discarded after tokenizer training.
 
 ### Training entry
 
@@ -169,6 +178,23 @@ The versioned export stores, per modality:
 
 Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_residual`. `codebook` indexes the checkpoint codebook directly; creating a fresh embedding table is an error. Round-trip validation reloads the checkpoint and requires identical IDs and posteriors for the exported sample order.
 
+## 🔗 P6 foundation and certificate implementation
+
+Implementation proceeds in four non-overlapping batches:
+
+| Batch | Files | Deliverable | Blocking verification |
+| --- | --- | --- | --- |
+| C1 target routing | `src/teachers/physical_state_teacher.py`, `src/losses/physiology_semantic.py`, dataset/config schemas | Versioned target groups, per-entry masks, uniform weighting | Mask isolation, coordinate rejection, train-only standardization |
+| C2 tokenizer preservation | `src/tokenizers/coupling_preservation.py`, `src/tokenizers/physiology_semantic_tokenizer.py`, trainer | T0–T4 ablations and disposable asymmetric shaper | Gradient allowlist, synthetic lag, shuffle/time-shift, serialization and discard |
+| C3 foundation discovery | `src/foundation/model.py`, foundation trainer/config | Causal multi-horizon `q_0/q_1` objective alongside MLM/InfoNCE baselines | Causal masks, matched samples, proper losses, frozen-export provenance |
+| C4 independent certificate | `experiments/analyze_frozen_sequence_coupling.py`, visualization script | Fresh/cross-fitted evaluator and paper figure tables | No training-shaper reuse, subject holdout, nuisance/null controls, deterministic figures |
+
+Each batch follows `unit → integration → dry-run → smoke → short formal → full
+formal`. C2 cannot start a teacher-supervised smoke before C1 passes; C3 starts
+only from a frozen export that passes P5; C4 starts only after model selection
+and uses disjoint certificate folds or cross-fitted predictions. Full-scale
+experiments never substitute for a failed gradient or causality test.
+
 ## ✅ Acceptance tests
 
 | Boundary | Blocking assertion |
@@ -177,12 +203,18 @@ Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_
 | Causality | Future or target-patch changes do not alter a fixed-history prediction |
 | Modality independence | Changing EEG cannot alter fNIRS outputs and vice versa |
 | Gradient isolation | No branch gradient reaches the other modality encoder or codebook |
+| Gradient entry | Each teacher loss reaches exactly its declared tokenizer modules; coupling preservation reaches EEG only |
 | Auxiliary-target mask | Invalid targets contribute exactly zero to that supervised loss |
+| Coordinate routing | Flow cannot enter local/prototype losses; optional `s` never becomes a blocking coordinate implicitly |
+| Weighting | Uncalibrated posterior variance cannot affect the loss |
+| Coupling preservation | Synthetic delayed information survives T4 and disappears under shuffle/time shift; shaper is absent from export |
+| Foundation causality | `q_0/q_1` share targets and masks, use no future inputs, and cannot manufacture gain by degrading `q_0` |
+| Certificate independence | Fresh/cross-fitted evaluator does not reuse the training shaper or protected model-selection outcomes |
 | Quantizer state | Zero-assignment stability, EMA arithmetic, revival logging, and reload equivalence pass |
 | Pipeline | Loader → teacher → tokenizer → loss → checkpoint → export passes on CPU |
 | Consumer | Export modes use checkpoint-native codebook geometry and preserve sample order |
 
-The execution sequence is unit tests, integration tests, unified-loader dry run, scoped target validation when applicable, then objective-specific smoke and short formal. A failed target validation blocks only objectives that consume that target. P6 remains blocked until tokenizer freeze and the G2/G3 information-retention and registered-semantics gates pass.
+The execution sequence is unit tests, integration tests, unified-loader dry run, scoped target validation when applicable, then objective-specific smoke and short formal. A failed target validation blocks only objectives that consume that target. Foundation discovery and the certificate remain blocked until tokenizer freeze and the G2/G3 information-retention and registered-semantics gates pass.
 
 ## 🔗 References
 
@@ -190,4 +222,4 @@ The execution sequence is unit tests, integration tests, unified-loader dry run,
 [^2]: Jiang, W.-B., Wang, Y., Lu, B.-L., & Li, D. (2025). “NeuroLM: A Universal Multi-task Foundation Model for Bridging the Gap between Language and EEG Signals.” https://arxiv.org/abs/2409.00101
 [^3]: Jiang, W.-B. et al. (2024). “Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI.” https://proceedings.iclr.cc/paper_files/paper/2024/file/47393e8594c82ce8fd83adc672cf9872-Paper-Conference.pdf
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-19_

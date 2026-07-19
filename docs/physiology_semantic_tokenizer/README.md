@@ -6,9 +6,15 @@ _Approved design baseline; full trainer implemented; adaptive joint-proxy target
 
 ## 📋 Status and authority
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. The historical Croce E0-v2 physical-state target remains blocked. The 2026-07-16 decision admits the gauge-corrected adaptive joint SSM for development as an optional `physiology_shaped_multimodal_consensus_proxy`; it does not admit physical-source, parameter-identification, causal-coupling, or protected-test claims. Adaptive cache/runtime integration remains pending.
+This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. The historical Croce E0-v2 physical-state target remains blocked. The 2026-07-16 decision admits the gauge-corrected adaptive joint SSM for development as an optional `physiology_shaped_multimodal_consensus_proxy`; the 2026-07-19 decision routes its broader state set by local, prototype, context, and coupling-preservation entrances and separates tokenizer preservation, foundation discovery, and independent certification. Neither decision admits physical-source, parameter-identification, causal-coupling, or protected-test claims. Adaptive cache/runtime integration remains pending.
 
 Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active status remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md); the scoped adaptive admission and its claim boundary are in [`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+
+The current implementation remains the canonical runtime figure below. The
+approved after-state is a separate plan artifact and must not be read as merged
+code:
+
+![Proposed coupling-aware foundation pipeline](figures/plans/physical_teacher_gradient_entry_plan.svg)
 
 The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
 
@@ -36,18 +42,22 @@ The redesign separates three responsibilities that the previous tokenizer attemp
 
 1. A **semantic token branch** represents physiologically interpretable state regions.
 2. A **private/residual branch** preserves information not explained by the semantic state model.
-3. A frozen-token **sequence-to-distribution coupling head** estimates incremental EEG-to-fNIRS predictive structure without modifying token identity.
+3. A training-only asymmetric shaper preserves broad delayed predictive information, a causal **foundation model** discovers contextual organization, and a fresh frozen evaluator certifies incremental EEG-to-fNIRS structure.
 
 ```mermaid
 flowchart LR
     accTitle: Redesign responsibility split
-    accDescr: The approved design separates physiological state tokenization, information-preserving residual coding, and downstream cross-modal coupling estimation.
+    accDescr: The approved design separates physiological tokenization, training-only coupling preservation, foundation discovery, and independent frozen certification.
 
     raw_signal["Raw EEG and fNIRS"] --> semantic_tokens["Semantic token branch"]
     raw_signal --> residual_stream["Private residual branch"]
     physical_teacher["Physical state teacher"] --> semantic_tokens
+    physical_teacher --> preservation["Disposable coupling-preservation shaper"]
+    semantic_tokens --> preservation
     semantic_tokens --> frozen_tokens["Frozen token sequences"]
-    frozen_tokens --> coupling_head["Sequence coupling head"]
+    preservation --> frozen_tokens
+    frozen_tokens --> foundation_model["Causal multimodal foundation model"]
+    foundation_model --> coupling_head["Fresh frozen coupling certificate"]
     frozen_tokens --> downstream_model["Whole-brain downstream model"]
     residual_stream --> downstream_model
 
@@ -56,7 +66,7 @@ flowchart LR
     classDef evaluation fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
 
     class raw_signal current
-    class physical_teacher,semantic_tokens,residual_stream target
+    class physical_teacher,semantic_tokens,residual_stream,preservation,foundation_model target
     class frozen_tokens,coupling_head,downstream_model evaluation
 ```
 
@@ -76,8 +86,9 @@ These findings motivate the target design. They do not prove that the physical-s
 
 - [`2026-07-01 physiology-semantic redesign`](../architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md)
 - [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
+- [`Physical-teacher gradient-entry decision`](analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md)
 - [`Archived tokenizer coupling responsibility boundary`](../archive/pre_physiology_semantic_20260701/source_observation/TOKENIZER_COUPLING_RESPONSIBILITY.md)
 - [`Archived physiological coupling plan`](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
 - [`Archived workflow reconstruction`](../archive/pre_physiology_semantic_20260701/research/workflow-reconstruction-cn/00_WORKFLOW_ARCHITECTURE.md)
 
-_Last updated: 2026-07-17_
+_Last updated: 2026-07-19_

@@ -14,6 +14,7 @@ SVG_PATH = PROJECT_ROOT / "docs/physiology_semantic_tokenizer/figures/physiology
 SPEC_SOURCE = "docs/physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json"
 REGISTERED_PLANS = [
     "measurement_first_input_contract_plan",
+    "physical_teacher_gradient_entry_plan",
     "shared_state_reconstruction_bound_plan",
 ]
 
@@ -49,7 +50,7 @@ def test_current_svg_preserves_baseline_runtime_content_and_exposes_visual_axes(
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     assert root.attrib["role"] == "img"
     assert root.find("svg:title", namespace).text == "Physiology-Semantic Tokenizer — Current Runtime Architecture"
-    assert "E0-v2 validation blocked" in root.find("svg:desc", namespace).text
+    assert "adaptive proxy admitted for development" in root.find("svg:desc", namespace).text
 
     required = {
         "loader",
@@ -136,6 +137,27 @@ def test_existing_v1_plan_gets_dynamic_callouts_without_source_changes():
     assert root.find(".//*[@id='node-optional_target_bank']").attrib["data-change-kind"] == "add"
     assert root.find(".//*[@id='callout-node-optional_target_bank']") is not None
     assert int(root.attrib["height"]) > int(_spec()["height"])
+
+
+def test_physical_teacher_plan_keeps_preservation_discovery_and_certificate_distinct():
+    plan_id = "physical_teacher_gradient_entry_plan"
+    changes = _load(
+        PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
+    )
+    root = _xml(render_svg(_spec(), changes))
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    assert root.find("svg:title", namespace).text == (
+        "Proposed After-State · Coupling-Aware Foundation Pipeline"
+    )
+    assert root.find(".//*[@id='evidence-boundary']") is not None
+    assert root.find(".//*[@id='node-coupling_shaper']").attrib["data-implementation"] == "planned"
+    assert root.find(".//*[@id='node-p6_coupling']").attrib["data-evidence"] == "blocked"
+    assert root.find(".//*[@id='edge-shaper--eeg-gradient']").attrib["data-edge-style"] == (
+        "gradient"
+    )
+    assert root.find(".//*[@id='edge-foundation--certificate']").attrib[
+        "data-edge-style"
+    ] == "evaluation"
 
 
 def test_validation_rejects_bad_replacement_unknown_endpoint_and_duplicate_ids():

@@ -41,6 +41,7 @@ gantt
         E0 gate + full trainer             :milestone, 2026-07-03, 0d
         E0-v2 teacher contract audit       :milestone, 2026-07-03, 0d
         Measurement-first input revision   :milestone, 2026-07-14, 0d
+        Teacher gradient-entry revision    :milestone, 2026-07-19, 0d
 ```
 
 ## Change Records
@@ -58,6 +59,7 @@ gantt
 | 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Merged; teacher supervision blocked |
 | 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Merged; validation blocked |
 | 11 | 2026-07-14 | Phase 3 input contract | [Measurement-first Input Contract and Optional Teacher Boundary](2026-07-14_measurement_first_input_contract.md) | unified loader, target architecture, experiment matrix, registry | Merged |
+| 12 | 2026-07-19 | Phase 3 coupling architecture | [Physical-Teacher Gradient Entries and Coupling Stages](2026-07-19_physical_teacher_gradient_entry_and_coupling_stages.md) | target router, preservation shaper, foundation `q_0/q_1`, frozen certificate, plan SVG | Planned |
 
 ## How to Add a New Entry
 

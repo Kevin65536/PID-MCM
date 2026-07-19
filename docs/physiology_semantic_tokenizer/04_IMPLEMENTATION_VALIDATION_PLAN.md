@@ -23,16 +23,17 @@ The default observation context is 20 seconds. A suite may override it only in i
 ```mermaid
 flowchart LR
     accTitle: Implementation dependency and gate order
-    accDescr: The redesign proceeds from frozen baselines through data and quantizer contracts, semantic tokenization, exports, frozen coupling analysis, and publication figures.
+    accDescr: The redesign proceeds from data and teacher contracts through entry-routed tokenization, export, foundation pretraining, an independent frozen certificate, and publication figures.
 
     archive["P0: Freeze evidence and baselines"] --> contracts["P1: Data and tensor contracts"]
     contracts --> quantizer["P2: Correct quantizer"]
     contracts --> teacher["P3: Optional target adapters"]
     quantizer --> tokenizer["P4: Semantic and residual tokenizer"]
     contracts --> tokenizer
-    teacher -. "named ablation" .-> tokenizer
+    teacher -. "entry-routed ablations" .-> tokenizer
     tokenizer --> export["P5: Export and whole-brain consumers"]
-    export --> coupling["P6: Frozen sequence coupling"]
+    export --> foundation_model["P6A: Causal multimodal foundation model"]
+    foundation_model --> coupling["P6B: Fresh frozen coupling certificate"]
     coupling --> figures["P7: Stable publication figures"]
 
     classDef archived fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
@@ -41,7 +42,7 @@ flowchart LR
 
     class archive archived
     class contracts,quantizer,teacher,tokenizer foundation
-    class export,coupling,figures evaluation
+    class export,foundation_model,coupling,figures evaluation
 ```
 
 ## 🧱 Planned code changes
@@ -55,12 +56,14 @@ Paths marked **new** are proposed module boundaries; the exact filename can chan
 | Registry | `src/tokenizers/registry.py` | Register a new target architecture name | Existing names and checkpoint loading remain unchanged |
 | Unified loader | `src/data/unified_physiology.py` | Mandatory four-dataset EEG/fNIRS measurement input, 20-second default context, labels, masks, alignment and geometry | Dataset-specific readers stay behind this contract |
 | Optional cache adapter | `src/data/croce_local_cache_dataset.py` | Join named Croce targets as a derived sidecar for historical/teacher ablations | Never replace measured inputs or enter the dataset count |
-| Optional teacher adapter | `src/teachers/physical_state_teacher.py` | Convert any admitted teacher family into named targets, uncertainty and masks | No globally required five-state shape; tensors are stop-gradient |
-| Losses | `src/losses/physiology_semantic.py` **new** | State, prototype, masked-state, private-attribution, and uncertainty-weighted losses | Every term can be disabled for ablation |
+| Optional teacher adapter | `src/teachers/physical_state_teacher.py` | Convert any admitted teacher family into versioned local, prototype, context, and coupling targets | No globally required five-state shape; tensors are stop-gradient |
+| Losses | `src/losses/physiology_semantic.py` | Route separate coordinates/masks to state, prototype, causal-context, reconstruction, VQ, and private losses | Uniform standardized weighting is default; calibrated inverse variance is a separate mode |
+| Coupling preservation | `src/tokenizers/coupling_preservation.py` **new** | Low-capacity multi-horizon `q_0/q_1` shaper using future flow and HbO/HbR innovations | Gradient allowlist ends at EEG semantic tokenizer; module is discarded after training |
 | Training entry | `experiments/train_physiology_semantic_tokenizer.py` **new** | Resolve config, train independent branches, emit validation artifacts | Dry-run and CPU/small-batch smoke modes are mandatory |
 | Export | `experiments/scripts/export_physiology_semantic_tokens.py` **new** | Export IDs, posterior, transferred embedding, residual, state target, and masks | Schema version and checkpoint hash are embedded |
+| Foundation | `src/foundation/model.py` | Add causal cross-modal temporal core and matched multi-horizon fNIRS-history `q_0` / EEG-incremental `q_1` objectives | Existing per-modality MLM and pooled InfoNCE remain named baselines |
 | Whole brain | existing whole-brain pretrain/probe modules | Add hard-ID, codebook, soft, and semantic-plus-residual input modes | Existing token-index mode remains a baseline |
-| Coupling | `experiments/analyze_frozen_sequence_coupling.py` **new** | Fit EEG-history to fNIRS-distribution models after tokenizer freeze | Must emit history/marginal-controlled baseline comparison |
+| Coupling certificate | `experiments/analyze_frozen_sequence_coupling.py` **new** | Fit a fresh/cross-fitted evaluator after tokenizer and foundation selection | Must emit history/marginal-controlled baseline and null comparisons |
 | Figures | `experiments/scripts/visualize_semantic_coupling.py` **new** | Signature ordering, meta-state aggregation, uncertainty, and null panels | No expected-index physiology panel in the main figure |
 
 ## 🧪 Phase plan and gates
@@ -121,9 +124,9 @@ unopened because validation did not pass.
 
 **Implementation status (updated 2026-07-16):** the generic adapter is merged. The historical Croce E0-v2 target remains blocked. The gauge-corrected adaptive joint SSM has passed the optional target-family development gate as a physiology-shaped multimodal consensus proxy, but its sidecar/cache schema and runtime adapter are not yet connected to this training path. No protected-test sample was evaluated.
 
-**Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics.
+**Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics. The adaptive proxy registers required EEG `r`, optional EEG `s`, required observation-aligned HbO/HbR, and context/coupling-only flow groups with separate entry masks.
 
-**Correctness checks:** deterministic patch pooling, covariance positivity or clamping, mask propagation, temporal alignment, and explicit unit tests for synthetic constant/ramp state trajectories.
+**Correctness checks:** deterministic patch pooling, mask contraction per entrance, temporal alignment, target standardization fitted on training subjects only, finite uncertainty metadata, and explicit unit tests for synthetic constant/ramp state trajectories. `delta_f` must be rejected by local/prototype routing even when present in the sidecar.
 
 **Execution boundary:** the old Croce physical-state objective remains blocked and cannot be bypassed with a boolean flag. Adaptive proxy supervision may begin only after its admitted coordinates, detached joint-teacher provenance, uniform/non-uncertainty-weighted loss role, and independent student paths are implemented and pass integration tests. This is an implementation boundary after E0 target-family admission, not a new scientific veto of the proxy.
 
@@ -133,15 +136,18 @@ unopened because validation did not pass.
 
 **Implementation status (updated 2026-07-16):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The adaptive proxy target is scientifically admitted for development, but its runtime schema/loss route has not yet passed this implementation stage; the existing trainer still represents software-readiness rather than an adaptive-teacher training result.
 
-**Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization context prediction, shared decoder reconstruction, and branch-attribution outputs. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
+**Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization causal-context prediction, shared decoder reconstruction, branch-attribution outputs, and the optional asymmetric coupling-preservation shaper. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
 
 **Correctness checks:**
 
 - changing EEG input cannot change fNIRS tokenizer output when fNIRS is fixed, and vice versa;
 - gradients from the EEG branch cannot enter the fNIRS encoder or codebook in the mainline;
 - each loss term reaches only its declared parameters;
+- local, prototype, context, and coupling masks cannot authorize one another;
+- the coupling-preservation gradient reaches the EEG semantic path but not the fNIRS tokenizer, target, baseline, or teacher;
+- a synthetic delayed bridge is retained by the shaper and removed by time-shift/shuffle controls;
 - the semantic-only and residual-only decoder paths have tested tensor shapes;
-- teacher uncertainty and validity masks produce zero contribution where invalid;
+- invalid targets contribute zero and uncalibrated uncertainty cannot change loss weights;
 - permutation of token IDs leaves all ID-invariant metrics unchanged.
 
 **Validity gate:** the semantic branch must improve its preregistered held-out signature/probe and prototype stability over the matched teacher-free reference under the versioned evidence protocol, while semantic-plus-residual reconstruction and downstream information remain consistent with the calibrated continuous-latent reference. G2 information retention and G3 registered semantics are co-equal gates; failure of either side blocks coupling experiments.
@@ -156,9 +162,27 @@ unopened because validation did not pass.
 
 **Validity gate:** a frozen probe must establish the information ordering of the four representation modes on identical folds. The implementation is rejected if `codebook` mode is not numerically identical to indexing the saved tokenizer codebook.
 
-### P6 — Fit frozen sequence-to-distribution coupling
+### P6A — Pretrain the causal multimodal foundation model
 
-**Implementation:** freeze both tokenizers, fit the fNIRS-history baseline and the EEG-plus-fNIRS-history model on identical training samples, and report lag-resolved incremental likelihood.
+**Implementation:** consume frozen independent tokenizer exports and train a
+causal temporal core with matched, proper-likelihood `q_0` and `q_1` heads over
+the same eligible samples and multiple future horizons. `q_0` sees fNIRS
+history and declared nuisance controls; `q_1` additionally sees EEG token
+history. Existing per-modality MLM and pooled InfoNCE are retained as ablations,
+not treated as sufficient coupling-discovery objectives.
+
+**Correctness checks:** causal attention and lag indices, identical target masks
+for `q_0/q_1`, baseline checkpoints that cannot be degraded through the gain
+objective, no teacher sidecar at inference, shuffled-EEG invariance of `q_0`,
+and exact frozen-export/checkpoint provenance.
+
+**Validity gate:** foundation pretraining must improve held-out proper
+likelihood and preserve the E6 information ladder. Any EEG-incremental result
+remains development evidence until P6B independently certifies it.
+
+### P6B — Fit a fresh frozen sequence-to-distribution certificate
+
+**Implementation:** freeze both tokenizers and the selected foundation checkpoint, then fit a fresh or cross-fitted fNIRS-history baseline and EEG-plus-fNIRS-history evaluator on identical training samples. Report lag-resolved incremental likelihood without reusing the training shaper as the evaluator.
 
 **Correctness checks:**
 
@@ -167,6 +191,7 @@ unopened because validation did not pass.
 - marginal-only synthetic data produces no excess coupling;
 - lag indexing is verified with injected delayed synthetic events;
 - no coupling gradient reaches tokenizer parameters in the primary experiment.
+- no model-selection or foundation-training sample is reused as an unlabelled independent certificate fold.
 
 **Validity gate:** held-out incremental log-likelihood must be directionally positive and separated from calibrated shuffle/time-shift/null evidence in the declared primary evaluation scope, survive subject-, source-, history-, marginal-, and task-prevalence-controlled tests, and show a reproducible lag profile. No universal minimum gain is imposed. Distinct task-specific coupling patterns remain a non-blocking secondary analysis; global pooled significance alone does not pass.
 
@@ -238,7 +263,7 @@ The redesign is implemented only when all of the following are true:
 
 1. current and target architecture documents match the merged code;
 2. P1, P2, P4 and P5 correctness checks pass; each optional P3 target used by a formal run passes its own scoped validity gate;
-3. frozen coupling P6 has a complete marginal/history-controlled result, whether positive or negative;
+3. P6A foundation pretraining and the independent P6B certificate have complete marginal/history-controlled results, whether positive or negative;
 4. the experiment matrix has immutable manifests and run-level summaries;
 5. figures are regenerated from saved tables, not notebook-only state;
 6. downstream results compare all four representation modes on identical folds;
@@ -255,4 +280,4 @@ The redesign is implemented only when all of the following are true:
 - [`Data normalization, HOMER2 alignment, and unified cache spec`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md)
 - [`Single-Trial EEG artifact remediation plan`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-19_

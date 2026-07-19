@@ -196,6 +196,30 @@ Let `H_t^F` denote available fNIRS history and nuisance controls. The physiologi
 
 A positive global mean is insufficient. Evidence must be positive on held-out subjects and remain positive within prespecified dataset/task scopes. Time-shift and spatial-null controls must remove the gain.
 
+### Preserve, discover, certify
+
+Discrete tokenization is lossy. If tokenizer objectives never test delayed
+cross-modal predictability, foundation pretraining cannot recover coupling
+information that the codebooks have already discarded. Conversely, forcing a
+complete EEG-sequence-to-fNIRS mapping into fixed codeword identities would
+collapse context-dependent dynamics into the tokenizer and risk encoding the
+teacher's assumptions as the result.
+
+The scientific responsibility is therefore divided as follows:
+
+| Stage | Responsibility | Not sufficient for |
+| --- | --- | --- |
+| Tokenizer | Preserve local physiological signatures, private information, and broad delayed EEG-to-fNIRS predictive information | Discovering the final contextual law or proving coupling |
+| Foundation model | Learn multi-horizon, context-dependent sequence organization with explicit fNIRS-history baseline and EEG-incremental objectives | Serving as its own unbiased certificate |
+| Frozen evaluator | Estimate held-out `q_1-q_0` gain with nuisance and null controls | Changing token identity or rescuing a lossy tokenizer |
+
+The training-only preservation shaper is intentionally asymmetric. Its
+coupling gradient reaches the EEG semantic tokenizer, while the future fNIRS
+target, fNIRS tokenizer, fNIRS-history baseline, and joint teacher are
+detached. This tests information preservation without allowing both sides to
+collude. A new frozen or cross-fitted evaluator is required after model
+selection.
+
 ## ⚙️ How an optional target can change semantics
 
 ### Waveform target versus state target
@@ -222,7 +246,7 @@ which constrains each prototype to cover a target-defined region. This can be st
 | Where constraint acts | Mainly decoder output | Continuous semantic latent and codebook prototype | Constrain the bottleneck explicitly |
 | Constraint dimensionality | High-dimensional and pointwise | Low-dimensional and structured | State target is weaker on samples, stronger on meaning |
 | Equivalent latent solutions | Many rotations/code permutations can reconstruct equally | Fewer solutions if prototypes must decode the same state coordinates | Measure prototype/state stability across seeds |
-| Treatment of inverse uncertainty | Hidden in one cached estimate | Explicit covariance/validity weighting | Down-weight ambiguous states |
+| Treatment of inverse uncertainty | Hidden in one cached estimate | Uniform standardized loss by default; calibrated covariance is an explicit later mode | Do not convert uncalibrated confidence into gradient scale |
 | Misspecification risk | Forces the teacher waveform decomposition into the decoder | Can over-organize tokens around an incorrect physical model | Preserve residual and compare shuffled/self-supervised controls |
 | Physiological claim supported alone | Clean-component reconstruction only | Teacher-defined state-region discretization after validation | Neither alone proves causal coupling |
 
@@ -240,6 +264,11 @@ When calibrated, target uncertainty defines which examples should strongly organ
 \]
 
 Low-confidence targets receive weaker influence. Uncalibrated uncertainty cannot be used merely because a covariance field exists.
+
+For the admitted adaptive proxy, the default is coordinate-standardized,
+uniform weighting. The equation above becomes active only after coverage and
+ranking calibration pass for the exact coordinate and entrance. A posterior
+variance field is otherwise diagnostic metadata, not a training weight.
 
 ### Privileged-information boundary
 
@@ -331,4 +360,4 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 [^5]: Barmpas, K., et al. (2025). “NeuroRVQ: Multi-Scale EEG Tokenization for Generative Large Brainwave Models.” https://arxiv.org/abs/2510.13068
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-19_

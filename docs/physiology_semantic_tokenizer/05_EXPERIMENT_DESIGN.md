@@ -1,6 +1,6 @@
 # Redesigned experiment program
 
-_Revised experiment logic for the measurement-first target architecture, updated 2026-07-14_
+_Revised experiment logic for entry-routed teacher supervision and preserve–discover–certify coupling, updated 2026-07-19_
 
 ---
 
@@ -11,13 +11,15 @@ The program tests a chain of claims rather than searching for an attractive coup
 ```mermaid
 flowchart LR
     accTitle: Scientific claim gate hierarchy
-    accDescr: Data validity and quantizer correctness precede two co-equal tokenizer gates for information retention and registered semantics; both are required before controlled coupling or downstream utility is evaluated.
+    accDescr: Data validity and quantizer correctness precede co-equal retention and semantics gates, followed by bridge preservation, foundation discovery, independent controlled coupling, and reproducibility.
 
     g0["G0 Unified data validity"] --> g1["G1 Quantizer correctness"]
     g1 --> g2["G2 Information retention"]
     g1 --> g3["G3 Registered semantics"]
-    g2 --> g4
-    g3 --> g4["G4 Controlled coupling"]
+    g2 --> g4p
+    g3 --> g4p["G4P Bridge preservation"]
+    g4p --> g4d["G4D Foundation discovery"]
+    g4d --> g4["G4 Controlled certificate"]
     g2 --> g5
     g3 --> g5["G5 Downstream utility"]
     g4 --> g6["G6 Reproducibility"]
@@ -28,11 +30,11 @@ flowchart LR
     classDef terminal fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
 
     class g0,g1 foundation
-    class g2,g3,g4,g5 evidence
+    class g2,g3,g4p,g4d,g4,g5 evidence
     class g6 terminal
 ```
 
-G2 and G3 are co-equal promotion gates. They may be evaluated in either order or in one joint suite, but both must pass before E7 coupling or E8 downstream promotion.
+G2 and G3 are co-equal promotion gates. They may be evaluated in either order or in one joint suite, but both must pass before E7 coupling-preservation promotion or E8 foundation pretraining. E7 preservation, E8 discovery, and E9 independent certification are distinct claims; success at an earlier stage cannot substitute for a later one.
 
 Every suite declares one primary endpoint and a calibration procedure before the protected test set is opened. It does not freeze a universal numerical cutoff in advance. Secondary metrics explain failure modes and may motivate later experiment versions, but cannot retroactively replace a failed primary endpoint on the same protected test set.
 
@@ -62,9 +64,9 @@ The following is a blocking software invariant for every newly created run. It a
 | E4 residual strategy | `UnifiedPhysiologyWindowDataset` | None required |
 | E5 fNIRS representation | `UnifiedPhysiologyWindowDataset` | None required |
 | E6 information ladder | `UnifiedPhysiologyWindowDataset` | Optional probe labels from the same sample IDs |
-| E7 frozen coupling | `UnifiedPhysiologyWindowDataset` | None required |
-| E8 downstream utility | Unified-loader-derived versioned token export | Optional task covariates from canonical labels |
-| E9 visualization | Immutable artifacts generated from the above unified-loader runs | Named signature/probe tables only |
+| E7 coupling-preservation ablation | `UnifiedPhysiologyWindowDataset` | Entry-routed adaptive proxy for named T1–T4 rows only |
+| E8 foundation discovery/downstream | Unified-loader-derived versioned frozen token export | Optional task covariates from canonical labels |
+| E9 certificate/visualization | Immutable frozen-token and foundation artifacts | Named signature/probe tables only |
 
 Every manifest records the loader class and contract, cache/index hashes, admitted alignment cases, window duration and preprocessing contract. The standard entrance is `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; REFED downstream sequence regression must instead declare `REFEDContinuousSequenceDataset` / `refed_continuous_va_sequence_v1` together with its source unified-window schema, stride, target rate, mask policy, target coverage, and event-index hash. Any other or missing loader identity blocks the run. Historical Croce-cache and dataset-specific-loader runs remain comparison artifacts and are not relabeled as conformant.
 
@@ -121,13 +123,18 @@ require the complete joint posterior or fNIRS waveform to be recovered from EEG
 alone.
 
 For this target family, the blocking development-gate coordinates are EEG
-`r_mean/r_slope` and observation-aligned fNIRS HbO/HbR mean/slope. Flow remains
-context-only. Raw-signal physical gain, EEG-only fNIRS reconstruction, and
+`r_mean/r_slope` and observation-aligned fNIRS HbO/HbR mean/slope. EEG
+`s_mean/s_slope` are admitted as optional local/prototype development
+coordinates. Flow remains context/coupling-only and is excluded from
+local/prototype losses. Raw-signal physical gain, EEG-only fNIRS reconstruction, and
 individual physiological-parameter recovery are retained as diagnostics that
 limit paper claims; they are not target-family admission endpoints. Posterior
 uncertainty is optional and cannot weight training until separately calibrated.
 The full decision and evidence ledger are recorded in
 [`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+Gradient-entry routing and the preserve–discover–certify responsibility split
+are fixed in
+[`analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md`](analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md).
 
 ### Dataset measurement contract
 
@@ -339,27 +346,35 @@ No dataset produced a positive cross-inferable shared fraction at five seconds. 
 
 **Question:** Do reconstruction, self-supervised temporal targets, task probes, data-driven dynamical targets, or an admitted physical teacher produce the most reproducible and informative token geometry?
 
-**Method:** compare B1–B4 under matched codebook size and latent dimension. Decode every registered target separately from continuous latents, hard IDs, posterior, and codebook embeddings using train-fitted probes. Measure prototype-signature consistency on held-out subjects without treating any candidate signature as universal truth.
+**Method:** compare B1–B4 under matched codebook size and latent dimension, then run the entry ladder below with all other optimization settings fixed:
+
+| Row | Teacher entrances |
+| --- | --- |
+| T0 | Teacher-free reconstruction, VQ, and self-supervision |
+| T1 | T0 + required local/prototype `r` and HbO/HbR targets |
+| T2 | T1 + optional EEG `s_mean/s_slope` |
+
+Decode every registered target separately from continuous latents, hard IDs, posterior, and codebook embeddings using train-fitted probes. Measure prototype-signature consistency on held-out subjects without treating any candidate signature as universal truth. Log per-loss gradient reachability, norm, and cosine conflict; flow and uncalibrated posterior variance are forbidden from these local/prototype rows.
 
 **Primary endpoint:** held-out performance for the preregistered signature family decoded from the hard token or its saved codebook vector, reported together with the teacher-free information-retention endpoint.
 
 **Secondary metrics:** mutual-information lower bounds, neighborhood continuity, token occupancy by state region, reconstruction, task probes, and seed-matched prototype stability.
 
-**Artifacts:** `state_decoding.json`, `prototype_signatures.parquet`, `prototype_stability.json`, `objective_ablation.csv`, and state-manifold figures.
+**Artifacts:** `state_decoding.json`, `prototype_signatures.parquet`, `prototype_stability.json`, `objective_ablation.csv`, `gradient_entry_audit.json`, and state-manifold figures.
 
-**Pass condition:** B3 or B4 improves its preregistered target endpoint over the matched teacher-free baseline on held-out subjects, with subject-level uncertainty, seed consistency, null sensitivity and no loss of the E6/G2 information-retention requirement. The conclusion is scoped to that target family.
+**Pass condition:** T1 or T2 improves its preregistered target endpoint over T0 on held-out subjects, with subject-level uncertainty, seed consistency, null sensitivity and no loss of the E6/G2 information-retention requirement. The conclusion is scoped to that target family; T2 is selected over T1 only when the optional `s` coordinates add stable value.
 
-## 🕰️ E3 — Masked temporal semantic learning
+## 🕰️ E3 — Causal context and genuine masking
 
 **Question:** Does predicting missing state regions from context create sequence-level semantics rather than patch-local clustering only?
 
-**Method:** compare no masking, random patch masking, contiguous-span masking, and causal-history masking. Match total updates and encoder capacity. Evaluate short/long missing spans and transfer to unseen tasks.
+**Method:** first compare no context with the T3 causal-history state objective, using only past expected embeddings and entry-specific context targets. Separately compare true random patch masking and contiguous-span masking when their input corruption is implemented. Match total updates and encoder capacity. Do not label the fixed-history next-state objective as masked modeling. Evaluate short/long histories, missing spans, and transfer to unseen tasks.
 
-**Primary endpoint:** held-out masked-state prediction error on subject-held-out sessions.
+**Primary endpoint:** held-out causal-context state prediction error for T3 on subject-held-out sessions; true masking variants report their own separately named masked-state endpoint.
 
 **Secondary metrics:** token transition predictability, future-state prediction, fine-task probe, robustness to sensor dropout, and prototype stability.
 
-**Artifacts:** `masked_state_metrics.json`, `mask_schedule.yaml`, transition matrices, span-length curves, and probe results.
+**Artifacts:** `causal_context_metrics.json`, optional `masked_state_metrics.json`, `mask_schedule.yaml`, transition matrices, history/span-length curves, and probe results.
 
 **Pass condition:** the chosen masking strategy improves held-out state prediction and at least one non-state transfer metric without reducing E2 semantic quality.
 
@@ -405,58 +420,58 @@ No dataset produced a positive cross-inferable shared fraction at five seconds. 
 
 **Pass condition:** B4 semantic-plus-residual reaches the calibrated continuous-latent retention reference for the current dataset and phase; semantic-only may remain lower but must retain the state endpoint from E2. The calibration record must show how reconstruction, task utility, bitrate, and uncertainty informed the decision. Absolute conditional-information values are not compared across incompatible estimator dimensions.
 
-## 🔗 E7 — Frozen EEG-sequence to fNIRS-distribution coupling
+## 🔗 E7 — Tokenizer coupling preservation
 
-**Question:** Does EEG token history improve prediction of future fNIRS token distributions beyond fNIRS history, lag marginals, subject, dataset, and task prevalence?
+**Question:** Does explicit, asymmetric physical-teacher guidance prevent the EEG tokenizer from discarding delayed information relevant to future fNIRS dynamics?
 
-**Method:** freeze the selected tokenizers. Fit nested models on identical folds:
+**Method:** extend T0–T2 with T3 causal context and T4, a low-capacity multi-horizon preservation shaper. T4 predicts future `delta_f` innovation and separately reported HbO/HbR innovations from EEG token history conditional on a frozen fNIRS-history baseline. Gradients reach only the EEG semantic tokenizer; fNIRS targets, tokenizer, baseline, and teacher are detached. Include T4-F0 without flow, N1 time-shift/shuffled teacher targets, and N2 EEG-only-teacher control. Discard the shaper after training.
 
-1. lag/global fNIRS marginal plus the shared dataset/source/task-prevalence nuisance terms;
-2. fNIRS token history plus the same nuisance terms;
-3. EEG history plus the same nuisance terms;
-4. fNIRS history plus EEG history plus the same nuisance terms.
+Evaluate every frozen tokenizer row with a fresh, identically specified development evaluator; never report the training shaper's own gain as the endpoint.
 
-All comparisons use identical eligible samples and nuisance definitions. Subject effects are handled through training-subject hierarchy or subject-derived covariates that remain defined for an unseen subject; a held-out subject ID is never fitted as a free test-time parameter.
+**Primary endpoint:** improvement of held-out EEG-incremental proper likelihood for T4 over T3 under the fresh evaluator, with no loss of G2 information retention or G3 registered semantics.
 
-Evaluate lags `0..16 s` initially. Compare hard targets and soft fNIRS posterior targets. Pre-VQ exchange is evaluated only as a labeled ablation after the independent-tokenizer result.
+**Secondary metrics:** horizon/lag profile, continuous-to-hard retention, flow ablation, codebook health, per-entry gradient norms/cosines, subject/dataset stability, and development null position.
 
-**Primary endpoint:** subject-held-out incremental log-likelihood of model 4 over model 2, with subject-level uncertainty and calibrated null comparisons.
+**Required nulls:** shuffled EEG within subject/task, circular time shift outside the declared lag range, target-frequency-preserving permutation, T4-F0, N1, N2, and fNIRS-history-only.
 
-**Secondary metrics:** calibration, conditional excess probability, lag profile, task interaction, task-stratified coupling maps, permutation-null position, transition-conditioned gain, and robustness across seeds/datasets. Task interaction and task-specific coupling are explicitly non-blocking secondary analyses.
+**Artifacts:** `teacher_entry_ablation.csv`, `gradient_entry_audit.json`, `preservation_metrics.json`, `lag_profile.csv`, null distributions, frozen tokenizer hashes, and a shaper-discard audit.
 
-**Required nulls:** shuffled EEG within subject/task, circular time shift beyond the physiological lag range, token-frequency-preserving permutation, fNIRS-history-only, random codebook-ID permutation, and source-stratified evaluation.
+**Pass condition:** T4 improves the preregistered frozen-development endpoint over T3 across held-out subjects and seeds, loses the gain under the required nulls, and preserves E2/E6 endpoints. Passing E7 means the tokenizer retained a delayed bridge; it is not yet the foundation-model or paper-level coupling claim.
 
-**Artifacts:** `nested_model_metrics.json`, `lag_profile.csv`, `subject_effects.csv`, `task_interactions.csv`, null distributions, calibrated predictions, and full/meta-state coupling tensors.
+## 🧭 E8 — Foundation coupling discovery and downstream utility
 
-**Pass condition:** held-out incremental likelihood is directionally positive and separated from the calibrated shuffle/time-shift/null evidence under the versioned lag-family correction, while surviving subject-, source-, history-, marginal-, and task-prevalence controls. No universal minimum gain is imposed. Distinct task-specific coupling patterns are not required; their presence or absence is reported as secondary evidence. A null result remains a valid falsification of H4.
+**Question:** Can the foundation model discover richer context-dependent EEG–fNIRS organization from frozen compressed sequences, and is the representation useful beyond token prevalence and source style?
 
-## 🧭 E8 — Whole-brain and downstream utility
+**Method:** pretrain a causal temporal core with matched proper-likelihood heads:
 
-**Question:** Which exported token representation supports downstream learning, and does coupling add information beyond token prevalence and source style?
+1. `q_0`: fNIRS history plus declared nuisance controls;
+2. `q_1`: the same inputs plus EEG token history.
 
-**Method:** pretrain and probe four modes on identical folds: hard ID, transferred codebook embedding, soft expected embedding, and semantic-plus-residual. Compare scratch, frozen, and limited fine-tuning. Add coupling summaries only after E7 passes.
+Use identical targets, masks, horizons, and eligible samples. Compare the explicit `q_0/q_1` objective with per-modality MLM, pooled InfoNCE, and scratch baselines. Probe hard ID, transferred codebook embedding, soft expected embedding, and semantic-plus-residual modes on identical folds; compare frozen and limited fine-tuning. The baseline is fit independently or frozen so incremental gain cannot be created by degrading `q_0`.
 
-**Primary endpoint:** subject-held-out performance for the versioned fine-grained task endpoint selected from train/validation evidence before protected-test evaluation.
+E8 is executed as two registered sub-suites so each retains one primary endpoint. E8A selects the foundation objective by held-out proper likelihood. E8B then selects the representation mode by subject-held-out performance for the versioned fine-grained downstream task.
 
-**Secondary metrics:** task family, n-back versus WG, source/dataset prediction, calibration, representation linearity, and sample efficiency.
+**Secondary metrics:** provisional EEG-incremental gain, calibration, sample efficiency, task family, source/dataset prediction, representation linearity, horizon dependence, and shuffled-EEG sensitivity.
 
-**Artifacts:** `representation_mode_comparison.csv`, fold-level predictions, confusion matrices, calibration curves, embedding-source audit, and exact checkpoint/export hashes.
+**Artifacts:** `foundation_objective_ablation.csv`, `q0_q1_metrics.json`, `representation_mode_comparison.csv`, fold predictions, calibration curves, embedding-source audit, and exact tokenizer/foundation hashes.
 
-**Pass condition:** the selected mode improves over the archived hard-ID baseline and is not explained by source-name prediction. Coupling features must add value over matched token-prevalence and sequence baselines.
+**Pass condition:** E8A improves held-out proper likelihood without violating causal/matched-sample checks; E8B improves the preregistered downstream endpoint without being explained by source-name prediction. Its provisional coupling gain motivates E9 but is not its own independent certificate.
 
-## 📊 E9 — Physiological visualization and reproducibility
+## 📊 E9 — Independent coupling certificate and physiological visualization
 
-**Question:** Are the learned state signatures and coupling structures stable enough to support paper figures?
+**Question:** After tokenizer and foundation selection, does independently evaluated EEG history add reproducible predictive information about future fNIRS tokens, and can that result support an interpretable paper figure?
 
-**Method:** order prototypes by train-only physical signatures; match codebooks across seeds with Hungarian assignment; cluster signatures into meta-states; visualize state trajectories, lag-resolved incremental coupling, task differences, uncertainty, and nulls.
+**Method:** freeze all selected checkpoints. Fit a fresh or cross-fitted evaluator on nested models using identical samples: lag/marginal nuisance baseline, fNIRS-history `q_0`, EEG-history-only control, and fNIRS-plus-EEG-history `q_1`. Evaluate lags `0..16 s` initially, hard and soft fNIRS targets, subject/source/task-prevalence controls, and the complete shuffle/time-shift/marginal null family. The evaluator cannot reuse the T4 shaper or foundation prediction head as an independent result.
 
-**Primary endpoint:** cross-seed signature-matched prototype and coupling-map similarity relative to random matching.
+Order prototypes by train-only physical signatures, match codebooks across seeds with Hungarian assignment, aggregate physiological meta-states, and visualize raw prevalence, fNIRS-history prediction, EEG-incremental gain, lag profile, uncertainty, and nulls as distinct panels.
 
-**Secondary metrics:** bootstrap confidence, subject consistency, meta-state stability, task-effect reproducibility, and sensitivity to ordering/clustering choices.
+**Primary endpoint:** subject-held-out incremental log-likelihood `q_1-q_0` under the versioned lag-family correction. Cross-seed signature-matched coupling-map similarity relative to random matching is the required visualization-reproducibility acceptance metric, not a replacement endpoint.
 
-**Artifacts:** publication SVG/PDF/PNG, `figure_data/*.csv`, ordering and matching files, meta-state definitions, captions, and null panels.
+**Secondary metrics:** calibration, conditional excess probability, task interaction, task-stratified maps, bootstrap confidence, subject/meta-state stability, and sensitivity to ordering/clustering choices. Task-specific coupling remains non-blocking.
 
-**Pass condition:** the main qualitative pattern is visible with a locked ordering and fixed scale across formal seeds, and its stability exceeds the permutation null. Expected token index is never interpreted as a physiological continuum.
+**Artifacts:** `nested_model_metrics.json`, `certificate_manifest.json`, `lag_profile.csv`, `subject_effects.csv`, null distributions, calibrated predictions, full/meta-state coupling tensors, publication SVG/PDF/PNG, `figure_data/*.csv`, ordering/matching files, and captions.
+
+**Pass condition:** held-out incremental likelihood is positive and separated from calibrated null evidence while surviving subject, source, history, marginal, and task-prevalence controls; the locked qualitative pattern is stable across formal seeds and exceeds the permutation null. Expected token index is never interpreted as a physiological continuum. A null result is a valid falsification of the paper-level coupling claim.
 
 ## 🧬 Splits, nuisance controls, and statistics
 
@@ -476,13 +491,13 @@ experiments/runs/physiology_semantic_tokenizer/
 ├── e0_teacher_validity/
 ├── e1_quantizer_correctness/
 ├── e2_semantic_supervision/
-├── e3_masked_state/
+├── e3_causal_context/
 ├── e4_residual_strategy/
 ├── e5_optical_representation/
 ├── e6_information_ladder/
-├── e7_frozen_coupling/
-├── e8_wholebrain_downstream/
-└── e9_visualization_stability/
+├── e7_tokenizer_coupling_preservation/
+├── e8_foundation_discovery_downstream/
+└── e9_coupling_certificate_visualization/
 ```
 
 Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yaml`, `metric_registry.json`, `evidence_calibration.json`, dry-run manifest, smoke summary, formal-run index, pooled statistical summary, and links to immutable run-level artifacts. Suite status distinguishes `planned`, `dry_run_passed`, `smoke_passed`, `formal_running`, `formal_complete`, `gate_passed`, and `gate_failed`.
@@ -499,11 +514,11 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 | E1 fails | Stop all expensive training; quantizer results are uninterpretable |
 | E2 fails, E6 passes | Retain information-preserving tokenizer but drop physiological-semantic token claims |
 | E2 passes, E6 fails | Increase or redesign residual capacity; do not use hard tokens alone downstream |
-| E7 global passes but source/history/marginal-controlled fails | Report pooled predictability only; do not claim controlled neurovascular token coupling |
-| E7 passes but task-specific patterns are absent or unstable | Keep G4 passed if its primary controls pass; report no verified task-specific coupling pattern |
-| E7 passes and E8 coupling features fail | Coupling may be interpretable without being useful for classification |
+| E7 preservation fails | Redesign tokenizer objectives/capacity; foundation training cannot restore discarded coupling information |
+| E7 passes but E8 explicit `q_0/q_1` discovery fails | Retain the tokenizer result; do not claim foundation-level coupling discovery |
 | E8 passes but source prediction dominates | Treat the result as confounded and redesign splits/normalization |
-| E9 fails | Report quantitative results without a stable token-map narrative |
+| E9 incremental certificate fails history/marginal/null controls | Report preservation/discovery development evidence only; do not claim controlled neurovascular token coupling |
+| E9 coupling certificate passes but visualization stability fails | Report quantitative controlled coupling without a stable token-map narrative |
 
 ## 🔗 Related documents
 
@@ -514,4 +529,4 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 
-_Last updated: 2026-07-18_
+_Last updated: 2026-07-19_

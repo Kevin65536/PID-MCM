@@ -17,6 +17,19 @@ The canonical figure describes the checkout's current runtime and evidence bound
 | [`architecture/change_overlay.example.json`](architecture/change_overlay.example.json) | Overlay template |
 | `experiments/scripts/render_physiology_semantic_architecture.py` | Deterministic renderer, validator, and drift checker |
 
+The current approved implementation plan is rendered separately from the
+runtime view:
+
+![Proposed coupling-aware foundation pipeline](figures/plans/physical_teacher_gradient_entry_plan.svg)
+
+Its source is
+[`architecture/physical_teacher_gradient_entry_plan.json`](architecture/physical_teacher_gradient_entry_plan.json).
+The diagram records four separate entrances—local, prototype, causal context,
+and coupling preservation—and the preserve–discover–certify sequence. Its
+banner and dashed implementation styling are part of the evidence boundary:
+none of the added paths is current runtime merely because E0 admitted the
+adaptive target family for development.
+
 The JSON is the text-diffable source of truth. Generated SVG files are committed for direct review and documentation rendering. Manual SVG edits are prohibited.
 
 ## Content-preservation boundary
@@ -107,6 +120,10 @@ The renderer retains canonical implementation/evidence values in `data-canonical
   --changes docs/physiology_semantic_tokenizer/architecture/measurement_first_input_contract_plan.json \
   --output docs/physiology_semantic_tokenizer/figures/plans/measurement_first_input_contract_plan.svg
 
+.venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py \
+  --changes docs/physiology_semantic_tokenizer/architecture/physical_teacher_gradient_entry_plan.json \
+  --output docs/physiology_semantic_tokenizer/figures/plans/physical_teacher_gradient_entry_plan.svg
+
 .venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py --check
 
 .venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py \
@@ -132,4 +149,4 @@ A plan overlay is rejected if its output path would overwrite the canonical SVG.
 
 When model behavior changes, update the architecture changelog. When only renderer or maintenance policy changes, use the project changelog.
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-19_

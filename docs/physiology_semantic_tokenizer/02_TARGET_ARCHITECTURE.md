@@ -113,6 +113,8 @@ An experiment may attach a self-supervised target, task target, data-driven dyna
 | `target_value` | Family-specific tensor; no globally fixed five-state dimension |
 | `target_uncertainty` | Optional calibrated uncertainty, never assumed valid by presence alone |
 | `target_valid_mask` | Receptive-field, solver and support validity |
+| `target_entry` | One of `local`, `prototype`, `context`, or `coupling`; never inferred from coordinate name |
+| `target_entry_mask` | Entry-specific support; a local mask cannot silently authorize a context/coupling loss |
 | `target_provenance` | Generator commit, parameters, source records and transform history |
 | `identifiability_scope` | Which modality, history and population can identify the target |
 
@@ -134,6 +136,24 @@ independently generated student tokens are required for the later frozen
 EEG-history-to-fNIRS-distribution coupling evaluation. A joint teacher may
 organize both tokenizers as privileged information, but its own fused posterior
 is never used as evidence that coupling was independently discovered.
+
+### Adaptive-proxy routing contract
+
+The gauge-corrected adaptive proxy uses an entry-specific target registry:
+
+| Entrance | Required coordinates | Optional/development coordinates | Excluded |
+| --- | --- | --- | --- |
+| EEG local/prototype | `r_mean`, `r_slope` | `s_mean`, `s_slope` | fNIRS states and fitted parameters |
+| fNIRS local/prototype | HbO/HbR mean and slope | None | `delta_f_mean`, `delta_f_slope` |
+| Intra-modal context | Future registered state/transition | Family-specific history targets after observability validation | Any target using future input |
+| Cross-modal preservation | Future flow innovation, with aligned HbO/HbR innovation safeguards | Multi-horizon variants | Direct teacher posterior as coupling evidence |
+
+The default loss uses train-fold standardized coordinates with uniform
+weights. Posterior covariance is stored for diagnostics but cannot provide
+inverse-variance weights until a separate calibration gate passes. Fitted SSM
+parameters never receive a semantic-loss entrance by default. The complete
+rationale is in
+[`analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md`](analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md).
 
 ## 🧠 Semantic tokenizer contract
 
@@ -233,9 +253,28 @@ When auxiliary target `j` exposes calibrated uncertainty, its loss may be uncert
 
 An auxiliary prototype or masked-target loss is enabled only after its target family passes modality- and receptive-field-specific validation. Reconstruction/self-supervision and residual attribution provide the teacher-free mainline. No loss is enabled merely because a field exists in a Croce cache.
 
+For the adaptive proxy, local, prototype, context, and coupling-preservation
+terms have separate coordinate registries, masks, and weights. The
+training-only coupling shaper predicts future registered fNIRS innovations
+from EEG token history conditional on a detached fNIRS-history baseline. Its
+gradient allowlist ends at the EEG semantic tokenizer; the fNIRS tokenizer,
+target, baseline, and teacher are stop-gradient. This shaper is discarded after
+tokenizer training and cannot serve as the final coupling evaluator.
+
 ### Coupling stage
 
-The coupling model is trained after both tokenizers are frozen:
+Coupling has three deliberately separated stages:
+
+1. tokenizer training preserves a broad delayed bridge with the low-capacity
+   asymmetric shaper above;
+2. foundation pretraining learns richer causal, context-dependent organization
+   from independently generated token sequences using matched `q_0` and `q_1`
+   objectives;
+3. a fresh frozen or cross-fitted evaluator certifies incremental information
+   without updating the tokenizers or foundation model.
+
+The certificate model is fit after tokenizers and the selected foundation
+checkpoint are frozen:
 
 \[
 p(K_t^F\mid K_{t-L:t}^E,H_t^F,\tau)
@@ -252,6 +291,13 @@ For a 2-second grid, the initial lag support is `0..8` tokens, covering `0..16` 
 | Incremental log-likelihood | `[B, 10, 9]` |
 
 Primary coupling evidence is the held-out gain over a fNIRS-history, lag-, dataset-, and subject-controlled baseline. The coupling head does not update tokenizers in the primary experiment.
+
+The foundation objective must fit the fNIRS-history baseline and
+EEG-plus-fNIRS-history model with proper likelihoods on identical eligible
+samples and horizons. It may not create apparent gain by jointly weakening the
+baseline. Teacher-derived preservation targets guide tokenizer information
+retention; only the independent frozen certificate supports the paper-level
+coupling claim.
 
 ## 📦 Export and downstream contract
 
@@ -302,4 +348,4 @@ Differences between task-specific coupling patterns are a secondary, non-blockin
 - [`Active experiment log`](06_EXPERIMENT_LOG.md)
 - [`Current runtime architecture`](../ARCHITECTURE.md)
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-19_

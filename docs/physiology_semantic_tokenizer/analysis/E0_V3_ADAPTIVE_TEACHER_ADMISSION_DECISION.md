@@ -84,8 +84,12 @@ the historical physical-source contract.
 ## Admitted target and loss boundary
 
 - EEG local targets: `r_mean`, `r_slope`.
+- EEG `s_mean`, `s_slope`: optional local/prototype development coordinates,
+  not blocking coordinates. Their validation R² values are `0.106/0.365`, and
+  both exceed their coordinate-wise permutation q95.
 - fNIRS local targets: observation-aligned HbO/HbR mean and slope.
-- Flow mean/slope: context-only diagnostic; not patch-local supervision.
+- Flow mean/slope: context/coupling-only development coordinates; not
+  patch-local or prototype supervision.
 - Fitted SSM parameters: provenance/diagnostics only.
 - Posterior covariance: stored if available, but not used for inverse-variance
   weighting until a later calibration gate passes.
@@ -115,8 +119,13 @@ adaptive runtime/cache integration: NEXT IMPLEMENTATION STEP
 The next experiments may implement and train this optional teacher on the
 existing train/validation development split. Before any confirmatory or paper
 claim, the revised contract must be frozen and evaluated under its declared
-protected-test policy. Later coupling claims remain governed by E7 and cannot
+protected-test policy. Later coupling claims remain governed by the E7–E9
+preserve–discover–certify sequence and cannot
 be inferred from E0 admission alone.
+
+The subsequent entry-specific routing decision is authoritative for how these
+coordinates enter tokenizer and foundation development:
+[`20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md`](20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md).
 
 ## Evidence sources
 
