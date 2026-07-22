@@ -15,12 +15,14 @@ if str(METHOD_ROOT) not in sys.path:
 
 from efrm_pytorch.data import (
     EFRMPairedWindowAdapter,
+    EFRMSyncPretrainDataset,
     InventoryDiverseBatchSampler,
     collate_efrm_pairs,
 )
 from efrm_pytorch.model import EFRMDownstreamModel, EFRMSyncModel
 from efrm_pytorch.protocol import load_public_split_subjects
 from efrm_pytorch.tasks import TASK_SPECS
+from efrm_pytorch.training import cached_pretrain_backward
 from efrm_pytorch.visualization import (
     PHYSIOLOGY_EVIDENCE_SCHEMA,
     export_alignment_evidence,
@@ -64,6 +66,30 @@ def test_variable_channel_model_forward_backward_and_positive_matrix() -> None:
     assert any(parameter.grad is not None for parameter in model.parameters())
 
 
+def test_cached_clip_gradient_matches_full_batch_gradient() -> None:
+    torch.manual_seed(9)
+    reference = _small_model()
+    cached = _small_model()
+    cached.load_state_dict(reference.state_dict())
+    batch = _batch(batch=4)
+
+    eeg_embedding, fnirs_embedding = reference.encode(**batch)
+    reference.alignment(eeg_embedding, fnirs_embedding)["loss"].backward()
+    reference_gradient = reference.eeg_model.patch_embed.proj.weight.grad.clone()
+
+    cached_pretrain_backward(
+        cached,
+        batch,
+        chunk_size=2,
+        amp_dtype=None,
+        eeg_reconstruction_weight=0.0,
+        fnirs_reconstruction_weight=0.0,
+        clip_alignment_weight=1.0,
+    )
+    cached_gradient = cached.eeg_model.patch_embed.proj.weight.grad
+    torch.testing.assert_close(cached_gradient, reference_gradient, rtol=2e-4, atol=2e-6)
+
+
 def test_patch_masks_exclude_invalid_tail() -> None:
     model = _small_model()
     batch = _batch()
@@ -73,6 +99,18 @@ def test_patch_masks_exclude_invalid_tail() -> None:
     assert torch.isfinite(output["loss"])
     assert not torch.any(output["eeg_reconstruction_mask"][:, 3::4].bool())
     assert not torch.any(output["fnirs_reconstruction_mask"][:, 3::4].bool())
+
+
+def test_embedding_removes_invalid_tokens_before_attention() -> None:
+    model = _small_model().eval()
+    values = torch.randn(1, 1, 5, 40)
+    valid = torch.ones(1, 5, 4, dtype=torch.bool)
+    valid[:, :, -1] = False
+    baseline = model.eeg_model.forward_embed(values, valid)
+    changed_only_in_invalid_patch = values.clone()
+    changed_only_in_invalid_patch[..., -10:] = 1_000_000.0
+    comparison = model.eeg_model.forward_embed(changed_only_in_invalid_patch, valid)
+    torch.testing.assert_close(baseline, comparison, rtol=1e-5, atol=1e-6)
 
 
 def test_downstream_classification_and_regression_shapes() -> None:
@@ -172,6 +210,27 @@ def test_contrastive_sampler_draws_distinct_records_per_pass() -> None:
         records = [dataset.lightweight_metadata(index)["join_key"] for index in batch]
         assert len(records) == len(set(records)) == 3
     assert sampler.manifest()["negative_sampling"].startswith("record_diverse")
+
+
+def test_pretraining_crop_uses_common_fully_valid_support() -> None:
+    dataset = object.__new__(EFRMSyncPretrainDataset)
+    dataset.seed = 42
+    dataset.epoch = 0
+    dataset.adapter = EFRMPairedWindowAdapter(duration_s=2.0)
+    sample = _fake_unified_sample()
+    sample["analysis_valid_mask"]["eeg"][:200] = False
+    sample["analysis_valid_mask"]["fnirs"][:10] = False
+    sample["eeg"] = np.zeros((4, 800), dtype=np.float32)
+    sample["fnirs"] = np.zeros((6, 40), dtype=np.float32)
+    sample["analysis_valid_mask"]["eeg"] = np.concatenate((
+        np.zeros(200, dtype=bool), np.ones(600, dtype=bool)
+    ))
+    sample["analysis_valid_mask"]["fnirs"] = np.concatenate((
+        np.zeros(10, dtype=bool), np.ones(30, dtype=bool)
+    ))
+    start = dataset._crop_start(sample, 0)
+    assert start >= 1.0
+    assert dataset.adapter.adapt(sample, crop_start_s=start)["admitted"] is True
 
 
 def test_all_seven_task_contracts_are_present() -> None:

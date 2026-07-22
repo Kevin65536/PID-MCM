@@ -10,7 +10,7 @@ data:
   window_duration_s: 8.0
   eeg_sample_rate_hz: 200.0
   fnirs_sample_rate_hz: 10.0
-  require_full_analysis_support: true
+  require_full_analysis_support: false
   sampler: balanced_dataset_inventory_diverse_epoch_crop_v1
   channel_policy: variable_measured_channels_no_duplication_v1
 
@@ -26,7 +26,7 @@ model:
   eeg_patch_samples: 50
   fnirs_patch_samples: 20
   clip_logit_multiplier: 0.1
-  activation_checkpointing: true
+  activation_checkpointing: false
 
 loss:
   eeg_reconstruction_weight: 1.0
@@ -39,7 +39,7 @@ training:
   min_epochs: 20
   early_stopping_patience: 15
   effective_batch_size: 32
-  microbatch_size: auto
+  microbatch_size: 16
   contrastive_gradient_cache: two_pass_exact_v1
   ordinary_gradient_accumulation_expands_negative_set: false
   learning_rate: 0.0001

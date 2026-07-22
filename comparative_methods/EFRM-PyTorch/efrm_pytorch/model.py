@@ -233,10 +233,29 @@ class VariableChannelMAE(nn.Module):
         embedded, height, width = self.patch_embed(values)
         valid = self._flatten_valid(patch_valid, height=height, width=width)
         positions = sincos_2d(self.embed_dim, height, width).to(device=embedded.device, dtype=embedded.dtype)
-        embedded = (embedded + positions[:, 1:]) * valid.unsqueeze(-1)
-        cls = (self.cls_token + positions[:, :1]).expand(values.shape[0], -1, -1)
-        encoded = self.norm(self._run_blocks(torch.cat((cls, embedded), dim=1), self.blocks))[:, 1:]
-        return (encoded * valid.unsqueeze(-1)).sum(dim=1) / valid.sum(dim=1, keepdim=True).clamp_min(1)
+        embedded = embedded + positions[:, 1:]
+        cls = self.cls_token + positions[:, :1]
+        if bool(valid.all()):
+            encoded = self.norm(
+                self._run_blocks(
+                    torch.cat((cls.expand(values.shape[0], -1, -1), embedded), dim=1),
+                    self.blocks,
+                )
+            )[:, 1:]
+            return encoded.mean(dim=1)
+
+        # Zeroing invalid tokens would still change attention's softmax
+        # denominator. Remove them from the physical token set per sample.
+        pooled: list[torch.Tensor] = []
+        for batch_index in range(values.shape[0]):
+            selected = embedded[batch_index : batch_index + 1, valid[batch_index]]
+            if selected.shape[1] == 0:
+                raise ValueError("embedding requires at least one valid physical patch")
+            encoded = self.norm(
+                self._run_blocks(torch.cat((cls, selected), dim=1), self.blocks)
+            )[:, 1:]
+            pooled.append(encoded.mean(dim=1))
+        return torch.cat(pooled, dim=0)
 
 
 class EFRMSyncModel(nn.Module):
@@ -378,4 +397,3 @@ class EFRMDownstreamModel(nn.Module):
         if self.target_length > 1:
             output = output.reshape(output.shape[0], self.output_dim, self.target_length)
         return output
-

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 import hashlib
+import json
 import math
+from pathlib import Path
 import random
 import re
 from typing import Any, Iterator, Mapping, Sequence
@@ -251,8 +253,26 @@ class EFRMSyncPretrainDataset(Dataset):
         if maximum <= 0:
             return 0.0
         steps = int(math.floor(maximum * self.adapter.fnirs_rate_hz)) + 1
-        selected = _stable_int(self.seed, self.epoch, index, sample["join_key"]) % steps
-        return selected / self.adapter.fnirs_rate_hz
+        eeg_mask = np.asarray(sample["analysis_valid_mask"]["eeg"], dtype=bool)
+        fnirs_mask = np.asarray(sample["analysis_valid_mask"]["fnirs"], dtype=bool)
+        eeg_length = int(round(self.adapter.duration_s * self.adapter.eeg_rate_hz))
+        fnirs_length = int(round(self.adapter.duration_s * self.adapter.fnirs_rate_hz))
+        valid_starts: list[int] = []
+        for candidate in range(steps):
+            start_s = candidate / self.adapter.fnirs_rate_hz
+            eeg_start = int(round(start_s * self.adapter.eeg_rate_hz))
+            fnirs_start = candidate
+            if (
+                eeg_start + eeg_length <= eeg_mask.size
+                and fnirs_start + fnirs_length <= fnirs_mask.size
+                and eeg_mask[eeg_start : eeg_start + eeg_length].all()
+                and fnirs_mask[fnirs_start : fnirs_start + fnirs_length].all()
+            ):
+                valid_starts.append(candidate)
+        if not valid_starts:
+            return 0.0
+        selected = _stable_int(self.seed, self.epoch, index, sample["join_key"]) % len(valid_starts)
+        return valid_starts[selected] / self.adapter.fnirs_rate_hz
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         sample = self.base[self.indices[int(index)]]
@@ -372,12 +392,14 @@ class InventoryDiverseBatchSampler(Sampler[list[int]]):
         seed: int = 42,
         drop_last: bool = False,
         minimum_batch_size: int = 2,
+        inventory_cache_path: str | Path | None = None,
     ) -> None:
         self.dataset = dataset
         self.batch_size = int(batch_size)
         self.seed = int(seed)
         self.drop_last = bool(drop_last)
         self.minimum_batch_size = int(minimum_batch_size)
+        self.inventory_cache_path = None if inventory_cache_path is None else Path(inventory_cache_path)
         self.epoch = 0
         records: dict[str, list[int]] = defaultdict(list)
         record_dataset: dict[str, str] = {}
@@ -386,16 +408,41 @@ class InventoryDiverseBatchSampler(Sampler[list[int]]):
             records[row["join_key"]].append(index)
             record_dataset[row["join_key"]] = row["dataset_id"]
 
+        cached_inventories: dict[str, Any] = {}
+        if self.inventory_cache_path is not None and self.inventory_cache_path.exists():
+            payload = json.loads(self.inventory_cache_path.read_text(encoding="utf-8"))
+            if payload.get("schema") != "efrm_measured_channel_inventory_v1":
+                raise ValueError(f"unsupported inventory cache: {self.inventory_cache_path}")
+            cached_inventories = dict(payload.get("records", {}))
+
         groups: dict[str, dict[tuple[tuple[str, ...], tuple[str, ...]], dict[str, list[int]]]] = defaultdict(
             lambda: defaultdict(dict)
         )
         for record_id, indices in records.items():
-            representative = dataset[indices[0]]
+            cached = cached_inventories.get(record_id)
+            if cached is None:
+                representative = dataset[indices[0]]
+                cached = {
+                    "dataset_id": record_dataset[record_id],
+                    "eeg_channel_names": list(representative["eeg_channel_names"]),
+                    "fnirs_location_names": list(representative["fnirs_location_names"]),
+                }
+                cached_inventories[record_id] = cached
             inventory = (
-                tuple(representative["eeg_channel_names"]),
-                tuple(representative["fnirs_location_names"]),
+                tuple(str(value) for value in cached["eeg_channel_names"]),
+                tuple(str(value) for value in cached["fnirs_location_names"]),
             )
             groups[record_dataset[record_id]][inventory][record_id] = indices
+        if self.inventory_cache_path is not None:
+            self.inventory_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "schema": "efrm_measured_channel_inventory_v1",
+                "adapter": dataset.adapter.manifest(),
+                "records": cached_inventories,
+            }
+            temporary = self.inventory_cache_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            temporary.replace(self.inventory_cache_path)
         self.groups = {
             dataset_id: {inventory: dict(rows) for inventory, rows in inventories.items()}
             for dataset_id, inventories in groups.items()
@@ -477,6 +524,9 @@ class InventoryDiverseBatchSampler(Sampler[list[int]]):
                 dataset_id: sum(len(records) for records in inventories.values())
                 for dataset_id, inventories in self.groups.items()
             },
+            "inventory_cache_path": (
+                None if self.inventory_cache_path is None else str(self.inventory_cache_path.resolve())
+            ),
         }
 
 

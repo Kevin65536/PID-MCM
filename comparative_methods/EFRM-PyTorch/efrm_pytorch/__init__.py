@@ -10,6 +10,7 @@ from .data import (
 from .model import EFRMDownstreamModel, EFRMSyncModel, VariableChannelMAE
 from .protocol import PretrainingBoundary, PublicSplitSubjects, load_public_split_subjects
 from .tasks import EFRMTaskSpec, EFRMUnifiedTaskDataset, TASK_SPECS, collate_efrm_task
+from .training import cached_pretrain_backward, evaluate_pretrain_batch
 
 __all__ = [
     "EFRMDownstreamModel",
@@ -26,5 +27,7 @@ __all__ = [
     "VariableChannelMAE",
     "collate_efrm_pairs",
     "collate_efrm_task",
+    "cached_pretrain_backward",
+    "evaluate_pretrain_batch",
     "load_public_split_subjects",
 ]

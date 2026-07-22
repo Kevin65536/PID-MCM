@@ -67,7 +67,7 @@ measurement provenance; they do not establish identical physical units.
 All valid measured channels are retained. HbO and HbR are paired by spatial
 channel name, and a location is admitted only when both components are
 present. Bad channels and invalid time support are represented by masks; they
-are excluded from reconstruction loss and global pooling. Batches contain one
+are excluded from reconstruction loss, self-attention, and global pooling. Batches contain one
 record inventory, while sinusoidal position embeddings are generated for the
 current channel/time grid. No channel is copied, mirrored, or assigned
 fabricated geometry.
@@ -190,9 +190,40 @@ smoke completed a finite forward/backward pass with 30 measured EEG channels
 and 36 measured HbO/HbR locations. Formal ViT-base architecture smoke and all
 performance training remain unopened.
 
+### Parameter and memory audit
+
+The synchronized implementation has 221,459,034 trainable parameters:
+110,735,922 in the EEG MAE and 110,723,112 in the fNIRS MAE. The official
+default source model has 222,780,000 total parameters, of which 221,466,720
+are trainable; most of the total-count difference is its fixed positional
+tables. FP32 parameters occupy 0.825 GiB. FP32 parameters, gradients, and the
+two AdamW moment tensors require approximately 3.30 GiB before activations;
+a weights-only checkpoint is approximately 0.825 GiB and a checkpoint with
+Adam state approximately 2.48 GiB before serialization overhead.
+
+Measured on an RTX 4090 with a true 32-pair contrastive matrix:
+
+| Recompute chunk | Activation checkpointing | Peak allocated | Peak reserved | Train+validation smoke |
+| ---: | --- | ---: | ---: | ---: |
+| 8 | on | 4.20 GiB | 4.55 GiB | 35.8 s |
+| 32 | on | 4.19 GiB | 4.38 GiB | 29.1 s |
+| 32 | off | 20.25 GiB | 20.62 GiB | 20.8 s |
+| 16 | off | 11.68 GiB | 11.98 GiB | 21.0 s |
+
+The development default is therefore batch 32, exact two-pass gradient cache,
+recompute chunk 16, BF16 autocast, and no activation checkpointing. This leaves
+substantial margin beside the active STA-Net jobs without paying the slower
+checkpoint-recompute path.
+
 ## Artifact contract
 
 Runs live only below `runs/<protocol_id>/...` and follow the common comparison
 layout: protocol/method/adapter/split manifests, resolved config, environment,
 checkpoints, metrics, predictions, `figures/`, `figure_data/`, hashes, status,
 and a self-contained summary. Vendor source files are never modified.
+
+The pretraining entry point is `train_pretrain.py`. It writes resumable
+latest/best checkpoints, epoch/step JSONL, the resolved config, split-boundary
+hashes, CUDA peak memory, and validation-only CLIP evidence. Its two-pass
+gradient cache is regression-tested against the full contrastive-batch
+gradient before GPU training.
