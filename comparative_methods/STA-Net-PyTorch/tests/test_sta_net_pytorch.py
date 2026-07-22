@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,8 @@ from sta_net_pytorch.data import (
 )
 from sta_net_pytorch.model import STANet, STANetConfig, STANetObjective, SamePadConv3d
 from train import PackedRecordBatchSampler, RecordGroupedBatchSampler, classification_weights
-from tune import RUNG_EPOCHS
+from launch_tuning import lane_plan
+from tune import RUNG_EPOCHS, best_validation_metric_through_epoch
 from select_best_checkpoints import metric_contract, select_candidate
 from sta_net_pytorch.metrics import classification_metrics as core_classification_metrics, improved
 from sta_net_pytorch.splits import development_subject_split, validate_public_manifest
@@ -196,6 +198,52 @@ def test_reproduction_regression_plots_emit_vector_and_raster_files(tmp_path):
 
 def test_tuning_budget_keeps_a_100_epoch_rung():
     assert RUNG_EPOCHS == (2, 8, 20, 40, 100)
+
+
+def test_tuning_objective_uses_best_checkpoint_through_rung(tmp_path):
+    metrics = tmp_path / "metrics"
+    metrics.mkdir()
+    rows = [
+        {"epoch": 1, "macro_f1": 0.51},
+        {"epoch": 2, "macro_f1": 0.63},
+        {"epoch": 3, "macro_f1": 0.55},
+        {"epoch": 4, "macro_f1": 0.52},
+    ]
+    (metrics / "validation_epochs.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    score, selected = best_validation_metric_through_epoch(tmp_path, "motor_imagery", 4)
+    assert score == 0.63
+    assert selected["epoch"] == 2
+
+
+def test_tuning_objective_minimizes_best_regression_checkpoint(tmp_path):
+    metrics = tmp_path / "metrics"
+    metrics.mkdir()
+    rows = [
+        {"epoch": 1, "masked_rmse_scaled": 1.2},
+        {"epoch": 2, "masked_rmse_scaled": 0.9},
+        {"epoch": 3, "masked_rmse_scaled": 1.0},
+    ]
+    (metrics / "validation_epochs.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    score, selected = best_validation_metric_through_epoch(tmp_path, "refed_regression", 3)
+    assert score == -0.9
+    assert selected["epoch"] == 2
+
+
+def test_tuning_lane_plan_preserves_total_trials_and_shards_long_tasks():
+    plan = lane_plan(11)
+    totals = {}
+    workers = {}
+    for lane in plan:
+        for task in lane["tasks"]:
+            totals[task] = totals.get(task, 0) + lane["quota"]
+            workers[task] = workers.get(task, 0) + 1
+    assert set(totals.values()) == {11}
+    assert workers["visual"] == 2
+    assert workers["refed_regression"] == 2
 
 
 def test_checkpoint_metric_prefers_macro_f1_instead_of_lower_loss_proxy():

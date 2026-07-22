@@ -26,7 +26,8 @@ from sta_net_pytorch.data import STANetUnifiedTaskDataset, get_sta_net_task_spec
 from sta_net_pytorch.splits import development_subject_split
 
 RUNG_EPOCHS = (2, 8, 20, 40, 100)
-SCHEMA = "sta_net_optuna_tuning_v1"
+SCHEMA = "sta_net_optuna_tuning_v2"
+OBJECTIVE_POLICY = "best_validation_checkpoint_through_rung"
 
 
 def utc_now() -> str:
@@ -95,14 +96,31 @@ def sample_config(trial: optuna.Trial, base: dict[str, Any], task: str) -> dict[
     return config
 
 
-def last_validation_metric(run_dir: Path, task: str, epoch: int) -> tuple[float, dict[str, Any]]:
+def best_validation_metric_through_epoch(
+    run_dir: Path,
+    task: str,
+    epoch: int,
+) -> tuple[float, dict[str, Any]]:
+    """Return the best checkpoint metric observed no later than ``epoch``.
+
+    The v1 tuner optimized only the metric at the last epoch of each rung.  That
+    disagreed with the trainer's checkpoint contract for five of seven tasks
+    and made useful early checkpoints invisible to both TPE and Hyperband.
+    """
     path = run_dir / "metrics" / "validation_epochs.jsonl"
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    matches = [row for row in rows if int(row["epoch"]) == epoch]
-    if not matches:
+    if not any(int(row["epoch"]) == epoch for row in rows):
         raise RuntimeError(f"trial {run_dir} emitted no validation metrics for epoch {epoch}")
-    row = matches[-1]
-    value = float(row["masked_rmse_scaled"] if task == "refed_regression" else row["macro_f1"])
+    metric_name = "masked_rmse_scaled" if task == "refed_regression" else "macro_f1"
+    eligible = [row for row in rows if int(row["epoch"]) <= epoch and metric_name in row]
+    if not eligible:
+        raise RuntimeError(f"trial {run_dir} emitted no {metric_name} through epoch {epoch}")
+    row = (
+        min(eligible, key=lambda item: (float(item[metric_name]), int(item["epoch"])))
+        if task == "refed_regression"
+        else max(eligible, key=lambda item: (float(item[metric_name]), -int(item["epoch"])))
+    )
+    value = float(row[metric_name])
     return (-value if task == "refed_regression" else value), row
 
 
@@ -124,8 +142,11 @@ def objective_factory(
             "schema": SCHEMA, "status": "running", "task": task,
             "trial_number": trial.number, "physical_gpu": physical_gpu,
             "created_at": utc_now(), "rung_epochs": list(RUNG_EPOCHS),
+            "objective_policy": OBJECTIVE_POLICY,
             "split_manifest": str(split_path), "parameters": trial.params,
         })
+        trial.set_user_attr("schema", SCHEMA)
+        trial.set_user_attr("objective_policy", OBJECTIVE_POLICY)
         environment = os.environ.copy()
         environment.update({
             "CUDA_VISIBLE_DEVICES": str(physical_gpu),
@@ -157,20 +178,34 @@ def objective_factory(
                     "failed_at": utc_now(), "parameters": trial.params,
                 })
                 raise RuntimeError(f"training failed at rung={epochs}; see {trial_dir / 'process.log'}")
-            score, metric_row = last_validation_metric(trial_dir / "run", task, epochs)
-            rung_rows.append({"rung": rung_index, "epochs": epochs, "score": score, "metrics": metric_row})
+            score, metric_row = best_validation_metric_through_epoch(
+                trial_dir / "run", task, epochs
+            )
+            selected_epoch = int(metric_row["epoch"])
+            rung_rows.append({
+                "rung": rung_index,
+                "epochs": epochs,
+                "score": score,
+                "selected_checkpoint_epoch": selected_epoch,
+                "metrics": metric_row,
+            })
             write_json(trial_dir / "rungs.json", {"schema": SCHEMA, "rungs": rung_rows})
+            trial.set_user_attr("best_checkpoint_epoch", selected_epoch)
             trial.report(score, step=rung_index + 1)
             if epochs < RUNG_EPOCHS[-1] and trial.should_prune():
                 write_json(trial_dir / "trial_manifest.json", {
                     "schema": SCHEMA, "status": "pruned", "task": task,
                     "trial_number": trial.number, "physical_gpu": physical_gpu,
-                    "pruned_at_epochs": epochs, "score": score, "parameters": trial.params,
+                    "objective_policy": OBJECTIVE_POLICY,
+                    "pruned_at_epochs": epochs, "selected_checkpoint_epoch": selected_epoch,
+                    "score": score, "parameters": trial.params,
                 })
                 raise optuna.TrialPruned(f"pruned after {epochs} epochs")
         write_json(trial_dir / "trial_manifest.json", {
             "schema": SCHEMA, "status": "completed_100_epochs", "task": task,
             "trial_number": trial.number, "physical_gpu": physical_gpu,
+            "objective_policy": OBJECTIVE_POLICY,
+            "selected_checkpoint_epoch": selected_epoch,
             "completed_at": utc_now(), "score": score, "parameters": trial.params,
         })
         return score
@@ -184,11 +219,17 @@ def run_task(args: argparse.Namespace, task: str, base: dict[str, Any], root: Pa
     study = optuna.create_study(
         study_name=f"{args.study_id}__{task}__development_cross_subject",
         storage=storage, direction="maximize", load_if_exists=True,
-        sampler=optuna.samplers.TPESampler(seed=int(base["training"].get("seed", 42)), n_startup_trials=6),
+        sampler=optuna.samplers.TPESampler(
+            seed=int(base["training"].get("seed", 42)) + args.sampler_seed_offset,
+            n_startup_trials=args.startup_trials,
+        ),
         pruner=optuna.pruners.HyperbandPruner(
             min_resource=1, max_resource=len(RUNG_EPOCHS), reduction_factor=2,
         ),
     )
+    study.set_user_attr("schema", SCHEMA)
+    study.set_user_attr("objective_policy", OBJECTIVE_POLICY)
+    study.set_user_attr("rung_epochs", list(RUNG_EPOCHS))
     study.optimize(
         objective_factory(
             task=task, base_config=base, split_path=split_path,
@@ -199,7 +240,8 @@ def run_task(args: argparse.Namespace, task: str, base: dict[str, Any], root: Pa
     write_json(root / "studies" / f"{task}.json", {
         "schema": SCHEMA, "task": task, "study_name": study.study_name,
         "trial_count": len(study.trials), "best_value": study.best_value,
-        "best_params": study.best_params, "updated_at": utc_now(),
+        "best_params": study.best_params, "objective_policy": OBJECTIVE_POLICY,
+        "worker_id": args.worker_id, "updated_at": utc_now(),
     })
 
 
@@ -211,13 +253,53 @@ def main() -> None:
     parser.add_argument("--physical-gpu", type=int, required=True)
     parser.add_argument("--tasks", nargs="+", required=True)
     parser.add_argument("--n-trials", type=int, default=12)
+    parser.add_argument("--startup-trials", type=int, default=6)
+    parser.add_argument("--sampler-seed-offset", type=int, default=0)
+    parser.add_argument("--worker-id", default="worker")
     args = parser.parse_args()
     root = Path(args.run_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     base_path = Path(args.base_config).resolve()
     base = yaml.safe_load(base_path.read_text(encoding="utf-8"))
-    for task in args.tasks:
-        run_task(args, task, base, root)
+    status_path = root / "workers" / f"{args.worker_id}.json"
+    write_json(status_path, {
+        "schema": SCHEMA,
+        "status": "running",
+        "worker_id": args.worker_id,
+        "physical_gpu": args.physical_gpu,
+        "tasks": args.tasks,
+        "trial_quota_per_task": args.n_trials,
+        "started_at": utc_now(),
+    })
+    completed_tasks: list[str] = []
+    try:
+        for task in args.tasks:
+            run_task(args, task, base, root)
+            completed_tasks.append(task)
+            write_json(status_path, {
+                "schema": SCHEMA,
+                "status": "running" if len(completed_tasks) < len(args.tasks) else "completed",
+                "worker_id": args.worker_id,
+                "physical_gpu": args.physical_gpu,
+                "tasks": args.tasks,
+                "completed_tasks": completed_tasks,
+                "trial_quota_per_task": args.n_trials,
+                "updated_at": utc_now(),
+            })
+    except Exception as error:
+        write_json(status_path, {
+            "schema": SCHEMA,
+            "status": "failed",
+            "worker_id": args.worker_id,
+            "physical_gpu": args.physical_gpu,
+            "tasks": args.tasks,
+            "completed_tasks": completed_tasks,
+            "trial_quota_per_task": args.n_trials,
+            "error_type": type(error).__name__,
+            "error": str(error),
+            "updated_at": utc_now(),
+        })
+        raise
 
 
 if __name__ == "__main__":

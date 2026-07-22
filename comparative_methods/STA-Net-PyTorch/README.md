@@ -68,9 +68,12 @@ tasks without pooling incompatible endpoints.
 
 The tuning path uses task-metric checkpoint selection and five multi-fidelity
 rungs: 2, 8, 20, 40, and 100 epochs. Optuna TPE proposes configurations and a
-Hyperband pruner prevents weak trials from consuming the 100-epoch budget. The
-launcher runs three trial lanes on GPU 0 and two on GPU 1 because a single
-STA-Net process leaves most RTX 4090 compute capacity idle:
+Hyperband pruner prevents weak trials from consuming the 100-epoch budget. At
+every rung, the value reported to Optuna is the best validation checkpoint seen
+through that epoch—not merely the last epoch—so pruning, TPE, trainer checkpoint
+selection, and final model selection share one objective. The launcher runs
+three trial lanes per GPU and shards the long Visual and REFED studies across
+two workers while preserving the requested total trial count per task:
 
 ```bash
 .venv/bin/python comparative_methods/STA-Net-PyTorch/launch_tuning.py \
@@ -86,7 +89,8 @@ Audit an existing tuning run without opening protected data:
 
 The analyzer reconstructs Optuna states, rung and per-epoch validation
 trajectories, failure causes, budget use, and the distinction between the
-epoch-100 endpoint winner and the best historical validation checkpoint. It
+Optuna objective winner, the epoch-100 endpoint, and the independently
+reconstructed best historical validation checkpoint. It
 writes machine-readable CSV/JSON, a Markdown audit, and SVG/300-DPI PNG figures
 under the run's `analysis/` directory.
 

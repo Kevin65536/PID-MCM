@@ -105,8 +105,8 @@ def collect_candidates(
         config_path = trial_dir / "config.yaml"
         candidates.append({
             "trial_number": int(trial.number),
-            "trial_endpoint_objective": float(trial.value),
-            "trial_endpoint_metric": float(-trial.value if mode == "min" else trial.value),
+            "trial_objective": float(trial.value),
+            "trial_objective_metric": float(-trial.value if mode == "min" else trial.value),
             "checkpoint_epoch": epoch,
             "checkpoint_metric": checkpoint_metric,
             "checkpoint": str(checkpoint_path.resolve()),
@@ -141,7 +141,7 @@ def run(args: argparse.Namespace) -> Path:
     task_payload: dict[str, Any] = {}
     for task in args.tasks:
         metric_name, mode = metric_contract(task)
-        candidates, endpoint_winner = collect_candidates(root, args.study_id, task, storage)
+        candidates, optuna_winner = collect_candidates(root, args.study_id, task, storage)
         selected = dict(select_candidate(candidates, mode))
         source_run = Path(selected["run_dir"])
         link = selected_runs / task
@@ -150,9 +150,9 @@ def run(args: argparse.Namespace) -> Path:
             "selection_metric": metric_name,
             "selection_mode": mode,
             "completed_100_epoch_candidate_count": len(candidates),
-            "study_endpoint_winner_trial": endpoint_winner,
+            "study_optuna_winner_trial": optuna_winner,
             "selected_trial": selected["trial_number"],
-            "selection_changed_trial": int(selected["trial_number"]) != endpoint_winner,
+            "selection_changed_trial": int(selected["trial_number"]) != optuna_winner,
             "selected": selected,
             "candidates": sorted(candidates, key=lambda row: int(row["trial_number"])),
         }

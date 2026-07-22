@@ -141,6 +141,8 @@ def collect_run(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     launch = read_json(root / "launch_manifest.json")
     rung_epochs = [int(value) for value in launch["rung_epochs"]]
+    objective_policy = str(launch.get("objective_policy", "final_rung_endpoint"))
+    startup_trials = int(launch.get("tpe_startup_trials", TPE_STARTUP_TRIALS))
     study_id = str(launch["study_id"])
     storage = f"sqlite:///{root / 'optuna.sqlite3'}"
     summaries = {summary.study_name: summary for summary in optuna.study.get_all_study_summaries(storage=storage)}
@@ -238,8 +240,8 @@ def collect_run(
 
         completed = [row for row in task_trials if row["state"] == "COMPLETE"]
         valid = [row for row in task_trials if row["state"] in {"COMPLETE", "PRUNED"}]
-        endpoint_trial = int(study.best_trial.number)
-        endpoint_value = natural_objective(task, study.best_value)
+        optuna_trial = int(study.best_trial.number)
+        optuna_value = natural_objective(task, study.best_value)
         eligible = [row for row in completed if row["checkpoint_best_metric"] is not None]
         checkpoint_winner = None
         if eligible:
@@ -265,22 +267,28 @@ def collect_run(
                 degradation.append(float(row["endpoint_metric"]) - float(row["checkpoint_best_metric"]))
         states = Counter(row["state"] for row in task_trials)
         consumed = sum(int(row["max_epoch_budget"]) for row in task_trials)
-        planned = int(launch["n_trials_per_task"]) * rung_epochs[-1]
+        planned_trials = int(launch.get("trial_allocation", {}).get(
+            task, launch["n_trials_per_task"]
+        ))
+        planned = planned_trials * rung_epochs[-1]
         task_summary[task] = {
             "metric": metric_name,
             "mode": mode,
             "trial_count": len(task_trials),
             "states": dict(states),
             "valid_trial_count": len(valid),
-            "tpe_startup_trial_count": min(TPE_STARTUP_TRIALS, len(valid)),
-            "estimated_tpe_guided_trial_count": max(0, len(valid) - TPE_STARTUP_TRIALS),
+            "tpe_startup_trial_count": min(startup_trials, len(valid)),
+            "estimated_tpe_guided_trial_count": max(0, len(valid) - startup_trials),
             "completed_100_epoch_count": len(completed),
             "failure_rate": states.get("FAIL", 0) / len(task_trials) if task_trials else None,
             "consumed_epoch_equivalents": consumed,
             "planned_full_epoch_equivalents": planned,
             "budget_fraction": consumed / planned if planned else None,
-            "endpoint_winner_trial": endpoint_trial,
-            "endpoint_winner_metric": endpoint_value,
+            "optuna_winner_trial": optuna_trial,
+            "optuna_winner_metric": optuna_value,
+            # Backward-compatible aliases retained for v1 analysis consumers.
+            "endpoint_winner_trial": optuna_trial,
+            "endpoint_winner_metric": optuna_value,
             "checkpoint_winner_trial": None if checkpoint_winner is None else int(checkpoint_winner["trial_number"]),
             "checkpoint_winner_metric": None if checkpoint_winner is None else float(checkpoint_winner["checkpoint_best_metric"]),
             "checkpoint_winner_epoch": None if checkpoint_winner is None else int(checkpoint_winner["checkpoint_best_epoch"]),
@@ -290,7 +298,7 @@ def collect_run(
                 if key.startswith("checkpoint_best_")
                 and key not in {"checkpoint_best_metric", "checkpoint_best_epoch"}
             },
-            "selection_changed_trial": checkpoint_winner is not None and int(checkpoint_winner["trial_number"]) != endpoint_trial,
+            "selection_changed_trial": checkpoint_winner is not None and int(checkpoint_winner["trial_number"]) != optuna_trial,
             "median_best_to_endpoint_degradation": float(np.median(degradation)) if degradation else None,
             "rung_to_final_spearman": correlations,
             "failure_reasons": dict(Counter(row["failure_reason"] for row in task_trials if row["failure_reason"])),
@@ -306,17 +314,20 @@ def collect_run(
     consumed = sum(int(row["max_epoch_budget"]) for row in trial_rows)
     changed = sum(bool(row["selection_changed_trial"]) for row in task_summary.values())
     report = {
-        "schema": "sta_net_tuning_audit_v1",
+        "schema": "sta_net_tuning_audit_v2",
         "generated_at": utc_now(),
         "source_run_root": str(root),
         "study_id": study_id,
         "rung_epochs": rung_epochs,
+        "objective_policy": objective_policy,
+        "tpe_startup_trials": startup_trials,
         "task_count": len(tasks),
         "trial_count": len(trial_rows),
         "overall_states": dict(overall_states),
         "consumed_epoch_equivalents": consumed,
         "planned_full_epoch_equivalents": intended,
         "budget_fraction": consumed / intended if intended else None,
+        "objective_checkpoint_selection_changed_tasks": changed,
         "endpoint_checkpoint_selection_changed_tasks": changed,
         "trainer_hash_counts": dict(all_trainer_hashes),
         "tasks": task_summary,
@@ -335,7 +346,7 @@ def plot_rungs(report: Mapping[str, Any], rung_rows: Sequence[Mapping[str, Any]]
         by_trial.setdefault((str(row["task"]), int(row["trial_number"])), []).append(row)
     for ax, task in zip(axes_flat, tasks):
         summary = report["tasks"][task]
-        endpoint_trial = summary["endpoint_winner_trial"]
+        optuna_trial = summary["optuna_winner_trial"]
         checkpoint_trial = summary["checkpoint_winner_trial"]
         for (row_task, trial_number), rows in by_trial.items():
             if row_task != task:
@@ -343,8 +354,8 @@ def plot_rungs(report: Mapping[str, Any], rung_rows: Sequence[Mapping[str, Any]]
             rows = sorted(rows, key=lambda row: int(row["epoch_budget"]))
             state = str(rows[-1]["state"])
             color, marker, linestyle = STATE_STYLE.get(state, STATE_STYLE["RUNNING"])
-            width = 2.2 if trial_number == checkpoint_trial else (1.6 if trial_number == endpoint_trial else 0.8)
-            alpha = 1.0 if trial_number in {endpoint_trial, checkpoint_trial} else 0.55
+            width = 2.2 if trial_number == checkpoint_trial else (1.6 if trial_number == optuna_trial else 0.8)
+            alpha = 1.0 if trial_number in {optuna_trial, checkpoint_trial} else 0.55
             ax.plot(
                 [row["epoch_budget"] for row in rows],
                 [row["objective_metric"] for row in rows],
@@ -355,10 +366,10 @@ def plot_rungs(report: Mapping[str, Any], rung_rows: Sequence[Mapping[str, Any]]
                 markersize=3.5,
                 alpha=alpha,
             )
-            if trial_number in {endpoint_trial, checkpoint_trial}:
-                tag = "E" if trial_number == endpoint_trial else "C"
-                if trial_number == endpoint_trial == checkpoint_trial:
-                    tag = "E/C"
+            if trial_number in {optuna_trial, checkpoint_trial}:
+                tag = "O" if trial_number == optuna_trial else "C"
+                if trial_number == optuna_trial == checkpoint_trial:
+                    tag = "O/C"
                 ax.annotate(
                     f"{tag}: T{trial_number}",
                     (rows[-1]["epoch_budget"], rows[-1]["objective_metric"]),
@@ -378,7 +389,7 @@ def plot_rungs(report: Mapping[str, Any], rung_rows: Sequence[Mapping[str, Any]]
         if state in {"COMPLETE", "PRUNED", "FAIL"}
     ]
     handles.extend([
-        plt.Line2D([], [], color="black", linewidth=1.6, label="E: endpoint winner"),
+        plt.Line2D([], [], color="black", linewidth=1.6, label="O: Optuna winner"),
         plt.Line2D([], [], color="black", linewidth=2.2, label="C: checkpoint winner"),
     ])
     fig.legend(handles=handles, loc="lower right", frameon=False, ncol=1)
@@ -460,6 +471,13 @@ def fmt(value: Any, digits: int = 3) -> str:
 
 
 def render_markdown(report: Mapping[str, Any]) -> str:
+    aligned_objective = report["objective_policy"] == "best_validation_checkpoint_through_rung"
+    objective_summary = (
+        "Optuna optimized the best validation checkpoint observed through each rung; "
+        "its winner and the independently reconstructed checkpoint winner differ for "
+        if aligned_objective else
+        "Endpoint-based Optuna selection and historical best-checkpoint selection choose different trials for "
+    )
     lines = [
         f"# STA-Net tuning audit: `{report['study_id']}`",
         "",
@@ -468,6 +486,8 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "> Development-split audit only. Protected test data were not opened.",
         "",
         "## Executive summary",
+        "",
+        f"Objective policy: `{report['objective_policy']}`.",
         "",
         (
             f"The database contains {report['trial_count']} trials across {report['task_count']} tasks: "
@@ -482,15 +502,15 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         ),
         "",
         (
-            f"Endpoint-based Optuna selection and historical best-checkpoint selection choose different "
-            f"trials for {report['endpoint_checkpoint_selection_changed_tasks']} of {report['task_count']} tasks."
+            objective_summary
+            + f"{report['objective_checkpoint_selection_changed_tasks']} of {report['task_count']} tasks."
         ),
         "",
         f"Observed trainer hashes: {len(report['trainer_hash_counts'])}. Counts: `{json.dumps(report['trainer_hash_counts'], sort_keys=True)}`.",
         "",
         "## Per-task audit",
         "",
-        "| Task | Metric | Val subjects | Complete / Pruned / Failed | TPE-guided est. | Budget | Endpoint winner | Checkpoint winner | Changed | Median endpoint degradation |",
+        "| Task | Metric | Val subjects | Complete / Pruned / Failed | TPE-guided est. | Budget | Optuna winner | Checkpoint winner | Changed | Median endpoint degradation |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | ---: |",
     ]
     for task, row in report["tasks"].items():
@@ -503,7 +523,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
                 f"{states.get('COMPLETE', 0)} / {states.get('PRUNED', 0)} / {states.get('FAIL', 0)}",
                 str(row["estimated_tpe_guided_trial_count"]),
                 f"{100.0 * row['budget_fraction']:.1f}%",
-                f"T{row['endpoint_winner_trial']} ({fmt(row['endpoint_winner_metric'])})",
+                f"T{row['optuna_winner_trial']} ({fmt(row['optuna_winner_metric'])})",
                 (
                     "NA" if row["checkpoint_winner_trial"] is None else
                     f"T{row['checkpoint_winner_trial']} @ e{row['checkpoint_winner_epoch']} ({fmt(row['checkpoint_winner_metric'])})"
@@ -515,7 +535,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     lines.extend([
         "",
         "`Median endpoint degradation` is the non-negative loss from each completed trial's best validation checkpoint to epoch 100; it is not a cross-task aggregate endpoint.",
-        "`TPE-guided est.` assumes the tuning-v1 setting of six COMPLETE/PRUNED startup trials; failed trials do not count toward TPE startup.",
+        f"`TPE-guided est.` assumes {report['tpe_startup_trials']} COMPLETE/PRUNED startup trials; failed trials do not count toward TPE startup.",
         "",
         "## Exploratory development checkpoint metrics",
         "",
@@ -571,7 +591,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "",
         "## Generated views",
         "",
-        "- `tuning_rung_trajectories.svg/png`: rung-level trial trajectories; E is the Optuna endpoint winner and C is the historical checkpoint winner.",
+        "- `tuning_rung_trajectories.svg/png`: rung-level trial trajectories; O is the Optuna objective winner and C is the independently reconstructed checkpoint winner.",
         "- `completed_trial_validation_curves.svg/png`: per-epoch curves for full-budget trials, highlighting the checkpoint winner.",
         "- `tuning_audit_overview.svg/png`: state counts and effective budget use.",
         "- `trials.csv`, `rungs.csv`, and `summary.json`: machine-readable source tables.",
