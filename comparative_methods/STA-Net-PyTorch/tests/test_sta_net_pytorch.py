@@ -19,6 +19,7 @@ from sta_net_pytorch.data import (
 from sta_net_pytorch.model import STANet, STANetConfig, STANetObjective, SamePadConv3d
 from train import PackedRecordBatchSampler, RecordGroupedBatchSampler, classification_weights
 from tune import RUNG_EPOCHS
+from select_best_checkpoints import metric_contract, select_candidate
 from sta_net_pytorch.metrics import classification_metrics as core_classification_metrics, improved
 from sta_net_pytorch.splits import development_subject_split, validate_public_manifest
 from visualize_results import classification_metrics, plot_regression_diagnostics, regression_metrics
@@ -242,3 +243,21 @@ def test_none_class_weighting_returns_no_tensor():
         spec = Spec()
 
     assert classification_weights(FakeDataset(), [0, 1], "none") is None
+
+
+def test_predictive_checkpoint_selection_uses_historical_metric_not_endpoint():
+    candidates = [
+        {"trial_number": 2, "checkpoint_metric": 0.61, "trial_endpoint_metric": 0.60},
+        {"trial_number": 7, "checkpoint_metric": 0.66, "trial_endpoint_metric": 0.62},
+    ]
+    assert metric_contract("wg") == ("macro_f1", "max")
+    assert select_candidate(candidates, "max")["trial_number"] == 7
+
+
+def test_predictive_checkpoint_selection_minimizes_regression_rmse():
+    candidates = [
+        {"trial_number": 0, "checkpoint_metric": 0.94},
+        {"trial_number": 5, "checkpoint_metric": 0.95},
+    ]
+    assert metric_contract("refed_regression") == ("masked_rmse_scaled", "min")
+    assert select_candidate(candidates, "min")["trial_number"] == 0

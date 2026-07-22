@@ -24,6 +24,7 @@ from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
     balanced_accuracy_score,
+    cohen_kappa_score,
     confusion_matrix,
     f1_score,
     precision_recall_curve,
@@ -44,6 +45,7 @@ from train import make_loader, move_batch
 
 REPORT_SCHEMA = "sta_net_reproduction_report_v1"
 OKABE_ITO = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000")
+TASK_ORDER = ("motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual", "refed_regression")
 
 
 def configure_style() -> None:
@@ -147,6 +149,7 @@ def classification_metrics(target: np.ndarray, probability: np.ndarray, class_na
         "balanced_accuracy": float(balanced_accuracy_score(target, predicted)),
         "macro_f1": float(f1_score(target, predicted, labels=labels, average="macro", zero_division=0)),
         "weighted_f1": float(f1_score(target, predicted, labels=labels, average="weighted", zero_division=0)),
+        "cohen_kappa": float(cohen_kappa_score(target, predicted, labels=labels)),
         "multiclass_brier": float(np.mean(np.sum((probability - one_hot) ** 2, axis=1))),
         "expected_calibration_error_10bin": float(ece),
         "confusion_matrix": matrix.tolist(),
@@ -214,8 +217,73 @@ def regression_metrics(
         "valid_coordinate_count": int(truth.size),
         "mae_native": float(np.mean(np.abs(error))),
         "rmse_native": float(np.sqrt(np.mean(error ** 2))),
+        "r2_native": float(r2_score(truth, estimate)) if truth.size > 1 else None,
+        "pearson_r": float(np.corrcoef(truth, estimate)[0, 1]) if truth.size > 1 else None,
+        "concordance_correlation": concordance_correlation(truth, estimate),
+        "bias_native": float(np.mean(error)),
         "per_target": per_target,
     }
+
+
+def mean_and_sample_sd(values: Sequence[float]) -> tuple[float, float | None]:
+    array = np.asarray(values, dtype=np.float64)
+    return float(array.mean()), float(array.std(ddof=1)) if array.size > 1 else None
+
+
+def classification_subject_summary(
+    target: np.ndarray,
+    probability: np.ndarray,
+    subjects: Sequence[str],
+    class_count: int,
+) -> dict[str, Any]:
+    subject_array = np.asarray(subjects, dtype=str)
+    predicted = probability.argmax(axis=1)
+    labels = np.arange(class_count)
+    rows = []
+    for subject in sorted(np.unique(subject_array)):
+        keep = subject_array == subject
+        rows.append({
+            "subject": str(subject),
+            "sample_count": int(keep.sum()),
+            "accuracy": float(accuracy_score(target[keep], predicted[keep])),
+            "balanced_accuracy": float(balanced_accuracy_score(target[keep], predicted[keep])),
+            "macro_f1": float(f1_score(
+                target[keep], predicted[keep], labels=labels, average="macro", zero_division=0,
+            )),
+            "cohen_kappa": float(cohen_kappa_score(target[keep], predicted[keep], labels=labels)),
+        })
+    summary: dict[str, Any] = {"subject_count": len(rows), "per_subject": rows}
+    for metric in ("accuracy", "balanced_accuracy", "macro_f1", "cohen_kappa"):
+        mean, sd = mean_and_sample_sd([float(row[metric]) for row in rows])
+        summary[f"subject_{metric}_mean"] = mean
+        summary[f"subject_{metric}_sd"] = sd
+    return summary
+
+
+def regression_subject_summary(
+    target: np.ndarray,
+    prediction: np.ndarray,
+    valid_mask: np.ndarray,
+    subjects: Sequence[str],
+    target_names: Sequence[str],
+) -> dict[str, Any]:
+    subject_array = np.asarray(subjects, dtype=str)
+    rows = []
+    for subject in sorted(np.unique(subject_array)):
+        keep = subject_array == subject
+        metrics = regression_metrics(
+            target[keep], prediction[keep], valid_mask[keep], target_names,
+        )
+        rows.append({
+            "subject": str(subject), "sample_count": int(keep.sum()),
+            "mae_native": metrics["mae_native"], "rmse_native": metrics["rmse_native"],
+        })
+    summary: dict[str, Any] = {"subject_count": len(rows), "per_subject": rows}
+    for metric in ("mae_native", "rmse_native"):
+        mean, sd = mean_and_sample_sd([float(row[metric]) for row in rows])
+        summary[f"subject_{metric}_mean"] = mean
+        summary[f"subject_{metric}_sd"] = sd
+    return summary
 
 
 def plot_training_curves(task_key: str, task_dir: Path, output_dir: Path) -> list[str]:
@@ -459,6 +527,9 @@ def evaluate_task(
     )
     if spec.task_type == "classification":
         metrics = classification_metrics(target, prediction, spec.class_names)
+        metrics.update(classification_subject_summary(
+            target, prediction, subjects, len(spec.class_names),
+        ))
         artifacts.extend(plot_confusion(metrics, spec.class_names, figure_dir))
         artifacts.extend(plot_classification_diagnostics(target, prediction, metrics, spec.class_names, figure_dir))
     else:
@@ -469,6 +540,15 @@ def evaluate_task(
         target_native = target * scale + center
         prediction_native = prediction * scale + center
         metrics = regression_metrics(target_native, prediction_native, valid_mask, spec.target_names)
+        scaled_error = np.asarray(prediction - target, dtype=np.float64)[valid_mask.astype(bool)]
+        metrics.update({
+            "sample_count": int(target.shape[0]),
+            "mae_scaled": float(np.mean(np.abs(scaled_error))),
+            "rmse_scaled": float(np.sqrt(np.mean(scaled_error ** 2))),
+        })
+        metrics.update(regression_subject_summary(
+            target_native, prediction_native, valid_mask, subjects, spec.target_names,
+        ))
         artifacts.extend(plot_regression_diagnostics(
             target_native, prediction_native, valid_mask, spec.target_names, figure_dir, max_sequence_examples
         ))
@@ -500,7 +580,13 @@ def discover_task_dirs(run_root: Path, selected: Sequence[str] | None) -> list[P
     if selected:
         selected_set = set(selected)
         candidates = [path for path in candidates if read_json(path / "manifest.json").get("task", {}).get("key") in selected_set]
-    return candidates
+    order = {task: index for index, task in enumerate(TASK_ORDER)}
+    return sorted(
+        candidates,
+        key=lambda path: order.get(
+            str(read_json(path / "manifest.json").get("task", {}).get("key")), len(order),
+        ),
+    )
 
 
 def plot_suite_overview(summaries: Sequence[Mapping[str, Any]], output_dir: Path) -> list[str]:
@@ -512,7 +598,12 @@ def plot_suite_overview(summaries: Sequence[Mapping[str, Any]], output_dir: Path
         x = np.arange(len(tasks))
         width = 0.26
         for offset, key, color in zip((-width, 0.0, width), ("accuracy", "balanced_accuracy", "macro_f1"), OKABE_ITO[:3], strict=True):
-            axes[0].bar(x + offset, [row["metrics"][key] for row in classification], width, label=key.replace("_", " ").title(), color=color)
+            values = [row["metrics"][key] for row in classification]
+            errors = [row["metrics"].get(f"subject_{key}_sd") or 0.0 for row in classification]
+            axes[0].bar(
+                x + offset, values, width, yerr=errors, capsize=2,
+                label=key.replace("_", " ").title(), color=color,
+            )
         axes[0].set(xticks=x, xticklabels=tasks, ylim=(0, 1), ylabel="Validation score", title="Classification reproduction")
         axes[0].tick_params(axis="x", rotation=35)
         axes[0].legend(frameon=False)
@@ -521,8 +612,16 @@ def plot_suite_overview(summaries: Sequence[Mapping[str, Any]], output_dir: Path
     if regression:
         tasks = [row["task"] for row in regression]
         x = np.arange(len(tasks))
-        axes[1].bar(x - 0.18, [row["metrics"]["mae_native"] for row in regression], 0.36, label="MAE", color=OKABE_ITO[1])
-        axes[1].bar(x + 0.18, [row["metrics"]["rmse_native"] for row in regression], 0.36, label="RMSE", color=OKABE_ITO[0])
+        axes[1].bar(
+            x - 0.18, [row["metrics"]["mae_native"] for row in regression], 0.36,
+            yerr=[row["metrics"].get("subject_mae_native_sd") or 0.0 for row in regression],
+            capsize=3, label="MAE", color=OKABE_ITO[1],
+        )
+        axes[1].bar(
+            x + 0.18, [row["metrics"]["rmse_native"] for row in regression], 0.36,
+            yerr=[row["metrics"].get("subject_rmse_native_sd") or 0.0 for row in regression],
+            capsize=3, label="RMSE", color=OKABE_ITO[0],
+        )
         axes[1].set(xticks=x, xticklabels=tasks, ylabel="Native-coordinate error", title="Regression reproduction")
         axes[1].legend(frameon=False)
     else:
@@ -533,15 +632,86 @@ def plot_suite_overview(summaries: Sequence[Mapping[str, Any]], output_dir: Path
     return save_figure(fig, output_dir / "suite_overview")
 
 
+def plot_checkpoint_selection_comparison(
+    selection: Mapping[str, Any],
+    output_dir: Path,
+) -> list[str]:
+    classification_tasks = [task for task in selection["tasks"] if task != "refed_regression"]
+    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.2), constrained_layout=True)
+    chance = {
+        "motor_imagery": 0.5, "mental_arithmetic": 0.5, "wg": 0.5,
+        "nback": 1.0 / 3.0, "dsr": 0.5, "visual": 0.25,
+    }
+    for x, task in enumerate(classification_tasks):
+        row = selection["tasks"][task]
+        candidates = row["candidates"]
+        values = np.asarray([candidate["checkpoint_metric"] for candidate in candidates], dtype=float)
+        offsets = np.linspace(-0.13, 0.13, len(values)) if len(values) > 1 else np.asarray([0.0])
+        axes[0].scatter(
+            np.full(len(values), x) + offsets, values, s=18, alpha=0.55,
+            color=OKABE_ITO[0], label="Completed 100-epoch trial" if x == 0 else None,
+        )
+        axes[0].scatter(
+            x, row["selected"]["checkpoint_metric"], marker="D", s=42,
+            color=OKABE_ITO[1], edgecolor="black", linewidth=0.5,
+            label="Unified selected checkpoint" if x == 0 else None, zorder=3,
+        )
+        axes[0].hlines(chance[task], x - 0.23, x + 0.23, color="#777777", linestyle="--", linewidth=1)
+    axes[0].set(
+        title="Completed-trial checkpoint distribution",
+        ylabel="Validation macro-F1", ylim=(0, 1),
+        xticks=np.arange(len(classification_tasks)), xticklabels=classification_tasks,
+    )
+    axes[0].tick_params(axis="x", rotation=35)
+    axes[0].legend(frameon=False, loc="upper right")
+
+    regression = selection["tasks"].get("refed_regression")
+    if regression:
+        candidates = regression["candidates"]
+        trials = [candidate["trial_number"] for candidate in candidates]
+        values = [candidate["checkpoint_metric"] for candidate in candidates]
+        colors = [
+            OKABE_ITO[1] if trial == regression["selected_trial"] else OKABE_ITO[0]
+            for trial in trials
+        ]
+        axes[1].bar([str(trial) for trial in trials], values, color=colors)
+        selected_index = trials.index(regression["selected_trial"])
+        axes[1].text(
+            selected_index, values[selected_index] + 0.015, "selected",
+            ha="center", va="bottom", fontsize=7, color=OKABE_ITO[1],
+        )
+        axes[1].set(
+            title="REFED completed-trial checkpoints",
+            xlabel="Trial", ylabel="Validation scaled RMSE (lower is better)",
+        )
+    else:
+        axes[1].text(0.5, 0.5, "No regression selection", ha="center", va="center")
+    for label, ax in zip("AB", axes, strict=True):
+        ax.text(0.01, 0.98, label, transform=ax.transAxes, fontweight="bold", va="top")
+        ax.grid(axis="y", alpha=0.2)
+    return save_figure(fig, output_dir / "checkpoint_selection_comparison")
+
+
 def write_metrics_csv(summaries: Sequence[Mapping[str, Any]], path: Path) -> None:
     rows = []
     for summary in summaries:
         metrics = summary["metrics"]
         row = {"task": summary["task"], "task_type": summary["task_type"]}
-        for key in ("accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "macro_roc_auc_ovr", "macro_average_precision", "mae_native", "rmse_native"):
+        for key in (
+            "accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "cohen_kappa",
+            "macro_roc_auc_ovr", "macro_average_precision", "subject_macro_f1_mean",
+            "subject_macro_f1_sd", "mae_scaled", "rmse_scaled", "mae_native", "rmse_native",
+            "r2_native", "pearson_r", "concordance_correlation", "subject_rmse_native_sd",
+        ):
             row[key] = metrics.get(key)
         rows.append(row)
-    fieldnames = ["task", "task_type", "accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "macro_roc_auc_ovr", "macro_average_precision", "mae_native", "rmse_native"]
+    fieldnames = [
+        "task", "task_type", "accuracy", "balanced_accuracy", "macro_f1", "weighted_f1",
+        "cohen_kappa", "macro_roc_auc_ovr", "macro_average_precision",
+        "subject_macro_f1_mean", "subject_macro_f1_sd", "mae_scaled", "rmse_scaled",
+        "mae_native", "rmse_native", "r2_native", "pearson_r",
+        "concordance_correlation", "subject_rmse_native_sd",
+    ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -553,16 +723,25 @@ def write_report(summaries: Sequence[Mapping[str, Any]], output_dir: Path, suite
         "# STA-Net reproduction evaluation", "",
         "> Validation-only diagnostics. Protected-test data were not opened, and this report does not establish comparative superiority.", "",
         "## Suite overview", "",
-        f"![Suite overview]({Path(suite_figures[0]).relative_to(output_dir)})" if suite_figures else "No suite figure.", "",
-        "| Task | Type | Accuracy | Balanced accuracy | Macro-F1 | MAE | RMSE |", "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
+    svg_overviews = [Path(path) for path in suite_figures if Path(path).suffix == ".svg"]
+    if svg_overviews:
+        for path in svg_overviews:
+            lines.extend([f"![{path.stem}]({path.relative_to(output_dir)})", ""])
+    else:
+        lines.extend(["No suite figure.", ""])
+    lines.extend([
+        "| Task | Type | Accuracy | Balanced accuracy | Macro-F1 | Kappa | MAE | RMSE |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ])
     for summary in summaries:
         metrics = summary["metrics"]
         format_value = lambda key: "—" if metrics.get(key) is None else f"{metrics[key]:.4f}"
         lines.append(
             f"| {summary['task']} | {summary['task_type']} | {format_value('accuracy')} | "
             f"{format_value('balanced_accuracy')} | {format_value('macro_f1')} | "
-            f"{format_value('mae_native')} | {format_value('rmse_native')} |"
+            f"{format_value('cohen_kappa')} | {format_value('mae_native')} | "
+            f"{format_value('rmse_native')} |"
         )
     for summary in summaries:
         task = summary["task"]
@@ -591,6 +770,15 @@ def run(args: argparse.Namespace) -> Path:
         for task_dir in task_dirs
     ]
     suite_figures = plot_suite_overview(summaries, output_dir)
+    selection_manifest = None
+    selection_path = Path(args.selection_manifest).resolve() if args.selection_manifest else None
+    if selection_path is not None:
+        selection_manifest = read_json(selection_path)
+        if selection_manifest.get("schema") != "sta_net_predictive_checkpoint_selection_v1":
+            raise ValueError("invalid checkpoint selection manifest schema")
+        if selection_manifest.get("protected_test_opened") is not False:
+            raise RuntimeError("selection manifest unexpectedly opened protected test data")
+        suite_figures.extend(plot_checkpoint_selection_comparison(selection_manifest, output_dir))
     write_metrics_csv(summaries, output_dir / "metrics.csv")
     write_report(summaries, output_dir, suite_figures)
     summary = {
@@ -601,6 +789,8 @@ def run(args: argparse.Namespace) -> Path:
         "suite_figures": suite_figures,
         "protected_test_opened": False,
         "claim_boundary": "validation-only reproduction evaluation",
+        "checkpoint_selection_manifest": None if selection_path is None else str(selection_path),
+        "checkpoint_selection_manifest_sha256": None if selection_path is None else sha256(selection_path),
     }
     write_json(output_dir / "summary.json", summary)
     artifact_manifest = {
@@ -618,6 +808,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-root", required=True)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--config", default=str(METHOD_ROOT / "configs" / "train_all_tasks.yaml"))
+    parser.add_argument("--selection-manifest", default=None)
     parser.add_argument("--tasks", nargs="+", default=None)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--workers", type=int, default=4)
