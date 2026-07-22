@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Dict, Mapping
 
 import torch
 import torch.nn as nn
@@ -19,6 +19,9 @@ class PhysicalTeacherOutput:
     fnirs_uncertainty: torch.Tensor
     valid_mask: torch.Tensor
     context_valid_mask: torch.Tensor
+    entry_masks: Dict[str, Dict[str, torch.Tensor]]
+    target_family: str
+    target_version: str
 
 
 class PhysicalStateTeacher(nn.Module):
@@ -31,6 +34,8 @@ class PhysicalStateTeacher(nn.Module):
         patch_duration_s: float = 2.0,
         fnirs_sample_rate_hz: float = 10.0,
         eeg_sample_rate_hz: float = 200.0,
+        target_family: str = "croce_physical_state",
+        target_version: str = "physiology_semantic_v2",
         eps: float = 1e-6,
     ) -> None:
         super().__init__()
@@ -38,6 +43,8 @@ class PhysicalStateTeacher(nn.Module):
         self.eeg_patch_samples = int(round(patch_duration_s * eeg_sample_rate_hz))
         self.fnirs_sample_rate_hz = float(fnirs_sample_rate_hz)
         self.eeg_sample_rate_hz = float(eeg_sample_rate_hz)
+        self.target_family = str(target_family)
+        self.target_version = str(target_version)
         self.eps = float(eps)
         if self.fnirs_patch_samples <= 1 or self.eeg_patch_samples <= 1:
             raise ValueError("Teacher patches require at least two samples")
@@ -107,9 +114,15 @@ class PhysicalStateTeacher(nn.Module):
         driver_summary, driver_uncertainty = self._summarize(
             driver, driver_var, self.eeg_sample_rate_hz, self.eeg_patch_samples
         )
-        mask_patch = mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
-        cache_mask_patch = cache_mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
-        causal_mask_patch = causal_mask.reshape(mask.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
+        def patch_mask(name: str, fallback: torch.Tensor) -> torch.Tensor:
+            value = teacher.get(name, fallback).detach().bool()
+            if value.shape != mask.shape:
+                raise ValueError(f"{name} must have shape [B,T]")
+            return value.reshape(value.shape[0], -1, self.fnirs_patch_samples).all(dim=-1)
+
+        mask_patch = patch_mask("teacher_valid_mask", mask)
+        cache_mask_patch = patch_mask("cache_valid_mask", cache_mask)
+        causal_mask_patch = patch_mask("causal_valid_mask", causal_mask)
         finite_patch = torch.isfinite(state_summary).all(dim=-1) & torch.isfinite(state_uncertainty).all(dim=-1)
         finite_patch &= torch.isfinite(driver_summary).all(dim=-1) & torch.isfinite(driver_uncertainty).all(dim=-1)
         # Local state/prototype supervision needs only a valid physical
@@ -119,6 +132,31 @@ class PhysicalStateTeacher(nn.Module):
         # two conditions.
         valid_mask = cache_mask_patch & finite_patch
         context_valid_mask = mask_patch & cache_mask_patch & causal_mask_patch & finite_patch
+
+        entry_masks: Dict[str, Dict[str, torch.Tensor]] = {}
+        for modality in ("eeg", "fnirs"):
+            local = patch_mask(
+                f"{modality}_local_valid_mask",
+                teacher.get("local_valid_mask", cache_mask),
+            ) & finite_patch
+            prototype = patch_mask(
+                f"{modality}_prototype_valid_mask",
+                teacher.get("prototype_valid_mask", cache_mask),
+            ) & finite_patch
+            context = patch_mask(
+                f"{modality}_context_valid_mask",
+                teacher.get("context_valid_mask", mask & cache_mask & causal_mask),
+            ) & finite_patch
+            coupling = patch_mask(
+                f"{modality}_coupling_valid_mask",
+                teacher.get("coupling_valid_mask", mask & cache_mask & causal_mask),
+            ) & finite_patch
+            entry_masks[modality] = {
+                "local": local.detach(),
+                "prototype": prototype.detach(),
+                "context": context.detach(),
+                "coupling": coupling.detach(),
+            }
 
         # Summary layout is statistic-major: [all means, all slopes, all log variances].
         s_indices = torch.tensor([0, 5, 10], device=state_mean.device)
@@ -137,6 +175,9 @@ class PhysicalStateTeacher(nn.Module):
             fnirs_uncertainty=fnirs_uncertainty.detach(),
             valid_mask=valid_mask.detach(),
             context_valid_mask=context_valid_mask.detach(),
+            entry_masks=entry_masks,
+            target_family=self.target_family,
+            target_version=self.target_version,
         )
 
 

@@ -1,6 +1,6 @@
 # Physical-teacher gradient entries and coupling stages
 
-_Date: 2026-07-19 · Phase: Phase 3 · Status: Planned_
+_Date: 2026-07-19 · Phase: Phase 3 · Status: In Progress_
 
 _Links: [decision](../physiology_semantic_tokenizer/analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md) · [implementation plan](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) · [experiment design](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) · [architecture overlay](../physiology_semantic_tokenizer/figures/plans/physical_teacher_gradient_entry_plan.svg)_
 
@@ -44,17 +44,67 @@ flowchart LR
     evaluator --> figures["Lag / null / uncertainty figures"]
 ```
 
-## Planned changes
+## Implementation state
 
-| Boundary | Planned change |
+| Boundary | State | Change |
+| --- | --- | --- |
+| Measurement entrance | Implemented for T0 Single-Trial pilot | Unified windows are converted to deterministic measured six-EEG/two-chromophore local views after mask and geometry checks |
+| Teacher adapter | Partially implemented | Required `r` and HbO/HbR, optional EEG `s`, and context/coupling-only flow have independent detached masks; adaptive sidecar generation/join remains pending |
+| Loss routing | Implemented | Local, prototype, context, and coupling entrances have separate coordinate allowlists and masks; E1 can select semantic-only reconstruction to prevent residual bypass |
+| Uncertainty | Implemented | Uniform standardized loss can be selected; inverse-uncertainty weighting remains disabled for the adaptive route |
+| Quantizer/masking | Implemented | Invalid measured patches are excluded from EMA, commitment loss, causal history, and health statistics; count/sum EMA starts from matched zero prior mass; optional revival is event-bounded and uses highest-error batch latents |
+| Tokenizer preservation shaper | Planned | Optional EEG-only-gradient causal preservation shaper, discarded after training |
+| Foundation | Planned | Multi-horizon fNIRS-history `q_0` and EEG-incremental `q_1` objectives |
+| Evaluation | Planned | Fresh frozen/cross-fitted certificate after model selection |
+| Visualization | Planned | Separate prevalence, history prediction, incremental gain, lag, uncertainty, and null panels |
+
+## Component changes
+
+| File | Change |
 | --- | --- |
-| Teacher adapter | Required `r` and HbO/HbR local/prototype groups; optional EEG `s`; context/coupling-only flow |
-| Loss routing | Separate masks and weights for local, prototype, context, and coupling entrances |
-| Uncertainty | Uniform standardized loss until coordinate-and-entry calibration passes |
-| Tokenizer | Optional EEG-only-gradient causal preservation shaper, discarded after training |
-| Foundation | Multi-horizon fNIRS-history `q_0` and EEG-incremental `q_1` objectives |
-| Evaluation | Fresh frozen/cross-fitted certificate after model selection |
-| Visualization | Separate prevalence, history prediction, incremental gain, lag, uncertainty, and null panels |
+| `src/data/physiology_semantic_local.py` | Adds a measurement-first local-view adapter over `UnifiedPhysiologyWindowDataset` with deterministic anchors, geometry checks, dependency groups, and contracted token masks |
+| `src/teachers/physical_state_teacher.py` | Emits target-family provenance and entry-specific detached validity masks |
+| `src/losses/physiology_semantic.py` | Routes coordinates independently at local, prototype, context, and coupling entrances; supports teacher-free T0 |
+| `src/tokenizers/ema_vector_quantizer.py` | Excludes invalid tokens and fixes unmatched initial EMA sum/count prior mass |
+| `src/tokenizers/physiology_semantic_tokenizer.py` | Propagates measurement validity into VQ and fixed-history context |
+| `experiments/train_physiology_semantic_tokenizer.py` | Audits unified subject keys and emits deterministic plus epoch-aggregated E1 health evidence |
+
+## Current data flow
+
+```mermaid
+flowchart LR
+    unified["Unified measured window"] --> local["Deterministic measured local view"]
+    local --> masks["Patch-valid masks"]
+    local --> students["Independent EEG / fNIRS students"]
+    masks --> students
+    optional["Optional adaptive sidecar · pending join"] -.-> router["Implemented entry router"]
+    router -.-> students
+    students --> e1["T0 health calibration"]
+```
+
+The T0 path is runnable without any teacher. The adaptive sidecar remains a
+planned join at the unified sample-identity boundary; its absence does not
+authorize a Croce-cache substitution.
+
+## Configuration changes
+
+```yaml
+data:
+  loader_class: UnifiedPhysiologyLocalViewDataset
+  contract: physiology_semantic_measurement_local_v1
+loss:
+  uncertainty_weighting: false
+  entry_routing:
+    local: {eeg: [r_mean, r_slope], fnirs: [delta_hbo_mean, delta_hb_mean, delta_hbo_slope, delta_hb_slope]}
+validation:
+  promotion_eligible: false
+```
+
+## Linked artifacts
+
+- Corrected CUDA smoke: `experiments/runs/physiology_semantic_tokenizer/software_smoke/20260719_m0_measurement_first_cuda_smoke_v2/`
+- Combined-reconstruction negative calibration: `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260719_e1_t0_measurement_first_short_formal_v1/`
+- Semantic-only follow-up: `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260719_e1_t0_semantic_only_short_formal_v2/`
 
 ## Gate impact
 

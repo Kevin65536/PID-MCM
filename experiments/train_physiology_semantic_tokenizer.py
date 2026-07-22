@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -29,6 +30,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.data.factory import create_configured_multimodal_dataloaders
 from src.losses.physiology_semantic import PhysiologySemanticLoss
 from src.teachers.physical_state_teacher import PhysicalStateTeacher
+from src.tokenizers.ema_vector_quantizer import EMAVectorQuantizer
 from src.tokenizers.registry import create_tokenizer
 import src.tokenizers  # noqa: F401  # active registry side effects
 
@@ -68,6 +70,127 @@ def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(_jsonable(dict(payload)), sort_keys=True) + "\n")
+
+
+def _implementation_snapshot(config_path: Path) -> dict[str, Any]:
+    relative_paths = (
+        "experiments/train_physiology_semantic_tokenizer.py",
+        "src/data/factory.py",
+        "src/data/physiology_semantic_local.py",
+        "src/losses/physiology_semantic.py",
+        "src/teachers/physical_state_teacher.py",
+        "src/tokenizers/ema_vector_quantizer.py",
+        "src/tokenizers/physiology_semantic_tokenizer.py",
+    )
+    return {
+        "schema": "physiology_semantic_implementation_snapshot_v1",
+        "git_commit": _git_value("rev-parse", "HEAD"),
+        "dirty_worktree": bool(_git_value("status", "--porcelain")),
+        "files_sha256": {
+            relative: _sha256(REPO_ROOT / relative)
+            for relative in relative_paths
+        },
+        "run_config_sha256": _sha256(config_path),
+    }
+
+
+def _quantizer_reference_tests() -> dict[str, Any]:
+    """Run deterministic implementation invariants without touching run data."""
+
+    zero_assignment = EMAVectorQuantizer(codebook_size=2, embedding_dim=2, decay=0.99)
+    with torch.no_grad():
+        zero_assignment.codebook.copy_(torch.tensor([[0.0, 0.0], [20.0, 20.0]]))
+    before = zero_assignment.codebook.detach().clone()
+    zero_assignment.train()(torch.tensor([[[2.0, -1.0], [2.0, -1.0]]]))
+
+    reference = EMAVectorQuantizer(codebook_size=4, embedding_dim=3)
+    latent = torch.tensor(
+        [[[0.1, -0.2, 0.3], [0.4, 0.0, -0.1], [-0.3, 0.2, 0.5]]]
+    )
+    reference.train()(latent)
+    reference.eval()
+    expected = reference(latent)
+    restored = copy.deepcopy(reference)
+    observed = restored(latent)
+
+    checks = {
+        "zero_assignment_code_unchanged": bool(torch.equal(zero_assignment.codebook[1], before[1])),
+        "first_assignment_matches_centroid": bool(
+            torch.allclose(zero_assignment.codebook[0], torch.tensor([2.0, -1.0]))
+        ),
+        "hard_id_equals_posterior_argmax": bool(
+            torch.equal(expected.hard_ids, expected.posterior.argmax(dim=-1))
+        ),
+        "state_round_trip_exact": bool(
+            torch.equal(expected.hard_ids, observed.hard_ids)
+            and torch.equal(expected.logits, observed.logits)
+            and torch.equal(expected.posterior, observed.posterior)
+        ),
+    }
+    return {
+        "schema": "physiology_semantic_quantizer_reference_v1",
+        "checks": checks,
+        "all_passed": all(checks.values()),
+    }
+
+
+def _update_epoch_health(
+    aggregate: dict[str, Any],
+    modality: str,
+    output: Any,
+    valid_mask: torch.Tensor | None,
+) -> None:
+    quantizer = output.quantizer
+    hard_ids = quantizer.hard_ids.detach()
+    if valid_mask is None:
+        selected = hard_ids.reshape(-1)
+    else:
+        selected = hard_ids[valid_mask.to(device=hard_ids.device, dtype=torch.bool)]
+    codebook_size = int(quantizer.posterior.shape[-1])
+    counts = torch.bincount(selected, minlength=codebook_size).cpu()
+    state = aggregate.setdefault(
+        modality,
+        {
+            "assignment_counts": torch.zeros(codebook_size, dtype=torch.long),
+            "valid_tokens": 0,
+            "batches": 0,
+            "prototype_drift_sum": 0.0,
+            "revived_codes_sum": 0.0,
+            "snapshot": {},
+        },
+    )
+    state["assignment_counts"] += counts
+    state["valid_tokens"] += int(selected.numel())
+    state["batches"] += 1
+    state["prototype_drift_sum"] += float(quantizer.health["prototype_drift"].detach())
+    state["revived_codes_sum"] += float(quantizer.health["revived_codes"].detach())
+    state["snapshot"] = {
+        key: float(value.detach()) for key, value in quantizer.health.items()
+    }
+
+
+def _finalize_epoch_health(aggregate: Mapping[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for modality, state in aggregate.items():
+        counts = state["assignment_counts"].float()
+        probabilities = counts / counts.sum().clamp_min(1.0)
+        nonzero = probabilities > 0
+        entropy = -(probabilities[nonzero] * probabilities[nonzero].log()).sum()
+        batches = max(int(state["batches"]), 1)
+        health = dict(state["snapshot"])
+        health.update(
+            {
+                "assignment_entropy": float(entropy),
+                "effective_codes": float(entropy.exp()),
+                "epoch_active_codes": int((counts > 0).sum()),
+                "epoch_active_fraction": float((counts > 0).float().mean()),
+                "valid_tokens": int(state["valid_tokens"]),
+                "mean_prototype_drift": float(state["prototype_drift_sum"] / batches),
+                "revived_codes": int(state["revived_codes_sum"]),
+            }
+        )
+        result[modality] = health
+    return result
 
 
 def _git_value(*args: str) -> str:
@@ -112,7 +235,9 @@ def _move_to_device(value: Any, device: torch.device) -> Any:
     return value
 
 
-def _dataset_subjects(dataset: Any) -> set[int]:
+def _dataset_subjects(dataset: Any) -> set[Any]:
+    if hasattr(dataset, "subject_keys"):
+        return {str(value) for value in dataset.subject_keys}
     if hasattr(dataset, "entries"):
         return {int(entry.subject_id) for entry in dataset.entries}
     if hasattr(dataset, "sources"):
@@ -126,7 +251,11 @@ def _dataset_subjects(dataset: Any) -> set[int]:
 def _validate_loader_subjects(dataloaders: Mapping[str, Any], config: Mapping[str, Any]) -> None:
     declared = config.get("data", {}).get("split", {})
     for split, key in (("train", "train_subjects"), ("val", "val_subjects"), ("test", "test_subjects")):
-        expected = {int(value) for value in declared.get(key, [])}
+        subject_key_name = f"{split}_subject_keys"
+        if subject_key_name in declared:
+            expected = {str(value) for value in declared.get(subject_key_name, [])}
+        else:
+            expected = {int(value) for value in declared.get(key, [])}
         observed = _dataset_subjects(dataloaders[split].dataset)
         if observed != expected:
             raise RuntimeError(
@@ -180,18 +309,51 @@ def _teacher_supervision_requested(config: Mapping[str, Any]) -> bool:
 
 def _loss_from_config(config: Mapping[str, Any], gate: Mapping[str, Any] | None) -> PhysiologySemanticLoss:
     loss = config.get("loss", {})
+    reconstruction = loss.get("reconstruction", {})
+    balance = loss.get("codebook_balance", {})
     admitted = None if gate is None else gate.get("admissible_coordinates", {})
     eeg_admitted = None if admitted is None else admitted.get("eeg", [])
     fnirs_admitted = None if admitted is None else admitted.get("fnirs", [])
+    routing = loss.get("entry_routing", {})
+
+    def entry_masks(
+        modality: str,
+        names: tuple[str, ...],
+        fallback: Iterable[str] | None,
+    ) -> dict[str, torch.Tensor]:
+        masks: dict[str, torch.Tensor] = {}
+        gate_by_entry = {} if gate is None else gate.get("admissible_coordinates_by_entry", {})
+        modality_gate = gate_by_entry.get(modality, {}) if isinstance(gate_by_entry, Mapping) else {}
+        for entry in ("local", "prototype", "context", "coupling"):
+            entry_cfg = routing.get(entry, {}) if isinstance(routing, Mapping) else {}
+            configured = entry_cfg.get(modality) if isinstance(entry_cfg, Mapping) else None
+            admitted_for_entry = modality_gate.get(entry) if isinstance(modality_gate, Mapping) else None
+            selected = configured if configured is not None else admitted_for_entry
+            if selected is None:
+                selected = fallback
+            masks[entry] = _coordinate_mask(names, selected)
+        return masks
+
     return PhysiologySemanticLoss(
         state_weight=loss.get("state", {}).get("weight", 1.0),
         prototype_weight=loss.get("prototype", {}).get("weight", 1.0),
         masked_state_weight=loss.get("masked_state", {}).get("weight", 1.0),
-        reconstruction_weight=loss.get("reconstruction", {}).get("weight", 1.0),
+        reconstruction_weight=reconstruction.get("weight", 1.0),
+        reconstruction_mode=str(reconstruction.get("mode", "combined")),
+        reconstruction_semantic_input=str(reconstruction.get("semantic_input", "expected")),
         vq_weight=loss.get("vq", {}).get("weight", 1.0),
         private_weight=loss.get("private", {}).get("weight", 0.0),
+        balance_weight=balance.get("weight", 0.0),
+        balance_temperature=balance.get("temperature", 1.0),
+        eeg_balance_temperature=balance.get("eeg_temperature"),
+        fnirs_balance_temperature=balance.get("fnirs_temperature"),
+        eeg_balance_scale=balance.get("eeg_scale", 1.0),
+        fnirs_balance_scale=balance.get("fnirs_scale", 1.0),
         eeg_coordinate_mask=_coordinate_mask(EEG_COORDINATES, eeg_admitted),
         fnirs_coordinate_mask=_coordinate_mask(FNIRS_COORDINATES, fnirs_admitted),
+        eeg_entry_coordinate_masks=entry_masks("eeg", EEG_COORDINATES, eeg_admitted),
+        fnirs_entry_coordinate_masks=entry_masks("fnirs", FNIRS_COORDINATES, fnirs_admitted),
+        uncertainty_weighting=bool(loss.get("uncertainty_weighting", True)),
     )
 
 
@@ -203,6 +365,27 @@ def _scheduler(optimizer: torch.optim.Optimizer, warmup_steps: int, total_steps:
         return 0.5 * (1.0 + math.cos(math.pi * min(max(progress, 0.0), 1.0)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, scale)
+
+
+def _quantization_strength_for_epoch(
+    epoch: int,
+    schedule: Mapping[str, Any] | None,
+) -> float:
+    schedule = dict(schedule or {})
+    if not bool(schedule.get("enabled", False)):
+        return 1.0
+    start_epoch = int(schedule.get("start_epoch", 1))
+    ramp_epochs = max(int(schedule.get("ramp_epochs", 1)), 1)
+    start_scale = float(schedule.get("start_scale", 0.0))
+    end_scale = float(schedule.get("end_scale", 1.0))
+    if not 0.0 <= start_scale <= 1.0 or not 0.0 <= end_scale <= 1.0:
+        raise ValueError("Quantization warmup scales must be in [0, 1]")
+    if epoch < start_epoch:
+        return start_scale
+    if ramp_epochs == 1:
+        return end_scale
+    progress = min(max((epoch - start_epoch) / (ramp_epochs - 1), 0.0), 1.0)
+    return start_scale + (end_scale - start_scale) * progress
 
 
 def _amp_context(device: torch.device, enabled: bool):
@@ -230,18 +413,23 @@ def _run_epoch(
     model.train(training)
     sums: dict[str, float] = {}
     sample_count = 0
-    last_health: dict[str, Any] = {}
+    health_aggregate: dict[str, Any] = {}
     for batch in loader:
         if max_steps is not None and global_step >= max_steps:
             break
         batch = _move_to_device(batch, device)
         batch_size = int(batch["eeg"].shape[0])
-        teacher = teacher_adapter(batch["teacher"])
+        teacher = teacher_adapter(batch["teacher"]) if "teacher" in batch else None
+        if teacher is None and criterion.requires_teacher:
+            raise RuntimeError("Enabled semantic losses require an auxiliary teacher sidecar")
+        token_valid_masks = batch.get("token_valid_mask")
         if training:
             optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training), _amp_context(device, amp_enabled):
-            outputs = model(batch["eeg"], batch["fnirs"])
-            losses = criterion(outputs, teacher)
+            outputs = model(
+                batch["eeg"], batch["fnirs"], token_valid_masks=token_valid_masks
+            )
+            losses = criterion(outputs, teacher, token_valid_masks=token_valid_masks)
         if training:
             scaler.scale(losses["total"]).backward()
             scaler.unscale_(optimizer)
@@ -254,13 +442,16 @@ def _run_epoch(
         for key, value in losses.items():
             sums[key] = sums.get(key, 0.0) + float(value.detach()) * batch_size
         sample_count += batch_size
-        last_health = {
-            "eeg": outputs["eeg"].quantizer.health,
-            "fnirs": outputs["fnirs"].quantizer.health,
-        }
+        for modality in ("eeg", "fnirs"):
+            mask = None if token_valid_masks is None else token_valid_masks.get(modality)
+            _update_epoch_health(health_aggregate, modality, outputs[modality], mask)
     if sample_count == 0:
         raise RuntimeError("Epoch consumed zero samples")
-    return {key: value / sample_count for key, value in sums.items()}, global_step, last_health
+    return (
+        {key: value / sample_count for key, value in sums.items()},
+        global_step,
+        _finalize_epoch_health(health_aggregate),
+    )
 
 
 def _save_checkpoint(
@@ -299,6 +490,10 @@ def _save_checkpoint(
 def run(args: argparse.Namespace) -> Path:
     config_path = Path(args.config).resolve()
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if args.seed is not None:
+        config.setdefault("training", {})["seed"] = args.seed
+    if args.device is not None:
+        config.setdefault("training", {})["device"] = args.device
     if args.e0_gate:
         config.setdefault("validation", {})["e0_gate_path"] = args.e0_gate
     if args.smoke_optimizer_steps is not None:
@@ -322,28 +517,56 @@ def run(args: argparse.Namespace) -> Path:
         (run_dir / relative).mkdir(parents=True, exist_ok=True)
     (run_dir / "config.yaml").write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
     (run_dir / "resolved_config.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    _write_json(run_dir / "implementation_snapshot.json", _implementation_snapshot(config_path))
 
+    validation = config.get("validation", {})
     protocol = {
         "schema": RUN_SCHEMA,
-        "selection_metric": "validation total loss",
+        "phase": validation.get("phase"),
+        "primary_endpoint": validation.get("primary_endpoint", "validation_total_loss"),
+        "selection_metric": validation.get("selection_metric", "validation total loss"),
         "stopping_rule": "validation early stopping with configured patience",
         "protected_test_policy": "test split is never evaluated by the trainer",
+        "promotion_eligible": bool(validation.get("promotion_eligible", False)),
+        "registered_factors": validation.get("registered_factors"),
         "e0_gate_sha256": gate_hash,
         "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
     }
     (run_dir / "decision_protocol.yaml").write_text(yaml.safe_dump(protocol, sort_keys=False), encoding="utf-8")
     _write_json(run_dir / "metric_registry.json", {
-        "primary": "validation_total_loss", "training": list(config.get("loss", {})),
+        "primary": validation.get("primary_endpoint", "validation_total_loss"),
+        "training": list(config.get("loss", {})),
         "diagnostic": ["quantizer_health", "learning_rate"],
     })
     _write_json(run_dir / "evidence_calibration.json", {
-        "source": "E0 gate", "e0_gate_sha256": gate_hash, "protected_test_opened": False,
+        "source": "E0 gate" if teacher_supervision else "training-only quantizer pilot",
+        "e0_gate_sha256": gate_hash,
+        "quantizer_health_calibration": validation.get("quantizer_health_calibration"),
+        "protected_test_opened": False,
+    })
+    reference_tests = _quantizer_reference_tests()
+    _write_json(run_dir / "diagnostics" / "quantizer_reference_tests.json", reference_tests)
+    if not reference_tests["all_passed"]:
+        raise RuntimeError("Deterministic quantizer reference tests failed")
+    _write_json(run_dir / "environment.json", {
+        "schema": "physiology_semantic_environment_v1",
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "torch": torch.__version__,
+        "cuda_runtime": torch.version.cuda,
+        "cuda_available": torch.cuda.is_available(),
+        "cuda_device_count": torch.cuda.device_count(),
+        "config_sha256": _sha256(config_path),
     })
 
     dataloaders = create_configured_multimodal_dataloaders(config)
     _validate_loader_subjects(dataloaders, config)
     model = create_tokenizer(config).to(device)
-    teacher_adapter = PhysicalStateTeacher().to(device)
+    target_cfg = config.get("data", {}).get("auxiliary_target", {})
+    teacher_adapter = PhysicalStateTeacher(
+        target_family=str(target_cfg.get("family", "croce_physical_state")),
+        target_version=str(target_cfg.get("version", "physiology_semantic_v2")),
+    ).to(device)
     criterion = _loss_from_config(config, gate).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -388,7 +611,12 @@ def run(args: argparse.Namespace) -> Path:
     start_time = time.time()
     status = "dry_run_passed"
     last_health: dict[str, Any] = {}
+    quantization_warmup = training.get("quantization_warmup", {})
     if args.dry_run or (args.smoke and not optimizer_requested):
+        quantization_strength = _quantization_strength_for_epoch(
+            start_epoch, quantization_warmup
+        )
+        model.set_quantization_strength(quantization_strength)
         train_metrics, _, last_health = _run_epoch(
             model=model,
             loader=[next(iter(dataloaders["train"]))],
@@ -403,14 +631,25 @@ def run(args: argparse.Namespace) -> Path:
             global_step=0,
             max_steps=None,
         )
-        _append_jsonl(run_dir / "metrics" / "train.jsonl", {"epoch": 0, **train_metrics})
+        _append_jsonl(run_dir / "metrics" / "train.jsonl", {
+            "epoch": 0,
+            "quantization_strength": quantization_strength,
+            **train_metrics,
+        })
+        _append_jsonl(run_dir / "diagnostics" / "quantizer_health.jsonl", {
+            "epoch": 0, "phase": "dry_run", "health": last_health,
+        })
         status = "dry_run_passed" if args.dry_run else "smoke_passed_optimizer_not_requested"
     else:
         patience = int(training.get("early_stopping_patience", 10))
         min_delta = float(training.get("early_stopping_min_delta", 0.0))
         grad_clip = float(training.get("grad_clip_norm", 1.0))
         for epoch in range(start_epoch, epochs):
-            train_metrics, global_step, last_health = _run_epoch(
+            quantization_strength = _quantization_strength_for_epoch(
+                epoch, quantization_warmup
+            )
+            model.set_quantization_strength(quantization_strength)
+            train_metrics, global_step, train_health = _run_epoch(
                 model=model,
                 loader=dataloaders["train"],
                 teacher_adapter=teacher_adapter,
@@ -439,12 +678,25 @@ def run(args: argparse.Namespace) -> Path:
                 max_steps=None,
             )
             last_health = validation_health
+            _append_jsonl(run_dir / "diagnostics" / "quantizer_health.jsonl", {
+                "epoch": epoch,
+                "global_step": global_step,
+                "train": train_health,
+                "validation": validation_health,
+            })
             learning_rate = optimizer.param_groups[0]["lr"]
             _append_jsonl(run_dir / "metrics" / "train.jsonl", {
-                "epoch": epoch, "global_step": global_step, "learning_rate": learning_rate, **train_metrics,
+                "epoch": epoch,
+                "global_step": global_step,
+                "learning_rate": learning_rate,
+                "quantization_strength": quantization_strength,
+                **train_metrics,
             })
             _append_jsonl(run_dir / "metrics" / "validation.jsonl", {
-                "epoch": epoch, "global_step": global_step, **validation_metrics,
+                "epoch": epoch,
+                "global_step": global_step,
+                "quantization_strength": quantization_strength,
+                **validation_metrics,
             })
 
             improved = validation_metrics["total"] < best_validation - min_delta
@@ -498,6 +750,18 @@ def run(args: argparse.Namespace) -> Path:
         "global_step": global_step,
         "best_validation": None if math.isinf(best_validation) else best_validation,
         "split_sha256": split_hash,
+        "loader_class": config.get("data", {}).get("loader_class"),
+        "data_contract": config.get("data", {}).get("contract"),
+        "dataset_ids": config.get("data", {}).get("dataset_ids"),
+        "task_namespaces": config.get("data", {}).get("task_namespaces"),
+        "cache_root": config.get("data", {}).get("cache_root"),
+        "phase": validation.get("phase"),
+        "promotion_eligible": bool(validation.get("promotion_eligible", False)),
+        "reconstruction_mode": criterion.reconstruction_mode,
+        "reconstruction_semantic_input": criterion.reconstruction_semantic_input,
+        "codebook_balance_weight": criterion.weights["balance"],
+        "quantization_warmup": quantization_warmup,
+        "final_quantization_strength": model.get_quantization_strength(),
         "checkpoint_sha256": checkpoint_hashes,
         "protected_test_opened": False,
         "start_time": datetime.fromtimestamp(start_time, timezone.utc).isoformat(),
@@ -530,6 +794,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume")
     parser.add_argument("--e0-gate", help="Override validation.e0_gate_path with a concrete gate_decision.json")
     parser.add_argument("--smoke-optimizer-steps", type=int, help="Override smoke step budget")
+    parser.add_argument("--seed", type=int, help="Override the registered training seed")
+    parser.add_argument("--device", help="Override the registered training device")
     parser.add_argument("--output-dir")
     return parser.parse_args()
 

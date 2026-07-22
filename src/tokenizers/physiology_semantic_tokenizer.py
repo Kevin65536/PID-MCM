@@ -26,6 +26,10 @@ class ModalityTokenizerOutput:
     context_valid_mask: torch.Tensor
     reconstruction: torch.Tensor
     semantic_reconstruction: torch.Tensor
+    hard_reconstruction: torch.Tensor
+    hard_semantic_reconstruction: torch.Tensor
+    annealed_hard_reconstruction: torch.Tensor
+    annealed_hard_semantic_reconstruction: torch.Tensor
     residual_reconstruction: torch.Tensor
 
 
@@ -60,10 +64,23 @@ class FixedHistoryContext(nn.Module):
         self.norm = nn.LayerNorm(embedding_dim)
         self.head = nn.Linear(embedding_dim, state_dim)
 
-    def forward(self, tokens: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        token_valid_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if tokens.dim() != 3:
             raise ValueError(f"Expected [B,N,D] tokens, got {tuple(tokens.shape)}")
         batch_size, token_count, _ = tokens.shape
+        if token_valid_mask is None:
+            token_valid_mask = torch.ones(
+                batch_size, token_count, device=tokens.device, dtype=torch.bool
+            )
+        elif token_valid_mask.shape != (batch_size, token_count):
+            raise ValueError("token_valid_mask must have shape [B,N]")
+        else:
+            token_valid_mask = token_valid_mask.to(device=tokens.device, dtype=torch.bool)
+        tokens = tokens.masked_fill(~token_valid_mask.unsqueeze(-1), 0.0)
         predictions = tokens.new_zeros(batch_size, token_count, self.head.out_features)
         valid = torch.zeros(batch_size, token_count, device=tokens.device, dtype=torch.bool)
         if token_count <= self.history_tokens:
@@ -79,7 +96,10 @@ class FixedHistoryContext(nn.Module):
         encoded = self.encoder(encoded)
         state = self.head(self.norm(encoded[:, -1]))
         predictions[:, self.history_tokens :] = state.reshape(batch_size, window_count, -1)
-        valid[:, self.history_tokens :] = True
+        history_valid = token_valid_mask.unfold(
+            dimension=1, size=self.history_tokens, step=1
+        )[:, :window_count].all(dim=-1)
+        valid[:, self.history_tokens :] = history_valid
         return predictions, valid
 
 
@@ -147,15 +167,23 @@ class _ModalityBranch(nn.Module):
         decoded = self.decoder(torch.cat((semantic, residual), dim=-1))
         return decoded.reshape(*decoded.shape[:2], self.input_channels, self.patch_size)
 
-    def forward(self, signal: torch.Tensor) -> ModalityTokenizerOutput:
+    def forward(
+        self,
+        signal: torch.Tensor,
+        token_valid_mask: torch.Tensor | None = None,
+    ) -> ModalityTokenizerOutput:
         patches = self._patchify(signal)
+        if token_valid_mask is not None and token_valid_mask.shape != patches.shape[:2]:
+            raise ValueError("token_valid_mask must match the [B,N] patch grid")
         features = self.local_encoder(self.patch_embedding(patches))
         semantic = self.semantic_head(features)
         residual = self.residual_head(features)
-        quantized = self.quantizer(semantic)
+        quantized = self.quantizer(semantic, valid_mask=token_valid_mask)
         state_prediction = self.state_head(semantic)
         prototype_state_prediction = self.prototype_state_head(quantized.quantized)
-        context_prediction, context_valid = self.context(quantized.expected_embedding)
+        context_prediction, context_valid = self.context(
+            quantized.expected_embedding, token_valid_mask=token_valid_mask
+        )
         zeros_semantic = torch.zeros_like(quantized.expected_embedding)
         zeros_residual = torch.zeros_like(residual)
         return ModalityTokenizerOutput(
@@ -170,6 +198,14 @@ class _ModalityBranch(nn.Module):
             context_valid_mask=context_valid,
             reconstruction=self._decode(quantized.expected_embedding, residual),
             semantic_reconstruction=self._decode(quantized.expected_embedding, zeros_residual),
+            hard_reconstruction=self._decode(quantized.quantized, residual),
+            hard_semantic_reconstruction=self._decode(quantized.quantized, zeros_residual),
+            annealed_hard_reconstruction=self._decode(
+                quantized.annealed_quantized, residual
+            ),
+            annealed_hard_semantic_reconstruction=self._decode(
+                quantized.annealed_quantized, zeros_residual
+            ),
             residual_reconstruction=self._decode(zeros_semantic, residual),
         )
 
@@ -216,6 +252,17 @@ class PhysiologySemanticTokenizer(nn.Module):
             quantizer_kwargs=quantizer_kwargs,
         )
 
+    def set_quantization_strength(self, strength: float) -> None:
+        self.eeg_branch.quantizer.set_quantization_strength(strength)
+        self.fnirs_branch.quantizer.set_quantization_strength(strength)
+
+    def get_quantization_strength(self) -> float:
+        eeg_strength = self.eeg_branch.quantizer.get_quantization_strength()
+        fnirs_strength = self.fnirs_branch.quantizer.get_quantization_strength()
+        if eeg_strength != fnirs_strength:
+            raise RuntimeError("EEG and fNIRS quantization strengths diverged")
+        return eeg_strength
+
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "PhysiologySemanticTokenizer":
         model = config.get("model", {})
@@ -241,21 +288,46 @@ class PhysiologySemanticTokenizer(nn.Module):
                 "commitment_cost": float(quantizer.get("commitment_cost", 0.25)),
                 "temperature": float(quantizer.get("temperature", 1.0)),
                 "assignment": str(quantizer.get("assignment", "euclidean")),
+                "normalize_latents": bool(quantizer.get("normalize_latents", False)),
+                "kmeans_init": bool(quantizer.get("kmeans_init", False)),
+                "kmeans_iters": int(quantizer.get("kmeans_iters", 10)),
                 "revive_dead_codes": bool(quantizer.get("revive_dead_codes", False)),
                 "dead_code_threshold": float(quantizer.get("dead_code_threshold", 0.1)),
                 "revival_warmup_steps": int(quantizer.get("revival_warmup_steps", 100)),
                 "revival_interval": int(quantizer.get("revival_interval", 100)),
+                "revival_stop_after_steps": quantizer.get("revival_stop_after_steps"),
+                "max_revivals_per_event": int(quantizer.get("max_revivals_per_event", 8)),
+                "revival_noise_std": float(quantizer.get("revival_noise_std", 0.0)),
+                "revival_strategy": str(quantizer.get("revival_strategy", "top_error")),
+                "revival_count_prior": str(quantizer.get("revival_count_prior", "threshold")),
             },
         )
 
-    def encode_eeg(self, eeg: torch.Tensor) -> ModalityTokenizerOutput:
-        return self.eeg_branch(eeg)
+    def encode_eeg(
+        self,
+        eeg: torch.Tensor,
+        token_valid_mask: torch.Tensor | None = None,
+    ) -> ModalityTokenizerOutput:
+        return self.eeg_branch(eeg, token_valid_mask=token_valid_mask)
 
-    def encode_fnirs(self, fnirs: torch.Tensor) -> ModalityTokenizerOutput:
-        return self.fnirs_branch(fnirs)
+    def encode_fnirs(
+        self,
+        fnirs: torch.Tensor,
+        token_valid_mask: torch.Tensor | None = None,
+    ) -> ModalityTokenizerOutput:
+        return self.fnirs_branch(fnirs, token_valid_mask=token_valid_mask)
 
-    def forward(self, eeg: torch.Tensor, fnirs: torch.Tensor) -> Dict[str, ModalityTokenizerOutput]:
-        return {"eeg": self.encode_eeg(eeg), "fnirs": self.encode_fnirs(fnirs)}
+    def forward(
+        self,
+        eeg: torch.Tensor,
+        fnirs: torch.Tensor,
+        token_valid_masks: Dict[str, torch.Tensor] | None = None,
+    ) -> Dict[str, ModalityTokenizerOutput]:
+        token_valid_masks = dict(token_valid_masks or {})
+        return {
+            "eeg": self.encode_eeg(eeg, token_valid_masks.get("eeg")),
+            "fnirs": self.encode_fnirs(fnirs, token_valid_masks.get("fnirs")),
+        }
 
 
 __all__ = [

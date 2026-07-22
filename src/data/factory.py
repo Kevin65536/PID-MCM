@@ -16,6 +16,7 @@ from .croce_local_cache_dataset import (
     validate_physiology_semantic_data_config,
 )
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
+from .physiology_semantic_local import UnifiedPhysiologyLocalViewDataset
 from .registry import normalize_data_config, resolve_dataset_id, resolve_modality_preprocessing
 from .simultaneous_eeg_nirs_dataset import (
     SimultaneousContinuousDataset,
@@ -435,7 +436,40 @@ def create_configured_dataloader(config: Dict[str, Any], split: str) -> DataLoad
 def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str, DataLoader]:
     data_cfg = config['data']
     normalize, normalization_mode = resolve_normalization_config(data_cfg)
-    dataset_id = resolve_dataset_id(data_cfg)
+    loader_class = str(data_cfg.get('loader_class', ''))
+    dataset_id = (
+        'unified_physiology_local'
+        if loader_class == 'UnifiedPhysiologyLocalViewDataset'
+        else resolve_dataset_id(data_cfg)
+    )
+
+    if dataset_id == 'unified_physiology_local':
+        dataloaders: Dict[str, DataLoader] = {}
+        split_cfg = data_cfg.get('split', {})
+        for split_name in ('train', 'val', 'test'):
+            subject_keys = split_cfg.get(f'{split_name}_subject_keys', split_cfg.get(split_name, []))
+            dataset = UnifiedPhysiologyLocalViewDataset(
+                cache_root=data_cfg.get('cache_root', 'data/cache/physiology_semantic_clean_v1'),
+                dataset_ids=tuple(data_cfg.get('dataset_ids', ('eeg_fnirs_single_trial',))),
+                subject_keys=subject_keys,
+                task_namespaces=data_cfg.get('task_namespaces'),
+                window_duration_s=float(data_cfg.get('window', {}).get('duration_s', 20.0)),
+                local_eeg_channels=int(data_cfg.get('local_view', {}).get('eeg_channels', 6)),
+                reject_unknown_labels=bool(data_cfg.get('reject_unknown_labels', True)),
+                allow_cross_coordinate_systems=bool(
+                    data_cfg.get('local_view', {}).get('allow_cross_coordinate_systems', False)
+                ),
+            )
+            is_train = split_name == 'train'
+            loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=is_train)
+            dataloaders[split_name] = DataLoader(
+                dataset,
+                batch_size=config['training']['batch_size'],
+                shuffle=is_train,
+                drop_last=_resolve_drop_last(data_cfg, is_train=is_train),
+                **loader_kwargs,
+            )
+        return dataloaders
 
     if dataset_id == 'croce_local_cache':
         if str(data_cfg.get('contract', '')) == PHYSIOLOGY_SEMANTIC_DATA_CONTRACT:

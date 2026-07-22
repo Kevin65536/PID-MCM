@@ -1,6 +1,10 @@
+import pytest
 import torch
 
-from src.losses.physiology_semantic import PhysiologySemanticLoss
+from src.losses.physiology_semantic import (
+    PhysiologySemanticLoss,
+    straight_through_codebook_balance_loss,
+)
 from src.teachers.physical_state_teacher import PhysicalStateTeacher
 from src.tokenizers.physiology_semantic_tokenizer import (
     FixedHistoryContext,
@@ -107,3 +111,163 @@ def test_loss_coordinate_gate_excludes_unadmitted_targets():
     teacher.fnirs_target[..., 1:] += 1e6
     changed = criterion(outputs, teacher)["state"]
     assert torch.equal(original, changed)
+
+
+def test_token_mask_blocks_vq_updates_and_invalid_history():
+    torch.manual_seed(8)
+    model = _small_model().train()
+    eeg_mask = torch.ones(1, 10, dtype=torch.bool)
+    eeg_mask[:, 2] = False
+    fnirs_mask = torch.ones(1, 10, dtype=torch.bool)
+    outputs = model(
+        torch.randn(1, 6, 4000),
+        torch.randn(1, 2, 200),
+        token_valid_masks={"eeg": eeg_mask, "fnirs": fnirs_mask},
+    )
+    # Target token 5 uses history tokens 0..4, which includes invalid token 2.
+    assert not outputs["eeg"].context_valid_mask[0, 5]
+    # Target token 8 uses history tokens 3..7 and is therefore valid.
+    assert outputs["eeg"].context_valid_mask[0, 8]
+
+
+def test_teacher_free_loss_accepts_no_sidecar_and_masks_reconstruction():
+    torch.manual_seed(9)
+    model = _small_model().eval()
+    masks = {
+        "eeg": torch.tensor([[True] + [False] * 9]),
+        "fnirs": torch.tensor([[True] + [False] * 9]),
+    }
+    outputs = model(
+        torch.randn(1, 6, 4000),
+        torch.randn(1, 2, 200),
+        token_valid_masks=masks,
+    )
+    criterion = PhysiologySemanticLoss(
+        state_weight=0.0,
+        prototype_weight=0.0,
+        masked_state_weight=0.0,
+        uncertainty_weighting=False,
+    )
+    losses = criterion(outputs, None, token_valid_masks=masks)
+    assert torch.isfinite(losses["total"])
+
+
+def test_semantic_only_reconstruction_does_not_train_residual_branch():
+    torch.manual_seed(10)
+    model = _small_model().train()
+    outputs = model(torch.randn(1, 6, 4000), torch.randn(1, 2, 200))
+    criterion = PhysiologySemanticLoss(
+        state_weight=0.0,
+        prototype_weight=0.0,
+        masked_state_weight=0.0,
+        reconstruction_mode="semantic_only",
+    )
+
+    criterion(outputs, None)["total"].backward()
+
+    assert model.eeg_branch.semantic_head.weight.grad is not None
+    assert model.eeg_branch.residual_head.weight.grad is None
+    assert model.fnirs_branch.semantic_head.weight.grad is not None
+    assert model.fnirs_branch.residual_head.weight.grad is None
+
+
+def test_hard_semantic_reconstruction_uses_straight_through_codebook_lookup():
+    torch.manual_seed(11)
+    model = _small_model().eval()
+    outputs = model(torch.randn(1, 6, 4000), torch.randn(1, 2, 200))
+    criterion = PhysiologySemanticLoss(
+        state_weight=0.0,
+        prototype_weight=0.0,
+        masked_state_weight=0.0,
+        reconstruction_mode="semantic_only",
+        reconstruction_semantic_input="hard",
+    )
+
+    assert torch.equal(
+        criterion._selected_reconstruction(outputs["eeg"]),
+        outputs["eeg"].hard_semantic_reconstruction,
+    )
+    assert not torch.equal(
+        outputs["eeg"].hard_semantic_reconstruction,
+        outputs["eeg"].semantic_reconstruction,
+    )
+
+
+def test_annealed_hard_reconstruction_starts_continuous_and_ends_hard():
+    torch.manual_seed(12)
+    model = _small_model().eval()
+    eeg = torch.randn(1, 6, 4000)
+    fnirs = torch.randn(1, 2, 200)
+    model.set_quantization_strength(0.0)
+    continuous = model(eeg, fnirs)
+    model.set_quantization_strength(1.0)
+    hard = model(eeg, fnirs)
+    criterion = PhysiologySemanticLoss(
+        state_weight=0.0,
+        prototype_weight=0.0,
+        masked_state_weight=0.0,
+        reconstruction_mode="semantic_only",
+        reconstruction_semantic_input="annealed_hard",
+    )
+
+    assert model.get_quantization_strength() == 1.0
+    assert torch.equal(
+        criterion._selected_reconstruction(hard["eeg"]),
+        hard["eeg"].hard_semantic_reconstruction,
+    )
+    assert not torch.equal(
+        continuous["eeg"].annealed_hard_semantic_reconstruction,
+        hard["eeg"].annealed_hard_semantic_reconstruction,
+    )
+
+
+def test_straight_through_balance_tracks_hard_ids_and_has_soft_gradient():
+    collapsed_logits = torch.tensor(
+        [[[8.0, 0.0, 0.0, 0.0]] * 4], requires_grad=True
+    )
+    balanced_logits = torch.tensor(
+        [[
+            [8.0, 0.0, 0.0, 0.0],
+            [0.0, 8.0, 0.0, 0.0],
+            [0.0, 0.0, 8.0, 0.0],
+            [0.0, 0.0, 0.0, 8.0],
+        ]]
+    )
+
+    collapsed = straight_through_codebook_balance_loss(collapsed_logits)
+    balanced = straight_through_codebook_balance_loss(balanced_logits)
+    collapsed.backward()
+
+    assert collapsed.item() > 0.99
+    assert balanced.item() == pytest.approx(0.0, abs=1e-5)
+    assert collapsed_logits.grad is not None
+    assert collapsed_logits.grad.abs().sum().item() > 0.0
+
+
+def test_balance_smoothing_sends_recovery_gradient_to_unused_codes():
+    logits = torch.zeros(1, 32, 128, requires_grad=True)
+    with torch.no_grad():
+        logits[..., 0] = 0.01
+
+    loss = straight_through_codebook_balance_loss(logits)
+    loss.backward()
+
+    assert loss.item() > 0.99
+    assert logits.grad is not None
+    assert logits.grad[..., 1:].abs().max().item() > 1.0e-6
+
+
+def test_balance_loss_excludes_invalid_tokens():
+    logits = torch.tensor(
+        [[
+            [8.0, 0.0],
+            [0.0, 8.0],
+        ]]
+    )
+    masked = straight_through_codebook_balance_loss(
+        logits, torch.tensor([[True, False]])
+    )
+    unmasked = straight_through_codebook_balance_loss(logits)
+
+    assert masked.item() > 0.99
+    assert unmasked.item() == pytest.approx(0.0, abs=1e-5)

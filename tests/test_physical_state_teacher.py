@@ -73,3 +73,25 @@ def test_teacher_outputs_are_detached_and_uncertainty_positive():
     assert torch.all(output.full_uncertainty > 0)
     assert torch.all(output.eeg_uncertainty > 0)
     assert torch.all(output.fnirs_uncertainty > 0)
+
+
+def test_teacher_keeps_entry_masks_independent_and_versioned():
+    adapter = PhysicalStateTeacher(
+        target_family="physiology_shaped_multimodal_consensus_proxy",
+        target_version="adaptive_teacher_v3",
+    )
+    batch = _teacher_batch(batch_size=1)
+    batch["cache_valid_mask"] = torch.ones(1, 200, dtype=torch.bool)
+    batch["eeg_prototype_valid_mask"] = torch.ones(1, 200, dtype=torch.bool)
+    batch["eeg_prototype_valid_mask"][0, 40] = False
+    batch["fnirs_coupling_valid_mask"] = torch.ones(1, 200, dtype=torch.bool)
+    batch["fnirs_coupling_valid_mask"][0, :20] = False
+
+    output = adapter(batch)
+
+    assert output.target_family == "physiology_shaped_multimodal_consensus_proxy"
+    assert output.target_version == "adaptive_teacher_v3"
+    assert output.entry_masks["eeg"]["local"].all()
+    assert not output.entry_masks["eeg"]["prototype"][0, 2]
+    assert not output.entry_masks["fnirs"]["coupling"][0, 0]
+    assert output.entry_masks["fnirs"]["local"].all()

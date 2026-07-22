@@ -145,6 +145,11 @@ from .unified_physiology import (
     refed_continuous_target_window,
     simultaneous_eeg_eog_cleaning_config,
 )
+from .physiology_semantic_local import (
+    LOCAL_VIEW_SCHEMA,
+    LocalWindowEntry,
+    UnifiedPhysiologyLocalViewDataset,
+)
 from .eeg_artifact_preprocessing import (
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
@@ -276,6 +281,9 @@ __all__ = [
     'CANONICAL_PREPROCESSING',
     'CanonicalPreprocessingContract',
     'UnifiedPhysiologyWindowDataset',
+    'LOCAL_VIEW_SCHEMA',
+    'LocalWindowEntry',
+    'UnifiedPhysiologyLocalViewDataset',
     'REFEDContinuousSequenceDataset',
     'canonical_channel_name',
     'canonical_fnirs_channel_names',

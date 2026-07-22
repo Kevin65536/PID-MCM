@@ -105,7 +105,7 @@ unopened because validation did not pass.
 
 ### P2 — Correct and instrument the vector quantizer
 
-**Implementation status (2026-07-02):** merged. Count-and-sum EMA, Euclidean and cosine assignment modes, distributed reductions, explicit revival accounting, serialization, posterior outputs, and health diagnostics pass deterministic tests. E1 health calibration and the P2 validity gate have not run.
+**Implementation status (updated 2026-07-20):** merged; G1/E1 passes at fixed K=128 for the registered diverse-farthest/T2-T2 candidate. Count-and-sum EMA, Euclidean/cosine assignment, first-batch K-means, latent L2 normalization, distributed reductions, checkpointed quantization warmup, annealed-hard reconstruction, explicit revival accounting and stop rules, serialization, posterior outputs, validity-mask exclusion, and health diagnostics pass deterministic tests. Additive balance smoothing preserves gradients to unused codes, and all EMA count/sum statistics age so dead-code health is no longer falsely reported as fully active. The first three-seed top-error retention gate failed because one fNIRS trajectory reached `21.18` effective codes against the frozen floor of `24`, despite later recovery. Changing only the replacement geometry to diverse-farthest raised that paired minimum to `24.80`; two confirmation seeds reached minima `29.64/29.63`. All three runs retained constant revival counts for eight validation epochs after step 200. Final effective usage is EEG `65.85 ± 1.66` and fNIRS `39.99 ± 1.38`, with mean final active codes `86.33/110.00`. The machine gate, registered factors, implementation hashes, and protected-test closure all pass. This is quantizer-health evidence, not G2 information-retention or G3 semantic evidence.
 
 **Implementation:** maintain EMA cluster counts `N_k` and EMA vector sums `M_k`, then update `e_k=M_k/(N_k+epsilon)`. Log revival events and resolved dimensions.
 
@@ -118,11 +118,11 @@ unopened because validation did not pass.
 - hard ID equals the posterior argmax;
 - runtime codebook shape equals the resolved modality-specific configuration.
 
-**Validity gate:** on a fixed latent stream, active-code fraction, effective rank, nearest-neighbor cosine, assignment entropy, and prototype drift remain consistent with health ranges calibrated from synthetic references and training-only pilots, without repeated mass revival. These ranges may change by modality, dataset, or phase and must retain their calibration provenance. They are health checks, not semantic evidence.
+**Validity gate:** on a fixed latent stream, active-code fraction, effective rank, nearest-neighbor cosine, assignment entropy, and prototype drift remain consistent with health ranges calibrated from synthetic references and training-only pilots, without ongoing periodic mass revival after any bounded and registered startup calibration. These ranges may change by modality, dataset, or phase and must retain their calibration provenance. They are health checks, not semantic evidence.
 
 ### P3 — Evaluate optional target/teacher adapters
 
-**Implementation status (updated 2026-07-16):** the generic adapter is merged. The historical Croce E0-v2 target remains blocked. The gauge-corrected adaptive joint SSM has passed the optional target-family development gate as a physiology-shaped multimodal consensus proxy, but its sidecar/cache schema and runtime adapter are not yet connected to this training path. No protected-test sample was evaluated.
+**Implementation status (updated 2026-07-19):** the generic adapter and entry-specific target masks are merged. The historical Croce E0-v2 target remains blocked. The gauge-corrected adaptive joint SSM has passed the optional target-family development gate as a physiology-shaped multimodal consensus proxy, but its unified sample-identity sidecar/cache join is not yet connected to training. No protected-test sample was evaluated.
 
 **Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics. The adaptive proxy registers required EEG `r`, optional EEG `s`, required observation-aligned HbO/HbR, and context/coupling-only flow groups with separate entry masks.
 
@@ -134,7 +134,7 @@ unopened because validation did not pass.
 
 ### P4 — Train independent semantic and residual branches
 
-**Implementation status (updated 2026-07-16):** the full trainer is merged. Patch locality, fixed-history causality, modality/gradient isolation, reconstruction shapes, coordinate-level gate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. A CUDA teacher-free smoke completed two optimizer steps and resumed to four with improving validation loss. The adaptive proxy target is scientifically admitted for development, but its runtime schema/loss route has not yet passed this implementation stage; the existing trainer still represents software-readiness rather than an adaptive-teacher training result.
+**Implementation status (updated 2026-07-20):** the full trainer and teacher-free measurement-first T0 path are merged in the working tree. Patch locality, fixed-history causality, modality/gradient isolation, measurement-mask propagation, reconstruction shapes, entry-specific coordinate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. The corrected CUDA smoke completed four optimizer steps, deterministic quantizer invariants pass, and the training-only G1/E1 quantizer-health gate is complete. G2/G3 objectives and the adaptive proxy sidecar join remain pending, so no information-retention, semantic, or adaptive-teacher training result is claimed.
 
 **Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization causal-context prediction, shared decoder reconstruction, branch-attribution outputs, and the optional asymmetric coupling-preservation shaper. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
 

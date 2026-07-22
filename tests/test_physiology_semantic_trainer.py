@@ -6,9 +6,15 @@ import torch
 from experiments.train_physiology_semantic_tokenizer import (
     E0_SCHEMA,
     _coordinate_mask,
+    _finalize_epoch_health,
+    _implementation_snapshot,
     _load_e0_gate,
+    _loss_from_config,
+    _quantizer_reference_tests,
+    _quantization_strength_for_epoch,
     _scheduler,
     _teacher_supervision_requested,
+    _update_epoch_health,
     _validate_loader_subjects,
 )
 
@@ -78,6 +84,19 @@ def test_warmup_cosine_scheduler_reaches_lower_learning_rate():
     assert rates[-1] < rates[1]
 
 
+def test_quantization_strength_schedule_matches_archived_epoch_ramp():
+    schedule = {
+        "enabled": True,
+        "start_epoch": 1,
+        "ramp_epochs": 5,
+        "start_scale": 0.0,
+        "end_scale": 1.0,
+    }
+    values = [_quantization_strength_for_epoch(epoch, schedule) for epoch in range(7)]
+    assert values == pytest.approx([0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 1.0])
+    assert _quantization_strength_for_epoch(0, {}) == 1.0
+
+
 def test_loader_subject_audit_rejects_missing_declared_subject():
     class Entry:
         def __init__(self, subject_id):
@@ -101,3 +120,98 @@ def test_loader_subject_audit_rejects_missing_declared_subject():
     }
     with pytest.raises(RuntimeError, match="coverage mismatch"):
         _validate_loader_subjects(loaders, config)
+
+
+def test_entry_routing_uses_separate_coordinate_allowlists():
+    criterion = _loss_from_config(
+        {
+            "loss": {
+                "uncertainty_weighting": False,
+                "entry_routing": {
+                    "local": {"eeg": ["r_mean"], "fnirs": ["delta_hbo_mean"]},
+                    "prototype": {"eeg": ["r_slope"], "fnirs": ["delta_hb_slope"]},
+                    "context": {"eeg": ["s_mean"], "fnirs": ["delta_f_mean"]},
+                    "coupling": {"eeg": ["r_mean"], "fnirs": ["delta_f_slope"]},
+                },
+            }
+        },
+        gate=None,
+    )
+    assert not criterion.uncertainty_weighting
+    assert torch.equal(
+        criterion.eeg_local_coordinate_mask,
+        torch.tensor([True, False, False, False, False, False]),
+    )
+    assert criterion.fnirs_local_coordinate_mask.nonzero().flatten().tolist() == [1]
+    assert criterion.fnirs_coupling_coordinate_mask.nonzero().flatten().tolist() == [3]
+
+
+def test_loss_config_selects_semantic_only_e1_reconstruction():
+    criterion = _loss_from_config(
+        {
+            "loss": {
+                "reconstruction": {
+                    "weight": 1.0,
+                    "mode": "semantic_only",
+                    "semantic_input": "hard",
+                },
+                "codebook_balance": {
+                    "weight": 0.08,
+                    "temperature": 1.5,
+                    "eeg_temperature": 2.0,
+                    "fnirs_temperature": 1.0,
+                    "eeg_scale": 1.0,
+                    "fnirs_scale": 0.5,
+                },
+            }
+        },
+        gate=None,
+    )
+    assert criterion.reconstruction_mode == "semantic_only"
+    assert criterion.reconstruction_semantic_input == "hard"
+    assert criterion.weights["balance"] == pytest.approx(0.08)
+    assert criterion.balance_temperature == pytest.approx(1.5)
+    assert criterion.eeg_balance_temperature == pytest.approx(2.0)
+    assert criterion.fnirs_balance_temperature == pytest.approx(1.0)
+    assert criterion.eeg_balance_scale == pytest.approx(1.0)
+    assert criterion.fnirs_balance_scale == pytest.approx(0.5)
+
+
+def test_quantizer_reference_artifact_checks_all_invariants():
+    result = _quantizer_reference_tests()
+    assert result["all_passed"]
+    assert all(result["checks"].values())
+
+
+def test_implementation_snapshot_hashes_active_e1_sources(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("experiment: {name: test}\n", encoding="utf-8")
+    snapshot = _implementation_snapshot(config)
+    assert snapshot["schema"] == "physiology_semantic_implementation_snapshot_v1"
+    assert len(snapshot["run_config_sha256"]) == 64
+    assert "src/losses/physiology_semantic.py" in snapshot["files_sha256"]
+    assert all(len(value) == 64 for value in snapshot["files_sha256"].values())
+
+
+def test_epoch_health_aggregates_assignments_across_batches():
+    class Output:
+        pass
+
+    aggregate = {}
+    for ids in (torch.tensor([[0, 0]]), torch.tensor([[1, 1]])):
+        quantizer = Output()
+        quantizer.hard_ids = ids
+        quantizer.posterior = torch.zeros(1, 2, 4)
+        quantizer.health = {
+            "prototype_drift": torch.tensor(0.5),
+            "revived_codes": torch.tensor(0.0),
+            "total_revivals": torch.tensor(0.0),
+        }
+        output = Output()
+        output.quantizer = quantizer
+        _update_epoch_health(aggregate, "eeg", output, valid_mask=None)
+
+    health = _finalize_epoch_health(aggregate)["eeg"]
+    assert health["epoch_active_codes"] == 2
+    assert health["valid_tokens"] == 4
+    assert health["effective_codes"] == pytest.approx(2.0)
