@@ -1,6 +1,6 @@
 # Comparative-method experiment workflow
 
-_Four-dataset downstream benchmark contract and readiness audit, updated 2026-07-18_
+_Four-dataset downstream benchmark contract and readiness audit, updated 2026-07-22_
 
 ---
 
@@ -24,7 +24,7 @@ This document fixes the workflow while leaving the final comparison-method set o
 | STA-Net | Official revision is pinned; the independent PyTorch FGSA/EGTA reimplementation, unified spatial/temporal adapter, binary/multiclass heads, and masked sequence-regression head pass seven-task CUDA smoke | Implemented comparison candidate; correctness only | Freeze formal splits/protocol, reproduce a source task, then run train/validation pilots |
 | EFRM | Official code is present locally at revision `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; released downstream path uses classification heads and `CrossEntropyLoss` | Candidate only | Separate pretraining regimes and add a regression-capable evaluation head |
 | Method provenance | STA-Net smoke manifests pin source URL/revision and the PyTorch deviations; upstream still exposes no license. EFRM remains an ignored nested repository | Partially ready; blocking for release/formal admission | Resolve license status and add the same manifest boundary for EFRM |
-| Fair result table | No common tasks, splits, data regimes, metrics, or seed policy are frozen | Not ready | Complete C0–C4 before any formal result |
+| Fair result table | Cross-subject and within-subject result families, common metrics, and seed policy are not yet jointly frozen | Not ready | Complete C0–C5 for both evaluation families before any formal result |
 
 The pre-contract read-only audit yielded 9,921 window references, including DSR and only eight Visual subjects. It is retained below as historical evidence of the gaps that prompted this change:
 
@@ -61,12 +61,13 @@ Completed STA-Net task runs are summarized with
 only the split-manifest validation indices from the best checkpoint and stores
 the predictions needed to audit every plotted aggregate. It reports training
 and validation curves, runtime/throughput, confusion matrices, per-class and
-calibration diagnostics, native-coordinate masked regression diagnostics, and
-EGTA lag-attention/fusion-gate distributions. Both SVG and 300-DPI PNG are
+calibration diagnostics, Accuracy and Cohen's Kappa, subject-level summaries,
+native-coordinate masked regression diagnostics, and EGTA
+lag-attention/fusion-gate distributions. Both SVG and 300-DPI PNG are
 required so figures remain editable and reviewable. The suite overview keeps
 classification and regression endpoints in separate panels; it never pools
 them into a synthetic ranking. Protected-test figures may be generated only by
-the later frozen C5 evaluation path, not by this validation-report command.
+the later frozen C6 evaluation path, not by this validation-report command.
 
 ## 🎯 Fixed benchmark scope
 
@@ -202,9 +203,9 @@ record-grouped batches and two sequential per-GPU task queues, performs
 validation every epoch, saves best/latest checkpoints, and pins implementation
 and configuration hashes. Its active run is
 [`20260719_sta_net_all_tasks_v4_optimized_frozen`](../../comparative_methods/STA-Net-PyTorch/runs/training/20260719_sta_net_all_tasks_v4_optimized_frozen/).
-It is in-progress development evidence, not an admitted performance result.
+It is completed development evidence, not an admitted performance result.
 
-STA-Net may therefore enter the **paired supervised architecture track** for public train/validation development. Source-protocol reproduction remains required before calling the PyTorch implementation a faithful named-method reproduction. Original subject-specific results, source-task PyTorch reproduction, and subject-independent adapted results must occupy separate tables.
+STA-Net may therefore enter the **paired supervised architecture track** for public train/validation development. Source-protocol reproduction remains required before calling the PyTorch implementation a faithful named-method reproduction. For MI, MA, and WG, the source-aligned reproduction must generate the paper's two reported performance indicators—per-subject Accuracy and Cohen's Kappa—and aggregate each as mean, sample standard deviation, and subject-level confidence interval. Original subject-specific results, source-task PyTorch reproduction, shared within-subject results, and subject-independent adapted results must occupy separate, explicitly labeled tables.
 
 ### EFRM
 
@@ -271,23 +272,31 @@ Create a versioned `benchmark_protocol.yaml` that records:
 - discrete class names and REFED continuous-target schema;
 - loader class, loader contract, cache/index hashes, signal branches, masks, and window policy;
 - primary modality regime, label budget, split family, seed policy, and result aggregation rule;
+- mandatory subject-independent and within-subject evaluation families, including their grouping units and eligibility rules;
 - protected-test boundary and protocol hash.
 
 **Gate C0:** a machine-readable inventory shows exactly the declared tasks, zero forbidden/unknown labels, target coverage, subject counts, and per-task class or target distributions.
 
-### C1 — Generate shared subject splits
+### C1 — Generate shared cross-subject and within-subject splits
 
-Generate splits once, before method-specific tensors. The primary protocol is subject-independent, group-exclusive outer-fold evaluation with nested train/validation selection. Each dataset/task receives versioned fold manifests containing train, validation, and protected outer-test subjects plus hashes of ordered sample IDs. The fold count is frozen before outcome inspection from admitted subject count and task coverage rather than imposed as one universal number. The current 16-subject Visual entrance still requires a fold design with explicit subject-level uncertainty; Probe1/Probe2 views of the same semantic trial must remain grouped and cannot inflate the effective trial denominator.
+Generate splits once, before method-specific tensors. Every admitted task must produce both result families in the same formal protocol version:
+
+1. **Subject-independent / cross-subject:** group-exclusive outer-fold evaluation with nested train/validation selection. Each dataset/task receives versioned fold manifests containing train, validation, and protected outer-test subjects plus hashes of ordered sample IDs.
+2. **Within-subject / non-cross-subject:** one evaluation is constructed per eligible subject, with sessions, records, blocks, videos, or semantic trials—not individual windows—as the indivisible split unit. Each subject receives versioned public train/validation and protected test manifests with ordered sample-ID hashes. Random window-level splitting is prohibited.
+
+The fold counts and within-subject grouping units are frozen before outcome inspection from admitted subject/session/record coverage rather than imposed as one universal number. The current 16-subject Visual entrance still requires cross-subject uncertainty to remain explicit; in the within-subject family, Probe1/Probe2 views of the same semantic trial must remain grouped and cannot inflate the effective trial denominator.
 
 Rules:
 
-- all sessions, records, windows, and probes from one subject remain in one partition;
-- task tracks within one dataset reuse the same subject partition whenever coverage permits;
-- REFED windows from one video or subject never cross partitions;
+- in the cross-subject family, all sessions, records, windows, and probes from one subject remain in one partition;
+- cross-subject task tracks within one dataset reuse the same subject partition whenever coverage permits;
+- REFED windows from one subject never cross cross-subject partitions, and windows from one video never cross within-subject partitions;
+- within-subject folds keep all windows from the same session, record, block, video, or semantic trial together, using the strongest dataset-native dependency key available;
+- a subject without enough independent groups or class/target support is marked protocol-ineligible with a recorded reason and denominator; it is never silently dropped after outcomes are observed;
 - hyperparameters, early stopping, calibration, channel selection, and target scaling use train/validation only;
-- subject-specific evaluation, if retained, is a secondary protocol with a different ID and table.
+- cross-subject and within-subject evaluation use different protocol IDs, manifests, result roots, and tables even when they share a task and model configuration.
 
-**Gate C1:** zero subject, sample-ID, normalization-statistic, or target-scaling leakage; identical fold and split hashes for all methods in the same task track.
+**Gate C1:** both result families exist for every eligible task; there is zero subject, dependency-group, sample-ID, normalization-statistic, or target-scaling leakage; and all methods in the same task/result family reuse identical fold and split hashes.
 
 ### C2 — Pin method provenance and environments
 
@@ -315,7 +324,7 @@ STA-Net's spatial grids and EFRM's fixed sampling/channel targets require explic
 
 ### C4 — Establish method fidelity
 
-Before the shared benchmark, reproduce one source-supported task close to the paper protocol. Record the source preprocessing, evaluation regime, metric, uncertainty, and any gap from the published result. Exact numerical identity is not required, but unexplained failure blocks claims that the implementation represents the named method.
+Before the shared benchmark, reproduce one source-supported task close to the paper protocol. For STA-Net, the source-fidelity suite covers MI, MA, and WG when their original data are available and reports per-subject Accuracy and Cohen's Kappa, followed by the across-subject mean and sample standard deviation used by the paper. Record the source preprocessing, session partition, evaluation regime, metric definitions, uncertainty, and any gap from the published result. Exact numerical identity is not required, but unexplained failure blocks claims that the implementation represents the named method.
 
 Then run a shared-protocol dry run and smoke on public train/validation subjects only. A method must emit finite losses, predictions, checkpoints, runtime/resource measurements, and evaluation artifacts using the common split and metric API.
 
@@ -323,24 +332,31 @@ Then run a shared-protocol dry run and smoke on public train/validation subjects
 
 ### C5 — Freeze task metrics and selection
 
-Classification and regression use different endpoints; raw values are never pooled across target types.
+Classification and regression use different endpoints; raw values are never pooled across target types. Metric roles are also explicit by result family:
 
-| Target family | Primary endpoint | Required secondary evidence |
-| --- | --- | --- |
-| Discrete | subject-level macro F1 | balanced accuracy, accuracy, per-class recall, confusion matrix, calibration, loss |
-| Continuous | subject-level concordance correlation coefficient | MAE, RMSE, R², Pearson/Spearman correlation, target coverage |
+| Result family | Scope | Primary endpoint | Required additional evidence |
+| --- | --- | --- | --- |
+| Source-aligned within-subject reproduction | STA-Net MI / MA / WG | mean per-subject Accuracy | Cohen's Kappa, subject-level Accuracy/Kappa rows, sample SD, confidence interval, and the exact paper-compatible session split |
+| Shared subject-independent discrete benchmark | All classification tasks | subject-level macro F1 across protected outer subjects | **Accuracy and Cohen's Kappa**, balanced accuracy, per-class recall, confusion matrix, calibration, loss, and subject-level bootstrap interval |
+| Shared within-subject discrete benchmark | All eligible classification subjects | mean per-subject macro F1 across protected within-subject groups | **Accuracy and Cohen's Kappa**, balanced accuracy, per-class recall, confusion matrix, calibration, loss, sample SD, and subject-level bootstrap interval |
+| Shared subject-independent continuous benchmark | REFED | subject-level concordance correlation coefficient | MAE, RMSE, R², Pearson/Spearman correlation, target coverage, and subject-level bootstrap interval |
+| Shared within-subject continuous benchmark | Eligible REFED subjects | mean per-subject concordance correlation coefficient across protected videos/records | MAE, RMSE, R², Pearson/Spearman correlation, target coverage, sample SD, and subject-level bootstrap interval |
 
-The primary endpoint is aggregated over held-out subjects, with subject-level bootstrap uncertainty. Class imbalance handling, checkpoint selection, and any metric calibration are fixed from training/validation data. No universal numerical pass threshold is imposed.
+Accuracy and Cohen's Kappa are mandatory outputs for every discrete STA-Net evaluation because they are the original paper's reported indicators; they do not replace macro F1 as the shared imbalanced/multiclass benchmark primary endpoint. Every classification prediction artifact therefore emits Accuracy, Kappa, balanced accuracy, and macro F1 at the fold/subject level before aggregation. Pooled-window versions may be retained as diagnostics but cannot substitute for subject-level estimates.
+
+Each suite has exactly one declared primary endpoint as specified above. Primary endpoints are aggregated over held-out subjects or protected within-subject dependency groups, with subject-level bootstrap uncertainty where applicable. Class imbalance handling, checkpoint selection, and metric calibration are fixed from training/validation data. No universal numerical pass threshold is imposed.
 
 For the overall summary, report every dataset/task separately. A cross-task summary may use paired ranks or normalized effect sizes as secondary evidence; it cannot average macro F1 and concordance correlation into one score.
 
-**Gate C5:** `decision_protocol.yaml`, `metric_registry.json`, and `evidence_calibration.json` are frozen and hashed before protected evaluation.
+**Gate C5:** `decision_protocol.yaml`, `metric_registry.json`, and `evidence_calibration.json` enumerate and freeze both result families, the source-paper Accuracy/Kappa outputs, aggregation units, and uncertainty procedures before either protected evaluation is opened.
 
 ### C6 — Run formal comparison and release artifacts
 
-Formal runs execute the same task–split–seed matrix for every admitted method and project model. Compare matched tracks only: scratch with scratch, in-domain pretraining with in-domain pretraining, released external checkpoints in a separate table, linear probe with linear probe, and full fine-tune with full fine-tune.
+Formal runs execute both the subject-independent and within-subject task–split–seed matrices for every admitted method and project model. A formal method suite is incomplete until both eligible matrices finish or every ineligible subject/task has a pre-outcome reason recorded. Compare matched tracks only: scratch with scratch, in-domain pretraining with in-domain pretraining, released external checkpoints in a separate table, linear probe with linear probe, and full fine-tune with full fine-tune.
 
-The complete protected outer-fold evaluation is opened once per frozen protocol version. Failed or incomplete methods remain visible; they are not dropped after inspecting project-model results. Revisions require a new protocol version and fresh protected evidence.
+The two evaluation families are never merged into one headline number. Reports contain separate tables for source-aligned STA-Net reproduction, shared within-subject comparison, and shared cross-subject comparison. The within-subject table reports the per-subject rows behind every aggregate so that a large number of windows cannot masquerade as a large subject denominator.
+
+The complete protected evaluation for each family is opened once per frozen protocol version: outer-subject folds for the cross-subject family and protected dependency-group folds for the within-subject family. Failed or incomplete methods remain visible; they are not dropped after inspecting project-model results. Revisions require a new protocol version and fresh protected evidence.
 
 **Gate C6:** every table cell resolves to an immutable run manifest, prediction file, subject-level metric table, environment, checkpoint hash, and completion status.
 
@@ -352,11 +368,12 @@ The following factors must match within a comparison track unless the factor its
 
 | Factor | Required handling |
 | --- | --- |
-| Measured samples | Same ordered split/sample IDs |
+| Measured samples | Same ordered split/sample IDs within each evaluation family |
 | Label access | Same train labels and label budget |
 | Pretraining corpus | Same in-domain corpus, or separate external track |
 | Input modality | Paired, EEG-only, and fNIRS-only reported separately |
-| Model selection | Same validation subjects and primary selection metric |
+| Model selection | Same validation subjects or within-subject dependency groups and the same family-specific primary selection metric |
+| Evaluation family | Both cross-subject and within-subject results are mandatory and separately labeled; neither may stand in for the other |
 | Randomness | Same declared seed set; method-native nondeterminism recorded |
 | Training budget | Matched optimizer-step or compute-budget policy plus actual resource report |
 | Augmentation | Method-native versus shared augmentations declared and ablated when material |
@@ -373,7 +390,7 @@ The primary comparison concerns downstream prediction. Coupling heatmaps, attent
 ## 📦 Artifact and directory contract
 
 ```text
-comparative_methods/<method_id>/runs/<protocol_id>/<dataset_id>/<task_id>/<run_id>/
+comparative_methods/<method_id>/runs/<protocol_id>/<evaluation_family>/<dataset_id>/<task_id>/<run_id>/
 ├── benchmark_protocol.yaml
 ├── method_manifest.yaml
 ├── adapter_manifest.json
@@ -422,11 +439,11 @@ The full-loader audit adds three prerequisites ahead of method tensor export: re
 1. the four datasets and seven admitted task tracks have machine-readable target contracts;
 2. every comparative entrance proves valid DSR Go/No-go provenance and zero unknown labels;
 3. REFED continuous targets are aligned, masked, versioned, and tested;
-4. one shared subject split manifest is reused by all methods in each track;
+4. shared cross-subject and within-subject split manifests are both present and reused by all methods in each matched track;
 5. STA-Net and EFRM have pinned provenance, environment, license status, and source-fidelity results;
 6. every method consumes unified-loader samples through deterministic, split-aware adapters;
 7. classification and regression dry runs emit the required artifact schema;
-8. data-regime, modality, probe/fine-tune, and subject-specific/independent results cannot enter the same unlabeled table;
+8. both subject-specific/within-subject and subject-independent/cross-subject result matrices are generated, while data-regime, modality, probe/fine-tune, and evaluation-family results cannot enter the same unlabeled table;
 9. protected-test protocols remain unopened until C0–C5 are frozen.
 
 ## 🔗 Related documents
@@ -447,4 +464,4 @@ The full-loader audit adds three prerequisites ahead of method tensor export: re
 
 [^4]: Jung, E., & An, J. “EFRM official implementation.” GitHub. https://github.com/EuijinMisp/EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
 
-_Last updated: 2026-07-18_
+_Last updated: 2026-07-22_
