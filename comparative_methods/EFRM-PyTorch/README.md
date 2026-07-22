@@ -208,12 +208,13 @@ Measured on an RTX 4090 with a true 32-pair contrastive matrix:
 | 8 | on | 4.20 GiB | 4.55 GiB | 35.8 s |
 | 32 | on | 4.19 GiB | 4.38 GiB | 29.1 s |
 | 32 | off | 20.25 GiB | 20.62 GiB | 20.8 s |
-| 16 | off | 11.68 GiB | 11.98 GiB | 21.0 s |
+| 16 | off | 11.89 GiB | 12.55 GiB | 21.9 s |
 
 The development default is therefore batch 32, exact two-pass gradient cache,
 recompute chunk 16, BF16 autocast, and no activation checkpointing. This leaves
 substantial margin beside the active STA-Net jobs without paying the slower
-checkpoint-recompute path.
+checkpoint-recompute path. Batched attention masks exclude invalid channel/time
+tokens as keys and values without falling back to per-sample transformer loops.
 
 ## Artifact contract
 

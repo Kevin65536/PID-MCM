@@ -126,13 +126,33 @@ class VariableChannelMAE(nn.Module):
             nn.init.zeros_(module.bias)
             nn.init.ones_(module.weight)
 
-    def _run_blocks(self, values: torch.Tensor, blocks: nn.ModuleList) -> torch.Tensor:
+    def _run_blocks(
+        self,
+        values: torch.Tensor,
+        blocks: nn.ModuleList,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         for block in blocks:
             if self.activation_checkpointing and self.training:
-                values = checkpoint(block, values, use_reentrant=False)
+                values = checkpoint(
+                    lambda current, layer=block: layer(current, attn_mask=attention_mask),
+                    values,
+                    use_reentrant=False,
+                )
             else:
-                values = block(values)
+                values = block(values, attn_mask=attention_mask)
         return values
+
+    @staticmethod
+    def _attention_mask(valid: torch.Tensor, *, dtype: torch.dtype) -> torch.Tensor:
+        cls_valid = torch.ones((valid.shape[0], 1), dtype=torch.bool, device=valid.device)
+        token_valid = torch.cat((cls_valid, valid.bool()), dim=1)
+        mask = torch.zeros(
+            (valid.shape[0], 1, 1, token_valid.shape[1]),
+            dtype=dtype,
+            device=valid.device,
+        )
+        return mask.masked_fill(~token_valid[:, None, None, :], torch.finfo(dtype).min)
 
     def patchify(self, values: torch.Tensor) -> torch.Tensor:
         batch, components, channels, time = values.shape
@@ -174,7 +194,7 @@ class VariableChannelMAE(nn.Module):
         self,
         values: torch.Tensor,
         patch_valid: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int, torch.Tensor]:
         embedded, height, width = self.patch_embed(values)
         valid = self._flatten_valid(patch_valid, height=height, width=width)
         positions = sincos_2d(self.embed_dim, height, width).to(device=embedded.device, dtype=embedded.dtype)
@@ -182,7 +202,7 @@ class VariableChannelMAE(nn.Module):
         embedded, reconstruction_mask, restore = self.random_masking(embedded, valid)
         cls = (self.cls_token + positions[:, :1]).expand(values.shape[0], -1, -1)
         latent = self._run_blocks(torch.cat((cls, embedded), dim=1), self.blocks)
-        return self.norm(latent), reconstruction_mask, restore, height, width
+        return self.norm(latent), reconstruction_mask, restore, height, width, valid
 
     def forward_decoder(
         self,
@@ -191,6 +211,7 @@ class VariableChannelMAE(nn.Module):
         *,
         height: int,
         width: int,
+        valid: torch.Tensor,
     ) -> torch.Tensor:
         decoded = self.decoder_embed(latent)
         missing = restore.shape[1] + 1 - decoded.shape[1]
@@ -205,7 +226,11 @@ class VariableChannelMAE(nn.Module):
         positions = sincos_2d(self.decoder_embed_dim, height, width).to(
             device=decoded.device, dtype=decoded.dtype
         )
-        decoded = self._run_blocks(decoded + positions, self.decoder_blocks)
+        decoded = self._run_blocks(
+            decoded + positions,
+            self.decoder_blocks,
+            self._attention_mask(valid, dtype=decoded.dtype),
+        )
         prediction = self.decoder_pred(self.decoder_norm(decoded))[:, 1:]
         return prediction
 
@@ -221,8 +246,10 @@ class VariableChannelMAE(nn.Module):
         return (per_patch * reconstruction_mask).sum() / denominator
 
     def reconstruct(self, values: torch.Tensor, patch_valid: torch.Tensor) -> dict[str, torch.Tensor]:
-        latent, mask, restore, height, width = self.forward_encoder(values, patch_valid)
-        prediction = self.forward_decoder(latent, restore, height=height, width=width)
+        latent, mask, restore, height, width, valid = self.forward_encoder(values, patch_valid)
+        prediction = self.forward_decoder(
+            latent, restore, height=height, width=width, valid=valid
+        )
         return {
             "loss": self.reconstruction_loss(values, prediction, mask),
             "prediction": prediction,
@@ -233,29 +260,20 @@ class VariableChannelMAE(nn.Module):
         embedded, height, width = self.patch_embed(values)
         valid = self._flatten_valid(patch_valid, height=height, width=width)
         positions = sincos_2d(self.embed_dim, height, width).to(device=embedded.device, dtype=embedded.dtype)
-        embedded = embedded + positions[:, 1:]
-        cls = self.cls_token + positions[:, :1]
-        if bool(valid.all()):
-            encoded = self.norm(
-                self._run_blocks(
-                    torch.cat((cls.expand(values.shape[0], -1, -1), embedded), dim=1),
-                    self.blocks,
-                )
-            )[:, 1:]
-            return encoded.mean(dim=1)
-
-        # Zeroing invalid tokens would still change attention's softmax
-        # denominator. Remove them from the physical token set per sample.
-        pooled: list[torch.Tensor] = []
-        for batch_index in range(values.shape[0]):
-            selected = embedded[batch_index : batch_index + 1, valid[batch_index]]
-            if selected.shape[1] == 0:
-                raise ValueError("embedding requires at least one valid physical patch")
-            encoded = self.norm(
-                self._run_blocks(torch.cat((cls, selected), dim=1), self.blocks)
-            )[:, 1:]
-            pooled.append(encoded.mean(dim=1))
-        return torch.cat(pooled, dim=0)
+        if int(valid.sum(dim=1).min()) == 0:
+            raise ValueError("embedding requires at least one valid physical patch")
+        embedded = (embedded + positions[:, 1:]) * valid.unsqueeze(-1)
+        cls = (self.cls_token + positions[:, :1]).expand(values.shape[0], -1, -1)
+        encoded = self.norm(
+            self._run_blocks(
+                torch.cat((cls, embedded), dim=1),
+                self.blocks,
+                self._attention_mask(valid, dtype=embedded.dtype),
+            )
+        )[:, 1:]
+        return (encoded * valid.unsqueeze(-1)).sum(dim=1) / valid.sum(
+            dim=1, keepdim=True
+        ).clamp_min(1)
 
 
 class EFRMSyncModel(nn.Module):
