@@ -1,0 +1,61 @@
+schema: efrm_sync_pretraining_v1
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  dataset_ids:
+    - eeg_fnirs_single_trial
+    - refed
+    - visual_cognitive_motivation
+    - simultaneous_eeg_nirs
+  window_duration_s: 8.0
+  eeg_sample_rate_hz: 200.0
+  fnirs_sample_rate_hz: 10.0
+  require_full_analysis_support: true
+  sampler: balanced_dataset_inventory_diverse_epoch_crop_v1
+  channel_policy: variable_measured_channels_no_duplication_v1
+
+model:
+  embedding_dim: 768
+  encoder_depth: 12
+  encoder_heads: 12
+  decoder_embedding_dim: 512
+  decoder_depth: 8
+  decoder_heads: 16
+  mlp_ratio: 4.0
+  mask_ratio: 0.5
+  eeg_patch_samples: 50
+  fnirs_patch_samples: 20
+  clip_logit_multiplier: 0.1
+  activation_checkpointing: true
+
+loss:
+  eeg_reconstruction_weight: 1.0
+  fnirs_reconstruction_weight: 1.0
+  clip_alignment_weight: 1.0
+
+training:
+  seed: 42
+  epochs: 100
+  min_epochs: 20
+  early_stopping_patience: 15
+  effective_batch_size: 32
+  microbatch_size: auto
+  contrastive_gradient_cache: two_pass_exact_v1
+  ordinary_gradient_accumulation_expands_negative_set: false
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  adam_betas: [0.9, 0.95]
+  gradient_clip_norm: 5.0
+  scheduler: cosine
+  amp: true
+  amp_dtype: bfloat16
+  validation_every_epochs: 1
+  checkpoint_every_epochs: 1
+
+evaluation:
+  development_seed: 42
+  formal_seeds: [17, 42, 73]
+  transfer_modes: [linear_probe, full_finetune]
+  hpo_trials_per_task_mode: 12
+  hpo_rung_epochs: [2, 8, 20, 40, 100]
+  protected_test_default: locked

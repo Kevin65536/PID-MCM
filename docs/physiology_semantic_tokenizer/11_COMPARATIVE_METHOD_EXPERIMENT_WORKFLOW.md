@@ -6,9 +6,9 @@ _Four-dataset downstream benchmark contract and readiness audit, updated 2026-07
 
 ## 📋 Decision and current readiness
 
-The comparison program is approved to enter **implementation smoke**, but it is not ready for formal performance training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. A task-configurable PyTorch STA-Net reimplementation and unified-loader adapter now pass correctness smoke on all seven task tracks. Shared formal split manifests, source-protocol reproduction, frozen performance protocols, and EFRM integration are not yet complete.
+The comparison program is approved to enter **implementation smoke**, but it is not ready for formal performance training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. A task-configurable PyTorch STA-Net reimplementation and unified-loader adapter pass correctness smoke on all seven task tracks. EFRM now has an isolated synchronized-data implementation, public-split pretraining boundary, seven-task transfer contract, CLIP-pair evidence exporter, and real-data CPU smoke; full ViT-base smoke, source-protocol reproduction, frozen performance protocols, and protected evaluation remain incomplete.
 
-This document fixes the workflow while leaving the final comparison-method set open. STA-Net is admitted as an **implemented comparison candidate** for source-fidelity and shared-protocol development; EFRM remains a candidate for integration audit. The project explicitly permits task-specific classification and regression heads when the variant name and deviation manifest are preserved. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
+This document fixes the workflow while leaving the final comparison-method set open. STA-Net and EFRM are admitted as **implemented comparison candidates** for source-fidelity and shared-protocol development; neither has entered protected performance evaluation. The project explicitly permits task-specific classification and regression heads when the variant name and deviation manifest are preserved. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
 
 ### Audit verdict
 
@@ -20,10 +20,10 @@ This document fixes the workflow while leaving the final comparison-method set o
 | Simultaneous ocular repair | `simultaneous_eeg_eog_clean_v1` caches all 78 records as 28 scalp EEG channels; HEOG/VEOG are auxiliary-only | Ready | Preserve branch/hash provenance and report artifact masks |
 | Visual timing | Documented DC9 appearance→3-second disappearance semantics replace every-third-row parsing | Ready; 54/55 records | Keep S06 Part1 excluded unless stronger raw evidence appears |
 | Visual fNIRS geometry | PDF optode layout + 112 raw `Mode,4x4` exports + partial EEG anchors projected onto `Location.ced`; both probes have connected 24-node/52-edge graphs | Ready for adjacency inputs | Keep graphical-template provenance and prohibit exact distance/co-registration claims |
-| Subject-independent comparison | Subjects are present in the unified sample contract | Not implemented | Generate one shared split manifest per dataset/task |
+| Subject-independent comparison | Shared cross-subject and single-subject registries exist for all seven tasks; EFRM fingerprints match the STA-Net task ordering | Implemented; protected folds locked | Reuse the same public hashes and keep the explicit unlock boundary |
 | STA-Net | Official revision is pinned; the independent PyTorch FGSA/EGTA reimplementation, unified spatial/temporal adapter, binary/multiclass heads, and masked sequence-regression head pass seven-task CUDA smoke | Implemented comparison candidate; correctness only | Freeze formal splits/protocol, reproduce a source task, then run train/validation pilots |
-| EFRM | Official code is present locally at revision `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; released downstream path uses classification heads and `CrossEntropyLoss` | Candidate only | Separate pretraining regimes and add a regression-capable evaluation head |
-| Method provenance | STA-Net smoke manifests pin source URL/revision and the PyTorch deviations; upstream still exposes no license. EFRM remains an ignored nested repository | Partially ready; blocking for release/formal admission | Resolve license status and add the same manifest boundary for EFRM |
+| EFRM | Official code is pinned at `a62bf3d4c092ac3022b6c0bad90ec3993d5a5720`; isolated 200/10 Hz variable-channel model, paired pretraining adapter, public-split boundary, seven-task heads, and CLIP evidence tools pass unit/CPU smoke | Implemented comparison candidate; correctness only | Run full ViT-base architecture smoke after STA-Net HPO, then public development pretraining/transfer |
+| Method provenance | Both isolated methods pin source URL/revision and deviations; neither upstream checkout exposes a license file | Partially ready; blocking for release/formal admission | Resolve upstream license status before redistribution |
 | Fair result table | Cross-subject and within-subject result families, common metrics, and seed policy are not yet jointly frozen | Not ready | Complete C0–C5 for both evaluation families before any formal result |
 
 The pre-contract read-only audit yielded 9,921 window references, including DSR and only eight Visual subjects. It is retained below as historical evidence of the gaps that prompted this change:
@@ -211,7 +211,9 @@ STA-Net may therefore enter the **paired supervised architecture track** for pub
 
 EFRM is a two-stage representation-learning method that combines modality-specific masked autoencoding with paired EEG–fNIRS contrastive alignment, followed by downstream transfer. The paper reports pretraining on approximately 1,250 hours from 918 participants and evaluates label-efficient classification.[^3] The checked official code exposes pretraining, fine-tuning, and linear-probe paths for classification.[^4]
 
-The local implementation also needs substantial integration:
+That total is predominantly unpaired: 868 hours / 766 participants are EEG-only, 364 hours / 123 participants are fNIRS-only, and 15.5 hours / 29 participants are paired EEG-fNIRS. In the released loop, the first two pools supervise their respective MAE reconstruction losses; only the paired loader defines the CLIP identity positives. Cycling the shorter loaders makes all three losses available at each optimization step, but it does not align unpaired people or experiments.
+
+The released implementation establishes the following source constraints:
 
 - the pretraining loader expects separate EEG-only, fNIRS-only, and paired directory trees;
 - method inputs use fixed 8-second targets at 128 Hz for EEG and 16 Hz for fNIRS, unlike the canonical 200/10 Hz unified coordinates;
@@ -220,7 +222,20 @@ The local implementation also needs substantial integration:
 - downstream solvers use classification heads and `CrossEntropyLoss`;
 - no released path defines continuous valence/arousal regression.
 
-EFRM may enter the **pretrained transfer track** only after the pretraining data regime is explicit. A checkpoint trained on the paper's larger external corpus belongs to an `external_pretraining` track; a checkpoint trained only on the four admitted datasets belongs to an `in_domain_pretraining` track. Neither may be compared against the other as if training data were matched.
+The isolated reproduction is [`comparative_methods/EFRM-PyTorch`](../../comparative_methods/EFRM-PyTorch/README.md), reported as `efrm_sync_200_10_variable_channel_v1`. It freezes the following decisions:
+
+- admit the current `homer2_aligned_fnirs` HbO/HbR branch after component construction and full-record robust amplitude alignment, while retaining the provenance warning that intensity→optical-density uses `-log` and MBLL and is not globally a linear raw-measurement transform;
+- use EEG at 200 Hz and fNIRS at 10 Hz, with 50-sample EEG and 20-sample fNIRS temporal patches so the physical patch durations remain 0.25 s and 2 s;
+- train EEG MAE, fNIRS MAE, and symmetric CLIP retrieval from the same synchronized pair batch; no single-modality external duration is introduced;
+- retain every measured good EEG channel and every name-paired HbO/HbR location, consume validity masks in reconstruction and pooling, and never repeat/mirror channels;
+- form stackable batches within the same measured channel inventory but sample records round-robin, so CLIP negatives are not systematically adjacent/overlapping windows from one recording;
+- cover MI, MA, WG, n-back, DSR, Visual, and the explicitly named `efrm_sync_regression_adapter` for REFED;
+- use one public-only development checkpoint for development, but retrain a separate checkpoint inside every formal outer-fold boundary; all-subject pretraining is diagnostic/transductive only;
+- export the exact identity positive-pair mask, raw cosine matrix, scaled logits, bidirectional ranks/top-k/MRR, within-record hard negatives, and paired embedding projection. The side-by-side physiological figure labels EFRM's diagonal as synchronized co-occurrence, not direction, hemodynamic delay, or mechanism.
+
+Public-boundary preflight reuses the seven frozen STA-Net development split manifests. With the strict “common allowed subjects; validation role wins” rule, it admits 14,194 synchronized training windows and 3,540 validation windows across the four datasets, with no protected manifest opened. Ten implementation tests and a real Single-Trial CPU forward/backward smoke pass; these are connectivity evidence, not performance estimates.
+
+EFRM may enter the **pretrained transfer track** only with the pretraining data regime explicit. The unavailable paper checkpoint cannot populate the `external_pretraining` track. The primary run is instead `in_domain_pretraining`, trained only on the four admitted synchronized datasets. It must not be described as a numerical reproduction of the paper's 1,247.5-hour pretraining result.
 
 ### Method-selection rule
 
@@ -424,13 +439,13 @@ comparative_methods/<method_id>/runs/<protocol_id>/<evaluation_family>/<dataset_
 | 1 | `comparative_task_contract_v1` | Task namespaces, class names, REFED target definition, DSR restoration boundary |
 | 2 | Unified downstream label adapter | REFED continuous targets and masks |
 | 3 | DSR event/preflight tests | **Complete:** 8,980 admitted Go/No-go windows; VP005 remains alignment-excluded |
-| 4 | Shared subject split generator | Cross-method sample identity and leakage prevention |
-| 5 | Method provenance manifests | **STA-Net smoke manifest complete;** upstream license unresolved and EFRM manifest pending |
+| 4 | Shared subject split generator | **Complete:** cross-subject and single-subject registries; EFRM ordering hashes match |
+| 5 | Method provenance manifests | **STA-Net and EFRM manifests present;** both upstream license files remain unavailable |
 | 6 | Common prediction/metric API | **STA-Net classification/regression smoke API complete;** cross-method formal API pending |
 | 7 | STA-Net tensor/head adapter | **Complete:** PyTorch FGSA/EGTA, binary/multiclass/regression heads, unified geometry/mask adapter |
-| 8 | EFRM data/head adapter | Fixed pretraining layout and classification-only downstream path |
+| 8 | EFRM data/head adapter | **Implemented:** synchronized 200/10 Hz variable-channel MAEs, seven-task heads, REFED regression adapter, split boundary, and CLIP evidence export |
 | 9 | Source-fidelity reproductions | Named-method validity |
-| 10 | Shared train/validation smokes | **STA-Net complete on all seven tasks;** EFRM and formal frozen splits pending |
+| 10 | Shared train/validation smokes | **STA-Net complete on all seven tasks; EFRM real-data CPU correctness complete;** EFRM full-model/public development training pending |
 
 The full-loader audit adds three prerequisites ahead of method tensor export: reject Visual unknown labels before split generation; freeze paired-probe grouping/fusion or weighting; and test that method adapters consume time-validity, analysis-valid, artifact, bad-channel, channel, and target masks while preserving geometry provenance and template-coordinate sensitivity controls.
 

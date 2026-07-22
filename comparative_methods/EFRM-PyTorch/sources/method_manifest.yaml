@@ -1,0 +1,21 @@
+schema: comparative_method_manifest_v1
+method_id: efrm_sync_200_10_variable_channel_v1
+paper:
+  title: "EFRM: A Multimodal EEG-fNIRS Representation-learning Model for few-shot brain-signal classification"
+  doi: 10.1016/j.compbiomed.2025.111292
+upstream:
+  url: https://github.com/EuijinMisp/EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
+  revision: a62bf3d4c092ac3022b6c0bad90ec3993d5a5720
+  license_status: no_license_file_observed_blocks_redistribution
+checkpoint:
+  status: unavailable_after_author_contact
+  provenance: retrained_from_random_initialization
+declared_deviations:
+  - all pretraining inputs are synchronized paired EEG-fNIRS
+  - EEG and fNIRS sampling rates are 200 Hz and 10 Hz
+  - physical patch durations are preserved with 50- and 20-sample patches
+  - valid measured channel counts are variable and channels are never duplicated
+  - all seven shared benchmark tasks are evaluated
+  - REFED uses an explicitly named sequence-regression adapter
+  - formal checkpoints are retrained inside every protected outer-fold boundary
+
