@@ -109,43 +109,50 @@ class EFRMPairedWindowAdapter:
             )
 
     @staticmethod
-    def _paired_fnirs_indices(sample: Mapping[str, Any]) -> tuple[list[int], list[int], list[str]]:
+    def _paired_fnirs_indices(
+        sample: Mapping[str, Any],
+    ) -> tuple[list[int], list[int], list[str], np.ndarray]:
         names = [str(value) for value in sample["channel_names"]["fnirs"]]
         roles = [str(value) for value in sample["component_roles"]["fnirs"]]
         bad = np.asarray(sample["bad_channel_mask"]["fnirs"], dtype=bool)
         by_role: dict[str, dict[str, int]] = {"HbO": {}, "HbR": {}}
         order: list[str] = []
         for index, (name, role) in enumerate(zip(names, roles, strict=True)):
-            if role not in by_role or bad[index]:
+            if role not in by_role:
                 continue
             base = _component_base(name)
             by_role[role][base] = index
             if role == "HbO":
                 order.append(base)
         paired = [base for base in order if base in by_role["HbR"]]
-        if not paired:
+        good = np.asarray(
+            [not bad[by_role["HbO"][base]] and not bad[by_role["HbR"][base]] for base in paired],
+            dtype=bool,
+        )
+        if not paired or not good.any():
             raise ValueError("No valid paired HbO/HbR spatial locations remain")
         return (
             [by_role["HbO"][base] for base in paired],
             [by_role["HbR"][base] for base in paired],
             paired,
+            good,
         )
 
     def adapt(self, sample: Mapping[str, Any], *, crop_start_s: float = 0.0) -> dict[str, Any]:
         self._validate_rates(sample)
         eeg_bad = np.asarray(sample["bad_channel_mask"]["eeg"], dtype=bool)
-        eeg_keep = np.flatnonzero(~eeg_bad)
-        if eeg_keep.size == 0:
+        if eeg_bad.all():
             raise ValueError("No valid EEG channels remain")
 
         eeg, eeg_time_valid = _crop(
-            np.asarray(sample["eeg"])[eeg_keep],
+            np.asarray(sample["eeg"]),
             sample["analysis_valid_mask"]["eeg"],
             rate_hz=self.eeg_rate_hz,
             duration_s=self.duration_s,
             start_s=crop_start_s,
         )
-        hbo, hbr, fnirs_locations = self._paired_fnirs_indices(sample)
+        eeg[eeg_bad] = 0.0
+        hbo, hbr, fnirs_locations, fnirs_location_good = self._paired_fnirs_indices(sample)
         fnirs_indices = hbo + hbr
         fnirs_flat, fnirs_time_valid = _crop(
             np.asarray(sample["fnirs"])[fnirs_indices],
@@ -156,10 +163,13 @@ class EFRMPairedWindowAdapter:
         )
         locations = len(fnirs_locations)
         fnirs = np.stack((fnirs_flat[:locations], fnirs_flat[locations:]), axis=0)
+        fnirs[:, ~fnirs_location_good] = 0.0
 
-        eeg_patch_valid = _time_patch_mask(eeg_time_valid, self.eeg_patch_samples, len(eeg_keep))
+        eeg_patch_valid = _time_patch_mask(eeg_time_valid, self.eeg_patch_samples, len(eeg_bad))
+        eeg_patch_valid &= ~eeg_bad[:, None]
         fnirs_patch_valid = _time_patch_mask(fnirs_time_valid, self.fnirs_patch_samples, locations)
-        full_support = bool(eeg_patch_valid.all() and fnirs_patch_valid.all())
+        fnirs_patch_valid &= fnirs_location_good[:, None]
+        full_support = bool(eeg_time_valid.all() and fnirs_time_valid.all())
         admitted = full_support or not self.require_full_analysis_support
 
         return {
@@ -179,7 +189,7 @@ class EFRMPairedWindowAdapter:
             "condition": str(sample.get("label", {}).get("condition", "")),
             "crop_start_s": float(crop_start_s),
             "duration_s": self.duration_s,
-            "eeg_channel_names": [str(sample["channel_names"]["eeg"][index]) for index in eeg_keep],
+            "eeg_channel_names": [str(value) for value in sample["channel_names"]["eeg"]],
             "fnirs_location_names": fnirs_locations,
             "adapter_state": {
                 "schema": ADAPTER_SCHEMA,
@@ -413,32 +423,33 @@ class InventoryDiverseBatchSampler(Sampler[list[int]]):
             payload = json.loads(self.inventory_cache_path.read_text(encoding="utf-8"))
             if payload.get("schema") != "efrm_measured_channel_inventory_v1":
                 raise ValueError(f"unsupported inventory cache: {self.inventory_cache_path}")
-            cached_inventories = dict(payload.get("records", {}))
+            cached_inventories = dict(payload.get("datasets", {}))
 
         groups: dict[str, dict[tuple[tuple[str, ...], tuple[str, ...]], dict[str, list[int]]]] = defaultdict(
             lambda: defaultdict(dict)
         )
         for record_id, indices in records.items():
-            cached = cached_inventories.get(record_id)
+            dataset_id = record_dataset[record_id]
+            cached = cached_inventories.get(dataset_id)
             if cached is None:
                 representative = dataset[indices[0]]
                 cached = {
-                    "dataset_id": record_dataset[record_id],
+                    "dataset_id": dataset_id,
                     "eeg_channel_names": list(representative["eeg_channel_names"]),
                     "fnirs_location_names": list(representative["fnirs_location_names"]),
                 }
-                cached_inventories[record_id] = cached
+                cached_inventories[dataset_id] = cached
             inventory = (
                 tuple(str(value) for value in cached["eeg_channel_names"]),
                 tuple(str(value) for value in cached["fnirs_location_names"]),
             )
-            groups[record_dataset[record_id]][inventory][record_id] = indices
+            groups[dataset_id][inventory][record_id] = indices
         if self.inventory_cache_path is not None:
             self.inventory_cache_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 "schema": "efrm_measured_channel_inventory_v1",
                 "adapter": dataset.adapter.manifest(),
-                "records": cached_inventories,
+                "datasets": cached_inventories,
             }
             temporary = self.inventory_cache_path.with_suffix(".tmp")
             temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

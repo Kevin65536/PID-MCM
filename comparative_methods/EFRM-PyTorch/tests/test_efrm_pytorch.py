@@ -160,10 +160,12 @@ def test_adapter_keeps_measured_channels_and_pairs_components_without_duplicatio
         fnirs_patch_samples=20,
     )
     result = adapter.adapt(_fake_unified_sample())
-    assert result["eeg"].shape == (1, 3, 400)
-    assert result["fnirs"].shape == (2, 2, 20)
-    assert result["eeg_channel_names"] == ["E1", "E3", "E4"]
-    assert result["fnirs_location_names"] == ["A", "B"]
+    assert result["eeg"].shape == (1, 4, 400)
+    assert result["fnirs"].shape == (2, 3, 20)
+    assert result["eeg_channel_names"] == ["E1", "E2", "E3", "E4"]
+    assert result["fnirs_location_names"] == ["A", "B", "C"]
+    assert not result["eeg_patch_valid"][1].any()
+    assert not result["fnirs_patch_valid"][2].any()
     assert result["admitted"] is True
 
 

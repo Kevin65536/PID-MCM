@@ -64,9 +64,9 @@ measurement provenance; they do not establish identical physical units.
 
 ### Variable-channel policy
 
-All valid measured channels are retained. HbO and HbR are paired by spatial
-channel name, and a location is admitted only when both components are
-present. Bad channels and invalid time support are represented by masks; they
+All measured channel slots are retained. HbO and HbR are paired by spatial
+channel name, and a location is valid only when both components are present
+and pass QC. Bad channels and invalid time support are zeroed and represented by masks; they
 are excluded from reconstruction loss, self-attention, and global pooling. Batches contain one
 record inventory, while sinusoidal position embeddings are generated for the
 current channel/time grid. No channel is copied, mirrored, or assigned
