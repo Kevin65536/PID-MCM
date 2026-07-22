@@ -77,6 +77,19 @@ STA-Net process leaves most RTX 4090 compute capacity idle:
   --study-id 20260719_sta_net_hpo_v1 --n-trials 12
 ```
 
+Audit an existing tuning run without opening protected data:
+
+```bash
+.venv/bin/python comparative_methods/STA-Net-PyTorch/analyze_tuning.py \
+  --run-root comparative_methods/STA-Net-PyTorch/runs/tuning/20260719_sta_net_hpo_v1_100ep
+```
+
+The analyzer reconstructs Optuna states, rung and per-epoch validation
+trajectories, failure causes, budget use, and the distinction between the
+epoch-100 endpoint winner and the best historical validation checkpoint. It
+writes machine-readable CSV/JSON, a Markdown audit, and SVG/300-DPI PNG figures
+under the run's `analysis/` directory.
+
 Training uses only the public development split. A winner may be frozen only
 after it completes the 100-epoch rung:
 
