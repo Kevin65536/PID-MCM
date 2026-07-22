@@ -256,6 +256,7 @@ class EFRMSyncPretrainDataset(Dataset):
             "window_offset_s": float(ref.window_offset_s),
         }
 
+
     def _crop_start(self, sample: Mapping[str, Any], index: int) -> float:
         eeg_seconds = np.asarray(sample["eeg"]).shape[-1] / float(sample["sample_rate_hz"]["eeg"])
         fnirs_seconds = np.asarray(sample["fnirs"]).shape[-1] / float(sample["sample_rate_hz"]["fnirs"])
@@ -307,6 +308,78 @@ class EFRMSyncPretrainDataset(Dataset):
             "adapter": self.adapter.manifest(),
             "source_loader": self.base.contract_summary(),
         }
+
+
+class CachedEFRMPretrainDataset(Dataset):
+    """Read fixed, split-approved 8-second tensors without reopening raw files."""
+
+    def __init__(self, source: EFRMSyncPretrainDataset, selected_indices: Sequence[int],
+                 cache_root: str | Path, *, build: bool = True) -> None:
+        self.source, self.adapter = source, source.adapter
+        self.cache_root = Path(cache_root)
+        self.samples_dir = self.cache_root / "samples"
+        self.samples_dir.mkdir(parents=True, exist_ok=True)
+        self.selected_indices = [int(value) for value in selected_indices]
+        self.indices = list(range(len(self.selected_indices)))
+        self.epoch = 0
+        if build:
+            self._build_missing()
+        self.entries = [self._entry(index) for index in self.selected_indices]
+        missing = [row["path"] for row in self.entries if not Path(row["path"]).is_file()]
+        if missing:
+            raise FileNotFoundError(f"EFRM tensor cache is incomplete; first missing={missing[0]}")
+
+    def _path(self, source_index: int) -> Path:
+        return self.samples_dir / f"sample_{self.source.indices[int(source_index)]:06d}.pt"
+
+    def _entry(self, source_index: int) -> dict[str, Any]:
+        return {**self.source.lightweight_metadata(source_index), "source_index": source_index,
+                "path": str(self._path(source_index))}
+
+    def _build_missing(self) -> None:
+        missing = [index for index in self.selected_indices if not self._path(index).is_file()]
+        if not missing:
+            return
+        print(f"EFRM tensor cache: building {len(missing)} fixed synchronized windows", flush=True)
+        for position, source_index in enumerate(missing, start=1):
+            destination = self._path(source_index)
+            temporary = destination.with_suffix(".tmp")
+            torch.save(self.source[source_index], temporary)
+            temporary.replace(destination)
+            if position % 500 == 0 or position == len(missing):
+                print(f"EFRM tensor cache: {position}/{len(missing)}", flush=True)
+        manifest = {
+            "schema": "efrm_fixed_window_tensor_cache_v1",
+            "crop_policy": "deterministic_epoch0_common_valid_start",
+            "protected_test_opened": False,
+            "adapter": self.adapter.manifest(),
+            "sample_count": len(list(self.samples_dir.glob("sample_*.pt"))),
+        }
+        (self.cache_root / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
+        )
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = int(epoch)
+
+    def lightweight_metadata(self, index: int) -> dict[str, Any]:
+        row = self.entries[self.indices[int(index)]]
+        return {key: row[key] for key in (
+            "dataset_id", "subject", "record_id", "join_key", "event_index", "window_offset_s"
+        )}
+
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        row = self.entries[self.indices[int(index)]]
+        return torch.load(row["path"], map_location="cpu", weights_only=False)
+
+    def contract_summary(self) -> dict[str, Any]:
+        return {"schema": "efrm_fixed_window_tensor_cache_v1", "sample_count": len(self),
+                "cache_root": str(self.cache_root.resolve()),
+                "crop_policy": "deterministic_epoch0_common_valid_start",
+                "adapter": self.adapter.manifest()}
 
 
 class RecordGroupedBatchSampler(Sampler[list[int]]):

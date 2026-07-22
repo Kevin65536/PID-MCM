@@ -30,6 +30,7 @@ for path in (REPO_ROOT, METHOD_ROOT):
         sys.path.insert(0, str(path))
 
 from efrm_pytorch.data import (
+    CachedEFRMPretrainDataset,
     EFRMPairedWindowAdapter,
     EFRMSyncPretrainDataset,
     InventoryDiverseBatchSampler,
@@ -197,8 +198,18 @@ def main() -> None:
             require_full_analysis_support=bool(config["data"]["require_full_analysis_support"]),
         ),
     )
-    train_dataset = _subset(full_dataset, boundary.indices_for(full_dataset, "train"))
-    validation_dataset = _subset(full_dataset, boundary.indices_for(full_dataset, "validation"))
+    train_indices = boundary.indices_for(full_dataset, "train")
+    validation_indices = boundary.indices_for(full_dataset, "validation")
+    tensor_cache = (
+        METHOD_ROOT / "runs/cache" /
+        f"tensors_{boundary_manifest['boundary_sha256']}"
+    )
+    train_dataset = CachedEFRMPretrainDataset(
+        full_dataset, train_indices, tensor_cache, build=not args.architecture_smoke
+    ) if not args.architecture_smoke else _subset(full_dataset, train_indices)
+    validation_dataset = CachedEFRMPretrainDataset(
+        full_dataset, validation_indices, tensor_cache, build=not args.architecture_smoke
+    ) if not args.architecture_smoke else _subset(full_dataset, validation_indices)
     batch_size = int(training["effective_batch_size"])
     inventory_cache = (
         METHOD_ROOT / "runs/cache" /
@@ -289,6 +300,11 @@ def main() -> None:
         "train_sampler": train_sampler.manifest(),
         "validation_sampler": validation_sampler.manifest(),
         "inventory_cache": None if args.architecture_smoke else str(inventory_cache.resolve()),
+        "tensor_cache": None if args.architecture_smoke else str(tensor_cache.resolve()),
+        "crop_policy": (
+            "architecture_smoke_dynamic" if args.architecture_smoke
+            else "deterministic_epoch0_common_valid_start"
+        ),
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (run_dir / "status.json").write_text(json.dumps({"status": "running", "epoch": start_epoch}), encoding="utf-8")

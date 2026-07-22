@@ -55,7 +55,10 @@ measurement provenance; they do not establish identical physical units.
   matching the physical patch durations and token counts of EFRM at 128/16 Hz.
 - All pretraining examples are real synchronized pairs. The same admitted pair
   supplies EEG MAE, fNIRS MAE, and symmetric EFRM/CLIP alignment losses.
-- Batches are grouped by the real measured channel inventory and draw windows
+- Development tensors are materialized once at a deterministic common-valid
+  8-second crop after the public split boundary is resolved. This method-local
+  cache contains no protected samples and avoids repeatedly decoding REFED MAT
+  containers or Visual EDF files. Batches are grouped by the real measured channel inventory and draw windows
   round-robin across records. Dataset sampling is balanced before selecting
   deterministic epoch-dependent crops. This keeps tensors stackable without
   copying channels while preventing every CLIP negative from being an adjacent

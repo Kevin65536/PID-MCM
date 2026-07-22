@@ -3,6 +3,7 @@
 from .data import (
     EFRMPairedWindowAdapter,
     EFRMSyncPretrainDataset,
+    CachedEFRMPretrainDataset,
     InventoryDiverseBatchSampler,
     RecordGroupedBatchSampler,
     collate_efrm_pairs,
@@ -14,6 +15,7 @@ from .training import cached_pretrain_backward, evaluate_pretrain_batch
 
 __all__ = [
     "EFRMDownstreamModel",
+    "CachedEFRMPretrainDataset",
     "EFRMPairedWindowAdapter",
     "EFRMSyncModel",
     "EFRMSyncPretrainDataset",
