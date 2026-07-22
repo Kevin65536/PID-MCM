@@ -293,8 +293,13 @@ def main() -> None:
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (run_dir / "status.json").write_text(json.dumps({"status": "running", "epoch": start_epoch}), encoding="utf-8")
 
-    max_train = 1 if args.architecture_smoke else args.max_train_batches
-    max_validation = 1 if args.architecture_smoke else args.max_validation_batches
+    max_train = (
+        (args.max_train_batches or 1) if args.architecture_smoke else args.max_train_batches
+    )
+    max_validation = (
+        (args.max_validation_batches or 1)
+        if args.architecture_smoke else args.max_validation_batches
+    )
     amp_dtype = torch.bfloat16
     torch.cuda.reset_peak_memory_stats(device)
     for epoch in range(start_epoch, epochs):

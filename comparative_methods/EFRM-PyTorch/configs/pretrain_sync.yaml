@@ -39,7 +39,7 @@ training:
   min_epochs: 20
   early_stopping_patience: 15
   effective_batch_size: 32
-  microbatch_size: 16
+  microbatch_size: 8
   contrastive_gradient_cache: two_pass_exact_v1
   ordinary_gradient_accumulation_expands_negative_set: false
   learning_rate: 0.0001
