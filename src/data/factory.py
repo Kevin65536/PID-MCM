@@ -448,17 +448,28 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
         split_cfg = data_cfg.get('split', {})
         for split_name in ('train', 'val', 'test'):
             subject_keys = split_cfg.get(f'{split_name}_subject_keys', split_cfg.get(split_name, []))
+            target_cfg = data_cfg.get('auxiliary_target', {}) or {}
+            target_root = target_cfg.get('root')
+            required_splits = set(target_cfg.get('required_splits', ()))
             dataset = UnifiedPhysiologyLocalViewDataset(
                 cache_root=data_cfg.get('cache_root', 'data/cache/physiology_semantic_clean_v1'),
                 dataset_ids=tuple(data_cfg.get('dataset_ids', ('eeg_fnirs_single_trial',))),
                 subject_keys=subject_keys,
                 task_namespaces=data_cfg.get('task_namespaces'),
                 window_duration_s=float(data_cfg.get('window', {}).get('duration_s', 20.0)),
+                window_offset_s=float(data_cfg.get('window', {}).get('offset_s', 0.0)),
+                eeg_signal_branch=str(
+                    data_cfg.get('eeg_signal_branch', 'single_trial_eeg_artifact_clean_v3')
+                ),
                 local_eeg_channels=int(data_cfg.get('local_view', {}).get('eeg_channels', 6)),
                 reject_unknown_labels=bool(data_cfg.get('reject_unknown_labels', True)),
                 allow_cross_coordinate_systems=bool(
                     data_cfg.get('local_view', {}).get('allow_cross_coordinate_systems', False)
                 ),
+                auxiliary_target_root=target_root,
+                auxiliary_target_family=target_cfg.get('family'),
+                auxiliary_target_version=target_cfg.get('version'),
+                require_auxiliary_target=split_name in required_splits,
             )
             is_train = split_name == 'train'
             loader_kwargs = _resolve_dataloader_kwargs(data_cfg, is_train=is_train)

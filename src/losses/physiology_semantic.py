@@ -327,6 +327,8 @@ class PhysiologySemanticLoss(nn.Module):
                 component = eeg[name] + fnirs[name]
             components[name] = component
             total = total + weight * component
+            components[f"eeg_{name}"] = eeg[name]
+            components[f"fnirs_{name}"] = fnirs[name]
         components["eeg_balance"] = eeg["balance"]
         components["fnirs_balance"] = fnirs["balance"]
         components["total"] = total

@@ -344,6 +344,15 @@ No dataset produced a positive cross-inferable shared fraction at five seconds. 
 
 ## 🧠 E2 — Which objectives produce useful semantic tokens?
 
+**Execution status (2026-07-22):** the T0/T1/T2 software path, versioned
+adaptive-target sidecar, entry-gradient audit, frozen representation probes,
+and prototype matching are implemented. Integration auditing found that 137 of
+230 historical E0-v3 target views use a channel rejected by the current
+measured-data bad-channel contract. Those targets are excluded, leaving 93 for
+software validation only. Formal E2 is blocked until a bad-channel-aware E0
+target rebuild and revalidation. See
+[`analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md).
+
 **Question:** Do reconstruction, self-supervised temporal targets, task probes, data-driven dynamical targets, or an admitted physical teacher produce the most reproducible and informative token geometry?
 
 **Method:** compare B1–B4 under matched codebook size and latent dimension, then run the entry ladder below with all other optimization settings fixed:

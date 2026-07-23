@@ -37,6 +37,7 @@ import src.tokenizers  # noqa: F401  # active registry side effects
 
 RUN_SCHEMA = "physiology_semantic_training_v2"
 E0_SCHEMA = "physiology_semantic_e0_v1"
+TARGET_FAMILY_GATE_SCHEMA = "physiology_semantic_target_family_gate_v1"
 EEG_COORDINATES = ("r_mean", "r_slope", "r_logvar", "s_mean", "s_slope", "s_logvar")
 FNIRS_COORDINATES = (
     "delta_f_mean", "delta_hbo_mean", "delta_hb_mean",
@@ -77,6 +78,7 @@ def _implementation_snapshot(config_path: Path) -> dict[str, Any]:
         "experiments/train_physiology_semantic_tokenizer.py",
         "src/data/factory.py",
         "src/data/physiology_semantic_local.py",
+        "src/data/physiology_semantic_targets.py",
         "src/losses/physiology_semantic.py",
         "src/teachers/physical_state_teacher.py",
         "src/tokenizers/ema_vector_quantizer.py",
@@ -263,11 +265,19 @@ def _validate_loader_subjects(dataloaders: Mapping[str, Any], config: Mapping[st
             )
 
 
-def _load_e0_gate(config: Mapping[str, Any], *, require_pass: bool) -> tuple[dict[str, Any] | None, str | None]:
-    gate_value = config.get("validation", {}).get("e0_gate_path")
+def _load_training_gate(
+    config: Mapping[str, Any],
+    *,
+    require_pass: bool,
+) -> tuple[dict[str, Any] | None, str | None]:
+    validation = config.get("validation", {})
+    gate_value = validation.get("target_family_gate_path") or validation.get("e0_gate_path")
     if not gate_value:
         if require_pass:
-            raise RuntimeError("Training requires validation.e0_gate_path; boolean e0_passed is not accepted")
+            raise RuntimeError(
+                "Teacher-supervised training requires validation.target_family_gate_path "
+                "or validation.e0_gate_path; boolean pass flags are not accepted"
+            )
         return None, None
     path = Path(gate_value)
     if not path.is_absolute():
@@ -275,21 +285,53 @@ def _load_e0_gate(config: Mapping[str, Any], *, require_pass: bool) -> tuple[dic
     if not path.is_file():
         raise FileNotFoundError(f"E0 gate file not found: {path}")
     gate = json.loads(path.read_text(encoding="utf-8"))
-    if gate.get("schema") != E0_SCHEMA or gate.get("gate") != "G0":
+    schema = gate.get("schema")
+    if schema not in {E0_SCHEMA, TARGET_FAMILY_GATE_SCHEMA}:
         raise ValueError(f"Unsupported E0 gate schema in {path}")
     expected_split = hashlib.sha256(
         json.dumps(config.get("data", {}).get("split", {}), sort_keys=True).encode("utf-8")
     ).hexdigest()
     if gate.get("split_sha256") != expected_split:
         raise ValueError("E0 gate subject split does not match the training configuration")
-    if gate.get("data_contract") != config.get("data", {}).get("contract"):
+    data_cfg = config.get("data", {})
+    if gate.get("data_contract") != data_cfg.get("contract"):
         raise ValueError("E0 gate data contract does not match the training configuration")
-    expected_roots = [source.get("root") for source in config.get("data", {}).get("cache_sources", [])]
-    if gate.get("cache_source_roots") != expected_roots:
-        raise ValueError("E0 gate cache sources do not match the training configuration")
-    if require_pass and not bool(gate.get("e0_passed", False)):
-        raise RuntimeError(f"E0 gate did not pass: {gate.get('status', 'unknown')}")
+    if schema == E0_SCHEMA:
+        if gate.get("gate") != "G0":
+            raise ValueError(f"Unsupported E0 gate identity in {path}")
+        expected_roots = [source.get("root") for source in data_cfg.get("cache_sources", [])]
+        if gate.get("cache_source_roots") != expected_roots:
+            raise ValueError("E0 gate cache sources do not match the training configuration")
+        passed = bool(gate.get("e0_passed", False))
+    else:
+        if gate.get("gate") != "E0_OPTIONAL_TARGET_FAMILY_DEVELOPMENT":
+            raise ValueError(f"Unsupported target-family gate identity in {path}")
+        target_cfg = data_cfg.get("auxiliary_target", {}) or {}
+        if gate.get("target_family") != target_cfg.get("family"):
+            raise ValueError("Target-family gate does not match the configured family")
+        if gate.get("target_version") != target_cfg.get("version"):
+            raise ValueError("Target-family gate does not match the configured target version")
+        if gate.get("cache_root") != data_cfg.get("cache_root"):
+            raise ValueError("Target-family gate measured-cache root mismatch")
+        sidecar_path = Path(str(target_cfg.get("root", ""))) / "manifest.json"
+        if not sidecar_path.is_absolute():
+            sidecar_path = REPO_ROOT / sidecar_path
+        if not sidecar_path.is_file():
+            raise FileNotFoundError(f"Target-family sidecar manifest not found: {sidecar_path}")
+        if gate.get("sidecar_manifest_sha256") != _sha256(sidecar_path):
+            raise ValueError("Target-family gate sidecar hash mismatch")
+        if bool(gate.get("protected_test_opened", False)):
+            raise ValueError("Development target-family gate must keep protected test closed")
+        if validation.get("promotion_eligible", False):
+            raise ValueError("A development-only target-family gate cannot authorize promotion")
+        passed = bool(gate.get("target_family_development_passed", False))
+    if require_pass and not passed:
+        raise RuntimeError(f"Training gate did not pass: {gate.get('status', 'unknown')}")
     return gate, _sha256(path)
+
+
+# Backward-compatible import for the existing G0 trainer tests and callers.
+_load_e0_gate = _load_training_gate
 
 
 def _coordinate_mask(names: tuple[str, ...], admitted: Iterable[str] | None) -> torch.Tensor:
@@ -357,6 +399,138 @@ def _loss_from_config(config: Mapping[str, Any], gate: Mapping[str, Any] | None)
     )
 
 
+def _gradient_contract(objective: str) -> dict[str, tuple[str, ...]] | None:
+    modality, _, loss_name = objective.partition("_")
+    if modality not in {"eeg", "fnirs"}:
+        return None
+    branch = f"{modality}_branch."
+    other = "fnirs_branch." if modality == "eeg" else "eeg_branch."
+    head_by_loss = {
+        "state": "state_head.",
+        "prototype": "prototype_state_head.",
+        "masked_state": "context.",
+        "reconstruction": "decoder.",
+    }
+    required = [branch + "semantic_head."]
+    if loss_name in head_by_loss:
+        required.append(branch + head_by_loss[loss_name])
+    return {"required_prefixes": tuple(required), "forbidden_prefixes": (other,)}
+
+
+def _gradient_objective_weight(criterion: PhysiologySemanticLoss, objective: str) -> float:
+    modality, _, loss_name = objective.partition("_")
+    weight = float(criterion.weights.get(loss_name, 0.0))
+    if loss_name == "balance":
+        scale = criterion.eeg_balance_scale if modality == "eeg" else criterion.fnirs_balance_scale
+        return 0.5 * weight * float(scale)
+    return weight
+
+
+def _audit_objective_gradients(
+    model: torch.nn.Module,
+    losses: Mapping[str, torch.Tensor],
+    criterion: PhysiologySemanticLoss,
+    config: Mapping[str, Any],
+    *,
+    global_step: int,
+) -> dict[str, Any]:
+    """Measure per-objective reachability and pairwise gradient conflict."""
+
+    objectives = tuple(config.get("objectives", (
+        "eeg_state", "fnirs_state", "eeg_prototype", "fnirs_prototype",
+        "eeg_reconstruction", "fnirs_reconstruction", "eeg_balance", "fnirs_balance",
+    )))
+    tolerance = float(config.get("tolerance", 1e-12))
+    strict = bool(config.get("strict", True))
+    named_parameters = [(name, parameter) for name, parameter in model.named_parameters() if parameter.requires_grad]
+    parameter_names = [name for name, _ in named_parameters]
+    parameters = [parameter for _, parameter in named_parameters]
+    gradients: dict[str, tuple[torch.Tensor | None, ...]] = {}
+    rows: dict[str, Any] = {}
+    all_passed = True
+    for objective in objectives:
+        if objective not in losses:
+            raise KeyError(f"Gradient-audit objective is absent from loss output: {objective}")
+        weight = _gradient_objective_weight(criterion, objective)
+        raw = losses[objective]
+        if weight <= 0.0:
+            rows[objective] = {
+                "status": "disabled",
+                "configured_weight": weight,
+                "raw_loss": float(raw.detach()),
+                "contract_passed": True,
+            }
+            continue
+        weighted = raw * weight
+        grads = torch.autograd.grad(
+            weighted,
+            parameters,
+            retain_graph=True,
+            allow_unused=True,
+        )
+        gradients[objective] = grads
+        norms = {
+            name: float(gradient.detach().float().norm())
+            for name, gradient in zip(parameter_names, grads)
+            if gradient is not None and float(gradient.detach().float().norm()) > tolerance
+        }
+        contract = _gradient_contract(objective)
+        required_missing: list[str] = []
+        forbidden_reached: list[str] = []
+        if contract is not None and abs(float(raw.detach())) > tolerance:
+            required_missing = [
+                prefix for prefix in contract["required_prefixes"]
+                if not any(name.startswith(prefix) for name in norms)
+            ]
+            forbidden_reached = [
+                name for name in norms
+                if any(name.startswith(prefix) for prefix in contract["forbidden_prefixes"])
+            ]
+        passed = not required_missing and not forbidden_reached
+        all_passed &= passed
+        rows[objective] = {
+            "status": "audited" if abs(float(raw.detach())) > tolerance else "zero_support",
+            "configured_weight": weight,
+            "raw_loss": float(raw.detach()),
+            "gradient_norm": math.sqrt(sum(value * value for value in norms.values())),
+            "reachable_parameters": sorted(norms),
+            "parameter_gradient_norms": norms,
+            "required_prefixes_missing": required_missing,
+            "forbidden_parameters_reached": forbidden_reached,
+            "contract_passed": passed,
+        }
+
+    cosine: dict[str, float | None] = {}
+    active = sorted(gradients)
+    for left_index, left in enumerate(active):
+        for right in active[left_index + 1:]:
+            dot = 0.0
+            left_sq = 0.0
+            right_sq = 0.0
+            for left_grad, right_grad in zip(gradients[left], gradients[right]):
+                if left_grad is not None:
+                    left_sq += float(left_grad.detach().float().square().sum())
+                if right_grad is not None:
+                    right_sq += float(right_grad.detach().float().square().sum())
+                if left_grad is not None and right_grad is not None:
+                    dot += float((left_grad.detach().float() * right_grad.detach().float()).sum())
+            denominator = math.sqrt(left_sq * right_sq)
+            cosine[f"{left}__{right}"] = None if denominator <= tolerance else dot / denominator
+    if strict and not all_passed:
+        violations = {
+            name: row for name, row in rows.items() if not row.get("contract_passed", True)
+        }
+        raise RuntimeError(f"Gradient-entry contract failed: {violations}")
+    return {
+        "schema": "physiology_semantic_gradient_entry_audit_v1",
+        "global_step": int(global_step),
+        "strict": strict,
+        "all_contracts_passed": all_passed,
+        "objectives": rows,
+        "cosine_conflict": cosine,
+    }
+
+
 def _scheduler(optimizer: torch.optim.Optimizer, warmup_steps: int, total_steps: int):
     def scale(step: int) -> float:
         if warmup_steps > 0 and step < warmup_steps:
@@ -408,6 +582,8 @@ def _run_epoch(
     grad_clip: float,
     global_step: int,
     max_steps: int | None,
+    gradient_audit_config: Mapping[str, Any] | None = None,
+    gradient_audit_records: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, float], int, dict[str, Any]]:
     training = optimizer is not None
     model.train(training)
@@ -431,6 +607,20 @@ def _run_epoch(
             )
             losses = criterion(outputs, teacher, token_valid_masks=token_valid_masks)
         if training:
+            audit_cfg = dict(gradient_audit_config or {})
+            audit_steps = {int(value) for value in audit_cfg.get("steps", (0,))}
+            if bool(audit_cfg.get("enabled", False)) and global_step in audit_steps:
+                if gradient_audit_records is None:
+                    raise ValueError("Enabled gradient audit requires a record sink")
+                gradient_audit_records.append(
+                    _audit_objective_gradients(
+                        model,
+                        losses,
+                        criterion,
+                        audit_cfg,
+                        global_step=global_step,
+                    )
+                )
             scaler.scale(losses["total"]).backward()
             scaler.unscale_(optimizer)
             if grad_clip > 0:
@@ -441,6 +631,10 @@ def _run_epoch(
             global_step += 1
         for key, value in losses.items():
             sums[key] = sums.get(key, 0.0) + float(value.detach()) * batch_size
+        if "has_auxiliary_target" in batch:
+            sums["auxiliary_target_coverage"] = sums.get(
+                "auxiliary_target_coverage", 0.0
+            ) + float(batch["has_auxiliary_target"].float().sum())
         sample_count += batch_size
         for modality in ("eeg", "fnirs"):
             mask = None if token_valid_masks is None else token_valid_masks.get(modality)
@@ -508,9 +702,18 @@ def run(args: argparse.Namespace) -> Path:
 
     optimizer_requested = bool(args.train or (args.smoke and int(training.get("smoke_optimizer_steps", 0)) > 0))
     teacher_supervision = _teacher_supervision_requested(config)
-    gate, gate_hash = _load_e0_gate(
+    gate, gate_hash = _load_training_gate(
         config, require_pass=bool(optimizer_requested and teacher_supervision)
     )
+    if (
+        args.train
+        and gate is not None
+        and bool(gate.get("requires_e0_channel_aware_revalidation_before_formal_e2", False))
+    ):
+        raise RuntimeError(
+            "Formal E2 training is blocked until the adaptive target is rebuilt and "
+            "revalidated under the current measured bad-channel contract"
+        )
     device = _resolve_device(training)
     run_dir = Path(args.output_dir).resolve() if args.output_dir else _default_run_dir(config)
     for relative in ("checkpoints", "metrics", "diagnostics"):
@@ -611,6 +814,8 @@ def run(args: argparse.Namespace) -> Path:
     start_time = time.time()
     status = "dry_run_passed"
     last_health: dict[str, Any] = {}
+    gradient_audit_records: list[dict[str, Any]] = []
+    gradient_audit_config = validation.get("gradient_audit", {})
     quantization_warmup = training.get("quantization_warmup", {})
     if args.dry_run or (args.smoke and not optimizer_requested):
         quantization_strength = _quantization_strength_for_epoch(
@@ -630,6 +835,8 @@ def run(args: argparse.Namespace) -> Path:
             grad_clip=0.0,
             global_step=0,
             max_steps=None,
+            gradient_audit_config=None,
+            gradient_audit_records=None,
         )
         _append_jsonl(run_dir / "metrics" / "train.jsonl", {
             "epoch": 0,
@@ -662,6 +869,8 @@ def run(args: argparse.Namespace) -> Path:
                 grad_clip=grad_clip,
                 global_step=global_step,
                 max_steps=max_steps,
+                gradient_audit_config=gradient_audit_config,
+                gradient_audit_records=gradient_audit_records,
             )
             validation_metrics, _, validation_health = _run_epoch(
                 model=model,
@@ -676,6 +885,8 @@ def run(args: argparse.Namespace) -> Path:
                 grad_clip=0.0,
                 global_step=global_step,
                 max_steps=None,
+                gradient_audit_config=None,
+                gradient_audit_records=None,
             )
             last_health = validation_health
             _append_jsonl(run_dir / "diagnostics" / "quantizer_health.jsonl", {
@@ -730,6 +941,16 @@ def run(args: argparse.Namespace) -> Path:
             status = "smoke_passed" if args.smoke else "training_complete"
 
     _write_json(run_dir / "diagnostics" / "quantizer_health.json", last_health)
+    _write_json(run_dir / "diagnostics" / "gradient_entry_audit.json", {
+        "schema": "physiology_semantic_gradient_entry_audit_collection_v1",
+        "enabled": bool(gradient_audit_config.get("enabled", False)),
+        "record_count": len(gradient_audit_records),
+        "all_contracts_passed": all(
+            bool(record.get("all_contracts_passed", False))
+            for record in gradient_audit_records
+        ) if gradient_audit_records else None,
+        "records": gradient_audit_records,
+    })
     checkpoint_hashes = {
         path.name: _sha256(path) for path in (run_dir / "checkpoints").glob("*.pt")
     }
@@ -746,6 +967,7 @@ def run(args: argparse.Namespace) -> Path:
         "seed": seed,
         "device": str(device),
         "e0_gate_sha256": gate_hash,
+        "training_gate_schema": None if gate is None else gate.get("schema"),
         "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
         "global_step": global_step,
         "best_validation": None if math.isinf(best_validation) else best_validation,

@@ -26,6 +26,7 @@ Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families 
 | [`tokenizer_training_pilot.yaml`](tokenizer_training_pilot.yaml) | Full physical-state-supervised training protocol | Blocked by E0 decision artifact |
 | [`tokenizer_optimizer_smoke.yaml`](tokenizer_optimizer_smoke.yaml) | Minimal teacher-supervised optimizer guard check | Correctly rejects blocked E0 |
 | [`tokenizer_reconstruction_baseline_pilot.yaml`](tokenizer_reconstruction_baseline_pilot.yaml) | Teacher-free reconstruction-plus-VQ baseline | CUDA smoke and resume passed |
+| [`e2_semantic_objective_suite.yaml`](e2_semantic_objective_suite.yaml) | Matched T0/T1/T2 development suite using the E1-selected quantizer | Software path passed; formal E2 blocked by channel-aware E0 rebuild |
 
 Run the two mandatory early stages with:
 
@@ -44,6 +45,9 @@ Run the migration software stages with:
 ```
 
 Teacher-supervised runs require a concrete passed E0 decision artifact whose split, contract, cache roots, protocol, registry, and calibration hashes match the run. A boolean flag cannot bypass this check. Teacher-free runs must set every teacher-derived loss weight to zero; they may optimize for quantizer and reconstruction characterization without claiming E0 success.
+
+The E2 implementation and the currently blocking channel audit are documented
+in [`20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md).
 
 Run the E0-v2 validation and regenerate its visual package with:
 

@@ -16,6 +16,10 @@ import torch
 from torch.utils.data import Dataset
 
 from .unified_physiology import UnifiedPhysiologyWindowDataset, canonical_label
+from .physiology_semantic_targets import (
+    PhysiologySemanticTargetSidecar,
+    target_sample_key,
+)
 
 
 LOCAL_VIEW_SCHEMA = "physiology_semantic_measurement_local_v1"
@@ -56,17 +60,37 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         local_eeg_channels: int = 6,
         reject_unknown_labels: bool = True,
         allow_cross_coordinate_systems: bool = False,
+        window_offset_s: float = 0.0,
+        eeg_signal_branch: str = "single_trial_eeg_artifact_clean_v3",
+        auxiliary_target_root: str | None = None,
+        auxiliary_target_family: str | None = None,
+        auxiliary_target_version: str | None = None,
+        require_auxiliary_target: bool = False,
         base_dataset: UnifiedPhysiologyWindowDataset | None = None,
     ) -> None:
         self.base = base_dataset or UnifiedPhysiologyWindowDataset(
             cache_root=cache_root,
             dataset_ids=dataset_ids,
             window_duration_s=window_duration_s,
+            window_offset_s=window_offset_s,
+            eeg_signal_branch=eeg_signal_branch,
         )
         self.local_eeg_channels = int(local_eeg_channels)
         if self.local_eeg_channels != 6:
             raise ValueError("The current local tokenizer contract requires six EEG channels")
         self.allow_cross_coordinate_systems = bool(allow_cross_coordinate_systems)
+        self.require_auxiliary_target = bool(require_auxiliary_target)
+        self.auxiliary_targets = (
+            None
+            if auxiliary_target_root is None
+            else PhysiologySemanticTargetSidecar(
+                auxiliary_target_root,
+                expected_family=auxiliary_target_family,
+                expected_version=auxiliary_target_version,
+            )
+        )
+        if self.require_auxiliary_target and self.auxiliary_targets is None:
+            raise ValueError("require_auxiliary_target=True requires an auxiliary target sidecar")
         requested_subjects = None if subject_keys is None else {str(value) for value in subject_keys}
         requested_tasks = None if task_namespaces is None else {str(value) for value in task_namespaces}
 
@@ -154,6 +178,22 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         return np.asarray(selected, dtype=np.int64)
 
     @staticmethod
+    def _indices_by_name(
+        available: Sequence[str],
+        requested: Sequence[str],
+        *,
+        modality: str,
+    ) -> np.ndarray:
+        lookup = {str(name): index for index, name in enumerate(available)}
+        missing = [str(name) for name in requested if str(name) not in lookup]
+        if missing:
+            raise ValueError(f"Sidecar-selected {modality} channels are absent: {missing}")
+        indices = np.asarray([lookup[str(name)] for name in requested], dtype=np.int64)
+        if len(set(indices.tolist())) != len(indices):
+            raise ValueError(f"Sidecar-selected {modality} channels must be unique")
+        return indices
+
+    @staticmethod
     def _token_mask(mask: np.ndarray, patch_samples: int) -> torch.Tensor:
         value = np.asarray(mask, dtype=bool)
         if value.size % patch_samples:
@@ -163,13 +203,54 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, Any]:
         entry = self.entries[index]
         sample = self.base[entry.base_index]
-        pairs = self._paired_indices(sample)
-        digest = hashlib.sha256(
-            f"{sample['join_key']}|{sample['event'].get('event_index', entry.base_index)}".encode("utf-8")
-        ).digest()
-        pair_index = int.from_bytes(digest[:8], "little") % len(pairs)
-        hbo_index, hbr_index = pairs[pair_index]
-        eeg_indices = self._select_eeg(sample, hbo_index)
+        event_index = int(sample["event"].get("event_index", entry.base_index))
+        target_key = target_sample_key(
+            str(sample["dataset_id"]),
+            str(sample["subject"]),
+            str(sample["record_id"]),
+            event_index,
+        )
+        target = None if self.auxiliary_targets is None else self.auxiliary_targets.lookup(target_key)
+        target_rejection_reason = ""
+        if target is not None:
+            eeg_indices = self._indices_by_name(
+                sample["channel_names"]["eeg"],
+                target["selected_eeg_channels"],
+                modality="EEG",
+            )
+            fnirs_indices = self._indices_by_name(
+                sample["channel_names"]["fnirs"],
+                target["selected_fnirs_channels"],
+                modality="fNIRS",
+            )
+            if len(eeg_indices) != self.local_eeg_channels or len(fnirs_indices) != 2:
+                raise ValueError("Sidecar local view must select six EEG and two fNIRS channels")
+            selected_bad_eeg = bool(
+                np.asarray(sample["bad_channel_mask"]["eeg"], dtype=bool)[eeg_indices].any()
+            )
+            selected_bad_fnirs = bool(
+                np.asarray(sample["bad_channel_mask"]["fnirs"], dtype=bool)[fnirs_indices].any()
+            )
+            if selected_bad_eeg or selected_bad_fnirs:
+                if self.require_auxiliary_target:
+                    raise ValueError(
+                        "Sidecar selected a channel marked bad by the measured-data contract"
+                    )
+                target = None
+                target_rejection_reason = "sidecar_selected_bad_measured_channel"
+        if target is not None:
+            roles = [sample["component_roles"]["fnirs"][int(i)] for i in fnirs_indices]
+            if roles != ["HbO", "HbR"]:
+                raise ValueError(f"Sidecar fNIRS channel order must be [HbO,HbR], got {roles}")
+            hbo_index, hbr_index = (int(fnirs_indices[0]), int(fnirs_indices[1]))
+        else:
+            if self.require_auxiliary_target and not target_rejection_reason:
+                raise KeyError(f"No auxiliary target for measured sample {target_key}")
+            pairs = self._paired_indices(sample)
+            digest = hashlib.sha256(target_key.encode("utf-8")).digest()
+            pair_index = int.from_bytes(digest[:8], "little") % len(pairs)
+            hbo_index, hbr_index = pairs[pair_index]
+            eeg_indices = self._select_eeg(sample, hbo_index)
 
         eeg_valid = np.asarray(sample["analysis_valid_mask"]["eeg"], dtype=bool)
         fnirs_valid = np.asarray(sample["analysis_valid_mask"]["fnirs"], dtype=bool)
@@ -179,11 +260,8 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         fnirs[:, ~fnirs_valid] = 0.0
         label = sample["label"]
         anchor_name = str(sample["channel_geometry"]["fnirs"][hbo_index].get("base_channel_name"))
-        sample_id = (
-            f"{sample['dataset_id']}|{sample['subject']}|{sample['record_id']}|"
-            f"event={sample['event'].get('event_index', entry.base_index)}|anchor={anchor_name}"
-        )
-        return {
+        sample_id = f"{target_key}|anchor={anchor_name}"
+        output = {
             "schema": LOCAL_VIEW_SCHEMA,
             "eeg": torch.from_numpy(np.ascontiguousarray(eeg)),
             "fnirs": torch.from_numpy(np.ascontiguousarray(fnirs)),
@@ -201,7 +279,22 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
             "selected_eeg_channels": [sample["channel_names"]["eeg"][int(i)] for i in eeg_indices],
             "dependency_group_id": entry.dependency_group_id,
             "sample_id": sample_id,
+            "target_sample_key": target_key,
+            "has_auxiliary_target": torch.tensor(target is not None, dtype=torch.bool),
+            "auxiliary_target_rejection_reason": target_rejection_reason,
         }
+        if self.auxiliary_targets is not None:
+            if target is None:
+                output["teacher"] = self.auxiliary_targets.empty_target(
+                    tokens=int(round(self.base.window_duration_s / 2.0))
+                )
+            else:
+                output["teacher"] = {
+                    key: value
+                    for key, value in target.items()
+                    if isinstance(value, torch.Tensor)
+                }
+        return output
 
 
 __all__ = [

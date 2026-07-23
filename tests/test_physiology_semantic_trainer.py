@@ -16,7 +16,10 @@ from experiments.train_physiology_semantic_tokenizer import (
     _teacher_supervision_requested,
     _update_epoch_health,
     _validate_loader_subjects,
+    _audit_objective_gradients,
 )
+from src.losses.physiology_semantic import PhysiologySemanticLoss
+from src.tokenizers.physiology_semantic_tokenizer import PhysiologySemanticTokenizer
 
 
 def test_training_requires_real_passed_gate_file(tmp_path):
@@ -215,3 +218,86 @@ def test_epoch_health_aggregates_assignments_across_batches():
     assert health["epoch_active_codes"] == 2
     assert health["valid_tokens"] == 4
     assert health["effective_codes"] == pytest.approx(2.0)
+
+
+def test_target_family_development_gate_is_scoped_and_hash_bound(tmp_path):
+    sidecar = tmp_path / "sidecar"
+    sidecar.mkdir()
+    (sidecar / "manifest.json").write_text('{"schema":"sidecar"}\n', encoding="utf-8")
+    import hashlib
+    split = {"train_subject_keys": ["d|s1"], "val_subject_keys": ["d|s2"], "test_subject_keys": ["d|s3"]}
+    config = {
+        "data": {
+            "contract": "physiology_semantic_measurement_local_v1",
+            "cache_root": "cache",
+            "split": split,
+            "auxiliary_target": {
+                "root": str(sidecar), "family": "family", "version": "v1",
+            },
+        },
+        "validation": {
+            "target_family_gate_path": str(tmp_path / "gate.json"),
+            "promotion_eligible": False,
+        },
+    }
+    (tmp_path / "gate.json").write_text(json.dumps({
+        "schema": "physiology_semantic_target_family_gate_v1",
+        "gate": "E0_OPTIONAL_TARGET_FAMILY_DEVELOPMENT",
+        "status": "development_passed_protected_test_closed",
+        "target_family_development_passed": True,
+        "target_family": "family",
+        "target_version": "v1",
+        "data_contract": config["data"]["contract"],
+        "cache_root": "cache",
+        "split_sha256": hashlib.sha256(json.dumps(split, sort_keys=True).encode()).hexdigest(),
+        "sidecar_manifest_sha256": hashlib.sha256((sidecar / "manifest.json").read_bytes()).hexdigest(),
+        "protected_test_opened": False,
+    }), encoding="utf-8")
+
+    gate, digest = _load_e0_gate(config, require_pass=True)
+
+    assert gate["target_family_development_passed"]
+    assert len(digest) == 64
+
+
+def test_gradient_audit_reports_modality_isolation_and_cosines():
+    torch.manual_seed(17)
+    model = PhysiologySemanticTokenizer(
+        eeg_encoder_dim=32,
+        fnirs_encoder_dim=24,
+        semantic_dim=8,
+        eeg_residual_dim=8,
+        fnirs_residual_dim=4,
+        codebook_size=16,
+    )
+    criterion = PhysiologySemanticLoss(
+        state_weight=0.0,
+        prototype_weight=0.0,
+        masked_state_weight=0.0,
+        reconstruction_weight=1.0,
+        balance_weight=0.1,
+        reconstruction_mode="semantic_only",
+    )
+    outputs = model(torch.randn(2, 6, 4000), torch.randn(2, 2, 200))
+    losses = criterion(outputs, None)
+
+    audit = _audit_objective_gradients(
+        model,
+        losses,
+        criterion,
+        {
+            "strict": True,
+            "objectives": [
+                "eeg_reconstruction", "fnirs_reconstruction",
+                "eeg_balance", "fnirs_balance",
+            ],
+        },
+        global_step=0,
+    )
+
+    assert audit["all_contracts_passed"]
+    assert audit["objectives"]["eeg_reconstruction"]["gradient_norm"] > 0
+    assert not any(
+        name.startswith("fnirs_branch.")
+        for name in audit["objectives"]["eeg_reconstruction"]["reachable_parameters"]
+    )

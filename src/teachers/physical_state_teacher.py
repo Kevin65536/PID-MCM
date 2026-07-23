@@ -83,6 +83,14 @@ class PhysicalStateTeacher(nn.Module):
         return summary, uncertainty.clamp_min(self.eps)
 
     def forward(self, teacher: Mapping[str, torch.Tensor]) -> PhysicalTeacherOutput:
+        direct_fields = {
+            "eeg_target",
+            "eeg_uncertainty",
+            "fnirs_target",
+            "fnirs_uncertainty",
+        }
+        if direct_fields.issubset(teacher):
+            return self._direct_patch_targets(teacher)
         required = {
             "state_mean",
             "state_var",
@@ -175,6 +183,60 @@ class PhysicalStateTeacher(nn.Module):
             fnirs_uncertainty=fnirs_uncertainty.detach(),
             valid_mask=valid_mask.detach(),
             context_valid_mask=context_valid_mask.detach(),
+            entry_masks=entry_masks,
+            target_family=self.target_family,
+            target_version=self.target_version,
+        )
+
+    def _direct_patch_targets(
+        self,
+        teacher: Mapping[str, torch.Tensor],
+    ) -> PhysicalTeacherOutput:
+        """Adapt a family-versioned sidecar that already uses the token grid."""
+
+        eeg_target = teacher["eeg_target"].detach()
+        eeg_uncertainty = teacher["eeg_uncertainty"].detach()
+        fnirs_target = teacher["fnirs_target"].detach()
+        fnirs_uncertainty = teacher["fnirs_uncertainty"].detach()
+        if eeg_target.ndim != 3 or eeg_target.shape[-1] != 6:
+            raise ValueError("Direct EEG targets must have shape [B,N,6]")
+        if fnirs_target.ndim != 3 or fnirs_target.shape[-1] != 9:
+            raise ValueError("Direct fNIRS targets must have shape [B,N,9]")
+        if eeg_target.shape[:2] != fnirs_target.shape[:2]:
+            raise ValueError("Direct EEG/fNIRS targets must share the token grid")
+        if eeg_uncertainty.shape != eeg_target.shape:
+            raise ValueError("Direct EEG target uncertainty shape mismatch")
+        if fnirs_uncertainty.shape != fnirs_target.shape:
+            raise ValueError("Direct fNIRS target uncertainty shape mismatch")
+
+        finite_eeg = torch.isfinite(eeg_target).all(dim=-1)
+        finite_eeg &= torch.isfinite(eeg_uncertainty).all(dim=-1)
+        finite_fnirs = torch.isfinite(fnirs_target).all(dim=-1)
+        finite_fnirs &= torch.isfinite(fnirs_uncertainty).all(dim=-1)
+        entry_masks: Dict[str, Dict[str, torch.Tensor]] = {"eeg": {}, "fnirs": {}}
+        for modality, finite in (("eeg", finite_eeg), ("fnirs", finite_fnirs)):
+            for entry in ("local", "prototype", "context", "coupling"):
+                name = f"{modality}_{entry}_valid_mask"
+                if name not in teacher:
+                    raise KeyError(f"Direct target sidecar is missing {name}")
+                mask = teacher[name].detach().bool()
+                if mask.shape != finite.shape:
+                    raise ValueError(f"{name} must have shape [B,N]")
+                entry_masks[modality][entry] = (mask & finite).detach()
+
+        valid = entry_masks["eeg"]["local"] & entry_masks["fnirs"]["local"]
+        context_valid = (
+            entry_masks["eeg"]["context"] & entry_masks["fnirs"]["context"]
+        )
+        return PhysicalTeacherOutput(
+            full_summary=torch.cat((eeg_target, fnirs_target), dim=-1).detach(),
+            full_uncertainty=torch.cat((eeg_uncertainty, fnirs_uncertainty), dim=-1).detach(),
+            eeg_target=eeg_target.detach(),
+            eeg_uncertainty=eeg_uncertainty.clamp_min(self.eps).detach(),
+            fnirs_target=fnirs_target.detach(),
+            fnirs_uncertainty=fnirs_uncertainty.clamp_min(self.eps).detach(),
+            valid_mask=valid.detach(),
+            context_valid_mask=context_valid.detach(),
             entry_masks=entry_masks,
             target_family=self.target_family,
             target_version=self.target_version,

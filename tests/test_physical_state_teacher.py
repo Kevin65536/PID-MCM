@@ -95,3 +95,29 @@ def test_teacher_keeps_entry_masks_independent_and_versioned():
     assert not output.entry_masks["eeg"]["prototype"][0, 2]
     assert not output.entry_masks["fnirs"]["coupling"][0, 0]
     assert output.entry_masks["fnirs"]["local"].all()
+
+
+def test_teacher_accepts_direct_patch_targets_and_preserves_entry_masks():
+    batch = {
+        "eeg_target": torch.randn(2, 10, 6, requires_grad=True),
+        "eeg_uncertainty": torch.ones(2, 10, 6),
+        "fnirs_target": torch.randn(2, 10, 9),
+        "fnirs_uncertainty": torch.ones(2, 10, 9),
+    }
+    for modality in ("eeg", "fnirs"):
+        for entry in ("local", "prototype", "context", "coupling"):
+            batch[f"{modality}_{entry}_valid_mask"] = torch.zeros(2, 10, dtype=torch.bool)
+    batch["eeg_local_valid_mask"][:, 2:] = True
+    batch["fnirs_local_valid_mask"][:, 3:] = True
+    batch["eeg_prototype_valid_mask"][:, 1:] = True
+
+    output = PhysicalStateTeacher(
+        target_family="adaptive_multimodal_consensus_proxy",
+        target_version="adaptive_ssm_gauge_corrected_patch_v1",
+    )(batch)
+
+    assert output.eeg_target.shape == (2, 10, 6)
+    assert output.fnirs_target.shape == (2, 10, 9)
+    assert not output.eeg_target.requires_grad
+    assert torch.equal(output.valid_mask, batch["eeg_local_valid_mask"] & batch["fnirs_local_valid_mask"])
+    assert torch.equal(output.entry_masks["eeg"]["prototype"], batch["eeg_prototype_valid_mask"])

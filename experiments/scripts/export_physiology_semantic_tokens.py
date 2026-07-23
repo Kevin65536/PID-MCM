@@ -24,7 +24,7 @@ from src.tokenizers.registry import create_tokenizer
 import src.tokenizers  # noqa: F401
 
 
-EXPORT_SCHEMA = "physiology_semantic_export_v1"
+EXPORT_SCHEMA = "physiology_semantic_export_v2"
 
 
 def _numpy(tensor: torch.Tensor) -> np.ndarray:
@@ -33,7 +33,7 @@ def _numpy(tensor: torch.Tensor) -> np.ndarray:
 
 def build_export_batch(
     outputs: Mapping[str, Any],
-    teacher: Any,
+    teacher: Any | None,
     batch: Mapping[str, Any],
     top_k: int | None = None,
 ) -> Dict[str, np.ndarray]:
@@ -41,6 +41,8 @@ def build_export_batch(
     for modality in ("eeg", "fnirs"):
         output = outputs[modality]
         payload[f"{modality}_hard_ids"] = _numpy(output.quantizer.hard_ids)
+        payload[f"{modality}_semantic_latent"] = _numpy(output.semantic_latent)
+        payload[f"{modality}_codebook_embedding"] = _numpy(output.quantizer.quantized)
         if top_k is None:
             payload[f"{modality}_posterior"] = _numpy(output.quantizer.posterior)
         else:
@@ -49,13 +51,32 @@ def build_export_batch(
             payload[f"{modality}_posterior_topk_probabilities"] = _numpy(probabilities)
         payload[f"{modality}_expected_embedding"] = _numpy(output.quantizer.expected_embedding)
         payload[f"{modality}_residual"] = _numpy(output.residual)
-    payload["teacher_full_summary"] = _numpy(teacher.full_summary)
-    payload["teacher_full_uncertainty"] = _numpy(teacher.full_uncertainty)
-    payload["teacher_valid_mask"] = _numpy(teacher.valid_mask)
-    payload["teacher_context_valid_mask"] = _numpy(teacher.context_valid_mask)
-    for key in ("subject_id", "label", "crop_start_s"):
-        payload[key] = _numpy(batch[key])
-    for key in ("cache_entry_id", "source_name", "source_task", "anchor", "label_name"):
+        token_masks = batch.get("token_valid_mask", {})
+        if modality in token_masks:
+            payload[f"{modality}_token_valid_mask"] = _numpy(token_masks[modality].bool())
+    if teacher is not None:
+        payload["teacher_full_summary"] = _numpy(teacher.full_summary)
+        payload["teacher_full_uncertainty"] = _numpy(teacher.full_uncertainty)
+        payload["teacher_valid_mask"] = _numpy(teacher.valid_mask)
+        payload["teacher_context_valid_mask"] = _numpy(teacher.context_valid_mask)
+        for modality in ("eeg", "fnirs"):
+            payload[f"{modality}_target"] = _numpy(getattr(teacher, f"{modality}_target"))
+            payload[f"{modality}_target_uncertainty"] = _numpy(
+                getattr(teacher, f"{modality}_uncertainty")
+            )
+            for entry, mask in teacher.entry_masks[modality].items():
+                payload[f"{modality}_{entry}_target_valid_mask"] = _numpy(mask)
+    for key in ("subject_id", "label", "crop_start_s", "has_auxiliary_target"):
+        if key in batch:
+            payload[key] = _numpy(batch[key])
+    string_keys = (
+        "sample_id", "target_sample_key", "subject_key", "dataset_id", "subject",
+        "record_id", "task_namespace", "cache_entry_id", "source_name", "source_task",
+        "anchor", "label_name",
+    )
+    for key in string_keys:
+        if key not in batch:
+            continue
         value = batch[key]
         if isinstance(value, str):
             value = [value]
@@ -84,7 +105,11 @@ def run(args: argparse.Namespace) -> Path:
     model = create_tokenizer(config)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
-    teacher_adapter = PhysicalStateTeacher()
+    target_cfg = config.get("data", {}).get("auxiliary_target", {}) or {}
+    teacher_adapter = PhysicalStateTeacher(
+        target_family=str(target_cfg.get("family")),
+        target_version=str(target_cfg.get("version")),
+    )
     dataloader = create_configured_multimodal_dataloaders(config)[args.split]
 
     chunks = []
@@ -92,19 +117,25 @@ def run(args: argparse.Namespace) -> Path:
         for index, batch in enumerate(dataloader):
             if args.max_batches is not None and index >= args.max_batches:
                 break
-            outputs = model(batch["eeg"], batch["fnirs"])
-            teacher = teacher_adapter(batch["teacher"])
+            outputs = model(
+                batch["eeg"], batch["fnirs"], token_valid_masks=batch.get("token_valid_mask")
+            )
+            teacher = teacher_adapter(batch["teacher"]) if "teacher" in batch else None
             chunks.append(build_export_batch(outputs, teacher, batch, top_k=args.top_k))
     payload = _concatenate(chunks)
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output, **payload)
-    sample_hash = hashlib.sha256("\n".join(payload["cache_entry_id"].tolist()).encode("utf-8")).hexdigest()
+    sample_key_name = "sample_id" if "sample_id" in payload else "cache_entry_id"
+    sample_hash = hashlib.sha256(
+        "\n".join(payload[sample_key_name].tolist()).encode("utf-8")
+    ).hexdigest()
     manifest = {
         "schema": EXPORT_SCHEMA,
         "split": args.split,
         "sample_count": int(payload["eeg_hard_ids"].shape[0]),
         "sample_order_sha256": sample_hash,
+        "sample_key_array": sample_key_name,
         "checkpoint_sha256": hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
         "checkpoint": str(checkpoint_path),
         "top_k": args.top_k,

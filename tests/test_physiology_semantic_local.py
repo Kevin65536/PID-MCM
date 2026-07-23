@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+import hashlib
+import json
 
 import numpy as np
 import pytest
@@ -7,6 +9,7 @@ from src.data.physiology_semantic_local import (
     LOCAL_VIEW_SCHEMA,
     UnifiedPhysiologyLocalViewDataset,
 )
+from src.data.physiology_semantic_targets import TARGET_ARRAY_SCHEMA, TARGET_SIDECAR_SCHEMA
 
 
 def _base_dataset(*, fnirs_units="normalized_head_unit"):
@@ -133,3 +136,65 @@ def test_unified_local_view_never_selects_a_bad_fnirs_component():
     item = dataset[0]
 
     assert item["anchor"] == "B"
+
+
+def _write_sidecar(root):
+    root.mkdir()
+    sample_key = "eeg_fnirs_single_trial|subject_01|session_00|event=3"
+    valid = np.ones((1, 10), dtype=bool)
+    invalid = np.zeros((1, 10), dtype=bool)
+    arrays = root / "targets.npz"
+    np.savez_compressed(
+        arrays,
+        schema=np.asarray(TARGET_ARRAY_SCHEMA),
+        sample_key=np.asarray([sample_key]),
+        selected_eeg_channels=np.asarray([[f"E{index}" for index in range(1, 7)]]),
+        selected_fnirs_channels=np.asarray([["B_HbO", "B_HbR"]]),
+        eeg_target=np.ones((1, 10, 6), dtype=np.float32),
+        eeg_uncertainty=np.ones((1, 10, 6), dtype=np.float32),
+        fnirs_target=np.ones((1, 10, 9), dtype=np.float32),
+        fnirs_uncertainty=np.ones((1, 10, 9), dtype=np.float32),
+        eeg_local_valid_mask=valid,
+        eeg_prototype_valid_mask=valid,
+        eeg_context_valid_mask=invalid,
+        eeg_coupling_valid_mask=invalid,
+        fnirs_local_valid_mask=valid,
+        fnirs_prototype_valid_mask=valid,
+        fnirs_context_valid_mask=invalid,
+        fnirs_coupling_valid_mask=invalid,
+    )
+    digest = hashlib.sha256(arrays.read_bytes()).hexdigest()
+    order = hashlib.sha256(sample_key.encode("utf-8")).hexdigest()
+    (root / "manifest.json").write_text(json.dumps({
+        "schema": TARGET_SIDECAR_SCHEMA,
+        "target_family": "adaptive_multimodal_consensus_proxy",
+        "target_version": "adaptive_ssm_gauge_corrected_patch_v1",
+        "protected_test_included": False,
+        "arrays_file": "targets.npz",
+        "arrays_sha256": digest,
+        "sample_count": 1,
+        "sample_order_sha256": order,
+    }), encoding="utf-8")
+
+
+def test_unified_local_view_joins_target_by_anchor_independent_identity(tmp_path):
+    sidecar = tmp_path / "sidecar"
+    _write_sidecar(sidecar)
+    namespace, sample = _base_dataset()
+    dataset = UnifiedPhysiologyLocalViewDataset(
+        base_dataset=_Base(namespace, sample),
+        subject_keys=["eeg_fnirs_single_trial|subject_01"],
+        reject_unknown_labels=False,
+        auxiliary_target_root=str(sidecar),
+        auxiliary_target_family="adaptive_multimodal_consensus_proxy",
+        auxiliary_target_version="adaptive_ssm_gauge_corrected_patch_v1",
+        require_auxiliary_target=True,
+    )
+
+    item = dataset[0]
+
+    assert item["has_auxiliary_target"]
+    assert item["anchor"] == "B"
+    assert item["selected_eeg_channels"] == [f"E{index}" for index in range(1, 7)]
+    assert item["teacher"]["eeg_target"].shape == (10, 6)
+    assert item["teacher"]["eeg_local_valid_mask"].all()

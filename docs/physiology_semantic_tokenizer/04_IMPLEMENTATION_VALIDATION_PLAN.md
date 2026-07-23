@@ -122,7 +122,15 @@ unopened because validation did not pass.
 
 ### P3 — Evaluate optional target/teacher adapters
 
-**Implementation status (updated 2026-07-19):** the generic adapter and entry-specific target masks are merged. The historical Croce E0-v2 target remains blocked. The gauge-corrected adaptive joint SSM has passed the optional target-family development gate as a physiology-shaped multimodal consensus proxy, but its unified sample-identity sidecar/cache join is not yet connected to training. No protected-test sample was evaluated.
+**Implementation status (updated 2026-07-22):** the generic adapter,
+anchor-independent unified sample join, entry-specific target masks,
+train-subject-only target standardization, hash-bound development gate, and
+adaptive sidecar builder are merged. The join audit exposed a channel-contract
+mismatch in the historical E0-v3 source: 137/230 teacher views contain a
+channel rejected by the current measured-data bad-channel mask. They are
+strictly excluded, leaving 93 targets for software validation only. Formal E2
+is blocked until a bad-channel-aware E0 rebuild and revalidation. No protected
+test sample was evaluated.
 
 **Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics. The adaptive proxy registers required EEG `r`, optional EEG `s`, required observation-aligned HbO/HbR, and context/coupling-only flow groups with separate entry masks.
 
@@ -134,7 +142,13 @@ unopened because validation did not pass.
 
 ### P4 — Train independent semantic and residual branches
 
-**Implementation status (updated 2026-07-20):** the full trainer and teacher-free measurement-first T0 path are merged in the working tree. Patch locality, fixed-history causality, modality/gradient isolation, measurement-mask propagation, reconstruction shapes, entry-specific coordinate routing, checkpoints, validation, early stopping, AMP, resume, and artifact emission pass. The corrected CUDA smoke completed four optimizer steps, deterministic quantizer invariants pass, and the training-only G1/E1 quantizer-health gate is complete. G2/G3 objectives and the adaptive proxy sidecar join remain pending, so no information-retention, semantic, or adaptive-teacher training result is claimed.
+**Implementation status (updated 2026-07-22):** the full trainer, T0/T1/T2
+configuration materializer, adaptive proxy sidecar join, per-objective gradient
+norm/cosine audit, four-mode frozen probes, and signature-based prototype
+matching are merged. A T1 CUDA smoke completed four optimizer steps and all
+registered gradient allowlists passed. The current 93-target channel-admitted
+subset is software evidence only; G2/G3 objectives are not scientifically
+evaluated, so no information-retention or semantic result is claimed.
 
 **Implementation:** add patch-local decoding from continuous latents and codebook prototypes, post-quantization causal-context prediction, shared decoder reconstruction, branch-attribution outputs, and the optional asymmetric coupling-preservation shaper. Token identity uses only the current two-second patch. Context history is a declared experiment parameter within the 20-second default observation window and never changes exported IDs. Start with continuous residuals.
 

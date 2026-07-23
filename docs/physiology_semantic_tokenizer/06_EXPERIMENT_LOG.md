@@ -400,6 +400,29 @@ behavior, plus a non-pooled suite overview. A completed one-epoch n-back
 engineering checkpoint exercised the full classification path; its scores are
 tool-correctness evidence only and are excluded from comparison tables.
 
+### E2 software closure and channel-contract blocker
+
+On 2026-07-22 the E1-selected K=128 quantizer was carried into a matched
+T0/T1/T2 E2 implementation. The unified loader now joins a versioned adaptive
+teacher sidecar by anchor-independent measured sample identity, standardizes
+targets from training subjects only, keeps local/prototype/context/coupling
+masks independent, and rejects development gates whose split, cache, family,
+version, or sidecar hash differs. The trainer emits per-objective gradient
+norms and cosine conflicts; frozen evaluation covers continuous latents, hard
+IDs, posteriors, and checkpoint codebook vectors plus signature-based prototype
+matching across seeds.
+
+The integration audit found that the historical E0-v3 local selection had not
+consumed the current measured-data bad-channel mask. Of 230 development target
+trials, 93 remain admissible and 137 are now excluded; train/validation counts
+are 54/39 admitted and 126/11 excluded. Seven training subjects have no
+admitted target. A four-step T1 CUDA smoke passed every gradient-entry
+allowlist, and a frozen-evaluator smoke emitted the expected artifacts. These
+are correctness results only. Formal E2 is blocked until the adaptive teacher
+is rebuilt with the current channel/QC contract and the affected E0 evidence is
+revalidated. Full implementation, commands, and claim boundaries are recorded
+in [`analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md).
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
