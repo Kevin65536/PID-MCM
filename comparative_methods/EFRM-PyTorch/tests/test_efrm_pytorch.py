@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 from pathlib import Path
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -20,6 +23,7 @@ from efrm_pytorch.data import (
     collate_efrm_pairs,
 )
 from efrm_pytorch.model import EFRMDownstreamModel, EFRMSyncModel
+from efrm_pytorch.pretraining_analysis import analyze_pretraining_run
 from efrm_pytorch.protocol import load_public_split_subjects
 from efrm_pytorch.tasks import TASK_SPECS
 from efrm_pytorch.training import cached_pretrain_backward
@@ -29,6 +33,8 @@ from efrm_pytorch.visualization import (
     render_alignment_report,
     retrieval_metrics,
 )
+from launch_pretrain_detached import launch_detached
+from train_pretrain import _archive_incomplete_resume_steps
 
 
 def _small_model() -> EFRMSyncModel:
@@ -299,3 +305,189 @@ def test_protected_manifest_path_is_refused_before_split_loading(tmp_path: Path)
     }))
     with pytest.raises(PermissionError, match="protected split manifest"):
         load_public_split_subjects(path)
+
+
+def test_pretraining_analysis_audits_logs_and_renders_public_report(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    for child in ("metrics", "checkpoints", "figure_data"):
+        (run / child).mkdir(parents=True)
+    (run / "manifest.json").write_text(json.dumps({
+        "schema": "efrm_sync_pretraining_run_v1",
+        "status": "completed",
+        "run_id": "synthetic",
+        "protected_test_opened": False,
+    }))
+    (run / "status.json").write_text(json.dumps({
+        "status": "completed",
+        "epoch": 1,
+        "protected_test_opened": False,
+    }))
+    (run / "resolved_config.yaml").write_text(
+        "training:\n  epochs: 2\n  min_epochs: 1\n", encoding="utf-8"
+    )
+    epoch_rows = [
+        {
+            "epoch": epoch,
+            "seconds": 10.0,
+            "learning_rate": 1e-4,
+            "train": {
+                "batch_count": 1.0, "pair_count": 4.0, "loss": 5.0 - epoch,
+                "eeg_reconstruction_loss": 1.0 - 0.2 * epoch,
+                "fnirs_reconstruction_loss": 0.8 - 0.2 * epoch,
+                "clip_alignment_loss": math.log(4),
+            },
+            "validation": {
+                "batch_count": 1.0, "pair_count": 4.0, "loss": 5.1 - epoch,
+                "eeg_reconstruction_loss": 1.1 - 0.2 * epoch,
+                "fnirs_reconstruction_loss": 0.9 - 0.2 * epoch,
+                "clip_alignment_loss": math.log(4),
+            },
+            "cuda_peak_allocated_gib": 1.0,
+            "cuda_peak_reserved_gib": 1.2,
+        }
+        for epoch in range(2)
+    ]
+    (run / "metrics/epochs.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in epoch_rows), encoding="utf-8"
+    )
+    step_rows = [
+        {
+            "epoch": float(epoch), "batch": 0.0, "pair_count": 4.0,
+            "loss": 5.0 - epoch, "eeg_reconstruction_loss": 1.0,
+            "fnirs_reconstruction_loss": 0.8,
+            "clip_alignment_loss": math.log(4), "gradient_norm": 1.0,
+        }
+        for epoch in range(2)
+    ]
+    (run / "metrics/train_steps.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in step_rows), encoding="utf-8"
+    )
+    (run / "checkpoints/latest.pt").write_bytes(b"same-checkpoint")
+    (run / "checkpoints/best.pt").write_bytes(b"same-checkpoint")
+    metadata = [
+        {
+            "sample_id": f"p{index}", "dataset_id": "public-dataset",
+            "subject": f"s{index}", "record_id": f"r{index}",
+            "join_key": f"d|r{index}", "condition": "task",
+        }
+        for index in range(4)
+    ]
+    export_alignment_evidence(
+        run / "figure_data",
+        eeg_embeddings=np.eye(4, dtype=np.float32),
+        fnirs_embeddings=np.eye(4, dtype=np.float32),
+        metadata=metadata,
+    )
+
+    result = analyze_pretraining_run(run)
+    assert result["audit"]["run_state"] == "completed"
+    assert result["audit"]["protected_test_opened"] is False
+    assert result["alignment"]["eeg_to_fnirs"]["top1"] == 1.0
+    assert result["interpretation"]["alignment_failure_warning"] is False
+    assert (
+        result["interpretation"]["dataset_level_alignment_impossibility_claim_supported"]
+        is False
+    )
+    assert (run / "analysis/REPORT.md").is_file()
+    assert (run / "analysis/figures/training_overview.svg").is_file()
+    assert (run / "analysis/tables/epoch_metrics.csv").is_file()
+
+
+def _wait_for_launcher_terminal_state(path: Path) -> dict[str, object]:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if path.is_file():
+            state = json.loads(path.read_text(encoding="utf-8"))
+            if state["status"] in {"completed", "failed", "launcher_failed"}:
+                return state
+        time.sleep(0.05)
+    raise AssertionError(f"detached launcher did not reach a terminal state: {path}")
+
+
+def test_detached_launcher_uses_new_session_file_log_and_exit_state(
+    tmp_path: Path,
+) -> None:
+    control = tmp_path / "control"
+    run = tmp_path / "run"
+    observation = tmp_path / "child.json"
+    child_code = (
+        "import json, os, pathlib; "
+        f"pathlib.Path({str(observation)!r}).write_text(json.dumps({{"
+        "'pid': os.getpid(), 'sid': os.getsid(0), 'pgrp': os.getpgrp(), "
+        "'stdin_tty': os.isatty(0), 'stdout_tty': os.isatty(1)"
+        "})); "
+        "print('detached-child-output', flush=True)"
+    )
+    launched = launch_detached(
+        command=[sys.executable, "-c", child_code],
+        run_id="launcher_success",
+        run_dir=run,
+        control_dir=control,
+    )
+    state = _wait_for_launcher_terminal_state(control / "state.json")
+    child = json.loads(observation.read_text(encoding="utf-8"))
+
+    assert launched["supervisor_pid"] != os.getpid()
+    assert state["status"] == "completed"
+    assert state["exit_code"] == 0
+    assert state["session_id"] == state["supervisor_pid"]
+    assert child["sid"] == state["supervisor_pid"]
+    assert child["stdin_tty"] is False
+    assert child["stdout_tty"] is False
+    assert "detached-child-output" in Path(state["log_path"]).read_text(encoding="utf-8")
+
+
+def test_detached_launcher_records_failure_in_run_artifacts(tmp_path: Path) -> None:
+    control = tmp_path / "control"
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "status.json").write_text(
+        json.dumps({"status": "running", "epoch": 2}), encoding="utf-8"
+    )
+    (run / "manifest.json").write_text(
+        json.dumps({"status": "running", "run_id": "launcher_failure"}),
+        encoding="utf-8",
+    )
+    launch_detached(
+        command=[sys.executable, "-c", "raise SystemExit(7)"],
+        run_id="launcher_failure",
+        run_dir=run,
+        control_dir=control,
+    )
+    state = _wait_for_launcher_terminal_state(control / "state.json")
+
+    assert state["status"] == "failed"
+    assert state["exit_code"] == 7
+    assert json.loads((run / "status.json").read_text())["status"] == "failed"
+    assert json.loads((run / "manifest.json").read_text())["exit_code"] == 7
+
+
+def test_resume_archives_partial_epoch_steps_before_replay(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    metrics = run / "metrics"
+    metrics.mkdir(parents=True)
+    rows = [
+        {"epoch": 0.0, "batch": 0.0},
+        {"epoch": 0.0, "batch": 1.0},
+        {"epoch": 1.0, "batch": 0.0},
+        {"epoch": 1.0, "batch": 1.0},
+    ]
+    step_path = metrics / "train_steps.jsonl"
+    step_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+
+    result = _archive_incomplete_resume_steps(run, start_epoch=1)
+
+    assert result is not None
+    assert result["discarded_step_count"] == 2
+    assert result["discarded_epoch_ids"] == [1]
+    retained = [
+        json.loads(line) for line in step_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert retained == rows[:2]
+    archived = [
+        json.loads(line)
+        for line in Path(result["archive"]).read_text(encoding="utf-8").splitlines()
+    ]
+    assert archived == rows[2:]

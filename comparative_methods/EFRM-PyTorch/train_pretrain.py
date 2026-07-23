@@ -114,6 +114,55 @@ def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
         handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def _archive_incomplete_resume_steps(
+    run_dir: Path,
+    *,
+    start_epoch: int,
+) -> dict[str, Any] | None:
+    """Remove replayed partial-epoch rows from the active log without losing evidence."""
+
+    path = run_dir / "metrics/train_steps.jsonl"
+    if not path.is_file():
+        return None
+    retained: list[str] = []
+    interrupted: list[str] = []
+    interrupted_epochs: set[int] = set()
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+            epoch = int(row["epoch"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"invalid step log row at {path}:{line_number}") from error
+        if epoch >= start_epoch:
+            interrupted.append(raw_line)
+            interrupted_epochs.add(epoch)
+        else:
+            retained.append(raw_line)
+    if not interrupted:
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    archive = (
+        run_dir / "metrics" /
+        f"interrupted_steps_from_epoch_{start_epoch:04d}_{timestamp}.jsonl"
+    )
+    archive.write_text("\n".join(interrupted) + "\n", encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.{timestamp}.tmp")
+    temporary.write_text(
+        ("\n".join(retained) + "\n") if retained else "",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+    return {
+        "archive": str(archive.resolve()),
+        "discarded_step_count": len(interrupted),
+        "discarded_epoch_ids": sorted(interrupted_epochs),
+        "resume_start_epoch": start_epoch,
+    }
+
+
 def _checkpoint(
     path: Path,
     *,
@@ -263,6 +312,7 @@ def main() -> None:
     start_epoch = 0
     best_loss = math.inf
     patience = 0
+    resume_step_archive: dict[str, Any] | None = None
     latest = run_dir / "checkpoints/latest.pt"
     if args.resume:
         payload = torch.load(latest, map_location=device, weights_only=False)
@@ -274,6 +324,9 @@ def main() -> None:
         start_epoch = int(payload["epoch"]) + 1
         best_loss = float(payload["best_validation_loss"])
         patience = int(payload["patience"])
+        resume_step_archive = _archive_incomplete_resume_steps(
+            run_dir, start_epoch=start_epoch
+        )
 
     vendor = METHOD_ROOT.parent / "EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model"
     manifest = {
@@ -305,6 +358,7 @@ def main() -> None:
             "architecture_smoke_dynamic" if args.architecture_smoke
             else "deterministic_epoch0_common_valid_start"
         ),
+        "resume_step_archive": resume_step_archive,
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (run_dir / "status.json").write_text(json.dumps({"status": "running", "epoch": start_epoch}), encoding="utf-8")

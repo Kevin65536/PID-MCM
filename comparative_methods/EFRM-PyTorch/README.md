@@ -100,6 +100,46 @@ similarities are exported separately so this unusual scale cannot obscure the
 diagnostic. A conventional learned/divisive temperature is a named ablation,
 not the primary EFRM run.
 
+### Alignment failure-warning assessment
+
+The first interrupted development run provides a **serious but scope-limited
+warning** that the source-faithful alignment branch has not activated by epoch
+8. This grade does not come from the flat CLIP scalar alone:
+
+- train and validation CLIP losses remain at their exact random-logit
+  baselines while both reconstruction losses improve substantially;
+- both retrieval directions are at chance, positive-vs-negative AUC is
+  `0.4990`, the mean positive-minus-negative cosine is approximately zero, and
+  the mean positive-minus-hardest-negative margin is negative;
+- validation embeddings are strongly angularly concentrated, especially the
+  fNIRS embedding with centered effective rank `3.38` in 768 dimensions.
+
+The fixed source multiplier makes scalar CLIP loss intrinsically insensitive.
+For 32 pairs, all logits are bounded to `[-0.1, 0.1]`: random CE is
+`log(32) = 3.4657`, while even the idealized geometric limit with every
+positive cosine at `+1` and every negative at `-1` is about `3.2726`.
+Retrieval, positive/negative separation, permutation evidence, and embedding
+geometry therefore carry more diagnostic weight than the raw loss curve.
+
+This evidence does **not** establish that the synchronized datasets contain no
+EEG-fNIRS relationship. The run stopped before the prespecified minimum 20
+epochs, and the saved retrieval evidence represents one validation batch from
+one subject and dataset. More importantly, EFRM supervises exact
+same-window-instance identity. Slow, delayed, task-shared physiological
+coupling can exist without making one fNIRS window uniquely retrievable among
+nearby or physiologically similar negatives.
+
+The faithful run is therefore resumed unchanged to an epoch-20 decision gate.
+At that gate, deterministic dataset/subject-stratified public-validation
+evidence must be considered. If bidirectional retrieval remains at chance,
+positive-vs-negative AUC remains near `0.5`, and positive margins remain
+non-positive, the result is recorded as
+`source_faithful_alignment_failed_on_sync_track`. It is a finding about the
+EFRM objective under this data regime, not evidence against physiological
+coupling. A learned or conventional divisive-temperature experiment starts
+from scratch under a separate ablation name; it is never substituted for the
+source-faithful baseline.
+
 ## Leakage boundary and evaluation matrix
 
 Development uses the public subject-grouped train/validation manifests already
@@ -182,16 +222,12 @@ and metric JSON are retained together.
 6. **Formal evaluation:** freeze configs and rerun pretraining per protected
    outer fold before the explicit shared-protocol test unlock.
 
-The two RTX 4090 GPUs are currently occupied by STA-Net HPO. EFRM GPU work must
-wait for that study to complete; CPU correctness tests and artifact construction
-may proceed meanwhile.
-
-Current implementation status (2026-07-22): the independent model, unified
-adapter, seven-task heads, public-split boundary, CLIP evidence exporter, and
-real-data CPU smoke are implemented. Ten unit tests pass; the Single-Trial
-smoke completed a finite forward/backward pass with 30 measured EEG channels
-and 36 measured HbO/HbR locations. Formal ViT-base architecture smoke and all
-performance training remain unopened.
+Current implementation status (2026-07-23): the independent model, unified
+adapter, seven-task heads, public-split boundary, CLIP evidence exporter,
+resumable ViT-base pretrainer, and post-hoc analysis tool are implemented.
+The first development run reached eight complete epochs and then stopped
+midway through epoch 9. Its durable checkpoint is epoch 8; it must not be
+reported as a completed 100-epoch or early-stopped run.
 
 ### Parameter and memory audit
 
@@ -232,3 +268,66 @@ latest/best checkpoints, epoch/step JSONL, the resolved config, split-boundary
 hashes, CUDA peak memory, and validation-only CLIP evidence. Its two-pass
 gradient cache is regression-tested against the full contrastive-batch
 gradient before GPU training.
+
+### Detached launch and process audit
+
+Long training must not be started by invoking `train_pretrain.py` directly
+from a Codex PTY, SSH terminal, or other temporary execution cell. Use the
+detached supervisor:
+
+```bash
+.venv/bin/python \
+  comparative_methods/EFRM-PyTorch/launch_pretrain_detached.py \
+  --run-id 20260722_efrm_sync_dev_v5 \
+  --device cuda:1 \
+  --chunk-size 8 \
+  --num-workers 0 \
+  --resume
+```
+
+The launcher creates a new POSIX session, connects stdin to `/dev/null`,
+redirects both output streams to a durable file, and returns only after the
+supervisor has recorded its state. Closing the invoking terminal therefore
+does not deliver its hangup signal to training. It records the supervisor PID,
+training PID, session/process-group IDs, exact command, log path, exit code,
+termination signal, and terminal timestamps below
+`runs/launcher/<run_id>/`. It also changes the run manifest/status to
+`completed` or `failed` when the child exits.
+
+Inspect a run without depending on the original terminal:
+
+```bash
+.venv/bin/python \
+  comparative_methods/EFRM-PyTorch/launch_pretrain_detached.py \
+  status 20260722_efrm_sync_dev_v5
+
+tail -F comparative_methods/EFRM-PyTorch/runs/launcher/\
+20260722_efrm_sync_dev_v5/logs/*.log
+```
+
+The launcher rejects an existing run unless `--resume` is explicit, rejects a
+resume without `checkpoints/latest.pt`, and refuses a second live supervisor
+for the same run ID. Launcher state is operational metadata and remains under
+the ignored `runs/` tree.
+
+### Post-hoc analysis
+
+Generate a read-only public train/validation audit with:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/analyze_pretraining.py \
+  --run-dir comparative_methods/EFRM-PyTorch/runs/pretraining/<run_id>
+```
+
+The command writes `analysis/REPORT.md`, machine-readable
+`analysis_metrics.json`, an epoch table, and 300-dpi PNG plus editable SVG
+figures for training dynamics, optimizer behavior, loss decomposition,
+positive/negative CLIP separation, bidirectional retrieval, and embedding
+geometry. A stale `running` marker is classified separately from a completed
+run. The analyzer refuses artifacts that report an opened protected test.
+
+The current trainer exports one final validation batch per completed epoch and
+overwrites the previous evidence. Consequently, the post-hoc tool labels saved
+retrieval results as batch diagnostics rather than full-validation estimates.
+Future formal runs should archive deterministic dataset/subject-stratified
+evidence per epoch before using alignment plots for generalization claims.

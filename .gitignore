@@ -1,5 +1,10 @@
 experiments/runs
-experiments/configs
+# Experiment configs are local by default; explicitly admit the active E2
+# protocol while keeping all other untracked generated configs ignored.
+experiments/configs/*
+!experiments/configs/physiology_semantic_tokenizer/
+experiments/configs/physiology_semantic_tokenizer/*
+!experiments/configs/physiology_semantic_tokenizer/e2_semantic_objective_suite.yaml
 experiments/logs
 experiments/results
 experiments/probe_results
