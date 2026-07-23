@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit and materialize the admitted Single-Trial EEG v3 branch.
+"""Audit and materialize the admitted Single-Trial EEG cleaning branch.
 
 The five ``cnt_artifact`` recordings are calibration controls only.  They are
 never emitted as task samples and never contribute labels or windows.
@@ -51,6 +51,7 @@ from src.data.unified_physiology import (
 matplotlib.use("Agg")
 
 CONTROL_CONDITIONS = ("EOG", "EMG", "Eye Blinking", "Teeth Clenching", "Mouth Opening")
+CACHE_SCHEMA = "single_trial_eeg_artifact_cache_v4"
 
 
 def _cell(value: Any, index: int) -> Any:
@@ -263,7 +264,7 @@ def _write_artifact_cache_record(
     with temporary_path.open("wb") as handle:
         np.savez_compressed(
             handle,
-            schema=np.asarray("single_trial_eeg_artifact_cache_v3"),
+            schema=np.asarray(CACHE_SCHEMA),
             signal_branch=np.asarray(config.schema),
             join_key=np.asarray(join_key),
             source_path=np.asarray(str(cnt_path.relative_to(REPO_ROOT))),
@@ -365,6 +366,10 @@ def _audit_subject(
             "interpolation_method": result.state["interpolation"]["method"],
             "bad_channel_count": int(np.count_nonzero(result.bad_channel_mask)),
             "bad_channel_names": result.state["bad_channel_names"],
+            "line_noise_action": result.state["line_noise_action"],
+            "line_noise_ratio_before": float(result.state["line_noise"]["median_ratio_before"]),
+            "line_noise_ratio_after": float(result.state["line_noise"]["median_ratio_after"]),
+            "line_noise_ratio_maximum_after": float(result.state["line_noise"]["maximum_ratio_after"]),
             "artifact_fraction": float(result.state["artifact_fraction"]),
             "ocular_fraction": float(result.state["ocular"]["dilated_fraction"]),
             "high_frequency_fraction": float(result.state["high_frequency"]["dilated_fraction"]),
@@ -510,7 +515,7 @@ def run(args: argparse.Namespace) -> Path:
             ])),
         } if condition_rows else {"subject_count": 0}
     calibration = {
-        "schema": "single_trial_controlled_artifact_calibration_v3",
+        "schema": "single_trial_controlled_artifact_calibration_v4",
         "role": "detector_calibration_only_not_a_task_dataset",
         "conditions": by_condition,
         "subject_status": {result["subject"]: result["controlled_artifact_status"] for result in results},
@@ -535,7 +540,7 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     preservation = {
-        "schema": "single_trial_eeg_signal_preservation_v3",
+        "schema": "single_trial_eeg_signal_preservation_v4",
         "record_count": len(rows),
         "subject_count": len(results),
         "artifact_fraction": _quantiles(row["artifact_fraction"] for row in rows),
@@ -559,6 +564,8 @@ def run(args: argparse.Namespace) -> Path:
             row["muscle_high_frequency_energy_reduction"] for row in rows
         ),
         "bad_channel_count": _quantiles(row["bad_channel_count"] for row in rows),
+        "line_noise_ratio_before": _quantiles(row["line_noise_ratio_before"] for row in rows),
+        "line_noise_ratio_after": _quantiles(row["line_noise_ratio_after"] for row in rows),
         "all_sample_counts_unchanged": all(row["sample_count_unchanged"] for row in rows),
         "all_channel_counts_unchanged": all(row["channel_count_unchanged"] for row in rows),
     }
@@ -582,10 +589,12 @@ def run(args: argparse.Namespace) -> Path:
         "eog_correlation_reduced_in_majority": float(np.mean([row["eog_correlation_ratio"] < 1.0 for row in rows])) > 0.5,
         "controlled_artifact_records_separated_from_task_data": calibration["role"] == "detector_calibration_only_not_a_task_dataset",
         "controlled_signature_directions_verified": all(calibration["expected_signature_directions"].values()),
-        "bad_channel_limit_not_saturated_in_majority": float(np.mean([
-            row["bad_channel_count"] < int(np.floor(row["eeg_channel_count"] * config.max_bad_channel_fraction))
-            for row in rows
-        ])) > 0.5,
+        "bad_channel_mask_disabled_in_all_records": all(
+            row["bad_channel_count"] == 0 for row in rows
+        ),
+        "line_noise_reduced_in_all_records": all(
+            row["line_noise_ratio_after"] < row["line_noise_ratio_before"] for row in rows
+        ),
         "nonfrontal_alpha_topology_has_no_negative_outliers": preservation[
             "nonfrontal_alpha_topology_negative_record_count"
         ] == 0,
@@ -593,14 +602,16 @@ def run(args: argparse.Namespace) -> Path:
         "full_29_subject_audit": len(results) == 29 and len(rows) == 174,
     }
     decision = {
-        "schema": "single_trial_eeg_artifact_admission_v3",
+        "schema": "single_trial_eeg_artifact_admission_v4",
         "decision": "admitted" if all(gates.values()) else "not_admitted",
         "default_eeg_signal_branch": config.schema if all(gates.values()) else "raw_with_ocular_artifact",
         "gates": gates,
         "blocking_reasons": [name for name, passed in gates.items() if not passed],
         "note": (
             "Muscle correction attenuates only 30-45 Hz content inside adaptively detected bursts; "
-            "controlled event windows are compared with equal-mask circular-shift sham correction."
+            "controlled event windows are compared with equal-mask circular-shift sham correction. "
+            "A 50 Hz zero-phase notch is applied before the 1-45 Hz passband, while bad-channel "
+            "masking and whole-channel interpolation are disabled for cross-dataset uniformity."
         ),
     }
     (output_dir / "admission_decision.yaml").write_text(
@@ -608,7 +619,7 @@ def run(args: argparse.Namespace) -> Path:
     )
 
     manifest = {
-        "schema": "single_trial_eeg_artifact_audit_manifest_v3",
+        "schema": "single_trial_eeg_artifact_audit_manifest_v4",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
@@ -631,7 +642,7 @@ def run(args: argparse.Namespace) -> Path:
         artifact_cache_root = Path(args.cache_root).resolve()
         cache_records = [record for result in results for record in result["cache_records"]]
         cache_manifest = {
-            "schema": "single_trial_eeg_artifact_cache_v3",
+            "schema": CACHE_SCHEMA,
             "created_at": manifest["created_at"],
             "signal_branch": config.schema,
             "record_count": len(cache_records),

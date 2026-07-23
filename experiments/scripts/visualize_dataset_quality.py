@@ -113,9 +113,9 @@ def parse_args() -> argparse.Namespace:
         choices=(
             'raw_with_ocular_artifact',
             'single_trial_eeg_artifact_clean_v2',
-            'single_trial_eeg_artifact_clean_v3',
+            'single_trial_eeg_artifact_clean_v4',
         ),
-        default='single_trial_eeg_artifact_clean_v3',
+        default='single_trial_eeg_artifact_clean_v4',
         help='Single-Trial EEG branch to audit; v3 is the admitted registry default.',
     )
     parser.add_argument(

@@ -36,12 +36,12 @@ class DatasetRegistryTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             require_dataset_loader('visual_cognitive_motivation', 'continuous_visualization')
 
-    def test_single_trial_registry_uses_admitted_v3_artifact_branch(self):
+    def test_single_trial_registry_uses_v4_line_clean_no_bad_mask_branch(self):
         registration = get_dataset_registration('eeg_fnirs_single_trial')
-        self.assertEqual(registration.default_eeg_signal_branch, 'single_trial_eeg_artifact_clean_v3')
-        self.assertEqual(registration.eeg_artifact_status, 'artifact_clean_v3_admitted')
+        self.assertEqual(registration.default_eeg_signal_branch, 'single_trial_eeg_artifact_clean_v4')
+        self.assertEqual(registration.eeg_artifact_status, 'artifact_clean_v4_line_clean_no_bad_mask')
         runtime = registration.runtime_metadata(registration.default_root)
-        self.assertEqual(runtime['default_eeg_signal_branch'], 'single_trial_eeg_artifact_clean_v3')
+        self.assertEqual(runtime['default_eeg_signal_branch'], 'single_trial_eeg_artifact_clean_v4')
 
     @staticmethod
     def _write_multimodal_config(root: Path) -> Path:

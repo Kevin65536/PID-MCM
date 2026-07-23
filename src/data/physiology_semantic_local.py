@@ -61,7 +61,7 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         reject_unknown_labels: bool = True,
         allow_cross_coordinate_systems: bool = False,
         window_offset_s: float = 0.0,
-        eeg_signal_branch: str = "single_trial_eeg_artifact_clean_v3",
+        eeg_signal_branch: str = "single_trial_eeg_artifact_clean_v4",
         auxiliary_target_root: str | None = None,
         auxiliary_target_family: str | None = None,
         auxiliary_target_version: str | None = None,

@@ -459,7 +459,7 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
                 window_duration_s=float(data_cfg.get('window', {}).get('duration_s', 20.0)),
                 window_offset_s=float(data_cfg.get('window', {}).get('offset_s', 0.0)),
                 eeg_signal_branch=str(
-                    data_cfg.get('eeg_signal_branch', 'single_trial_eeg_artifact_clean_v3')
+                    data_cfg.get('eeg_signal_branch', 'single_trial_eeg_artifact_clean_v4')
                 ),
                 local_eeg_channels=int(data_cfg.get('local_view', {}).get('eeg_channels', 6)),
                 reject_unknown_labels=bool(data_cfg.get('reject_unknown_labels', True)),

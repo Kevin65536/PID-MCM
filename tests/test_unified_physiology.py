@@ -35,9 +35,9 @@ def test_unified_loader_default_observation_window_is_twenty_seconds():
     assert default == DEFAULT_UNIFIED_WINDOW_DURATION_S == 20.0
 
 
-def test_unified_loader_default_eeg_branch_is_admitted_single_trial_v3():
+def test_unified_loader_default_eeg_branch_is_single_trial_v4():
     default = inspect.signature(UnifiedPhysiologyWindowDataset).parameters["eeg_signal_branch"].default
-    assert default == "single_trial_eeg_artifact_clean_v3"
+    assert default == "single_trial_eeg_artifact_clean_v4"
 
 
 def test_fnirs_names_are_unified_to_hbo_hbr_components():
@@ -408,16 +408,16 @@ def test_unified_loader_admits_restored_dsr_stimulus_labels(tmp_path):
     assert summary["excluded_forbidden_task_record_count"] == 0
 
 
-def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_path):
+def test_v4_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_path):
     source = tmp_path / "cnt.mat"
     source.write_bytes(b"source")
     cache_root = tmp_path / "cache"
     path = cache_root / "subject_01" / "session_00.npz"
     path.parent.mkdir(parents=True)
-    state = {"signal_branch": "single_trial_eeg_artifact_clean_v3"}
+    state = {"signal_branch": "single_trial_eeg_artifact_clean_v4"}
     np.savez_compressed(
         path,
-        schema=np.asarray("single_trial_eeg_artifact_cache_v3"),
+        schema=np.asarray("single_trial_eeg_artifact_cache_v4"),
         join_key=np.asarray("eeg_fnirs_single_trial|subject_01|session_00"),
         source_path=np.asarray("cnt.mat"),
         source_size_bytes=np.asarray(source.stat().st_size, dtype=np.int64),
@@ -438,8 +438,8 @@ def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
         ).hexdigest(),
     }
     (cache_root / "cache_manifest.json").write_text(json.dumps({
-        "schema": "single_trial_eeg_artifact_cache_v3",
-        "signal_branch": "single_trial_eeg_artifact_clean_v3",
+        "schema": "single_trial_eeg_artifact_cache_v4",
+        "signal_branch": "single_trial_eeg_artifact_clean_v4",
         "cleaning_config": EEGArtifactCleaningConfig().to_dict(),
         "code_sha256": code_sha256,
         "records": [{"join_key": "eeg_fnirs_single_trial|subject_01|session_00"}],
@@ -455,7 +455,7 @@ def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
         base_record_id="session_00",
         join_key="eeg_fnirs_single_trial|subject_01|session_00",
     )
-    loaded = dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v3")
+    loaded = dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v4")
     assert loaded is not None
     eeg, names, loaded_state, quality = loaded
     assert eeg.shape == (20, 2)
@@ -464,19 +464,19 @@ def test_v3_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
     assert quality["artifact_mask"].shape == (20,)
     record.join_key = "eeg_fnirs_single_trial|subject_01|session_wrong"
     with pytest.raises(RuntimeError, match="manifest has no record"):
-        dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v3")
+        dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v4")
     record.join_key = "eeg_fnirs_single_trial|subject_01|session_00"
     source.write_bytes(b"changed source")
     with pytest.raises(RuntimeError, match="source EEG changed"):
-        dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v3")
+        dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v4")
 
 
-def test_v3_artifact_cache_rejects_stale_code_hash(tmp_path):
+def test_v4_artifact_cache_rejects_stale_code_hash(tmp_path):
     cache_root = tmp_path / "cache"
     cache_root.mkdir()
     (cache_root / "cache_manifest.json").write_text(json.dumps({
-        "schema": "single_trial_eeg_artifact_cache_v3",
-        "signal_branch": "single_trial_eeg_artifact_clean_v3",
+        "schema": "single_trial_eeg_artifact_cache_v4",
+        "signal_branch": "single_trial_eeg_artifact_clean_v4",
         "cleaning_config": EEGArtifactCleaningConfig().to_dict(),
         "code_sha256": {"audit": "stale", "cleaner": "stale"},
         "records": [],

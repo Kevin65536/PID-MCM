@@ -1164,7 +1164,7 @@ def run(args: argparse.Namespace) -> Path:
         REPO_ROOT / str(config["data"]["cache_root"]) / "cache_manifest.json",
         REPO_ROOT / str(config["data"]["cache_root"]) / "event_index/event_manifest.json",
         REPO_ROOT / str(config["data"]["cache_root"]) / "channel_geometry/geometry_manifest.json",
-        REPO_ROOT / str(config["data"]["cache_root"]) / "eeg_artifact_clean_v3/cache_manifest.json",
+        REPO_ROOT / str(config["data"]["cache_root"]) / "eeg_artifact_clean_v4/cache_manifest.json",
     ]
     trial_inventory = []
     for condition_id, subjects in grouped.items():

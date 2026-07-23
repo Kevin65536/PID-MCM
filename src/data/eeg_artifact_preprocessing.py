@@ -13,18 +13,22 @@ from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
 import numpy as np
-from scipy.signal import butter, sosfiltfilt, welch
+from scipy.signal import butter, filtfilt, iirnotch, sosfiltfilt, welch
 
 
 SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2 = "single_trial_eeg_artifact_clean_v2"
 SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3 = "single_trial_eeg_artifact_clean_v3"
-SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
+SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4 = "single_trial_eeg_artifact_clean_v4"
+SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
 
 
 @dataclass(frozen=True)
 class EEGArtifactCleaningConfig:
     schema: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
     band_hz: tuple[float, float] = (1.0, 45.0)
+    line_noise_frequency_hz: float | None = 50.0
+    line_noise_quality_factor: float = 30.0
+    bad_channel_action: str = "disabled_for_cross_dataset_uniformity"
     bad_channel_robust_z: float = 4.5
     bad_channel_extreme_robust_z: float = 9.0
     bad_channel_metric_count: int = 2
@@ -97,6 +101,46 @@ def _bandpass(values: np.ndarray, sample_rate_hz: float, band_hz: tuple[float, f
         return values.copy()
     sos = butter(4, [low / nyquist, high / nyquist], btype="bandpass", output="sos")
     return sosfiltfilt(sos, values, axis=0)
+
+
+def _remove_line_noise(
+    values: np.ndarray,
+    sample_rate_hz: float,
+    config: EEGArtifactCleaningConfig,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    frequency_hz = config.line_noise_frequency_hz
+    if frequency_hz is None:
+        return values.copy(), {
+            "method": "disabled",
+            "frequency_hz": None,
+            "quality_factor": None,
+        }
+    frequency_hz = float(frequency_hz)
+    quality_factor = float(config.line_noise_quality_factor)
+    nyquist = 0.5 * float(sample_rate_hz)
+    if frequency_hz <= 0.0 or frequency_hz >= nyquist:
+        raise ValueError(
+            f"line-noise frequency must be inside (0, Nyquist): "
+            f"{frequency_hz} Hz for fs={sample_rate_hz} Hz"
+        )
+    if quality_factor <= 0.0:
+        raise ValueError(f"line-noise quality factor must be positive: {quality_factor}")
+    if values.shape[0] < 32:
+        return values.copy(), {
+            "method": "skipped_short_record",
+            "frequency_hz": frequency_hz,
+            "quality_factor": quality_factor,
+        }
+    numerator, denominator = iirnotch(
+        frequency_hz,
+        quality_factor,
+        fs=float(sample_rate_hz),
+    )
+    return filtfilt(numerator, denominator, values, axis=0), {
+        "method": "zero_phase_iirnotch",
+        "frequency_hz": frequency_hz,
+        "quality_factor": quality_factor,
+    }
 
 
 def _robust_location_scale(values: np.ndarray, axis: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -489,19 +533,51 @@ def clean_single_trial_eeg(
     ]
     if len(eeg) != len(eog):
         raise ValueError(f"EEG/EOG length mismatch: {len(eeg)} != {len(eog)}")
-    filtered = _bandpass(eeg, sample_rate_hz, cfg.band_hz)
+    line_band = (
+        max(0.0, float(cfg.line_noise_frequency_hz or 50.0) - 2.0),
+        min(0.5 * float(sample_rate_hz), float(cfg.line_noise_frequency_hz or 50.0) + 2.0),
+    )
+    line_ratio_before = _band_power(
+        eeg,
+        sample_rate_hz,
+        line_band,
+        reference_band_hz=(1.0, min(80.0, 0.5 * float(sample_rate_hz))),
+    )
+    line_cleaned, line_noise_state = _remove_line_noise(eeg, sample_rate_hz, cfg)
+    filtered = _bandpass(line_cleaned, sample_rate_hz, cfg.band_hz)
+    line_ratio_after = _band_power(
+        filtered,
+        sample_rate_hz,
+        line_band,
+        reference_band_hz=(1.0, min(80.0, 0.5 * float(sample_rate_hz))),
+    )
     eog_for_metrics = _bandpass(eog, sample_rate_hz, (0.5, 15.0))
     metrics_before = compute_channel_quality_metrics(filtered, sample_rate_hz)
-    bad_mask, bad_scores = detect_bad_channels(metrics_before, cfg)
+    if cfg.bad_channel_action == "detect_and_interpolate":
+        bad_mask, channel_quality_scores = detect_bad_channels(metrics_before, cfg)
+    elif cfg.bad_channel_action == "disabled_for_cross_dataset_uniformity":
+        bad_mask = np.zeros(eeg.shape[1], dtype=bool)
+        _, channel_quality_scores = detect_bad_channels(metrics_before, cfg)
+    else:
+        raise ValueError(f"unsupported bad_channel_action: {cfg.bad_channel_action!r}")
     ocular_mask, ocular_state = detect_ocular_mask(eog, sample_rate_hz, cfg)
     high_frequency_mask, high_frequency_state = detect_high_frequency_mask(filtered, sample_rate_hz, cfg)
     correlation_before = _max_abs_eog_correlation(filtered, eog_for_metrics)
     regressed, regression_state = _robust_eog_regression(
         filtered.copy(), eog, ocular_mask, sample_rate_hz, cfg
     )
-    interpolated, interpolation_state = _interpolate_bad_channels(
-        regressed, bad_mask, cfg.interpolation_neighbors, channel_positions
-    )
+    if cfg.bad_channel_action == "detect_and_interpolate":
+        interpolated, interpolation_state = _interpolate_bad_channels(
+            regressed, bad_mask, cfg.interpolation_neighbors, channel_positions
+        )
+    else:
+        interpolated = regressed
+        interpolation_state = {
+            "method": "disabled_for_cross_dataset_uniformity",
+            "geometry_available": False,
+            "interpolated_channel_count": 0,
+            "neighbors": {},
+        }
     corrected, muscle_correction_state = correct_high_frequency_bursts(
         interpolated, high_frequency_mask, sample_rate_hz, cfg
     )
@@ -521,7 +597,17 @@ def clean_single_trial_eeg(
             str(resolved_channel_names[index])
             for index in np.flatnonzero(bad_mask)
         ],
-        "bad_channel_scores": {key: np.asarray(value, dtype=float).tolist() for key, value in bad_scores.items()},
+        "bad_channel_policy": {
+            "action": cfg.bad_channel_action,
+            "mask_emitted": bool(np.any(bad_mask)),
+            "interpolation_applied": bool(
+                interpolation_state["interpolated_channel_count"]
+            ),
+        },
+        "channel_quality_scores": {
+            key: np.asarray(value, dtype=float).tolist()
+            for key, value in channel_quality_scores.items()
+        },
         "metrics_before": {key: np.asarray(value, dtype=float).tolist() for key, value in metrics_before.items()},
         "metrics_after": {key: np.asarray(value, dtype=float).tolist() for key, value in metrics_after.items()},
         "ocular": ocular_state,
@@ -535,7 +621,16 @@ def clean_single_trial_eeg(
         "median_eog_correlation_after": float(np.median(correlation_after)),
         "artifact_fraction": float(np.mean(artifact_mask)),
         "reference_strategy": cfg.reference_strategy,
-        "line_noise_action": "audit_only; 1-45 Hz passband makes a 50 Hz notch redundant",
+        "line_noise_action": line_noise_state["method"],
+        "line_noise": {
+            **line_noise_state,
+            "audit_band_hz": list(line_band),
+            "ratio_before_by_channel": line_ratio_before.tolist(),
+            "ratio_after_by_channel": line_ratio_after.tolist(),
+            "median_ratio_before": float(np.median(line_ratio_before)),
+            "median_ratio_after": float(np.median(line_ratio_after)),
+            "maximum_ratio_after": float(np.max(line_ratio_after)),
+        },
         "muscle_action": cfg.muscle_action,
     }
     return EEGArtifactCleaningResult(
@@ -553,6 +648,7 @@ __all__ = [
     "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA",
     "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2",
     "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3",
+    "SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4",
     "EEGArtifactCleaningConfig",
     "EEGArtifactCleaningResult",
     "clean_single_trial_eeg",

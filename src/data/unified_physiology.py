@@ -32,6 +32,7 @@ from .eeg_artifact_preprocessing import (
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
     clean_single_trial_eeg,
 )
 
@@ -58,6 +59,7 @@ SINGLE_TRIAL_EEG_SIGNAL_BRANCHES = (
     "raw_with_ocular_artifact",
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
 )
 SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 = "simultaneous_eeg_eog_clean_v1"
 SUPPORTED_EEG_SIGNAL_BRANCHES = SINGLE_TRIAL_EEG_SIGNAL_BRANCHES + (
@@ -85,6 +87,8 @@ def simultaneous_eeg_eog_cleaning_config(
         bad_channel_robust_z=1.0e12,
         bad_channel_extreme_robust_z=1.0e12,
         max_bad_channel_fraction=0.0,
+        line_noise_frequency_hz=None,
+        bad_channel_action="disabled_for_cross_dataset_uniformity",
         high_frequency_window_robust_z=1.0e12,
         muscle_action="mask_only",
         reference_strategy="native_reference_preserved_eog_auxiliary_excluded",
@@ -274,6 +278,7 @@ def preprocess_eeg_record_with_quality(
     if signal_branch in {
         SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
         SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+        SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
         SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
     }:
         if record.auxiliary_values is None or not record.auxiliary_channel_names:
@@ -285,12 +290,24 @@ def preprocess_eeg_record_with_quality(
             resolved_config = replace(
                 resolved_config,
                 schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V2,
+                line_noise_frequency_hz=None,
+                bad_channel_action="detect_and_interpolate",
                 muscle_action="mask_only",
+            )
+        elif signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3:
+            resolved_config = replace(
+                resolved_config,
+                schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                line_noise_frequency_hz=None,
+                bad_channel_action="detect_and_interpolate",
+                muscle_action="mask_gated_high_frequency_attenuation_v1",
             )
         else:
             resolved_config = replace(
                 resolved_config,
-                schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
+                line_noise_frequency_hz=50.0,
+                bad_channel_action="disabled_for_cross_dataset_uniformity",
                 muscle_action="mask_gated_high_frequency_attenuation_v1",
             )
         cleaned = clean_single_trial_eeg(
@@ -813,7 +830,7 @@ class UnifiedPhysiologyWindowDataset:
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_offset_s: float = 0.0,
-        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
         eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
         eeg_artifact_cache_root: str | Path | None = None,
         simultaneous_eeg_cache_root: str | Path | None = None,
@@ -841,7 +858,11 @@ class UnifiedPhysiologyWindowDataset:
         self.eeg_artifact_cache_root = (
             Path(eeg_artifact_cache_root)
             if eeg_artifact_cache_root is not None
-            else self.cache_root / "eeg_artifact_clean_v3"
+            else self.cache_root / (
+                "eeg_artifact_clean_v4"
+                if eeg_signal_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+                else "eeg_artifact_clean_v3"
+            )
         )
         self._artifact_cache_manifest: dict[str, Any] | None = None
         self.simultaneous_eeg_cache_root = (
@@ -970,8 +991,19 @@ class UnifiedPhysiologyWindowDataset:
         record: CleanCacheRecord,
         eeg_branch: str,
     ) -> tuple[np.ndarray, tuple[str, ...], dict[str, Any], dict[str, np.ndarray]] | None:
-        if record.dataset_id != "eeg_fnirs_single_trial" or eeg_branch != SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3:
+        if (
+            record.dataset_id != "eeg_fnirs_single_trial"
+            or eeg_branch not in {
+                SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
+            }
+        ):
             return None
+        cache_schema = (
+            "single_trial_eeg_artifact_cache_v4"
+            if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+            else "single_trial_eeg_artifact_cache_v3"
+        )
         path = (
             self.eeg_artifact_cache_root
             / record.canonical_subject_id
@@ -982,7 +1014,15 @@ class UnifiedPhysiologyWindowDataset:
         manifest = self._validated_artifact_cache_manifest()
         expected_config = replace(
             self.eeg_artifact_config or EEGArtifactCleaningConfig(),
-            schema=SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+            schema=eeg_branch,
+            line_noise_frequency_hz=(
+                50.0 if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4 else None
+            ),
+            bad_channel_action=(
+                "disabled_for_cross_dataset_uniformity"
+                if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+                else "detect_and_interpolate"
+            ),
             muscle_action="mask_gated_high_frequency_attenuation_v1",
         ).to_dict()
         if manifest.get("cleaning_config") != expected_config:
@@ -996,7 +1036,7 @@ class UnifiedPhysiologyWindowDataset:
         with np.load(path, allow_pickle=False) as payload:
             schema = str(np.asarray(payload["schema"]).item())
             join_key = str(np.asarray(payload["join_key"]).item())
-            if schema != "single_trial_eeg_artifact_cache_v3" or join_key != record.join_key:
+            if schema != cache_schema or join_key != record.join_key:
                 raise RuntimeError(
                     f"stale/incompatible EEG artifact cache {path}: schema={schema!r}, join_key={join_key!r}"
                 )
@@ -1031,8 +1071,16 @@ class UnifiedPhysiologyWindowDataset:
             raise RuntimeError(f"EEG artifact cache record exists without manifest: {path}")
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if (
-            manifest.get("schema") != "single_trial_eeg_artifact_cache_v3"
-            or manifest.get("signal_branch") != SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3
+            manifest.get("schema")
+            not in {
+                "single_trial_eeg_artifact_cache_v3",
+                "single_trial_eeg_artifact_cache_v4",
+            }
+            or manifest.get("signal_branch")
+            not in {
+                SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
+            }
         ):
             raise RuntimeError(f"stale/incompatible EEG artifact cache manifest: {path}")
         code_root = Path(__file__).resolve().parents[2]
@@ -1244,7 +1292,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         window_stride_s: float | None = None,
         target_sample_rate_hz: float = REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ,
         include_partial_windows: bool = True,
-        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+        eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
         eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
         eeg_artifact_cache_root: str | Path | None = None,
         require_paired_timestamps: bool = True,

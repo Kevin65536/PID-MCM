@@ -13,7 +13,7 @@ data:
   cache_root: "data/cache/physiology_semantic_clean_v1"
   dataset_ids: ["eeg_fnirs_single_trial"]
   task_namespaces: ["eeg_fnirs_single_trial:mental_arithmetic"]
-  eeg_signal_branch: "single_trial_eeg_artifact_clean_v3"
+  eeg_signal_branch: "single_trial_eeg_artifact_clean_v4"
   reject_unknown_labels: true
   split:
     train_subject_keys:

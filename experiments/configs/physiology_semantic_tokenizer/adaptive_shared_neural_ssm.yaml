@@ -14,14 +14,14 @@ data:
       subjects: [subject_19, subject_20, subject_21, subject_22, subject_23]
       record_id: session_01
       target_label: MA
-      eeg_signal_branch: single_trial_eeg_artifact_clean_v3
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
       max_trials_per_subject: 10
     - condition_id: simultaneous_unified
       dataset_id: simultaneous_eeg_nirs
       subjects: [VP019, VP020, VP021]
       record_id: cnt_wg
       target_label: WG
-      eeg_signal_branch: single_trial_eeg_artifact_clean_v3
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
       max_trials_per_subject: 10
 
 analysis:
