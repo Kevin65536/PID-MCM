@@ -16,6 +16,7 @@ New tokenizer work is governed by [`physiology_semantic_tokenizer/`](physiology_
 | How should it be implemented and tested? | [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) |
 | Which experiments are allowed? | [`05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) |
 | What has run under the new design? | [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
+| How did the four development tracks evolve and affect each other? | [`PROJECT_EVOLUTION_MAP.md`](PROJECT_EVOLUTION_MAP.md) |
 | Where should outputs be saved? | [`STORAGE_LAYOUT.md`](STORAGE_LAYOUT.md) |
 | Which source packages are active? | [`../src/README.md`](../src/README.md) |
 
