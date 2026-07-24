@@ -330,6 +330,52 @@ def _load_training_gate(
     return gate, _sha256(path)
 
 
+def _load_semantic_weight_calibration(
+    config: Mapping[str, Any],
+    *,
+    require_pass: bool,
+) -> tuple[dict[str, Any] | None, str | None]:
+    if not require_pass:
+        return None, None
+    validation = config.get("validation", {})
+    path_value = validation.get("semantic_weight_calibration_path")
+    if not path_value:
+        raise RuntimeError(
+            "Formal teacher-supervised E2 training requires "
+            "validation.semantic_weight_calibration_path"
+        )
+    path = Path(str(path_value))
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    if not path.is_file():
+        raise FileNotFoundError(f"Semantic-weight calibration not found: {path}")
+    calibration = json.loads(path.read_text(encoding="utf-8"))
+    if calibration.get("schema") != "physiology_semantic_e2_training_gradient_calibration_v1":
+        raise ValueError(f"Unsupported semantic-weight calibration schema in {path}")
+    if not bool(calibration.get("calibration_passed", False)):
+        raise RuntimeError("Semantic-weight training-gradient calibration did not pass")
+    if bool(calibration.get("validation_target_decoding_read", True)):
+        raise ValueError("Semantic-weight calibration must not use validation target decoding")
+    if bool(calibration.get("protected_test_opened", True)):
+        raise ValueError("Semantic-weight calibration unexpectedly opened protected test")
+    selected = float(calibration["selected_weight"])
+    loss = config.get("loss", {})
+    configured = {
+        "state": float(loss.get("state", {}).get("weight", 0.0)),
+        "prototype": float(loss.get("prototype", {}).get("weight", 0.0)),
+    }
+    mismatched = {
+        name: value
+        for name, value in configured.items()
+        if value > 0.0 and not math.isclose(value, selected, rel_tol=0.0, abs_tol=1e-12)
+    }
+    if mismatched:
+        raise ValueError(
+            f"Configured semantic weights do not match calibrated {selected}: {mismatched}"
+        )
+    return calibration, _sha256(path)
+
+
 # Backward-compatible import for the existing G0 trainer tests and callers.
 _load_e0_gate = _load_training_gate
 
@@ -705,6 +751,10 @@ def run(args: argparse.Namespace) -> Path:
     gate, gate_hash = _load_training_gate(
         config, require_pass=bool(optimizer_requested and teacher_supervision)
     )
+    _, semantic_calibration_hash = _load_semantic_weight_calibration(
+        config,
+        require_pass=bool(args.train and teacher_supervision),
+    )
     if (
         args.train
         and gate is not None
@@ -733,6 +783,7 @@ def run(args: argparse.Namespace) -> Path:
         "promotion_eligible": bool(validation.get("promotion_eligible", False)),
         "registered_factors": validation.get("registered_factors"),
         "e0_gate_sha256": gate_hash,
+        "semantic_weight_calibration_sha256": semantic_calibration_hash,
         "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
     }
     (run_dir / "decision_protocol.yaml").write_text(yaml.safe_dump(protocol, sort_keys=False), encoding="utf-8")
@@ -744,6 +795,7 @@ def run(args: argparse.Namespace) -> Path:
     _write_json(run_dir / "evidence_calibration.json", {
         "source": "E0 gate" if teacher_supervision else "training-only quantizer pilot",
         "e0_gate_sha256": gate_hash,
+        "semantic_weight_calibration_sha256": semantic_calibration_hash,
         "quantizer_health_calibration": validation.get("quantizer_health_calibration"),
         "protected_test_opened": False,
     })
@@ -967,6 +1019,7 @@ def run(args: argparse.Namespace) -> Path:
         "seed": seed,
         "device": str(device),
         "e0_gate_sha256": gate_hash,
+        "semantic_weight_calibration_sha256": semantic_calibration_hash,
         "training_gate_schema": None if gate is None else gate.get("schema"),
         "objective": "teacher_supervised" if teacher_supervision else "teacher_free",
         "global_step": global_step,

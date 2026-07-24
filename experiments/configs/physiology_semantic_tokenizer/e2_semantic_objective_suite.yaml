@@ -139,13 +139,15 @@ validation:
   promotion_eligible: false
   target_family_gate_path: >-
     data/cache/physiology_semantic_targets_v1/adaptive_ssm_e2_development/target_family_gate.json
+  semantic_weight_calibration_path: >-
+    experiments/runs/physiology_semantic_tokenizer/e2_weight_calibration/20260723_e2_v4_training_gradient_weight_calibration_v1/analysis/summary.json
   protected_test_metrics: false
   registered_factors:
     e1_quantizer_candidate: "diverse_farthest_t2_t2_k128_v23"
     data_window: "20 s from -5 s to +15 s relative to event"
     target_standardization: "coordinatewise train-subject-only"
     uncertainty_weighting: false
-    semantic_loss_weight: 0.25
+    semantic_loss_weight: 0.005
     teacher_coverage_policy: "masked sparse sidecar; identical samples and views in T0/T1/T2"
   gradient_audit:
     enabled: true
@@ -174,12 +176,12 @@ e2_suite:
       eeg_coordinates: []
       fnirs_coordinates: []
     T1:
-      state_weight: 0.25
-      prototype_weight: 0.25
+      state_weight: 0.005
+      prototype_weight: 0.005
       eeg_coordinates: ["r_mean", "r_slope"]
       fnirs_coordinates: ["delta_hbo_mean", "delta_hb_mean", "delta_hbo_slope", "delta_hb_slope"]
     T2:
-      state_weight: 0.25
-      prototype_weight: 0.25
+      state_weight: 0.005
+      prototype_weight: 0.005
       eeg_coordinates: ["r_mean", "r_slope", "s_mean", "s_slope"]
       fnirs_coordinates: ["delta_hbo_mean", "delta_hb_mean", "delta_hbo_slope", "delta_hb_slope"]

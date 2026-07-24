@@ -9,7 +9,7 @@ data:
   baseline_duration_s: 5.0
   task_duration_s: 10.0
   conditions:
-    - condition_id: single_trial_clean_v3
+    - condition_id: single_trial_clean_v4
       dataset_id: eeg_fnirs_single_trial
       subjects: [subject_19, subject_20, subject_21, subject_22, subject_23]
       record_id: session_01

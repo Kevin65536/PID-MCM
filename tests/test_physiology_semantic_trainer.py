@@ -9,6 +9,7 @@ from experiments.train_physiology_semantic_tokenizer import (
     _finalize_epoch_health,
     _implementation_snapshot,
     _load_e0_gate,
+    _load_semantic_weight_calibration,
     _loss_from_config,
     _quantizer_reference_tests,
     _quantization_strength_for_epoch,
@@ -72,6 +73,38 @@ def test_teacher_free_objective_does_not_claim_teacher_supervision():
         {"loss": {"state": {"weight": 0}, "prototype": {"weight": 0}, "masked_state": {"weight": 0}}}
     )
     assert _teacher_supervision_requested({"loss": {"state": {"weight": 1.0}}})
+
+
+def test_formal_semantic_weight_must_match_training_gradient_calibration(tmp_path):
+    path = tmp_path / "calibration.json"
+    path.write_text(
+        json.dumps({
+            "schema": "physiology_semantic_e2_training_gradient_calibration_v1",
+            "calibration_passed": True,
+            "validation_target_decoding_read": False,
+            "protected_test_opened": False,
+            "selected_weight": 0.005,
+        }),
+        encoding="utf-8",
+    )
+    config = {
+        "loss": {
+            "state": {"weight": 0.005},
+            "prototype": {"weight": 0.005},
+        },
+        "validation": {"semantic_weight_calibration_path": str(path)},
+    }
+
+    calibration, digest = _load_semantic_weight_calibration(
+        config,
+        require_pass=True,
+    )
+
+    assert calibration["selected_weight"] == 0.005
+    assert len(digest) == 64
+    config["loss"]["state"]["weight"] = 0.25
+    with pytest.raises(ValueError, match="do not match"):
+        _load_semantic_weight_calibration(config, require_pass=True)
 
 
 def test_warmup_cosine_scheduler_reaches_lower_learning_rate():

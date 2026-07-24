@@ -423,6 +423,36 @@ is rebuilt with the current channel/QC contract and the affected E0 evidence is
 revalidated. Full implementation, commands, and claim boundaries are recorded
 in [`analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md).
 
+### E2 v4 formal development decision
+
+On 2026-07-23 the Single-Trial v4 line-clean branch removed the historical
+bad-channel conflict, and the adaptive teacher was regenerated and revalidated
+on subjects 01–23. Required local observability, target gauge, and K=128
+transmissibility passed; the sidecar admitted all 230 source trials. The broader
+E0 machine gate remains failed on its separate fNIRS physical and
+posterior-calibration layers, so E2 used only the registered local/prototype
+target family, with uncertainty weighting and context/coupling entrances
+disabled. Subjects 24–29 remained unopened.
+
+A training-gradient-only amendment found that the original
+`0.1/0.25/0.5` weights overwhelmed the shared trunk. The preregistered follow-up
+grid selected `0.005`, which was hash-bound into all semantic runs. Nine
+T0/T1/T2 jobs completed 462 updates each. All passed the E1 retention thresholds,
+stopped revival after the registered window, retained full-rank codebooks,
+passed four strict entry-gradient audits, and wrote checkpoint and implementation
+hashes.
+
+Frozen hard-token evaluation did not admit a semantic row. T1 minus T0 on the
+two-modality required endpoint was `-0.0271/-0.0413/+0.0065` across matched
+seeds; T2 minus T0 was `-0.0343/-0.0560/-0.0324`. Paired subject bootstrap means
+were `-0.0326` (95% CI `[-0.0770, 0.0042]`) and `-0.0575`
+(`[-0.1107, -0.0147]`). fNIRS hard IDs remained above their null in every row,
+but EEG hard IDs were negative and below null in every run. T2 also lacked
+seed-consistent optional-s improvement and reduced the required endpoint versus
+T1 in all seeds. The development decision is
+`no_semantic_row_admitted_retain_T0`; this is not G3, E6/G2, protected-test, or
+coupling evidence.
+
 ## 🚦 Scientific-result admission rule
 
 A correctness-only dry-run or smoke may be logged with an explicit non-gate status. A scientific result or gate decision is promoted only when it has:
@@ -453,4 +483,4 @@ Their narrative log is preserved at [`source_observation/EXPERIMENT_LOG.md`](../
 - [Storage layout](../STORAGE_LAYOUT.md)
 - [Archived-run inventory](../../experiments/archive/pre_physiology_semantic_20260701/README.md)
 
-_Last updated: 2026-07-22_
+_Last updated: 2026-07-23_
