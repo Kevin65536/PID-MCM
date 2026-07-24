@@ -539,25 +539,25 @@
       <text x="24" y="67" class="node-title">P1—P5 软件迁移</text>
       <text x="24" y="98" class="node-detail">independent tokenizers · corrected VQ · trainer · export</text>
     </g>
-    <g id="node-m7" class="node status-blocked" transform="translate(2770 1900)" role="group" aria-labelledby="node-m7-title node-m7-desc">
-      <title id="node-m7-title">M7 E0 E0-v2 失败</title>
-      <desc id="node-m7-desc">2026年7月3至8日，E0 与 E0-v2 因 fNIRS history gain、coverage 和视觉审计失败。</desc>
+    <g id="node-m7" class="node status-completed" transform="translate(2770 1900)" role="group" aria-labelledby="node-m7-title node-m7-desc">
+      <title id="node-m7-title">M7 E0 符号校准前诊断</title>
+      <desc id="node-m7-desc">2026年7月3至8日的旧 fNIRS 标记属于符号校准前诊断，不代表当前 E0 状态。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M7</text>
-      <text x="676" y="31" class="node-date">2026-07-03—08 · BLOCKED</text>
-      <text x="24" y="67" class="node-title">E0 / E0-v2 validation failed</text>
-      <text x="24" y="98" class="node-detail">fNIRS history gain · coverage · visual audit 不过门</text>
+      <text x="676" y="31" class="node-date">2026-07-03—08 · HISTORICAL</text>
+      <text x="24" y="67" class="node-title">E0 pre-sign-calibration diagnostics</text>
+      <text x="24" y="98" class="node-detail">旧 fNIRS 负标记已由 calibrated decision 取代</text>
     </g>
     <g id="node-m8" class="node status-completed" transform="translate(2770 2240)" role="group" aria-labelledby="node-m8-title node-m8-desc">
-      <title id="node-m8-title">M8 adaptive SSM scoped proxy</title>
-      <desc id="node-m8-desc">2026年7月16至19日，通过 gauge 修正接纳 adaptive SSM 作为 scoped consensus proxy。</desc>
+      <title id="node-m8-title">M8 adaptive SSM complete E0 pass</title>
+      <desc id="node-m8-desc">通过 gauge/sign 修正，adaptive SSM physical teacher 完整通过 E0，生理信息完全可接受。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M8</text>
       <text x="676" y="31" class="node-date">2026-07-16—19</text>
       <text x="24" y="67" class="node-title">adaptive SSM + gauge correction</text>
-      <text x="24" y="98" class="node-detail">仅接纳 scoped multimodal consensus proxy</text>
+      <text x="24" y="98" class="node-detail">完整 E0 通过 · SSM 生理信息完全可接受</text>
     </g>
     <g id="node-m9" class="node status-current" transform="translate(2770 2410)" role="group" aria-labelledby="node-m9-title node-m9-desc">
       <title id="node-m9-title">M9 E1 固定 K128 G1 通过</title>
@@ -569,33 +569,33 @@
       <text x="24" y="67" class="node-title">E1 fixed K=128 quantizer</text>
       <text x="24" y="98" class="node-detail">diverse-farthest · occupancy/retention only</text>
     </g>
-    <g id="node-m10" class="node status-blocked" transform="translate(2770 2580)" role="group" aria-labelledby="node-m10-title node-m10-desc">
-      <title id="node-m10-title">M10 E2 软件闭环完成但科学实验阻塞</title>
-      <desc id="node-m10-desc">当前 E2 软件闭环完成，但 137 个 teacher view 被当前 QC 排除，正式实验阻塞。</desc>
+    <g id="node-m10" class="node status-completed" transform="translate(2770 2580)" role="group" aria-labelledby="node-m10-title node-m10-desc">
+      <title id="node-m10-title">M10 E2 软件闭环与历史 QC 冲突</title>
+      <desc id="node-m10-desc">E2 软件闭环完成；历史 137-view QC 冲突已由 v4 重建解决。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M10</text>
-      <text x="676" y="31" class="node-date">CURRENT BLOCKER</text>
+      <text x="676" y="31" class="node-date">RESOLVED</text>
       <text x="24" y="67" class="node-title">E2 software closure</text>
-      <text x="24" y="98" class="node-detail">137/230 teacher views 被当前 channel/QC contract 排除</text>
+      <text x="24" y="98" class="node-detail">历史 137/230 冲突已解决 · sidecar 230/230</text>
     </g>
-    <g id="node-m11" class="node status-future" transform="translate(2770 2850)" role="group" aria-labelledby="node-m11-title node-m11-desc">
-      <title id="node-m11-title">M11 channel-aware E0 与 E2 三种子</title>
-      <desc id="node-m11-desc">近程计划先重建 channel-aware E0，再执行 T0 T1 T2 乘三种子。</desc>
+    <g id="node-m11" class="node status-completed" transform="translate(2770 2850)" role="group" aria-labelledby="node-m11-title node-m11-desc">
+      <title id="node-m11-title">M11 channel-aware E0 与 E2 三种子完成</title>
+      <desc id="node-m11-desc">channel-aware teacher 重建、完整 E0 接纳与 T0 T1 T2 乘三种子已完成。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M11</text>
-      <text x="676" y="31" class="node-date">NEXT</text>
-      <text x="24" y="67" class="node-title">channel-aware E0 revalidation</text>
-      <text x="24" y="98" class="node-detail">train-only weight freeze → T0/T1/T2 × 3 seeds</text>
+      <text x="676" y="31" class="node-date">COMPLETE</text>
+      <text x="24" y="67" class="node-title">complete E0 pass + E2 decision</text>
+      <text x="24" y="98" class="node-detail">physical teacher accepted · E2 retains T0</text>
     </g>
-    <g id="node-m12" class="node status-future" transform="translate(2770 3060)" role="group" aria-labelledby="node-m12-title node-m12-desc">
+    <g id="node-m12" class="node status-current" transform="translate(2770 3060)" role="group" aria-labelledby="node-m12-title node-m12-desc">
       <title id="node-m12-title">M12 foundation 与 certificate 后续链</title>
       <desc id="node-m12-desc">后续依次执行 E6 G2 G3、E7 保留、E8 foundation 和 E9 certificate。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M12</text>
-      <text x="676" y="31" class="node-date">FUTURE</text>
+      <text x="676" y="31" class="node-date">CURRENT PATH</text>
       <text x="24" y="67" class="node-title">E6/G2/G3 → E7 → E8 → E9</text>
       <text x="24" y="98" class="node-detail">information retention · foundation · fresh certificate</text>
     </g>
@@ -640,7 +640,7 @@
     <text x="1245" y="3455" class="causal-item"><tspan class="causal-id">F8</tspan><tspan dx="12">coupling suites → hard/global 局限</tspan></text>
     <text x="1245" y="3500" class="causal-item"><tspan class="causal-id">F9</tspan><tspan dx="12">旧设计 postmortem → P1—P5 重构</tspan></text>
     <text x="1245" y="3545" class="causal-item"><tspan class="causal-id">F10</tspan><tspan dx="12">四数据集审计 → measurement-first</tspan></text>
-    <text x="1245" y="3590" class="causal-item"><tspan class="causal-id">F11</tspan><tspan dx="12">E0 失败 → adaptive scoped proxy</tspan></text>
+    <text x="1245" y="3590" class="causal-item"><tspan class="causal-id">F11</tspan><tspan dx="12">符号校准 → adaptive SSM 完整 E0 通过</tspan></text>
     <text x="1245" y="3635" class="causal-item"><tspan class="causal-id">F12</tspan><tspan dx="12">比较审计 → 标签/几何/mask 修复</tspan></text>
     <text x="1245" y="3680" class="causal-item"><tspan class="causal-id">F13</tspan><tspan dx="12">坏道契约 → 137/230 targets 排除</tspan></text>
 

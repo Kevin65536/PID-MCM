@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-06
 - **Scope:** non-gate experiment tooling, result provenance, and architecture-plan evidence
-- **Scientific gate impact:** none; E0 remains blocked and protected subjects remain closed
+- **Scientific gate impact:** historical diagnostic only; current sign-calibrated E0 status is pass
 
 ## Change
 

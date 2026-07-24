@@ -1,7 +1,7 @@
 {
   "schema": "physiology_semantic_architecture_v1",
   "title": "Physiology-Semantic Tokenizer — Current Runtime Architecture",
-  "subtitle": "Measurement-first T0 runtime + entry masks implemented · adaptive proxy sidecar pending",
+  "subtitle": "Measurement-first T0 runtime · sign-calibrated adaptive SSM physical teacher accepted · complete E0 passed",
   "width": 1600,
   "height": 1060,
   "sections": [

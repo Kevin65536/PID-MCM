@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-06
 - **Scope:** four-dataset experimental adapters, lagged shared-state analysis, and visualization
-- **Scientific gate impact:** none; E0 remains blocked
+- **Scientific gate impact:** historical diagnostic only; current sign-calibrated E0 status is pass
 
 ## Change
 

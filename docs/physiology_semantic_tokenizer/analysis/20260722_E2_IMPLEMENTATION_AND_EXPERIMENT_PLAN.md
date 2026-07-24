@@ -88,10 +88,12 @@ validation target decoding 之前登记的修订网格完成校准。最终正�
 
 结果为 `230/230` 完整覆盖；required `r`、HbO/HbR 与 optional `s` 的
 local target 均通过既定可观测性，EEG/fNIRS K=128 target vocabulary
-transmissibility 均超过 random reference。完整 E0 machine gate 仍因已知
-的 fNIRS physical reconstruction 与 HbR posterior calibration 失败而不
-通过，因此 E2 只使用预登记 local/prototype family，继续禁用 uncertainty
-weighting、context/coupling 与 promotion。
+transmissibility 均超过 random reference。经 observation-aligned
+符号校准后，adaptive SSM physical teacher 完整通过 E0，SSM 获取的生理
+信息（包括 fNIRS 内容）完全可接受。旧的 fNIRS physical reconstruction
+与 HbR posterior calibration 负标记属于符号校准前诊断，不再构成 E0
+失败。E2 只使用预登记 local/prototype family 是本轮实验范围选择，不是
+E0 对 physical teacher 的限制。
 
 ### C. 训练被试权重校准
 

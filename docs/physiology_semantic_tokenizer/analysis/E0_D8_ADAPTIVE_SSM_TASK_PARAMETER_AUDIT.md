@@ -212,12 +212,11 @@ At the time of this audit, this result did not alter the E0-D7 status: the
 joint shared state remained a candidate privileged soft teacher, not an
 admitted or uniquely identified physical source.
 
-**Subsequent admission interpretation:** the E0-v3 design review no longer
-requires uniquely identified physiological coefficients for an optional joint
-proxy. These boundary rates still prohibit interpreting fitted parameters as
-subject physiology, but they do not block a teacher whose declared role is a
-physiology-shaped regularizer. The scoped decision is recorded in
-[`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+**Subsequent E0 interpretation:** complete E0 does not require every fitted
+coefficient to be uniquely identified. These boundary rates constrain
+parameter-level claims but do not reduce the accepted SSM physiological
+outputs. The final decision is recorded in
+[`20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
 
 ## 🔗 Artifacts
 
@@ -230,6 +229,6 @@ physiology-shaped regularizer. The scoped decision is recorded in
 - [Resolved configuration](../../../experiments/configs/physiology_semantic_tokenizer/adaptive_ssm_task_parameter_audit.yaml)
 
 **Status:** exploratory task-parameter audit complete; no FDR-confirmed task
-effect; task-specific physiological parameter supervision is not supported;
-parameter-level physical claims remain blocked, while proxy-level E0 admission
-is governed separately.
+effect. This limits claims about task-specific parameter variation but does not
+limit the accepted SSM physiological outputs: the sign-calibrated physical
+teacher passes complete E0.

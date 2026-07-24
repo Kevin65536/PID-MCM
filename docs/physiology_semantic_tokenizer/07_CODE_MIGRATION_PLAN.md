@@ -15,7 +15,7 @@ The following rules are fixed for all new work after the 2026-07-14 input-contra
 - every new run gets measured EEG/fNIRS from `UnifiedPhysiologyWindowDataset`;
 - formal validation of an optional target starts only after its adapter passes deterministic correctness tests and a real-data dry run;
 - target-supervised training does not start before its scoped E0 establishes valid prediction and admissible coordinates;
-- an explicit teacher-free reconstruction-plus-VQ baseline may optimize after a blocked E0 because it consumes no teacher target;
+- an explicit teacher-free reconstruction-plus-VQ baseline remains available independently of the now-passed E0;
 - legacy aliases, four-branch source/observation quantization, and pre-VQ cross-modal exchange remain archive-only;
 - smoke success is software evidence, not a scientific gate decision.
 
@@ -120,7 +120,7 @@ For each state coordinate and patch, compute:
 - least-squares slope against time in seconds;
 - `log(mean posterior variance + temporal variance of posterior means + eps)`.
 
-The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope. The adaptive proxy registers required EEG `r_mean/r_slope`, optional EEG `s_mean/s_slope`, required observation-aligned HbO/HbR mean/slope, and context/coupling-only flow coordinates.
+The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope. The adaptive physical teacher registers required EEG `r_mean/r_slope`, optional EEG `s_mean/s_slope`, required observation-aligned HbO/HbR mean/slope, and context/coupling-only flow coordinates.
 
 A target patch is valid only if every underlying cache-valid and causal-valid fNIRS sample is valid and all required means and variances are finite. The first five patches are therefore ineligible under the fixed ten-second history contract. Invalid targets and their weights are finite placeholders with a false mask; they must contribute exactly zero loss. `local_mask`, `prototype_mask`, `context_mask`, and `coupling_mask` are distinct fields and cannot silently fall back to one modality-wide mask.
 
@@ -163,7 +163,7 @@ module is excluded from export and discarded after tokenizer training.
 
 The active training script supports `--dry-run`, `--smoke`, `--train`, and `--resume`. It implements epoch training and validation, AMP, gradient clipping, AdamW, warm-up/cosine scheduling, early stopping, best/last checkpoints, and complete optimizer/scheduler/scaler state restoration. A run saves resolved configuration, environment, split/cache manifest, JSONL metrics, quantizer health, teacher diagnostics, completion status, and hashes required by the run artifact contract.
 
-The 2026-07-03 E0 pilot blocked the historical Croce physical-state objective, so that exact objective cannot take optimizer steps. The 2026-07-16 design decision separately admits the gauge-corrected adaptive joint proxy for development; its new decision artifact, cache sidecar and loss routing must be implemented before optimizer use. The trainer continues to verify the concrete decision artifact, split hash, data contract, cache roots and admitted coordinates. The teacher-free reconstruction-plus-VQ path remains independently runnable.
+The 2026-07-03 pilot is a historical pre-sign-calibration record. The final 2026-07-24 decision accepts the sign-calibrated adaptive SSM physical teacher, passes complete E0, and authorizes its physiological information for supervision. The trainer continues to verify the concrete decision artifact, split hash, data contract, cache roots, and routed coordinates. The teacher-free reconstruction-plus-VQ path remains independently runnable.
 
 ## 📤 P5 export and consumer contract
 

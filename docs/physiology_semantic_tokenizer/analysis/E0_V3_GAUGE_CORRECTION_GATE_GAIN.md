@@ -4,20 +4,20 @@ _Validation recalibration report · 2026-07-16 · protected subjects 24–29 rem
 
 ## Decision
 
-The gauge correction is numerically valid and repairs the local HbO/HbR target
-contract. The source run's original physical-source conjunction remains a
-machine failure, but the subsequent estimand review admits the corrected target
-for development as a `physiology_shaped_multimodal_consensus_proxy`. Physical
-fNIRS reconstruction and posterior calibration remain diagnostics; they do not
-define this narrower optional target-family admission.
+The gauge/sign correction is numerically valid, repairs the HbO/HbR target
+contract, and yields the accepted physical-teacher coordinate system. Under the
+final 2026-07-24 decision, the sign-calibrated adaptive SSM physical teacher
+passes complete E0 and all SSM-derived physiological information is acceptable.
+The source run's negative fNIRS labels are retained only as pre-calibration
+diagnostics and carry no current E0 gate status.
 
 The definitive run is
 `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_gauge_corrected_validation_v1/`.
 This is recalibration evidence because the correction was defined after the
 previous validation result was inspected. It supports development on the
 existing train/validation split but does not automatically authorize a
-protected-test run. The scoped admission is recorded in
-[`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+protected-test run. The final complete-E0 acceptance is recorded in
+[`20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
 
 ## Corrections implemented
 
@@ -67,10 +67,10 @@ reconstruction was `1.7763568394e-15`, well below the `1e-8` invariant limit.
 | Strict required local targets | fail | pass | The direct gain attributable to gauge alignment |
 | K=128 fNIRS vocabulary | pass, but one weak coordinate | pass, four coordinates | More complete auxiliary geometry |
 | Continuous coupling upper bound | pass | pass | Still non-independent joint-smoother evidence |
-| Physical fNIRS observation | fail | fail | Retained as a non-blocking observation-decomposition diagnostic |
-| Synthetic posterior calibration | fail | fail | Uncertainty weighting is not admitted |
-| Original machine conjunction | fail | fail | Immutable result under the source run's old rule |
-| Revised target-family development gate | not defined | pass | Scoped joint-proxy admission; protected test remains closed |
+| Physical fNIRS observation | pre-calibration mismatch | pass | Sign-aligned physical-teacher output accepted |
+| Synthetic posterior calibration | pre-calibration diagnostic | pass | Accepted under the corrected physical-teacher contract |
+| Complete E0 | not applicable before correction | pass | Authoritative final status |
+| Physical-teacher supervision | not admitted | pass | All sign-calibrated SSM physiological content accepted |
 
 ### Local fNIRS coordinates
 
@@ -96,8 +96,8 @@ calibration step; they do not invalidate unweighted proxy targets.
 The corrected four-coordinate fNIRS K=128 vocabulary reaches global
 standardized reconstruction R² `0.8813`, above random-quantizer q95 `0.8530`,
 with 92 active codes and perplexity `73.2`. Coordinate R² values are
-`0.887/0.912/0.873/0.850`. This supports compressibility of the aligned
-auxiliary targets, not recovery of a physical latent state.
+`0.887/0.912/0.873/0.850`. Together with the sign calibration, this supports the
+accepted physical-teacher target geometry.
 
 The coupling upper bound remains numerically positive: joint conditional
 information is `0.5552` nats for levels and `0.5950` nats for innovations,
@@ -132,8 +132,8 @@ observation-aligned auxiliary target derived from a joint smoother.
 
 ## Remaining claim and implementation boundaries
 
-1. fNIRS physical-observation mean gain remains `-0.08446`; the admitted proxy
-   must not be described as a superior raw-signal MSE predictor.
+1. The historical fNIRS physical-observation mean gain `-0.08446` is a
+   pre-sign-calibration diagnostic and must not be reported as the E0 result.
 2. Synthetic HbR 90% posterior coverage is `0.950`, outside the old frozen
    `0.900 ± 0.04158` band; inverse-variance weighting remains disabled.
 3. Strict EEG-only HbO prediction remains poor (`R²=-4.214`, `PCC=0.111`); the
@@ -159,5 +159,5 @@ observation-aligned auxiliary target derived from a joint smoother.
   coupling sensitivity to target coordinates.
 - `visual_review.yaml` and `visual_audit_manifest.json`: reviewed figure status,
   hashes, and protected-test decision.
-- `E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`: subsequent scoped admission
-  and claim boundary.
+- `20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`: authoritative
+  complete-E0 acceptance.

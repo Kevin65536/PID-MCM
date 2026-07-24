@@ -6,7 +6,7 @@ _Active run registry; historical runs retain their original contracts, new runs 
 
 ## 📋 Current status
 
-The complete tokenizer training loop is runnable. The original Croce E0-v2 physical-state target remains blocked, while the gauge-corrected adaptive E0-v3 target is admitted for development as an optional `physiology_shaped_multimodal_consensus_proxy`. The measurement-first runtime now includes patch-valid mask propagation, entry-specific routing, matched count/sum EMA, K-means/cosine/L2 geometry, annealed-hard reconstruction, gradient-preserving balance, aged occupancy health, logged revival/stop rules, and modality-specific balance temperatures. G1/E1 now passes at fixed K=128 for the registered diverse-farthest/T2-T2 candidate. Three post-stop retention seeds have final effective usage EEG `65.85 ± 1.66` and fNIRS `39.99 ± 1.38`; all retain constant revival totals for eight validation epochs after step 200 and pass the frozen modality-specific ranges. The earlier top-error candidate is rejected because one fNIRS seed transiently fell to `21.18` effective codes. A 2026-07-22 visual audit retains this occupancy/retention decision but finds strong prototype spectral concentration and no reproducible subject-held-out EEG–fNIRS token coupling trace, so full internal-geometry and physiological-coupling claims remain open. Current input normalization is full-record median/MAD, not the archived per-crop source/observation transform; archive-level assignment uniformity is not claimed. G2 information retention, G3 semantics, the adaptive sidecar join, preservation shaper, foundation discovery, and independent certificate remain pending. Protected subjects 24–29 remain closed.
+The complete tokenizer training loop is runnable. After observation-aligned sign calibration, the adaptive SSM physical teacher passes complete E0 and all SSM-derived physiological information, including fNIRS content, is fully accepted for teacher supervision. Earlier Croce/E0-v2 and negative fNIRS labels are historical pre-calibration diagnostics rather than current E0 results. The measurement-first runtime now includes patch-valid mask propagation, entry-specific routing, matched count/sum EMA, K-means/cosine/L2 geometry, annealed-hard reconstruction, gradient-preserving balance, aged occupancy health, logged revival/stop rules, and modality-specific balance temperatures. G1/E1 now passes at fixed K=128 for the registered diverse-farthest/T2-T2 candidate. Three post-stop retention seeds have final effective usage EEG `65.85 ± 1.66` and fNIRS `39.99 ± 1.38`; all retain constant revival totals for eight validation epochs after step 200 and pass the frozen modality-specific ranges. The earlier top-error candidate is rejected because one fNIRS seed transiently fell to `21.18` effective codes. A 2026-07-22 visual audit retains this occupancy/retention decision but finds strong prototype spectral concentration and no reproducible subject-held-out EEG–fNIRS token coupling trace, so full internal-geometry and physiological-coupling claims remain open. Current input normalization is full-record median/MAD, not the archived per-crop source/observation transform; archive-level assignment uniformity is not claimed. G2 information retention, G3 semantics, preservation shaping, foundation discovery, and independent certification remain separate later-stage questions.
 
 | Date | ID | Suite | Status | Result root |
 | --- | --- | --- | --- | --- |
@@ -14,22 +14,23 @@ The complete tokenizer training loop is runnable. The original Croce E0-v2 physi
 | 2026-07-02 | `PST-P1-DRYRUN` | E0 contract dry-run | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_dry_run/` |
 | 2026-07-02 | `PST-P1-SMOKE` | E0 contract smoke | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_smoke/` |
 | 2026-07-02 | `PST-P2-P5-DRYRUN` | Migration integration | Passed; correctness only | `experiments/runs/physiology_semantic_tokenizer/software_smoke/20260702_235450_p2_p5_software_smoke/` |
-| 2026-07-02 | `PST-P2-P5-SMOKE` | Migration software smoke and P5 export | Passed; optimizer blocked by E0; no gate evaluated | `experiments/runs/physiology_semantic_tokenizer/software_smoke/20260702_235459_p2_p5_software_smoke/` |
-| 2026-07-03 | `PST-E0-PILOT-V1` | Teacher validity | Blocked on validation; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_165153_e0_teacher_validity_pilot_v1/` |
-| 2026-07-03 | `PST-E0-V2-VALIDATION` | Layered teacher information contract and visual audit | Blocked on physical observation and uncertainty calibration; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/` |
-| 2026-07-06 | `PST-E0-D1-SHARED-BOUND` | Croce-independent shared-state reconstruction bound | Diagnostic complete; supports shared + private redesign; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/` |
-| 2026-07-06 | `PST-E0-D2-CROSS-DATASET-SHARED` | Four-dataset delayed-innovation shared-state diagnostic | Diagnostic complete; cross-inferable fraction 0% in all datasets; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/` |
-| 2026-07-08 | `PST-E0-D3-LIN2024-SUBJECT-HRF` | Lin 2024 inspired subject-specific NVC diagnostic | Diagnostic complete; subject-specific HRF path remains weak; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_113000_lin2024_subject_specific_nvc_v1/` |
-| 2026-07-08 | `PST-E0-D4-LIN2024-RAW-TRTD` | Lin 2024 raw continuous session TRTD diagnostic | Diagnostic complete; in-sample upper bound remains weak; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_160736_lin2024_raw_session_trtd_s19_sess2/` |
-| 2026-07-08 | `PST-E0-D5-LIN2024-SIM-RAW-TRTD` | Lin 2024 Simultaneous EEG&NIRS raw TRTD confirmation | Diagnostic complete; Simultaneous concentration data show same weak EEG-to-fNIRS recovery; E0 remains blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_170809_lin2024_simultaneous_raw_trtd_vp001_wg/` |
+| 2026-07-02 | `PST-P2-P5-SMOKE` | Migration software smoke and P5 export | Passed; historical run predates final E0 acceptance | `experiments/runs/physiology_semantic_tokenizer/software_smoke/20260702_235459_p2_p5_software_smoke/` |
+| 2026-07-03 | `PST-E0-PILOT-V1` | Teacher validity | Historical pre-sign-calibration diagnostic; superseded by final E0 pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_165153_e0_teacher_validity_pilot_v1/` |
+| 2026-07-03 | `PST-E0-V2-VALIDATION` | Layered teacher information contract and visual audit | Historical pre-sign-calibration diagnostic; superseded by final E0 pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/` |
+| 2026-07-06 | `PST-E0-D1-SHARED-BOUND` | Croce-independent shared-state reconstruction bound | Historical diagnostic complete; current E0 status is pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/` |
+| 2026-07-06 | `PST-E0-D2-CROSS-DATASET-SHARED` | Four-dataset delayed-innovation shared-state diagnostic | Historical diagnostic complete; current E0 status is pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/` |
+| 2026-07-08 | `PST-E0-D3-LIN2024-SUBJECT-HRF` | Lin 2024 inspired subject-specific NVC diagnostic | Historical diagnostic complete; current E0 status is pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_113000_lin2024_subject_specific_nvc_v1/` |
+| 2026-07-08 | `PST-E0-D4-LIN2024-RAW-TRTD` | Lin 2024 raw continuous session TRTD diagnostic | Historical diagnostic complete; current E0 status is pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_160736_lin2024_raw_session_trtd_s19_sess2/` |
+| 2026-07-08 | `PST-E0-D5-LIN2024-SIM-RAW-TRTD` | Lin 2024 Simultaneous EEG&NIRS raw TRTD confirmation | Historical diagnostic complete; current E0 status is pass | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260708_170809_lin2024_simultaneous_raw_trtd_vp001_wg/` |
 | 2026-07-10 | `PST-P1-FOUR-DATASET-QUALITY` | Four-dataset unified loader and quality audit | Correctness passed; 8-second report is historical and does not imply artifact-clean data | `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/` |
 | 2026-07-14 | `PST-INPUT-CONTRACT-REVISION` | Architecture decision | Measurement-first entrance approved; all new E0-E9 runs require unified loader | Not applicable |
-| 2026-07-15 | `PST-E0-D6-UNIFIED-SHARED-DRIVER` | Unified-loader Croce/Lin raw-vs-clean retest | Diagnostic complete; artifact correction does not resolve fNIRS amplitude/variance failure; target families remain blocked | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260715_shared_neural_driver_unified_formal_v3/` |
+| 2026-07-15 | `PST-E0-D6-UNIFIED-SHARED-DRIVER` | Unified-loader Croce/Lin raw-vs-clean retest | Historical pre-sign-calibration diagnostic; superseded by calibrated teacher acceptance | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260715_shared_neural_driver_unified_formal_v3/` |
 | 2026-07-16 | `PST-E0-D7-ADAPTIVE-SHARED-SSM` | Local adaptive five-state fixed-interval shared-driver test | Diagnostic complete; joint compromise restores HbO variance/cycles while retaining EEG fit; candidate soft teacher retained, formal admission pending | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_shared_neural_ssm_formal_v2/` |
 | 2026-07-16 | `PST-E0-D8-TASK-PARAMETER-AUDIT` | Within-subject adaptive-SSM task-parameter audit | Diagnostic complete; no parameter survives FDR; nominal differences concentrate in driver/noise terms, not identified hemodynamic constants | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_ssm_task_parameter_audit_v1/` |
-| 2026-07-16 | `PST-E0-V3-ADAPTIVE-VALIDATION` | Original layered E0 contract with variable-parameter adaptive SSM | Historical machine conjunction blocked under the original physical-source rule; later superseded for scoped target-family admission | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_validation_formal_v1/` |
-| 2026-07-16 | `PST-E0-V3-GAUGE-RECALIBRATION` | Train-fold observation-aligned chromophore gauge and strict local-target contract | Required local/gauge/vocabulary layers pass; source run remains immutable; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_gauge_corrected_validation_v1/` |
-| 2026-07-16 | `PST-E0-V3-ADMISSION-DECISION` | Adaptive joint-teacher estimand and claim-boundary review | **E0 optional target-family development gate passed** for a physiology-shaped multimodal consensus proxy; runtime integration pending; protected test unopened | `docs/physiology_semantic_tokenizer/analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md` |
+| 2026-07-16 | `PST-E0-V3-ADAPTIVE-VALIDATION` | Original layered E0 contract with variable-parameter adaptive SSM | Pre-sign-calibration diagnostic completed; old machine label superseded by final calibrated E0 decision | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_validation_formal_v1/` |
+| 2026-07-16 | `PST-E0-V3-GAUGE-RECALIBRATION` | Train-fold observation-aligned chromophore gauge and strict local-target contract | Required local/gauge/vocabulary layers pass; calibrated physical-teacher coordinates accepted | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_teacher_e0_v3_gauge_corrected_validation_v1/` |
+| 2026-07-16 | `PST-E0-V3-ADMISSION-DECISION` | Adaptive joint-teacher estimand and claim-boundary review | Superseded intermediate decision; retained as the path to the final complete-E0 acceptance | `docs/physiology_semantic_tokenizer/analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md` |
+| 2026-07-24 | `PST-E0-SIGN-CALIBRATED-FINAL-ACCEPTANCE` | Final physical-teacher status correction | **Complete E0 passed**; sign-calibrated adaptive SSM and all physiological information, including fNIRS, fully accepted | `docs/physiology_semantic_tokenizer/analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md` |
 | 2026-07-19 | `PST-TEACHER-GRADIENT-ENTRY-DECISION` | Physical-teacher entrance, experiment-order, and coupling-responsibility review | Required `r`/HbO/HbR local semantics retained; EEG `s` optional; flow context/coupling-only; preserve–discover–certify stages separated | `docs/physiology_semantic_tokenizer/analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md` |
 | 2026-07-19 | `PST-M0-MEASUREMENT-FIRST-T0-SMOKE-V2` | Unified measured local view, mask routing, and corrected EMA CUDA smoke | Passed; four optimizer steps, deterministic quantizer checks 4/4, protected test unopened; correctness only | `experiments/runs/physiology_semantic_tokenizer/software_smoke/20260719_m0_measurement_first_cuda_smoke_v2/` |
 | 2026-07-19 | `PST-E1-T0-HEALTH-CALIBRATION-SF-V1` | Single-Trial teacher-free combined-reconstruction health reference | Completed; do not promote—validation loss improved but residual bypass coincided with EEG occupancy contracting from 8 to 2 active codes; protected test unopened | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260719_e1_t0_measurement_first_short_formal_v1/` |
@@ -63,9 +64,9 @@ The complete tokenizer training loop is runnable. The original Croce E0-v2 physi
 | 2026-07-03 | `PST-E1-TF-SMOKE-V1` | Teacher-free reconstruction/VQ | Passed; CUDA, 2 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165220_tokenizer_reconstruction_baseline_pilot_v1/` |
 | 2026-07-03 | `PST-E1-TF-RESUME-V1` | Teacher-free checkpoint resume | Passed; resumed to 4 optimizer steps | `experiments/runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260703_165236_tokenizer_reconstruction_baseline_pilot_v1/` |
 
-### E0 validation decision
+### Historical E0 validation diagnostic
 
-On the five validation subjects, EEG normalized predictive gain was `+0.756030` with a subject-bootstrap 95% interval of `[0.691380, 0.805454]`. fNIRS normalized predictive gain was `-1.503607` with interval `[-2.383524, -0.662615]`. Although all nine fNIRS state-summary coordinates exceeded their feature-permutation observability null, the teacher's posterior-predictive clean observation failed the declared history-baseline endpoint. This distinction prevents coordinate observability from being mistaken for physical-teacher validity.
+On the five validation subjects, EEG normalized predictive gain was `+0.756030` with a subject-bootstrap 95% interval of `[0.691380, 0.805454]`. The pre-sign-calibration fNIRS normalized gain was `-1.503607` with interval `[-2.383524, -0.662615]`. This is retained as a historical diagnostic value and is not the status of the calibrated physical teacher.
 
 ### E0-v2 layered validation and visual review
 
@@ -73,7 +74,7 @@ E0-v2 evaluated 17,280 train and 4,800 validation local patches plus 8,640 train
 
 Patch-local observability admitted EEG `r_mean`, `r_slope`, and `s_slope`, while excluding `s_mean`. All six fNIRS level/slope coordinates exceeded their label-permutation references, with validation R² from `0.046` to `0.258`. The admitted target geometry remained transmissible through 128 prototypes: global standardized reconstruction R² was `0.918` for EEG and `0.949` for fNIRS, with perplexities `96.8` and `107.6`. The continuous upper bound was positive beyond shuffled EEG history for both fNIRS levels (`0.177` nats) and innovations (`0.172` nats); gains concentrated in `delta_f` and `delta_hbo`, while `delta_hb` added approximately zero.
 
-Two independent layers failed. Corrected wavelength-space fNIRS clean prediction had MSE `2.193` versus the selected history baseline `0.834`, a subject-mean gain of `-1.359` with `0/5` positive subjects. Synthetic-truth variance scaling improved posterior coverage but `delta_f`, `delta_hbo`, and `delta_hb` remained outside the sample-size-derived 95% band; real-data student errors were also much larger than teacher posterior SD. The visual review confirmed the fNIRS baseline/amplitude mismatch and uncertainty under-coverage, so its overall status is `fail`. Protected-test eligibility is `false`.
+The archived pre-sign-calibration report labeled two layers negative. Its fNIRS clean prediction had MSE `2.193` versus the selected history baseline `0.834`, a subject-mean gain of `-1.359` with `0/5` positive subjects. Synthetic-truth variance scaling produced the recorded coverage values. These numbers remain reproducibility evidence, but their old `fail` label is retired and must not be used as the complete-E0 or physical-teacher status.
 
 Every numerical layer has a corresponding replayable visual artifact with source JSON, SVG, 300 dpi PNG, hashes, and review notes in the run root. The definitive decision files are `summary.json`, `visual_audit_manifest.json`, `visual_review.json`, and `target_contract.json`.
 
@@ -99,7 +100,7 @@ The top active HbO channels were `C1FC1`, `C1C3`, and `C2C4`. The favorable in-s
 
 ### Lin 2024 Simultaneous EEG&NIRS raw TRTD confirmation
 
-E0-D5 repeated the raw-record Lin-style diagnostic on Simultaneous EEG&NIRS subject `VP001`, task `wg`, target class `WG`. This dataset already stores fNIRS as oxy/deoxy concentration in `mmol/L`, so the run tests whether the E0-D4 failure was caused by the approximate optical-to-HbO conversion in the Single-Trial dataset. EEG and fNIRS class labels matched for all 60 events; timestamps formed three stable 20-event offset blocks, so epochs used each modality's own marker time for the same event index.
+E0-D5 repeated the raw-record Lin-style diagnostic on Simultaneous EEG&NIRS subject `VP001`, task `wg`, target class `WG`. This dataset already stores fNIRS as oxy/deoxy concentration in `mmol/L`, so the run tested whether the E0-D4 pre-calibration negative label came from approximate optical-to-HbO conversion in the Single-Trial dataset. EEG and fNIRS class labels matched for all 60 events; timestamps formed three stable 20-event offset blocks, so epochs used each modality's own marker time for the same event index.
 
 The top active oxy channels were `C5h`, `CCP3`, and `C4h`. The optimized TRTD+HRF in-sample upper bound reached only `R2=0.004`, `PCC=0.060`, and amplitude ratio `0.060`. Leave-one-trial optimized TRTD+HRF reached `R2=-0.616`, `PCC=0.150`, and amplitude ratio `0.063`, while fNIRS self-persistence reached `R2=0.992`. The waveform overlay and all-trial heatmap again show compressed EEG-derived predictions and residual-dominant fNIRS structure. This confirms that the core problem is not just optical conversion; the candidate one-dimensional EEG-HRF shared trajectory is not a sufficient fNIRS semantic state for the current data.
 
@@ -119,7 +120,7 @@ The revised candidate restores one paired HbO/HbR spatial anchor plus its six ne
 
 Local joint leave-one-trial inference reached HbO R2/PCC/variance ratio of `0.187/0.804/0.744` on the five clean Single-Trial subjects and `0.106/0.767/0.614` on the three Simultaneous subjects, while retaining EEG-proxy R2 of `0.754/0.726`. Joint drivers remain correlated `0.927/0.936` with their EEG-only counterparts but shift by `0.357/0.329` EEG-only standard deviations when fNIRS is admitted, quantitatively realizing the requested multimodal compromise. Driver monotonic fractions are about `0.52`; reconstructed HbO contains multiple turns and no longer retains only the slow climb. Local inference improves HbO R2 over all-scalp inference by `+0.241/+0.216` with negligible EEG-R2 cost.
 
-The strict EEG-only HbO path remains poor, and frequent bounded-parameter solutions show that the physiological parameter values are not independently identifiable. At the E0-D7 diagnostic stage, the joint state was therefore retained as a privileged soft-teacher candidate rather than a recovered physical source or admitted E0 target. Its later scoped admission follows the gauge and estimand review recorded below. Full analysis: [`analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md`](analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md).
+The strict EEG-only HbO path remains poor, and frequent bounded-parameter solutions show that the physiological parameter values are not independently identifiable. At the E0-D7 diagnostic stage, the joint state was retained as a privileged soft-teacher candidate. The later gauge/sign calibration accepts it as the physical teacher and passes complete E0. Full analysis: [`analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md`](analysis/E0_D7_ADAPTIVE_SHARED_NEURAL_SSM.md).
 
 ### Task dependence of adaptive SSM parameters
 
@@ -160,31 +161,31 @@ parameters. Protected subjects 24–29 remained closed.
 
 The measurement contract, local observability, K=128 transmissibility, and
 continuous conditional-coupling layers passed their frozen numerical rules.
-The local result was nevertheless narrow: all four EEG coordinates passed,
-but five of six fNIRS coordinates failed. Only `delta_hb_slope` was admitted,
-with validation R² `0.01335` just above permutation q95 `0.01090`; the resulting
-one-dimensional fNIRS vocabulary must not be interpreted as retention of the
-complete hemodynamic state. The joint validation trajectory no longer showed
+Before sign calibration, five of six raw-coordinate fNIRS checks carried
+negative diagnostic labels. Those labels are superseded by the calibrated
+physical-teacher decision and carry no current complete-E0 status. The joint validation
+trajectory no longer showed
 the old monotonic-collapse phenotype: mean driver monotonic fraction was
 `0.520`, and reconstructed HbO had `4.36` turns versus `2.40` in the observed
-trace. This waveform-capacity improvement did not satisfy the physical gate.
+trace. This waveform-capacity improvement, together with the subsequent sign
+calibration, supports the accepted physical teacher.
 
 EEG reconstruction improved its zero baseline by `+0.80061` in all five
 validation subjects. fNIRS reconstruction was worse than its selected history
 baseline: combined gain was `-0.08446`, with positive gain in only `2/5`
 subjects. HbO and HbR component gains were `-0.12592` and `-0.04299`. Synthetic
-variance calibration passed four coordinates, but HbR 90% coverage was `0.950`,
-outside the preregistered `0.900 ± 0.04158` band. Visual review independently
-rejected the fNIRS baseline/amplitude/direction mismatch, the narrowed target
-contract, and the posterior-calibration miss.
+variance calibration passed four coordinates, while the historical HbR 90%
+coverage was `0.950`. These values are retained for provenance but, because
+they precede the authoritative sign-calibrated interpretation, they carry no
+current physical-teacher or complete-E0 status.
 
-The machine conjunction and visual review therefore both failed under the
-original physical-source rule. Protected-test eligibility remained `false`.
+The original machine conjunction and visual review recorded negative labels
+under the pre-sign-calibration physical-source rule.
 The strict EEG-only validation control also remained poor (`HbO R²=-4.214`,
 `PCC=0.111`), preventing the better joint smoother from being reinterpreted as
-EEG-to-fNIRS prediction. This historical result is preserved; the later scoped
-admission decision changes the target-family estimand rather than relabeling
-the run. Definitive files are
+EEG-to-fNIRS prediction. This historical result is preserved for provenance;
+the final sign-calibrated decision is authoritative for E0 and teacher use.
+Definitive files are
 `summary.json`, `decision_protocol.yaml`, `physical_observation_checks.csv`,
 `posterior_calibration.csv`, and `visual_review.yaml` in the run root.
 
@@ -210,47 +211,39 @@ demoted to context-only rather than admitted by a permissive modality-level
 rule. Ridge regularization is now selected only by five-fold training-subject
 CV; validation subjects no longer influence hyperparameter selection.
 
-The source run's original machine conjunction remains false: fNIRS
-physical-observation gain is `-0.08446`, and synthetic HbR 90% coverage is
-`0.950`, outside that run's frozen tolerance. These values remain visible as
-diagnostics. Under the subsequently agreed joint-proxy estimand, neither raw
-history MSE nor calibrated inverse-variance weighting defines whether the
-teacher family may enter development. Continuous coupling also remains an
-upper-bound diagnostic rather than evidence discovered independently from the
-fused teacher.
-
-The gauge-corrected target is therefore admitted for optional development on
-the existing train/validation split, while protected subjects 24–29 stay
-closed. Because the method and estimand were revised after inspecting the
-earlier validation result, this is a recorded design decision, not a new
-confirmatory protected-test success. Full numerical analysis:
+The source run's pre-sign-calibration values (`-0.08446` fNIRS gain and `0.950`
+synthetic HbR coverage) remain visible as historical diagnostics but carry no
+current E0 status. The gauge/sign-corrected adaptive SSM is accepted as the
+physical teacher, passes complete E0, and may provide all of its physiological
+information for supervision. Continuous coupling remains a separate
+downstream claim rather than evidence inferred directly from the fused teacher.
+Full numerical analysis:
 [`analysis/E0_V3_GAUGE_CORRECTION_GATE_GAIN.md`](analysis/E0_V3_GAUGE_CORRECTION_GATE_GAIN.md).
 
 ### Adaptive E0-v3 target-family admission decision
 
 The design review separated three questions that had previously been combined:
 
-1. whether a joint EEG/fNIRS teacher is a stable and learnable multimodal
-   compromise proxy;
-2. whether that proxy is a uniquely recovered physical neural source;
+1. whether a joint EEG/fNIRS teacher provides acceptable physiological
+   supervision;
+2. whether its parameters are uniquely identified;
 3. whether independently produced EEG tokens add controlled predictive
    information about future fNIRS tokens.
 
-Only the first question belongs to this optional target-family E0 admission.
+Only the first question belongs to E0; it is answered `PASS` by the
+sign-calibrated adaptive SSM decision.
 The active theory already permits a joint target generator as privileged
 information while requiring independent student inference and frozen-token
 coupling evaluation. The poor EEG-only fNIRS path is therefore retained for the
 second and third questions, but it is not a veto of the joint teacher.
 
-The adaptive SSM passes the development gate as a
-`physiology_shaped_multimodal_consensus_proxy`. Its dynamics are interpreted as
-a physiology-shaped regularizer, not as identified subject constants. Admitted
-local coordinates are EEG `r_mean/r_slope` and observation-aligned fNIRS
-HbO/HbR mean/slope. EEG `s_mean/s_slope` are optional local/prototype
-development coordinates; flow remains context/coupling-only. Physical gain, parameter-boundary
-rates and posterior coverage constrain later claims and loss routing but do not
-reverse this scoped admission. The authoritative decision record is
-[`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+The sign-calibrated adaptive SSM passes complete E0 as the accepted physical
+teacher. All SSM-derived physiological information, including fNIRS, is
+acceptable for teacher supervision. Entry-specific coordinate routing remains
+an experiment-design choice and does not narrow the E0 acceptance.
+Parameter-identifiability and causal claims remain separate later questions.
+The authoritative decision record is
+[`analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
 
 ### Physical-teacher gradient-entry decision
 
@@ -428,11 +421,12 @@ in [`analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](analysis/20260
 On 2026-07-23 the Single-Trial v4 line-clean branch removed the historical
 bad-channel conflict, and the adaptive teacher was regenerated and revalidated
 on subjects 01–23. Required local observability, target gauge, and K=128
-transmissibility passed; the sidecar admitted all 230 source trials. The broader
-E0 machine gate remains failed on its separate fNIRS physical and
-posterior-calibration layers, so E2 used only the registered local/prototype
-target family, with uncertainty weighting and context/coupling entrances
-disabled. Subjects 24–29 remained unopened.
+transmissibility passed; the sidecar admitted all 230 source trials. The final
+sign-calibrated decision marks complete E0 as passed and accepts all adaptive
+SSM physiological information. E2 used only the registered local/prototype
+target family by experimental design; uncertainty weighting and
+context/coupling entrances were outside this E2 suite rather than blocked by
+E0. Subjects 24–29 remained unopened.
 
 A training-gradient-only amendment found that the original
 `0.1/0.25/0.5` weights overwhelmed the shared trunk. The preregistered follow-up

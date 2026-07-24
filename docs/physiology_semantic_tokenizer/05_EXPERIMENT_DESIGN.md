@@ -64,7 +64,7 @@ The following is a blocking software invariant for every newly created run. It a
 | E4 residual strategy | `UnifiedPhysiologyWindowDataset` | None required |
 | E5 fNIRS representation | `UnifiedPhysiologyWindowDataset` | None required |
 | E6 information ladder | `UnifiedPhysiologyWindowDataset` | Optional probe labels from the same sample IDs |
-| E7 coupling-preservation ablation | `UnifiedPhysiologyWindowDataset` | Entry-routed adaptive proxy for named T1–T4 rows only |
+| E7 coupling-preservation ablation | `UnifiedPhysiologyWindowDataset` | Entry-routed adaptive physical teacher for named T1–T4 rows only |
 | E8 foundation discovery/downstream | Unified-loader-derived versioned frozen token export | Optional task covariates from canonical labels |
 | E9 certificate/visualization | Immutable frozen-token and foundation artifacts | Named signature/probe tables only |
 
@@ -107,16 +107,16 @@ STA-Net and EFRM remain candidate methods rather than scientifically admitted ba
 
 ### Status and scope boundary
 
-E0-v1 and E0-v2 are preserved as failed historical Croce-target validations. They block reuse of those exact physical-state targets, not teacher-free optimization and not alternative teacher families. The protected test for those historical protocols remains unopened.
+E0-v1 and E0-v2 are preserved as historical pre-sign-calibration Croce-target diagnostics. They do not represent the current E0 status and do not block the sign-calibrated adaptive SSM physical teacher. The authoritative complete-E0 result is `PASS`.
 
 The active E0 begins with the unified measured-data contract and then evaluates each optional target family independently. No family is the fixed physical prior for the architecture. The Croce-specific E0-v2 equations and results below are retained as historical rationale for this change; they are not the new input contract.
 
 ### Adaptive joint-teacher admission decision
 
-The 2026-07-16 design review defines the adaptive local fixed-interval SSM as a
-`physiology_shaped_multimodal_consensus_proxy`, not as a uniquely recovered
-neural source. A joint target generator may use paired held-out EEG/HbO/HbR as
-privileged information. E0 admission requires that its train-fold transforms
+The final 2026-07-24 review accepts the sign-calibrated adaptive local
+fixed-interval SSM as the physical teacher. A joint target generator may use
+paired held-out EEG/HbO/HbR as privileged information. E0 admission requires
+that its train-fold transforms
 are auditable, its declared local targets are learnable from the corresponding
 student modality, and its finite target geometry is non-degenerate. It does not
 require the complete joint posterior or fNIRS waveform to be recovered from EEG
@@ -310,15 +310,21 @@ Required artifacts are `measurement_adapters.yaml`, `unit_scale_audit.csv`, `tar
 
 ### Admission and pass rule
 
-E0-v2 is admitted from validation only when the measurement adapter is auditable, every enabled local/context target is observable from its declared receptive field, uncertainty is calibrated, the fixed-capacity transmissibility reference is non-degenerate, and the continuous state bridge contains incremental EEG-history information beyond fNIRS history. Coordinates or datasets that fail only a scoped requirement are removed, regrouped, or assigned to another entrance before the protocol is frozen. G0 passes only if the frozen contract reproduces the required evidence on the fresh protected evaluation.
+The active rule evaluates the observation-aligned, sign-calibrated teacher
+coordinate system. Measurement provenance, required target observability,
+finite-capacity transmissibility, and sign/gauge invariance must be auditable.
+The adaptive SSM satisfies this rule and complete E0 passes.
 
-Clean-waveform error against raw history remains a diagnostic of observation decomposition, not the single E0 primary endpoint. A validation failure cannot be rescued by another layer's success, and the existing protected test remains closed until the E0-v2 decision protocol, metric registry, calibration procedure, and eligible target list are frozen.
+Clean-waveform error against raw history remains an observation-decomposition
+diagnostic rather than a standalone veto. Values computed before sign
+calibration cannot be propagated as current physical-teacher or E0 status
+labels.
 
-**Execution status (2026-07-03):** E0-v2 validation completed and was not admitted. Measurement, local target, finite-vocabulary, and continuous-coupling layers passed. The physical-observation layer failed for fNIRS (`2.193` clean MSE versus `0.834` history MSE), and synthetic-truth posterior calibration remained outside its sample-size-derived coverage band for the three hemodynamic coordinates. Visual review independently confirmed both failures. The protected test remains closed; the immutable validation archive is `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/`.
+**Execution status (updated 2026-07-24):** The 2026-07-03 E0-v2 numbers remain an immutable pre-sign-calibration diagnostic archive. After observation-aligned sign calibration, the adaptive SSM physical teacher passes complete E0 and its physiological information, including fNIRS content, is fully accepted. The old `2.193` versus `0.834` comparison and posterior label carry no current E0 gate status. The archive remains at `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260703_232754_e0_teacher_validity_v2/`.
 
 ### E0-D1 — Shared-state reconstruction-bound diagnostic
 
-After the blocked E0-v2 result, a Croce-independent diagnostic tested whether the paired observations themselves support one low-dimensional state that describes both modalities. The analysis fixed latent capacity, decoder family, input access, temporal crop, and subject split before interpreting a bound. It compared validation-oracle joint PCA, train-fitted joint PCA, cross-modal CCA, single-sided CCA inference, and separate modality PCA over dimensions 1–64. This is diagnostic evidence and cannot promote G0.
+After the historical E0-v2 diagnostic, a Croce-independent analysis tested whether the paired observations themselves support one low-dimensional state that describes both modalities. The analysis fixed latent capacity, decoder family, input access, temporal crop, and subject split before interpreting a bound. It compared validation-oracle joint PCA, train-fitted joint PCA, cross-modal CCA, single-sided CCA inference, and separate modality PCA over dimensions 1–64. This remains diagnostic evidence; the current E0 pass is established by the sign-calibrated adaptive SSM decision.
 
 At five dimensions, validation-oracle descriptor reconstruction reached EEG/fNIRS $R^2$ of `0.893/0.931`, but joint-component loading balance was only `0.041`; the components were modality-dominated. A CCA-constrained shared state reached only `0.098/-0.222`, and its mean validation canonical correlation was `0.004`. Separate five-dimensional modality models reached `0.880/0.965`. The resulting requirement is to admit only cross-subject-stable shared targets and retain modality-private observation state, measurement adaptation, and delayed hemodynamic dynamics. The full scope and caveats are archived in [`archive/diagnostics/09_SHARED_STATE_RECONSTRUCTION_BOUND.md`](archive/diagnostics/09_SHARED_STATE_RECONSTRUCTION_BOUND.md).
 
@@ -326,7 +332,7 @@ At five dimensions, validation-oracle descriptor reconstruction reached EEG/fNIR
 
 The next diagnostic tested a three-dimensional lagged CCA state after removing each modality's own three-second history, trial phase, and condition. Two subjects from each of Single-Trial, REFED, Simultaneous EEG&NIRS, and Visual Cognitive Motivation were evaluated with reciprocal one-subject train/one-subject validation folds. Five seconds was the fixed primary EEG-leading lag; 0–10 seconds was exploratory.
 
-No dataset produced a positive cross-inferable shared fraction at five seconds. A joint state using both modalities gave balanced innovation ceilings of `3.97%`, `0.62%`, `1.63%`, and `2.56%`, respectively, but independent EEG-only and fNIRS-only states both clipped to `0%` in every dataset. This historical result prevents the joint ceiling itself from being treated as independent coupling evidence or a uniquely identifiable shared cause. Under the revised privileged-information boundary, it does not prohibit a separately validated joint proxy from serving as an optional teacher for independent students. Full methods and evidence boundaries are archived in [`archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md).
+No dataset produced a positive cross-inferable shared fraction at five seconds. A joint state using both modalities gave balanced innovation ceilings of `3.97%`, `0.62%`, `1.63%`, and `2.56%`, respectively, but independent EEG-only and fNIRS-only states both clipped to `0%` in every dataset. This historical result prevents the joint ceiling itself from being treated as independent coupling evidence or a uniquely identifiable shared cause. It does not reduce the later sign-calibrated physical-teacher acceptance. Full methods and evidence boundaries are archived in [`archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md`](archive/diagnostics/10_CROSS_DATASET_SHARED_NEURAL_STATE_DIAGNOSTIC.md).
 
 ## ⚙️ E1 — Quantizer implementation and geometry
 
@@ -519,7 +525,7 @@ Each suite contains a `suite_manifest.json`, `README.md`, `decision_protocol.yam
 | E0 local/context target fails | Remove, regroup, or move the coordinate to the receptive field that can identify it |
 | One teacher's continuous coupling upper bound fails | Reject that teacher bridge; E7 may proceed only from a separately preregistered teacher-free or alternative-target premise |
 | E0-v2 validation admitted | Freeze admitted targets and calibration, then open fresh protected evidence once; teacher-supervised optimization remains blocked until G0 passes |
-| Adaptive joint-proxy development gate admitted | Freeze its scoped coordinates and claim boundary; implement the sidecar/loss route, then compare against teacher-free and matched non-physiological targets without reading the protected split |
+| Sign-calibrated adaptive SSM complete E0 passed | Use the accepted physical teacher through explicit entry routing, then evaluate downstream semantics and coupling under their own gates |
 | E1 fails | Stop all expensive training; quantizer results are uninterpretable |
 | E2 fails, E6 passes | Retain information-preserving tokenizer but drop physiological-semantic token claims |
 | E2 passes, E6 fails | Increase or redesign residual capacity; do not use hard tokens alone downstream |

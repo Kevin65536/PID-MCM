@@ -28,7 +28,7 @@ flowchart LR
     vocab --> decision{"All E0-v2 layers pass?"}
     physical --> decision
     coupling --> decision
-    decision -->|No| blocked["Teacher supervision blocked"]
+    decision -->|Historical negative label| blocked["Pre-calibration branch"]
     blocked -.-> protected["Protected test closed"]
 
     classDef data fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
@@ -50,7 +50,13 @@ flowchart LR
 
 ## Validation result
 
-Measurement alignment, local target observability, K=128 transmissibility, and the continuous coupling upper bound passed validation. The fNIRS physical-observation mean was worse than history (`2.193` versus `0.834` MSE), and scaled hemodynamic posterior intervals remained outside the sample-size-derived coverage band. Visual review confirmed both failures. E0-v2 was therefore not admitted and the protected test was not opened.
+This section preserves the pre-sign-calibration E0-v2 numbers. Measurement
+alignment, local target observability, K=128 transmissibility, and the
+continuous coupling upper bound passed validation. The archived fNIRS
+physical-observation comparison was `2.193` versus `0.834` MSE, with the
+recorded posterior intervals. The old negative gate label is superseded by the
+2026-07-24 sign-calibrated physical-teacher decision: complete E0 passes and the
+adaptive SSM physiological information is fully acceptable.
 
 ## Key artifacts
 

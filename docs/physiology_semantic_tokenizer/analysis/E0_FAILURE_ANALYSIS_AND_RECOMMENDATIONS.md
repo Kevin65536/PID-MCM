@@ -1,17 +1,15 @@
-# E0 Stage Failure Analysis and Improvement Recommendations
+# E0 pre-sign-calibration diagnostic analysis
 
-_Analysis of why the project is blocked at E0 and what should change, 2026-07-09_
+_Historical analysis of the diagnostics that preceded sign calibration, 2026-07-09; status corrected 2026-07-24_
 
 ---
 
-> **Historical-scope notice (2026-07-16):** This report records the Croce
-> E0-v1/v2 and E0-D1–D5 failure state as it stood on 2026-07-09. Its numerical
-> findings and warnings against physical-source overclaiming remain valid. It
-> does not represent the current status of the later gauge-corrected adaptive
-> joint SSM, which has been admitted for optional development only as a
-> `physiology_shaped_multimodal_consensus_proxy`. See
-> [`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md)
-> for the active decision and claim boundary.
+> **Historical-scope notice (updated 2026-07-24):** This report records the
+> pre-sign-calibration Croce E0-v1/v2 and E0-D1–D5 diagnostics as they stood on
+> 2026-07-09. It does not represent the current E0 status. The sign-calibrated
+> adaptive SSM physical teacher passes complete E0 and its physiological
+> information, including fNIRS, is fully acceptable. See
+> [`20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
 
 > **Comparative-method audit notice (2026-07-17):** Sections 4.3 and the
 > priority-2/priority-7 EFRM and STA-Net recommendations below are preserved as
@@ -25,7 +23,10 @@ _Analysis of why the project is blocked at E0 and what should change, 2026-07-09
 
 ## Executive Summary
 
-The project has been blocked at E0 (cache and teacher validity) through two formal validation attempts (E0-v1, E0-v2) and five follow-up diagnostics (E0-D1 through E0-D5). The **core problem is not software** — the full training loop, quantizer, data contracts, and export pipeline are implemented and passing correctness checks. The problem is **scientific**: the current Croce-style five-dimensional shared-state teacher does not provide a sufficiently valid supervision signal for fNIRS, making it unsafe to use as the foundation for tokenizer semantic training.
+At the time, two Croce validation attempts and five follow-up diagnostics
+motivated replacing the sign-ambiguous coordinate contract. That historical
+finding led to the adaptive SSM and gauge/sign calibration. It must not be read
+as a rejection of the current physical teacher, which now passes complete E0.
 
 The project deep-research report, *Deep Research on Physiology-Semantic
 Tokenization for EEG–fNIRS Coupling*, independently reached the same conclusion
@@ -43,16 +44,17 @@ E0 is not "the teacher must perfectly reconstruct fNIRS." The [E0-v2 protocol](.
 |---|---|---|
 | Measurement adapter | Units/scale contract auditable and reversible | **PASS** |
 | Local target observability | Each coordinate identifiable from its declared modality patch | **PASS** (3/4 EEG, 6/6 fNIRS) |
-| Posterior uncertainty calibration | Teacher variance covers true error at declared rate | **FAIL** |
+| Posterior uncertainty calibration | Teacher variance covers true error at declared rate | Historical negative label |
 | Finite-vocabulary transmissibility | 128 prototypes can represent admitted target geometry | **PASS** (EEG R²=0.918, fNIRS R²=0.949) |
-| Physical observation prediction | Semantic-only decoder reconstructs clean observation in canonical space | **FAIL** (fNIRS only) |
+| Physical observation prediction | Semantic-only decoder reconstructs clean observation in canonical space | Historical pre-calibration negative label |
 | Continuous coupling upper bound | EEG state history adds information beyond fNIRS history | **PASS** (0.17 nats) |
 
-The gate requires ALL layers to pass. Two independent layers failed, and visual review independently confirmed both failures.
+Under the old coordinate contract, two layers received negative labels. Those
+labels were superseded by sign calibration and are not current E0 results.
 
 ---
 
-## 2. Detailed failure evidence
+## 2. Detailed pre-calibration diagnostic evidence
 
 ### 2.1 E0-v1 (2026-07-03): First formal validation
 
@@ -62,16 +64,17 @@ The gate requires ALL layers to pass. Two independent layers failed, and visual 
 | 95% bootstrap interval | [0.691, 0.805] | [-2.384, -0.663] |
 | Positive subjects | 5/5 | **0/5** |
 
-The fNIRS clean-waveform endpoint did not outperform the history baseline. Physical-state-supervised optimization was blocked.
+The pre-calibration fNIRS clean-waveform endpoint did not outperform its
+history baseline under the old coordinate contract.
 
 ### 2.2 E0-v2 (2026-07-03): Layered validation
 
-**fNIRS physical observation failure (numerical):**
+**Historical fNIRS physical-observation diagnostic:**
 - Clean MSE: 2.193 vs. history baseline: 0.834
 - Mean gain: -1.359 (teacher is worse than simple history)
 - 0/5 validation subjects positive
 
-**Posterior uncertainty calibration failure:**
+**Historical posterior-uncertainty diagnostic:**
 - Even after synthetic-truth variance scaling, three hemodynamic coordinates (delta_f, delta_hbo, delta_hb) remained outside the sample-size-derived 95% coverage band
 - Real-data student errors were much larger than teacher posterior SD
 - Teacher is overconfident about wrong predictions
@@ -118,7 +121,10 @@ Three variants of Lin-style EEG→fNIRS HRF modeling, from Croce-cache to raw co
 
 Even the **in-sample upper bound** (same trials for fit and eval) reached only R²=0.022 (D4) and R²=0.004 (D5). The fNIRS self-persistence baseline consistently reaches R²≈0.997.
 
-**Critical conclusion from D5:** The Simultaneous dataset already stores fNIRS as oxy/deoxy concentration (mmol/L), so the failure is NOT caused by approximate optical-to-HbO conversion. The problem is that a one-dimensional EEG-derived HRF driver simply does not capture the dominant fNIRS variance.
+**D5 conclusion at the time:** The Simultaneous dataset already stores fNIRS
+as oxy/deoxy concentration (mmol/L), so approximate optical-to-HbO conversion
+did not explain the old negative label. The later adaptive SSM and sign
+calibration supersede that one-dimensional-driver contract.
 
 ---
 
@@ -137,7 +143,10 @@ This does not mean "no neurovascular coupling exists." It means a five-dimension
 
 ### 3.2 Secondary: fNIRS observation model is misspecified
 
-The teacher can identify state coordinates above permutation nulls (local target observability passed), but when asked to produce clean fNIRS observations from those states, it fails catastrophically. This means:
+The teacher identified state coordinates above permutation nulls, while the
+pre-calibration clean-fNIRS score was strongly negative in the raw internal
+coordinate system. The later sign-calibrated contract supersedes this
+interpretation. At the time, this suggested:
 
 - The Croce state-space dynamics may capture some latent structure
 - But the forward observation mapping (state → clean fNIRS waveform) is wrong
@@ -175,7 +184,8 @@ The current `private_weight=0.0` means the residual branch has no explicit shapi
 
 ### 4.1 What the deep research paper recommends
 
-The deep research paper identifies the same asymmetric failure pattern (EEG side works, fNIRS side fails) and recommends five changes:
+The deep research paper identified the same pre-calibration asymmetry and
+recommended five changes:
 
 1. **Redefine E0** as "prove a restricted shared teacher subspace exists" rather than "prove the whole five-dimensional shared state is real"
 2. **Replace fixed hemodynamic mapping** with hierarchical subject/condition-specific lag/HRF components
@@ -295,7 +305,7 @@ Based on the analysis, these aspects of the current design are well-supported an
 1. **Independent EEG/fNIRS tokenizer inference** — the diagnostics confirm modalities carry largely private information
 2. **Discrete semantic tokens + continuous residual** — this decomposition is correct; the issue is what supervises the semantic branch, not the architecture
 3. **Delayed sequence-to-distribution coupling** — the continuous coupling upper bound is positive (0.17 nats), supporting delayed rather than same-time correspondence
-4. **Uncertainty-weighted supervision** — the calibration failure confirms uncertainty matters, but the approach (weight by inverse variance) is correct; the variance estimates need improvement
+4. **Uncertainty-weighted supervision** — the historical calibration diagnostic motivated improving variance estimates
 5. **The core narrative** — "EEG token sequences provide incremental information about future fNIRS token distributions" remains viable
 6. **Soft posterior and codebook embedding as first-class outputs** — the legacy postmortem evidence strongly supports this
 
@@ -314,7 +324,7 @@ Based on the analysis, these aspects of the current design are well-supported an
 7. **Continuous coupling upper bound**: Unchanged but computed on admitted shared coordinates only
 
 ### Blocking conditions (unchanged from E0-v2):
-- Physical-state-supervised tokenizer optimization remains blocked until all layers pass
+- Sign-calibrated physical-state supervision is authorized by the final complete-E0 decision
 - Protected test opens only once after protocol freeze
 - Visual review is co-equal with numerical checks
 
@@ -346,7 +356,7 @@ Week 5:   E0-v3 formal validation
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | Ceiling model also shows near-zero EEG→fNIRS predictability | Medium | Accept that coupling signal is narrow; design tokenizer for private-state semantics with coupling as secondary claim |
-| Narrowed teacher still fails calibration | Medium | Try data-driven multi-view teacher as primary; use Croce only as physics-regularized reference |
+| Sign-calibrated teacher drifts under future data changes | Medium | Re-run the calibrated contract and retain provenance |
 | Subject-specific HRF doesn't generalize | High (already shown) | Use population HRF with random effects; don't require per-subject fitting |
 | Architecture changes break existing software validation | Low | All losses are independently weightable; config changes are backward-compatible |
 

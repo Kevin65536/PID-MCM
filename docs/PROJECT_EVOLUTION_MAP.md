@@ -29,7 +29,7 @@ _审计快照：`main@55cee3f`，覆盖 2025-12-02 至 2026-07-23 的全部 303 
 
 _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19` 虚线是跨主线影响；点击图可打开完整尺寸。SVG 内保留可编辑文本、节点 ID、状态、无障碍标题/描述和完整因果索引。_
 
-> 📌 **当前关键路径：** `D7/D8 → M11 → M12 → C5`。也就是说，先完成并提交统一 EEG/QC 契约，再按同一契约重建 adaptive teacher 和 E0；E0 通过后才运行正式 E2；信息保持与语义门通过后才进入 foundation/certificate；最后才允许打开冻结的对比测试。跳过任何一段都会重新引入当前已经发现的数据或主张泄漏。
+> 📌 **当前关键路径：** `M12 → C5`。统一 EEG/QC 契约、adaptive teacher 重建与符号校准已经完成；完整 E0 已通过，SSM 生理信息完全可接受。后续信息保持、语义、foundation/certificate 与冻结对比测试仍按各自门禁推进。
 
 ## 📚 四条主线的版本台账
 
@@ -68,7 +68,7 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `T3` | shared/private 因子化与残差 | `b61df3`, `c9eb679`, `633286b` | 尝试把共享信息和模态私有信息分开 |
 | `T4` | 显式语义、source/observation 与 Croce 物理目标 | `d6d154a..5b4b77f` | 从“共享码本即语义”转向外部可解释 target |
 | `T5` | 信息阶梯、局部耦合与 whole-brain 审计 | `1204f0f..5cf74fa`; [旧设计 postmortem](physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md) | hard ID 丢信息；全局 coupling 不能替代任务局部证据；X3 会污染检验 |
-| `T6` | physiology-semantic、measurement-first、privileged proxy 与 entry routing | `b81c31b..d7255d9`; [理论基础](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) | teacher 可训练时使用，但不等于可辨识物理源；推理必须模态独立 |
+| `T6` | physiology-semantic、measurement-first、physical teacher 与 entry routing | `b81c31b..d7255d9`; [理论基础](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) | sign-calibrated SSM teacher 已接纳；推理仍须模态独立 |
 | `T7` | foundation discovery + fresh certificate | [目标架构](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md); [实现计划](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | 最终主张限定为：在 history/marginal/null 控制后，EEG 是否提供未来 fNIRS 的增量信息 |
 
 ### 自有模型架构与实验
@@ -82,11 +82,11 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `M4` | source/observation 全迁移 | `84299b4..ab7d7e0` | 旧 shared/private 语义从主线删除 |
 | `M5` | Gate1 稳定化、dual decoder、Croce target/local cache、coupling suites | `3cc2724..5cf74fa` | 工程可运行；语义和局部 coupling 仍不足 |
 | `M6` | physiology-semantic P1–P5、独立分支、修正 EMA VQ、trainer 与 export | `b81c31b..43bdef1` | 软件迁移完成，科学门未自动通过 |
-| `M7` | E0/E0-v2 teacher validation | `2b4f3b3..0a38a7c` | fNIRS history gain/coverage/视觉审计失败，protected test 未开 |
-| `M8` | adaptive shared-neural SSM、task parameter audit、gauge correction、scoped admission | `612e8c3..d7255d9` | 仅接纳 `physiology_shaped_multimodal_consensus_proxy`；不接纳物理源或因果主张 |
+| `M7` | E0/E0-v2 teacher validation | `2b4f3b3..0a38a7c` | 符号校准前历史诊断；旧 fNIRS 负标记不代表当前 E0 状态 |
+| `M8` | adaptive shared-neural SSM、task parameter audit、gauge/sign correction、完整接纳 | `612e8c3..d7255d9` | 完整 E0 通过；physical teacher 与全部 SSM 生理信息（含 fNIRS）可接受 |
 | `M9` | E1 quantizer v2–v23，最终 fixed K=128 diverse-farthest/T2-T2 | `0d00f28`, `7f1149c` | G1 仅在 occupancy/retention 意义上通过；跨模态 hard-token coupling 未证实 |
-| `M10` | E2 T0/T1/T2、sidecar、entry masks、梯度审计与冻结 probe | `b4ffc82`; [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 软件闭环完成；因 137/230 teacher views 与当前 bad-channel contract 冲突而阻塞 |
-| `M11` | channel-aware E0 重建、训练被试权重校准、9 个 E2 development jobs | [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 下一次允许的自有模型科学实验 |
+| `M10` | E2 T0/T1/T2、sidecar、entry masks、梯度审计与冻结 probe | `b4ffc82`; [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 历史 channel/QC 冲突已由 v4 重建解决 |
+| `M11` | channel-aware E0 重建、训练被试权重校准、9 个 E2 development jobs | [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 已完成；完整 E0 通过，E2 保留 T0 |
 | `M12` | E6/G2 信息保留、G3 语义、E7 coupling preservation、E8 foundation、E9 certificate | [实验设计](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) | 只有前一门通过才进入后一门 |
 
 ## 🔗 跨主线影响证据
@@ -102,7 +102,7 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `F7` | 直接记录 | Croce solver、event-relative cache 和单位统一把物理 target 从理论假设变成可训练 sidecar |
 | `F8–F9` | 直接实验 | hard/quantized 表示丢失 LOSO 信息、全局 coupling 在任务局部失效、X3 直接交换污染检验，直接产生 2026-07-01 redesign |
 | `F10` | 直接记录 | 四数据集原始测量审计否定“物理分解是必需输入”，架构改为 measurement-first、teacher optional |
-| `F11` | 直接实验 | E0/E0-v2 的 fNIRS 重建、coverage 和单调形态失败，促成 adaptive SSM；gauge 修正后只允许 scoped proxy 解释 |
+| `F11` | 直接实验 | 旧 fNIRS 诊断促成 adaptive SSM；gauge/sign 修正消除坐标歧义并形成完整 E0 接纳 |
 | `F12` | 直接审计 | 对比准备暴露 DSR 标签、Visual event/geometry、REFED continuous target 和 mask 消费缺口，反向修改统一 loader |
 | `F13–F15` | 直接实验 | artifact/bad-channel 契约进入 measured-data 后，旧 E0 channel selection 只剩 93/230 target 可用，因此正式 E2 必须先回到数据/teacher 重建 |
 | `F14` | 直接继承 | E1 的 fixed K=128 candidate 是 E2 的固定量化基础；E1 只通过占用，不把 hard-token 共现当作 coupling |
@@ -122,19 +122,17 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 
 ### 当前不能宣称
 
-- adaptive teacher 已在当前 channel/QC contract 下通过 E0
 - T1/T2 比 T0 更有语义，或 G2/G3 已通过
 - E1 hard tokens 已发现 EEG–fNIRS coupling
 - STA-Net/EFRM 已完成源协议数值复现或正式 protected 比较
-- joint proxy 是唯一物理源、其参数可辨识，或某个 EEG token 导致某个 fNIRS token
+- E0 通过本身证明 SSM 参数唯一可辨识、因果方向成立，或某个 EEG token 导致某个 fNIRS token
 
 ### 推荐执行顺序
 
-1. 完成 `D7` 的测试、质量审计、文档与提交，选择唯一默认 EEG/QC 契约
-2. 执行 `D8/M11`：按该契约重建 adaptive teacher，重新冻结 E0 coverage/observability/transmissibility
-3. E0 通过后，在训练被试上冻结 semantic weight，再运行 `T0/T1/T2 × 3 seeds`
-4. 通过 E6/G2 与 G3 后，依次执行 E7 preservation、E8 foundation 和 E9 fresh certificate
-5. 并行完成不打开 protected test 的 comparison 源协议复现与 C0–C5 冻结；只在自有模型和比较方法都冻结后执行 C6
+1. 以已通过完整 E0 的 sign-calibrated adaptive SSM 作为 physical teacher
+2. 按 E2 结果处理语义目标与信息保持问题，不回退 E0 接纳
+3. 通过 E6/G2 与 G3 后，依次执行 E7 preservation、E8 foundation 和 E9 fresh certificate
+4. 并行完成 comparison 源协议复现与 C0–C5 冻结；只在自有模型和比较方法都冻结后执行 C6
 
 ## 🧾 Git 分支与文档一致性审计
 

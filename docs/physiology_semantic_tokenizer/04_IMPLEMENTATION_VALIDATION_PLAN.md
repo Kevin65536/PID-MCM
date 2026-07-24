@@ -128,22 +128,23 @@ train-subject-only target standardization, hash-bound development gate, and
 adaptive sidecar builder are merged. The join audit exposed a channel-contract
 mismatch in the historical E0-v3 source: 137/230 teacher views contain a
 channel rejected by the current measured-data bad-channel mask. They are
-strictly excluded, leaving 93 targets for software validation only. Formal E2
-is blocked until a bad-channel-aware E0 rebuild and revalidation. No protected
-test sample was evaluated.
+strictly excluded, leaving 93 targets for software validation only. The later
+bad-channel-aware E0 rebuild restored full coverage, and the final
+sign-calibrated physical-teacher decision passes complete E0. No protected test
+sample was needed for this development-stage correction.
 
-**Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics. The adaptive proxy registers required EEG `r`, optional EEG `s`, required observation-aligned HbO/HbR, and context/coupling-only flow groups with separate entry masks.
+**Implementation:** expose Croce, self-supervised, task, data-driven dynamical and physics-regularized targets through a generic frozen sidecar interface. Croce remains one candidate, not the input ontology or default semantics. The adaptive physical teacher registers required EEG `r`, optional EEG `s`, required observation-aligned HbO/HbR, and context/coupling-only flow groups with separate entry masks.
 
 **Correctness checks:** deterministic patch pooling, mask contraction per entrance, temporal alignment, target standardization fitted on training subjects only, finite uncertainty metadata, and explicit unit tests for synthetic constant/ramp state trajectories. `delta_f` must be rejected by local/prototype routing even when present in the sidecar.
 
-**Execution boundary:** the old Croce physical-state objective remains blocked and cannot be bypassed with a boolean flag. Adaptive proxy supervision may begin only after its admitted coordinates, detached joint-teacher provenance, uniform/non-uncertainty-weighted loss role, and independent student paths are implemented and pass integration tests. This is an implementation boundary after E0 target-family admission, not a new scientific veto of the proxy.
+**Execution boundary:** the sign-calibrated adaptive SSM physical teacher is accepted and may supervise the declared training entrances. Historical Croce diagnostics cannot override the final E0 pass. Detached joint-teacher provenance, explicit loss routing, and independent student paths remain ordinary implementation correctness requirements, not scientific vetoes of the teacher.
 
 **Validity gate:** a target family may supervise a named experiment only when held-out predictive/identifiability checks beat its declared baselines. Failed coordinates or families are removed from that experiment; their failure does not block the teacher-free tokenizer mainline.
 
 ### P4 — Train independent semantic and residual branches
 
 **Implementation status (updated 2026-07-22):** the full trainer, T0/T1/T2
-configuration materializer, adaptive proxy sidecar join, per-objective gradient
+configuration materializer, adaptive physical-teacher sidecar join, per-objective gradient
 norm/cosine audit, four-mode frozen probes, and signature-based prototype
 matching are merged. A T1 CUDA smoke completed four optimizer steps and all
 registered gradient allowlists passed. The current 93-target channel-admitted

@@ -1,14 +1,14 @@
 # Physiology-semantic tokenizer redesign archive
 
-_Approved design baseline; full trainer implemented; adaptive joint-proxy target admitted for development_
+_Approved design baseline; full trainer implemented; sign-calibrated adaptive SSM physical teacher fully accepted_
 
 ---
 
 ## 📋 Status and authority
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces, the full trainer, and teacher-free optimizer/resume smoke are implemented. The historical Croce E0-v2 physical-state target remains blocked. The 2026-07-16 decision admits the gauge-corrected adaptive joint SSM for development as an optional `physiology_shaped_multimodal_consensus_proxy`; the 2026-07-19 decision routes its broader state set by local, prototype, context, and coupling-preservation entrances and separates tokenizer preservation, foundation discovery, and independent certification. Neither decision admits physical-source, parameter-identification, causal-coupling, or protected-test claims. Adaptive cache/runtime integration remains pending.
+This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces and the full trainer are implemented. The 2026-07-24 final correction accepts the sign-calibrated adaptive joint SSM physical teacher and all of its physiological information, including fNIRS content: complete E0 is `PASS`, and physical-teacher supervision is authorized. Earlier Croce/E0-v2 and pre-calibration fNIRS error labels remain historical diagnostics only and carry no current E0 status. The 2026-07-19 entry routing still separates tokenizer preservation, foundation discovery, and independent certification; those later experiments do not qualify the E0 pass.
 
-Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active status remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md); the scoped adaptive admission and its claim boundary are in [`analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md).
+Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active status remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md); the authoritative complete-E0 decision is [`analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
 
 The current implementation remains the canonical runtime figure below. The
 approved after-state is a separate plan artifact and must not be read as merged

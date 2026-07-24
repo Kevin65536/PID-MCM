@@ -33,7 +33,7 @@ flowchart LR
     accTitle: Entry-routed preserve discover certify architecture
     accDescr: Teacher coordinates are routed by receptive field, an asymmetric shaper preserves a delayed bridge, the foundation model discovers context-dependent organization, and a fresh evaluator certifies it.
 
-    teacher["Versioned adaptive proxy"] --> router["Local / prototype / context / coupling router"]
+    teacher["Accepted adaptive SSM physical teacher"] --> router["Local / prototype / context / coupling router"]
     router --> tokenizer["Independent semantic tokenizers"]
     router --> shaper["Disposable causal preservation shaper"]
     tokenizer --> shaper

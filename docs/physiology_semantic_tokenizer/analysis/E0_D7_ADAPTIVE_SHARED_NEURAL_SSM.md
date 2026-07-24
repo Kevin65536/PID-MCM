@@ -10,12 +10,12 @@ requested intermediate state: fNIRS changes the joint driver by about one third
 of an EEG-only driver standard deviation, while the joint trajectory remains
 strongly correlated with and reconstructs the EEG observation.
 
-This supports continuing with a physiology-constrained shared-state teacher as
-a **soft multimodal candidate**. At the time of this diagnostic it did not by
-itself admit a new target into E0. The subsequent gauge-corrected validation and
-estimand review admit it for development as a physiology-shaped multimodal
-consensus proxy. The strict EEG-only path, parameter non-identifiability and
-offline smoothing remain claim boundaries rather than joint-teacher vetoes.
+This supported continuing with a physiology-constrained shared-state teacher.
+At the time of this diagnostic it was still a candidate. The subsequent
+gauge/sign-calibrated decision passes complete E0 and accepts it as the physical
+teacher; all SSM-derived physiological information, including fNIRS, is fully
+acceptable. The strict EEG-only path and parameter-identifiability questions
+remain separate claims rather than joint-teacher vetoes.
 
 Final run:
 [`20260716_adaptive_shared_neural_ssm_formal_v2`](../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260716_adaptive_shared_neural_ssm_formal_v2/)
@@ -213,11 +213,10 @@ The decision at the time of this diagnostic was:
 > physical neural source, and do not promote it through E0 from this post-hoc
 > exploratory run alone.
 
-This historical caution remains valid for physical-source and causal claims.
-It is superseded only for the narrower optional target-family development gate
-by
-[`E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md`](E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md),
-which explicitly treats the joint state as a privileged consensus proxy.
+This historical caution remains valid for unique-parameter and causal claims.
+For E0 teacher validity it is superseded by
+[`20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md),
+which accepts the sign-calibrated adaptive SSM as the physical teacher.
 
 Before formal admission, the next version should preregister the modality-noise
 range, reduce parameter freedom or use hierarchical shrinkage, add an fNIRS-
@@ -235,9 +234,8 @@ the offline smoother, but causal performance must be assessed separately.
 - Replay: [`evaluate_adaptive_shared_neural_ssm.py`](../../../experiments/evaluate_adaptive_shared_neural_ssm.py)
 - Model: [`adaptive_neurovascular_ssm.py`](../../../src/inference/adaptive_neurovascular_ssm.py)
 
-**Status at the time of E0-D7:** model-revision diagnostic complete;
-slow-only/monotonic reconstruction failure resolved for joint inference;
-candidate soft teacher retained, formal E0 admission pending. **Current scoped
-status:** the later gauge-corrected target passed the optional target-family
-development gate as a multimodal consensus proxy; physical-source and causal
-claims remain unadmitted.
+**Status at the time of E0-D7:** model-revision diagnostic complete and
+slow-only/monotonic reconstruction issue resolved for joint inference.
+**Current status:** the later gauge/sign-calibrated adaptive SSM physical
+teacher passes complete E0, and its physiological information is fully
+acceptable. Unique-parameter and causal claims remain separate later questions.

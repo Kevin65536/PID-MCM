@@ -41,5 +41,6 @@ The final report is stored under:
 `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/`
 
 All four datasets passed the deterministic format/unit/component/sample-rate/
-label/timing/geometry-schema checks. This does not upgrade the failed E0 physical
-teacher gate and does not establish cross-dataset scientific equivalence.
+label/timing/geometry-schema checks. This loader result did not itself decide
+E0; the later sign-calibrated adaptive SSM decision passes complete E0. The
+loader audit still does not establish cross-dataset scientific equivalence.

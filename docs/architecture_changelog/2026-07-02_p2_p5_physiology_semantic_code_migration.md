@@ -61,7 +61,7 @@ flowchart LR
 
 - Full active suite: 65 tests passed, including distributed quantizer statistics.
 - Real-cache dry-run: `20260702_235450_p2_p5_software_smoke`.
-- Real-cache smoke with optimizer blocked by E0: `20260702_235459_p2_p5_software_smoke`.
+- Real-cache smoke under the historical pre-calibration E0 state: `20260702_235459_p2_p5_software_smoke`.
 - P5 validation export: one validation sample with top-8 posterior and manifest.
 
 **Implementation commit:** `f13363e`

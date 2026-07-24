@@ -4,8 +4,12 @@ _Exploratory validation diagnostic, 2026-07-15_
 
 ## Decision
 
-The admitted Single-Trial EEG artifact correction changes model behavior, but
-it does **not** resolve the fNIRS reconstruction failure.
+> **Status correction (2026-07-24):** This is a pre-sign-calibration
+> diagnostic. Its raw-coordinate fNIRS label is superseded by the calibrated
+> adaptive SSM physical-teacher acceptance and is not a current E0 result.
+
+The admitted Single-Trial EEG artifact correction changed model behavior but
+did not, by itself, resolve the historical raw-coordinate fNIRS mismatch.
 
 - **Supported:** the 2026-07-14 unified measured-data entrance and admitted
   Single-Trial v3 branch are usable for a paired raw-versus-clean model audit.
@@ -187,4 +191,3 @@ event manifest, geometry manifest, and v3 artifact-cache manifest by SHA-256.
 
 **Status: diagnostic complete; the amplitude/variance, baseline, and direction
 mismatch persists; Croce/Lin shared-driver supervision remains unsupported.**
-

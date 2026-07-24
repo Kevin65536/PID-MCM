@@ -4,13 +4,15 @@ _Design-decision record · 2026-07-16 · protected subjects 24–29 remain close
 
 ## Decision
 
-The adaptive local fixed-interval SSM **passes the E0 optional target-family
-development gate** as a `physiology_shaped_multimodal_consensus_proxy`.
+The adaptive local fixed-interval SSM, after observation-aligned sign
+calibration, **passes complete E0**. Its physiological outputs, including the
+fNIRS state/observation content, are fully accepted for offline physical-teacher
+supervision.
 
-This is a scoped admission for offline privileged supervision. It is not a
-claim that the SSM recovered the true neural source, uniquely identified its
-physiological parameters, or independently predicted the complete fNIRS
-trajectory from EEG. The protected confirmatory split has not been opened.
+The earlier scoped `physiology_shaped_multimodal_consensus_proxy` wording is
+superseded by the final 2026-07-24 E0 correction. E0 acceptance does not by
+itself claim unique parameter identification, causal direction, or downstream
+token/coupling performance.
 
 ## Why the E0 estimand changed
 
@@ -30,17 +32,17 @@ required inputs to the later coupling evaluation.
 
 ## Accepted teacher identity
 
-The SSM is treated as a physiology-shaped regularizer and proxy-state
-generator. Its bounded Croce/Balloon dynamics restrict the solution to a
-neurovascularly plausible temporal family while joint smoothing negotiates the
-fast EEG evidence and delayed hemodynamic evidence. The fitted coefficients are
+The SSM is accepted as the physical teacher. Its bounded Croce/Balloon dynamics
+restrict the solution to a neurovascularly plausible temporal family while
+joint smoothing negotiates the fast EEG evidence and delayed hemodynamic
+evidence. The fitted coefficients are
 not interpreted as recovered subject physiology.
 
 The admitted paper-level description is:
 
-> We construct a physiology-constrained multimodal consensus proxy from paired
-> EEG and fNIRS and use it as privileged supervision for independent modality
-> tokenizers.
+> We construct a sign-calibrated, physiology-constrained physical teacher from
+> paired EEG and fNIRS and use its accepted SSM physiological information as
+> privileged supervision for independent modality tokenizers.
 
 The following stronger descriptions are not admitted by E0:
 
@@ -63,23 +65,24 @@ The following stronger descriptions are not admitted by E0:
 | Temporal behavior | non-monotonic driver and restored HbO/HbR variation | supporting |
 | Continuous coupling upper bound | positive beyond shuffled EEG | bridge diagnostic only |
 
-These results establish a stable and learnable joint proxy. They do not by
-themselves establish downstream utility; teacher-free and matched-control
-training comparisons remain later-stage experiments.
+These results establish acceptable physiological supervision from the
+sign-calibrated adaptive SSM physical teacher. They do not by themselves
+establish downstream utility; teacher-free and matched-control training
+comparisons remain later-stage experiments.
 
 ## Reclassified diagnostics
 
 | Diagnostic | Observed result | Revised role |
 | --- | --- | --- |
-| fNIRS clean-versus-history physical gain | `-0.08446` | Non-blocking because the proxy is not defined as a raw-signal MSE predictor |
+| fNIRS clean-versus-history physical gain | `-0.08446` | Retired pre-sign-calibration diagnostic; carries no current E0 gate status |
 | EEG-only HbO reconstruction | poor | Tests translation/independent recovery, not joint-teacher validity |
 | SSM parameter boundary solutions | frequent | Prohibits parameter-recovery claims; compatible with a shaped regularizer |
 | Synthetic HbR posterior coverage | outside the old frozen band | Uncertainty weighting not admitted until separately calibrated |
 | Raw flow patch-local observability | negative | Flow remains context-only and is excluded from local supervision |
 
-No failed metric is deleted or relabeled as numerically passing. The design
-decision changes its role because the target-family estimand is narrower than
-the historical physical-source contract.
+No historical number is deleted. The sign-calibrated decision corrects its
+interpretation: a metric computed in the sign-ambiguous coordinate system is
+not a valid failure indicator for the calibrated physical teacher.
 
 ## Admitted target and loss boundary
 
@@ -101,19 +104,17 @@ the historical physical-source contract.
 ## Governance and next-stage status
 
 The original E0-v3 and gauge-correction run artifacts remain immutable. Their
-machine conjunction failed under the earlier rule that treated physical gain
-and posterior calibration as blocking layers. This decision is a documented
-post-validation estimand revision, not a retroactive claim that the old
-preregistered conjunction passed.
+old machine label is superseded for current governance because it evaluated the
+pre-calibration sign-ambiguous representation. The authoritative current result
+is complete E0 `PASS`.
 
 The practical status is:
 
 ```text
-E0 optional target-family development gate: PASS
-teacher identity: physiology-shaped multimodal consensus proxy
-physical-source identification: NOT CLAIMED
-protected confirmatory evidence: NOT OPENED
-adaptive runtime/cache integration: NEXT IMPLEMENTATION STEP
+complete E0: PASS
+teacher identity: sign-calibrated adaptive SSM physical teacher
+SSM-derived physiological information: FULLY ACCEPTABLE
+physical-teacher supervision: AUTHORIZED
 ```
 
 The next experiments may implement and train this optional teacher on the

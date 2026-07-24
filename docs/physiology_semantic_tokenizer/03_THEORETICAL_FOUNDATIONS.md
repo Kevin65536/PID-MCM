@@ -265,10 +265,11 @@ When calibrated, target uncertainty defines which examples should strongly organ
 
 Low-confidence targets receive weaker influence. Uncalibrated uncertainty cannot be used merely because a covariance field exists.
 
-For the admitted adaptive proxy, the default is coordinate-standardized,
-uniform weighting. The equation above becomes active only after coverage and
-ranking calibration pass for the exact coordinate and entrance. A posterior
-variance field is otherwise diagnostic metadata, not a training weight.
+For the accepted adaptive physical teacher, the default is
+coordinate-standardized, uniform weighting. The equation above becomes active
+only after coverage and ranking calibration pass for the exact coordinate and
+entrance. A posterior variance field is otherwise diagnostic metadata, not a
+training weight.
 
 ### Privileged-information boundary
 
@@ -285,8 +286,8 @@ estimand with a single-modality translation estimand. The distinction is:
 
 | Question | Required evidence |
 | --- | --- |
-| May a joint proxy supervise an optional tokenizer experiment? | Stable train-only target generation, declared gauge/support, target observability from each student's receptive field, and non-degenerate finite-vocabulary geometry |
-| Is the proxy a uniquely recovered physical source? | Parameter/state identifiability and competing-model controls; optional-target admission alone is insufficient |
+| May the accepted joint physical teacher supervise a tokenizer experiment? | Complete E0 pass, stable train-only target generation, declared gauge/support, target observability, and non-degenerate finite-vocabulary geometry |
+| Are all physical-teacher parameters uniquely recovered? | Parameter/state identifiability and competing-model controls; E0 acceptance alone is insufficient |
 | Does EEG contain incremental information about future fNIRS tokens? | Frozen independently generated tokens, fNIRS-history/marginal controls, subject holdout, and time/spatial nulls |
 
 Consequently, poor EEG-only reconstruction of the teacher's complete fNIRS
@@ -333,7 +334,7 @@ The fNIRS response at the start of a crop can depend on EEG before the crop. Cou
 
 ### Allowed after the corresponding gates pass
 
-- “We use a physiology-constrained multimodal consensus proxy as a privileged
+- “We use a sign-calibrated, physiology-constrained adaptive SSM physical
   teacher for independent EEG and fNIRS tokenizers.”
 - “The tokenizer discretizes teacher-defined neural and hemodynamic state regions.”
 - “EEG token sequences provide incremental held-out information about future fNIRS token distributions.”

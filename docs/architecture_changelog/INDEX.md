@@ -57,11 +57,12 @@ gantt
 | 6 | 2026-07-01 | Phase 3 | [Physiology-Semantic Tokenizer Redesign Baseline](2026-07-01_physiology_semantic_tokenizer_redesign.md) | `docs/physiology_semantic_tokenizer/`, `ARCHITECTURE.md`, architecture changelog | Planned |
 | 7 | 2026-07-02 | Phase 3 P1/G0 | [P1 Physiology-Semantic Data Contract Smoke](2026-07-02_p1_physiology_semantic_data_contract.md) | v2 cache generator, strict paired-optical loader, E0 contract validator/config | In Progress |
 | 8 | 2026-07-02 | Phase 3 P2-P5 | [P2-P5 Physiology-Semantic Code Migration](2026-07-02_p2_p5_physiology_semantic_code_migration.md) | corrected EMA VQ, physical teacher, independent tokenizer, gated trainer, export/consumers | Merged |
-| 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Merged; teacher supervision blocked |
-| 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Merged; validation blocked |
+| 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Historical pre-calibration record; superseded |
+| 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Historical pre-calibration record; superseded |
 | 11 | 2026-07-14 | Phase 3 input contract | [Measurement-first Input Contract and Optional Teacher Boundary](2026-07-14_measurement_first_input_contract.md) | unified loader, target architecture, experiment matrix, registry | Merged |
 | 12 | 2026-07-19 | Phase 3 coupling architecture | [Physical-Teacher Gradient Entries and Coupling Stages](2026-07-19_physical_teacher_gradient_entry_and_coupling_stages.md) | measurement-local adapter, entry router, masked EMA VQ, preservation/foundation/certificate plan | In Progress |
 | 13 | 2026-07-20 | Phase 3 E1/P2 | [E1 Codebook Occupancy Contract Restoration](2026-07-20_e1_codebook_occupancy_contract_restoration.md) | Fixed-K=128 EMA VQ, gradient-preserving balance, bounded diverse revival, multi-seed retention gate v2 | Complete — G1 passed |
+| 14 | 2026-07-24 | Phase 3 E0 final | [Sign-calibrated physical-teacher acceptance](../physiology_semantic_tokenizer/analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md) | adaptive SSM, gauge/sign calibration, fNIRS status correction | Complete — full E0 passed |
 
 ## How to Add a New Entry
 

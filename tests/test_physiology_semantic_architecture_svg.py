@@ -51,7 +51,8 @@ def test_current_svg_preserves_baseline_runtime_content_and_exposes_visual_axes(
     assert root.attrib["role"] == "img"
     assert root.find("svg:title", namespace).text == "Physiology-Semantic Tokenizer — Current Runtime Architecture"
     assert "Measurement-first T0 runtime" in root.find("svg:desc", namespace).text
-    assert "adaptive proxy sidecar pending" in root.find("svg:desc", namespace).text
+    assert "adaptive SSM physical teacher accepted" in root.find("svg:desc", namespace).text
+    assert "complete E0 passed" in root.find("svg:desc", namespace).text
 
     required = {
         "loader",

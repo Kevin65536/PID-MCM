@@ -126,9 +126,11 @@ An optional teacher may condition jointly on paired EEG and fNIRS during
 offline target generation. This does not violate independent inference: the
 EEG and fNIRS students still receive only their own measured modality, and the
 teacher is detached and absent from tokenizer inference. E0 admission of such a
-teacher asks whether it yields a stable, non-degenerate, learnable
-physiology-shaped multimodal consensus proxy. It does **not** require the full
-joint posterior to be independently recoverable from EEG alone or fNIRS alone.
+teacher asks whether it yields stable, non-degenerate, learnable physiological
+supervision. The sign-calibrated adaptive SSM satisfies this requirement,
+passes complete E0, and is accepted as the physical teacher. Complete E0 does
+not require the full joint posterior to be independently recoverable from EEG
+alone or fNIRS alone.
 
 Independent single-modality recovery has a different role. It is required when
 claiming that a latent is independently identifiable from that modality, and
@@ -137,9 +139,10 @@ EEG-history-to-fNIRS-distribution coupling evaluation. A joint teacher may
 organize both tokenizers as privileged information, but its own fused posterior
 is never used as evidence that coupling was independently discovered.
 
-### Adaptive-proxy routing contract
+### Adaptive physical-teacher routing contract
 
-The gauge-corrected adaptive proxy uses an entry-specific target registry:
+The gauge/sign-corrected adaptive physical teacher uses an entry-specific
+target registry:
 
 | Entrance | Required coordinates | Optional/development coordinates | Excluded |
 | --- | --- | --- | --- |
@@ -253,7 +256,7 @@ When auxiliary target `j` exposes calibrated uncertainty, its loss may be uncert
 
 An auxiliary prototype or masked-target loss is enabled only after its target family passes modality- and receptive-field-specific validation. Reconstruction/self-supervision and residual attribution provide the teacher-free mainline. No loss is enabled merely because a field exists in a Croce cache.
 
-For the adaptive proxy, local, prototype, context, and coupling-preservation
+For the adaptive physical teacher, local, prototype, context, and coupling-preservation
 terms have separate coordinate registries, masks, and weights. The
 training-only coupling shaper predicts future registered fNIRS innovations
 from EEG token history conditional on a detached fNIRS-history baseline. Its
