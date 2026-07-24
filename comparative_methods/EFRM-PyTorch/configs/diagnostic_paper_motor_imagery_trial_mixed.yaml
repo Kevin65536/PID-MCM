@@ -1,0 +1,63 @@
+schema: efrm_paper_task_trial_mixed_diagnostic_v1
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  dataset_ids:
+    - eeg_fnirs_single_trial
+  task_namespaces:
+    - eeg_fnirs_single_trial:motor_imagery
+  split_tasks:
+    - motor_imagery
+  split_strategy: within_subject_trial_mixed_public_v1
+  split_seed: 42
+  validation_fraction: 0.2
+  window_duration_s: 8.0
+  eeg_sample_rate_hz: 200.0
+  fnirs_sample_rate_hz: 10.0
+  require_full_analysis_support: false
+  sampler: paper_task_trial_mixed_inventory_diverse_v1
+  channel_policy: variable_measured_channels_no_duplication_v1
+
+model:
+  embedding_dim: 768
+  encoder_depth: 12
+  encoder_heads: 12
+  decoder_embedding_dim: 512
+  decoder_depth: 8
+  decoder_heads: 16
+  mlp_ratio: 4.0
+  mask_ratio: 0.5
+  eeg_patch_samples: 50
+  fnirs_patch_samples: 20
+  clip_logit_multiplier: 0.1
+  activation_checkpointing: false
+
+loss:
+  eeg_reconstruction_weight: 1.0
+  fnirs_reconstruction_weight: 1.0
+  clip_alignment_weight: 1.0
+
+training:
+  seed: 42
+  epochs: 30
+  min_epochs: 30
+  early_stopping_patience: 30
+  effective_batch_size: 32
+  microbatch_size: 8
+  contrastive_gradient_cache: two_pass_exact_v1
+  ordinary_gradient_accumulation_expands_negative_set: false
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  adam_betas: [0.9, 0.95]
+  gradient_clip_norm: 5.0
+  scheduler: cosine
+  amp: true
+  amp_dtype: bfloat16
+  validation_every_epochs: 1
+  checkpoint_every_epochs: 1
+
+evaluation:
+  estimand: same_subject_record_condition_held_out_trial_exact_pair_retrieval
+  evidence_scope: full_public_validation
+  protected_test_default: locked
+  leakage_note: full_record_normalization_state_shared_across_trial_roles

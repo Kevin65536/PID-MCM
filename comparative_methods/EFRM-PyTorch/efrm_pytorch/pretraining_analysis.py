@@ -174,14 +174,18 @@ def analyze_alignment_evidence(path: Path) -> tuple[dict[str, Any], dict[str, np
         f"{row.get('dataset_id', 'unknown')}:{row.get('subject', 'unknown')}"
         for row in metadata
     })
+    full_validation = "full_validation" in path.name
     base.update({
         "evidence_scope": {
-            "kind": "single_exported_validation_batch",
+            "kind": (
+                "full_public_validation"
+                if full_validation else "single_exported_validation_batch"
+            ),
             "dataset_ids": datasets,
             "dataset_count": len(datasets),
             "subject_ids": subjects,
             "subject_count": len(subjects),
-            "representative_of_full_validation": False,
+            "representative_of_full_validation": full_validation,
         },
         "chance": {
             "top1": 1.0 / size,
@@ -706,6 +710,70 @@ def _markdown_report(
         )
         if partial else "none"
     )
+    if audit["run_state"] == "completed":
+        integrity_summary = (
+            f"The run has a terminal completed marker after "
+            f"{audit['completed_epoch_count']} complete epochs; partial work: {partial_text}."
+        )
+        checkpoint_summary = (
+            "The run completed cleanly. The latest checkpoint represents the final complete "
+            "epoch, while the separately retained best checkpoint minimizes the public "
+            "validation total objective."
+        )
+        recommendation = (
+            "Record this as a completed source-faithful pretraining run whose public-development "
+            "alignment branch failed to generalize. Retain the best checkpoint for public "
+            "downstream diagnostics, but do not describe it as a validated EEG–fNIRS aligned "
+            "representation and do not open protected-test evaluation on the basis of the current "
+            "alignment evidence. First extend retrieval capture to a deterministic, "
+            "dataset/subject-stratified public-validation set. A learned or conventional divisive "
+            "temperature must be trained from scratch as a separately named diagnostic ablation; "
+            "the faithful and ablation results must not be conflated."
+        )
+    else:
+        integrity_summary = (
+            f"There are {audit['completed_epoch_count']} complete epochs; partial work: "
+            f"{partial_text}. The process left no terminal success/failure marker, so the "
+            "termination cause cannot be recovered from the run artifacts."
+        )
+        checkpoint_summary = (
+            "A stale `running` marker is not a completed run. For this audited run, the latest "
+            "durable checkpoint represents the last complete epoch; optimizer updates from the "
+            "partial epoch were not checkpointed."
+        )
+        recommendation = (
+            "Do not label this run as completed and do not begin protected-test evaluation. "
+            "Extend validation evidence capture to a deterministic, dataset/subject-stratified "
+            "sample and archive it per epoch, then resume the faithful run to its prespecified "
+            "minimum epoch gate. A learned or conventional divisive temperature must be trained "
+            "from scratch as a separately named diagnostic ablation; the faithful and ablation "
+            "results must not be conflated."
+        )
+
+    eeg_geometry = alignment["eeg_embedding_geometry"]
+    fnirs_geometry = alignment["fnirs_embedding_geometry"]
+    rank_one_bipolar = (
+        eeg_geometry["effective_rank"] < 2.0
+        and fnirs_geometry["effective_rank"] < 2.0
+        and eeg_geometry["first_axis_energy_fraction"] > 0.95
+        and fnirs_geometry["first_axis_energy_fraction"] > 0.95
+    )
+    if rank_one_bipolar:
+        geometry_summary = (
+            "Both centered embedding clouds are effectively rank one, with more than 95% of "
+            "their variance on the first axis. Because the off-diagonal cosine means are not "
+            "near +1, this is a bipolar/antipodal collapse rather than simple concentration in "
+            "one common direction. In combination with chance retrieval and negative pair "
+            "separation, the saved batch is weakly discriminative for exact cross-modal pairs; "
+            "this does not imply that the reconstruction branches failed."
+        )
+    else:
+        geometry_summary = (
+            "Low effective rank or extreme within-modality cosine concentration indicates weak "
+            "embedding diversity. In combination with chance retrieval, this is consistent with "
+            "a collapsed or weakly discriminative contrastive representation on the saved batch; "
+            "it does not imply that the reconstruction branches failed."
+        )
     lines = [
         "# EFRM synchronized pretraining analysis",
         "",
@@ -715,10 +783,7 @@ def _markdown_report(
         "",
         "## Executive conclusion",
         "",
-        f"1. **Run integrity:** `{audit['run_state']}`. There are "
-        f"{audit['completed_epoch_count']} complete epochs; partial work: {partial_text}. "
-        "The process left no terminal success/failure marker, so the termination cause cannot "
-        "be recovered from the run artifacts.",
+        f"1. **Run integrity:** `{audit['run_state']}`. {integrity_summary}",
         f"2. **Reconstruction learned:** validation total loss changed by "
         f"{_percent(changes['loss'])}; EEG reconstruction by "
         f"{_percent(changes['eeg_reconstruction_loss'])}; fNIRS reconstruction by "
@@ -749,9 +814,7 @@ def _markdown_report(
         f"| Best/latest checkpoints byte-identical | {audit['checkpoint']['latest_and_best_identical_sha256']} |",
         f"| Protected test opened | {audit['protected_test_opened']} |",
         "",
-        "A stale `running` marker is not a completed run. For this audited run, the latest "
-        "durable checkpoint represents the last complete epoch; optimizer updates from the "
-        "partial epoch were not checkpointed.",
+        checkpoint_summary,
         "",
         "## Optimization and reconstruction",
         "",
@@ -820,23 +883,11 @@ def _markdown_report(
         f"{alignment['fnirs_embedding_geometry']['effective_rank']:.3f} | "
         f"{_percent(alignment['fnirs_embedding_geometry']['first_axis_energy_fraction'])} |",
         "",
-        "Within-modality cosines near 1 indicate strong angular concentration. In combination "
-        "with chance retrieval, this is consistent with a collapsed or weakly discriminative "
-        "contrastive representation on the saved batch; it does not imply that the "
-        "reconstruction branches failed.",
+        geometry_summary,
         "",
         "## Recommended decision",
         "",
-        "Do not label this run as completed and do not begin protected-test evaluation. Preserve "
-        "the epoch-8 checkpoint as the faithful baseline. Before the epoch-20 decision gate, "
-        "extend validation evidence capture to a deterministic, dataset/subject-stratified "
-        "sample and archive it per epoch. Resume the faithful 0.1-multiplier run to its minimum "
-        "20 epochs. If full public-validation retrieval remains at chance, positive-vs-negative "
-        "AUC remains near 0.5, and positive margins remain non-positive at epoch 20, record "
-        "`source_faithful_alignment_failed_on_sync_track`; this is a method/data-regime result, "
-        "not a claim that physiological coupling is absent. A learned or conventional divisive "
-        "temperature must be trained from scratch as a separately named diagnostic ablation. "
-        "The faithful and ablation results must not be conflated.",
+        recommendation,
         "",
         "## Figures and data",
         "",
@@ -889,9 +940,15 @@ def analyze_pretraining_run(
         run, manifest, status, epochs, steps, stale_after_hours=stale_after_hours
     )
     training = _training_metrics(epochs, steps)
-    alignment, arrays, metadata = analyze_alignment_evidence(
-        run / "figure_data/clip_alignment_evidence.npz"
+    full_validation_evidence = (
+        run / "figure_data/full_validation_clip_alignment_evidence.npz"
     )
+    evidence_path = (
+        full_validation_evidence
+        if full_validation_evidence.is_file()
+        else run / "figure_data/clip_alignment_evidence.npz"
+    )
+    alignment, arrays, metadata = analyze_alignment_evidence(evidence_path)
     interpretation = _alignment_interpretation(training, alignment)
     interpretation.update({
         "reconstruction_learning_observed": bool(
@@ -906,7 +963,13 @@ def analyze_pretraining_run(
             alignment["eeg_to_fnirs"]["top1"] > alignment["chance"]["top1"]
             or alignment["fnirs_to_eeg"]["top1"] > alignment["chance"]["top1"]
         ),
-        "full_validation_alignment_claim_supported": False,
+        "full_validation_alignment_claim_supported": bool(
+            alignment["evidence_scope"]["representative_of_full_validation"]
+            and alignment["identity_pair_permutation_p_one_sided"] < 0.05
+            and alignment["positive_minus_negative_cosine"] > 0
+            and alignment["eeg_to_fnirs"]["mrr"] > alignment["chance"]["mrr"]
+            and alignment["fnirs_to_eeg"]["mrr"] > alignment["chance"]["mrr"]
+        ),
     })
     result = {
         "schema": ANALYSIS_SCHEMA,

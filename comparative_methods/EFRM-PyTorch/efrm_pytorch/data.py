@@ -15,7 +15,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
-from src.data.unified_physiology import RAW_DATASET_IDS, UnifiedPhysiologyWindowDataset
+from src.data.unified_physiology import (
+    RAW_DATASET_IDS,
+    UnifiedPhysiologyWindowDataset,
+    canonical_label,
+)
 
 
 ADAPTER_SCHEMA = "efrm_sync_unified_adapter_v1"
@@ -226,6 +230,7 @@ class EFRMSyncPretrainDataset(Dataset):
         cache_root: str = "data/cache/physiology_semantic_clean_v1",
         *,
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
+        task_namespaces: Sequence[str] | None = None,
         seed: int = 42,
         adapter: EFRMPairedWindowAdapter | None = None,
         base: UnifiedPhysiologyWindowDataset | None = None,
@@ -234,7 +239,20 @@ class EFRMSyncPretrainDataset(Dataset):
             cache_root=cache_root,
             dataset_ids=tuple(dataset_ids),
         )
-        self.indices = list(range(len(self.base)))
+        self.task_namespaces = tuple(str(value) for value in (task_namespaces or ()))
+        allowed_namespaces = set(self.task_namespaces)
+        self.indices = [
+            index
+            for index, window in enumerate(self.base.windows)
+            if not allowed_namespaces
+            or canonical_label(window.event, window.record.dataset_id)["namespace"]
+            in allowed_namespaces
+        ]
+        if not self.indices:
+            raise RuntimeError(
+                "no synchronized pretraining windows survive task namespace filtering: "
+                f"{sorted(allowed_namespaces)}"
+            )
         self.seed = int(seed)
         self.epoch = 0
         self.adapter = adapter or EFRMPairedWindowAdapter()
@@ -247,6 +265,7 @@ class EFRMSyncPretrainDataset(Dataset):
 
     def lightweight_metadata(self, index: int) -> dict[str, Any]:
         ref = self.base.windows[self.indices[int(index)]]
+        label = canonical_label(ref.event, ref.record.dataset_id)
         return {
             "dataset_id": str(ref.record.dataset_id),
             "subject": str(ref.record.canonical_subject_id),
@@ -254,6 +273,8 @@ class EFRMSyncPretrainDataset(Dataset):
             "join_key": str(ref.record.join_key),
             "event_index": int(ref.event.get("event_index", -1)),
             "window_offset_s": float(ref.window_offset_s),
+            "task_namespace": str(label["namespace"]),
+            "condition": str(label["condition"]),
         }
 
 
@@ -291,18 +312,22 @@ class EFRMSyncPretrainDataset(Dataset):
 
     def contract_summary(self) -> dict[str, Any]:
         datasets = defaultdict(int)
+        task_namespaces = defaultdict(int)
         records: dict[str, set[str]] = defaultdict(set)
         subjects: dict[str, set[str]] = defaultdict(set)
         for index in range(len(self)):
             row = self.lightweight_metadata(index)
             dataset_id = row["dataset_id"]
             datasets[dataset_id] += 1
+            task_namespaces[row["task_namespace"]] += 1
             records[dataset_id].add(row["join_key"])
             subjects[dataset_id].add(row["subject"])
         return {
             "schema": "efrm_sync_pretrain_dataset_v1",
             "sample_count": len(self),
             "sample_count_by_dataset": dict(datasets),
+            "sample_count_by_task_namespace": dict(task_namespaces),
+            "task_namespace_filter": list(self.task_namespaces),
             "record_count_by_dataset": {key: len(value) for key, value in records.items()},
             "subject_count_by_dataset": {key: len(value) for key, value in subjects.items()},
             "adapter": self.adapter.manifest(),
@@ -368,7 +393,8 @@ class CachedEFRMPretrainDataset(Dataset):
     def lightweight_metadata(self, index: int) -> dict[str, Any]:
         row = self.entries[self.indices[int(index)]]
         return {key: row[key] for key in (
-            "dataset_id", "subject", "record_id", "join_key", "event_index", "window_offset_s"
+            "dataset_id", "subject", "record_id", "join_key", "event_index", "window_offset_s",
+            "task_namespace", "condition",
         )}
 
     def __getitem__(self, index: int) -> dict[str, Any]:

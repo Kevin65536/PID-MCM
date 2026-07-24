@@ -38,7 +38,12 @@ from efrm_pytorch.data import (
     collate_efrm_pairs,
 )
 from efrm_pytorch.model import EFRMSyncModel
-from efrm_pytorch.protocol import PretrainingBoundary, role_counts
+from efrm_pytorch.protocol import (
+    PretrainingBoundary,
+    TrialMixedBoundary,
+    load_public_split_subjects,
+    role_counts,
+)
 from efrm_pytorch.training import cached_pretrain_backward, evaluate_pretrain_batch, move_batch
 from efrm_pytorch.visualization import export_alignment_evidence, render_alignment_report
 from preflight import DEVELOPMENT_MANIFESTS
@@ -69,6 +74,45 @@ def _subset(dataset: EFRMSyncPretrainDataset, selected: Iterable[int]) -> EFRMSy
     return view
 
 
+def _build_boundary(
+    config: dict[str, Any],
+    dataset: EFRMSyncPretrainDataset,
+) -> tuple[list[str], PretrainingBoundary | TrialMixedBoundary]:
+    tasks = [
+        str(value)
+        for value in config["data"].get("split_tasks", DEVELOPMENT_MANIFESTS)
+    ]
+    unknown_tasks = sorted(set(tasks) - set(DEVELOPMENT_MANIFESTS))
+    if unknown_tasks:
+        raise ValueError(f"unknown public split tasks in config: {unknown_tasks}")
+    paths = [DEVELOPMENT_MANIFESTS[task] for task in tasks]
+    strategy = str(config["data"].get("split_strategy", "subject_disjoint_public_v1"))
+    if strategy == "subject_disjoint_public_v1":
+        boundary = PretrainingBoundary.from_manifests(
+            paths,
+            tasks=tasks,
+            mode="development_public_only",
+            cache_root=config["data"]["cache_root"],
+        )
+    elif strategy == "within_subject_trial_mixed_public_v1":
+        if len(tasks) != 1:
+            raise ValueError("trial-mixed diagnostics require exactly one split task")
+        source = load_public_split_subjects(
+            paths[0],
+            task=tasks[0],
+            cache_root=config["data"]["cache_root"],
+        )
+        boundary = TrialMixedBoundary(
+            dataset,
+            source,
+            validation_fraction=float(config["data"]["validation_fraction"]),
+            seed=int(config["data"].get("split_seed", config["training"]["seed"])),
+        )
+    else:
+        raise ValueError(f"unsupported EFRM split strategy: {strategy}")
+    return tasks, boundary
+
+
 def _loader(
     dataset: EFRMSyncPretrainDataset,
     *,
@@ -83,7 +127,7 @@ def _loader(
         dataset,
         batch_size=batch_size,
         seed=seed,
-        drop_last=not inventory_diverse,
+        drop_last=False,
         **({"inventory_cache_path": inventory_cache_path} if inventory_diverse else {}),
     )
     kwargs: dict[str, Any] = {
@@ -225,18 +269,10 @@ def main() -> None:
         (run_dir / child).mkdir(parents=True, exist_ok=True)
     shutil.copy2(config_path, run_dir / "resolved_config.yaml")
 
-    tasks = list(DEVELOPMENT_MANIFESTS)
-    paths = [DEVELOPMENT_MANIFESTS[task] for task in tasks]
-    boundary = PretrainingBoundary.from_manifests(
-        paths, tasks=tasks, mode="development_public_only", cache_root=config["data"]["cache_root"]
-    )
-    boundary_manifest = boundary.manifest()
-    (run_dir / "boundary_manifest.json").write_text(
-        json.dumps(boundary_manifest, indent=2, sort_keys=True), encoding="utf-8"
-    )
     full_dataset = EFRMSyncPretrainDataset(
         cache_root=config["data"]["cache_root"],
         dataset_ids=tuple(config["data"]["dataset_ids"]),
+        task_namespaces=tuple(config["data"].get("task_namespaces", ())),
         seed=seed,
         adapter=EFRMPairedWindowAdapter(
             duration_s=float(config["data"]["window_duration_s"]),
@@ -246,6 +282,11 @@ def main() -> None:
             fnirs_patch_samples=int(config["model"]["fnirs_patch_samples"]),
             require_full_analysis_support=bool(config["data"]["require_full_analysis_support"]),
         ),
+    )
+    tasks, boundary = _build_boundary(config, full_dataset)
+    boundary_manifest = boundary.manifest()
+    (run_dir / "boundary_manifest.json").write_text(
+        json.dumps(boundary_manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
     train_indices = boundary.indices_for(full_dataset, "train")
     validation_indices = boundary.indices_for(full_dataset, "validation")
@@ -311,6 +352,7 @@ def main() -> None:
 
     start_epoch = 0
     best_loss = math.inf
+    best_alignment_loss = math.inf
     patience = 0
     resume_step_archive: dict[str, Any] | None = None
     latest = run_dir / "checkpoints/latest.pt"
@@ -342,6 +384,11 @@ def main() -> None:
         "device": str(device),
         "parameter_count": parameter_count,
         "contrastive_batch_size": batch_size,
+        "split_tasks": tasks,
+        "split_strategy": config["data"].get(
+            "split_strategy", "subject_disjoint_public_v1"
+        ),
+        "task_namespaces": list(config["data"].get("task_namespaces", ())),
         "recompute_chunk_size": args.chunk_size,
         "gradient_cache": "two_pass_exact_v1",
         "activation_checkpointing": model.eeg_model.activation_checkpointing,
@@ -401,6 +448,9 @@ def main() -> None:
         model.eval()
         validation_rows: list[dict[str, float]] = []
         final_evidence: tuple[dict[str, Any], dict[str, torch.Tensor]] | None = None
+        validation_eeg_embeddings: list[torch.Tensor] = []
+        validation_fnirs_embeddings: list[torch.Tensor] = []
+        validation_metadata: list[dict[str, Any]] = []
         for batch_index, raw_batch in enumerate(validation_loader):
             if max_validation is not None and batch_index >= max_validation:
                 break
@@ -410,6 +460,15 @@ def main() -> None:
             )
             validation_rows.append(metrics)
             final_evidence = (raw_batch, evidence)
+            validation_eeg_embeddings.append(evidence["eeg_embedding"].cpu())
+            validation_fnirs_embeddings.append(evidence["fnirs_embedding"].cpu())
+            validation_metadata.extend([
+                {key: raw_batch[key][index] for key in (
+                    "sample_id", "dataset_id", "subject", "record_id", "join_key",
+                    "task_namespace", "condition", "crop_start_s", "duration_s",
+                )}
+                for index in range(len(raw_batch["sample_id"]))
+            ])
         train_epoch = _mean_metrics(train_rows)
         validation_epoch = _mean_metrics(validation_rows)
         scheduler.step()
@@ -424,6 +483,9 @@ def main() -> None:
         }
         _append_jsonl(run_dir / "metrics/epochs.jsonl", epoch_row)
         improved = validation_epoch["loss"] < best_loss
+        alignment_improved = (
+            validation_epoch["clip_alignment_loss"] < best_alignment_loss
+        )
         if improved:
             best_loss = validation_epoch["loss"]
             patience = 0
@@ -437,6 +499,9 @@ def main() -> None:
             )
             if improved:
                 shutil.copy2(latest, run_dir / "checkpoints/best.pt")
+            if alignment_improved:
+                best_alignment_loss = validation_epoch["clip_alignment_loss"]
+                shutil.copy2(latest, run_dir / "checkpoints/best_alignment.pt")
 
         if final_evidence is not None:
             raw_batch, evidence = final_evidence
@@ -455,11 +520,21 @@ def main() -> None:
                 logit_multiplier=float(model_config["clip_logit_multiplier"]),
             )
             render_alignment_report(evidence_path, run_dir)
+        if validation_eeg_embeddings:
+            export_alignment_evidence(
+                run_dir / "figure_data",
+                eeg_embeddings=torch.cat(validation_eeg_embeddings),
+                fnirs_embeddings=torch.cat(validation_fnirs_embeddings),
+                metadata=validation_metadata,
+                logit_multiplier=float(model_config["clip_logit_multiplier"]),
+                filename="full_validation_clip_alignment_evidence.npz",
+            )
 
         status = {
             "status": "smoke_passed" if args.architecture_smoke else "running",
             "epoch": epoch,
             "best_validation_loss": best_loss,
+            "best_validation_alignment_loss": best_alignment_loss,
             "patience": patience,
             "cuda_peak_allocated_gib": epoch_row["cuda_peak_allocated_gib"],
             "cuda_peak_reserved_gib": epoch_row["cuda_peak_reserved_gib"],

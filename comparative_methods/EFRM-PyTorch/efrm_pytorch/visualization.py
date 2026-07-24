@@ -61,9 +61,12 @@ def export_alignment_evidence(
     fnirs_embeddings: Any,
     metadata: Sequence[Mapping[str, Any]],
     logit_multiplier: float = 0.1,
+    filename: str = "clip_alignment_evidence.npz",
 ) -> Path:
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
+    if Path(filename).name != filename or not filename.endswith(".npz"):
+        raise ValueError("alignment evidence filename must be a local .npz basename")
     eeg = _as_numpy(eeg_embeddings).astype(np.float32)
     fnirs = _as_numpy(fnirs_embeddings).astype(np.float32)
     if eeg.shape != fnirs.shape or eeg.ndim != 2 or eeg.shape[0] != len(metadata):
@@ -71,7 +74,7 @@ def export_alignment_evidence(
     eeg_normalized = eeg / np.maximum(np.linalg.norm(eeg, axis=1, keepdims=True), 1e-12)
     fnirs_normalized = fnirs / np.maximum(np.linalg.norm(fnirs, axis=1, keepdims=True), 1e-12)
     cosine = eeg_normalized @ fnirs_normalized.T
-    path = directory / "clip_alignment_evidence.npz"
+    path = directory / filename
     np.savez_compressed(
         path,
         schema=np.asarray(EVIDENCE_SCHEMA),

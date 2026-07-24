@@ -24,7 +24,11 @@ from efrm_pytorch.data import (
 )
 from efrm_pytorch.model import EFRMDownstreamModel, EFRMSyncModel
 from efrm_pytorch.pretraining_analysis import analyze_pretraining_run
-from efrm_pytorch.protocol import load_public_split_subjects
+from efrm_pytorch.protocol import (
+    PublicSplitSubjects,
+    TrialMixedBoundary,
+    load_public_split_subjects,
+)
 from efrm_pytorch.tasks import TASK_SPECS
 from efrm_pytorch.training import cached_pretrain_backward
 from efrm_pytorch.visualization import (
@@ -261,8 +265,10 @@ def test_alignment_metrics_and_visual_report(tmp_path: Path) -> None:
         for index in range(4)
     ]
     evidence = export_alignment_evidence(
-        tmp_path / "evidence", eeg_embeddings=eeg, fnirs_embeddings=fnirs, metadata=metadata
+        tmp_path / "evidence", eeg_embeddings=eeg, fnirs_embeddings=fnirs, metadata=metadata,
+        filename="full_validation_clip_alignment_evidence.npz",
     )
+    assert evidence.name == "full_validation_clip_alignment_evidence.npz"
     metrics = retrieval_metrics(np.eye(4))
     assert metrics["eeg_to_fnirs"]["top1"] == 1.0
     physiology = tmp_path / "physiology.npz"
@@ -292,6 +298,59 @@ def test_shared_public_split_matches_efrm_task_ordering() -> None:
     assert split.train_subjects
     assert split.validation_subjects
     assert set(split.train_subjects).isdisjoint(split.validation_subjects)
+
+
+def test_trial_mixed_boundary_is_stratified_deterministic_and_disjoint() -> None:
+    class FakeDataset:
+        def __init__(self) -> None:
+            self.rows = []
+            for subject in ("s1", "s2"):
+                for record in ("r1", "r2"):
+                    for condition in ("LMI", "RMI"):
+                        for trial in range(5):
+                            self.rows.append({
+                                "dataset_id": "d",
+                                "subject": subject,
+                                "record_id": record,
+                                "join_key": f"d|{subject}|{record}",
+                                "event_index": trial,
+                                "window_offset_s": float(trial),
+                                "task_namespace": "d:motor_imagery",
+                                "condition": condition,
+                            })
+
+        def __len__(self) -> int:
+            return len(self.rows)
+
+        def lightweight_metadata(self, index: int) -> dict:
+            return self.rows[index]
+
+    dataset = FakeDataset()
+    source = PublicSplitSubjects(
+        task="motor_imagery",
+        dataset_id="d",
+        manifest_path="/public/split.json",
+        manifest_sha256="abc",
+        manifest_schema="sta_net_subject_split_v1",
+        train_subjects=("s1",),
+        validation_subjects=("s2",),
+        allowed_subjects=("s1", "s2"),
+        metadata_sha256=None,
+    )
+    first = TrialMixedBoundary(dataset, source, validation_fraction=0.2, seed=7)
+    second = TrialMixedBoundary(dataset, source, validation_fraction=0.2, seed=7)
+    assert first.train_indices == second.train_indices
+    assert first.validation_indices == second.validation_indices
+    assert len(first.train_indices) == 32
+    assert len(first.validation_indices) == 8
+    assert set(first.train_indices).isdisjoint(first.validation_indices)
+    manifest = first.manifest()
+    assert manifest["subject_overlap_count"] == 2
+    assert manifest["trial_overlap_count"] == 0
+    assert all(
+        counts == {"total": 5, "train": 4, "validation": 1}
+        for counts in manifest["stratum_counts"].values()
+    )
 
 
 def test_protected_manifest_path_is_refused_before_split_loading(tmp_path: Path) -> None:

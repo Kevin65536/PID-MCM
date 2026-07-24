@@ -13,6 +13,7 @@ from .tasks import EFRMUnifiedTaskDataset, get_task_spec
 
 
 BOUNDARY_SCHEMA = "efrm_pretraining_boundary_v1"
+TRIAL_MIXED_BOUNDARY_SCHEMA = "efrm_trial_mixed_boundary_v1"
 PUBLIC_SPLIT_SCHEMAS = {"sta_net_split_registry_v2", "sta_net_subject_split_v1"}
 
 
@@ -196,6 +197,147 @@ class PretrainingBoundary:
             "train_subjects_by_dataset": self.train_subjects,
             "validation_subjects_by_dataset": self.validation_subjects,
             "sources": [asdict(source) for source in self.sources],
+        }
+        result["boundary_sha256"] = _stable_hash(result)
+        return result
+
+
+class TrialMixedBoundary:
+    """Deterministic within-subject trial split over public subjects only.
+
+    Every subject/record/condition stratum contributes trials to both roles.
+    This is intentionally a relaxed diagnostic boundary: subjects, records,
+    preprocessing state, and task conditions are shared across train and
+    validation, while exact trial indices remain disjoint.
+    """
+
+    def __init__(
+        self,
+        dataset: EFRMSyncPretrainDataset,
+        source: PublicSplitSubjects,
+        *,
+        validation_fraction: float = 0.2,
+        seed: int = 42,
+        mode: str = "within_subject_trial_mixed_public",
+    ) -> None:
+        if not 0.0 < float(validation_fraction) < 1.0:
+            raise ValueError("validation_fraction must lie strictly between zero and one")
+        self.dataset = dataset
+        self.source = source
+        self.validation_fraction = float(validation_fraction)
+        self.seed = int(seed)
+        self.mode = str(mode)
+
+        allowed_subjects = set(source.allowed_subjects)
+        groups: dict[tuple[str, str, str], list[int]] = {}
+        excluded_subjects: set[str] = set()
+        for index in range(len(dataset)):
+            row = dataset.lightweight_metadata(index)
+            subject = str(row["subject"])
+            if row["dataset_id"] != source.dataset_id or subject not in allowed_subjects:
+                excluded_subjects.add(subject)
+                continue
+            stratum = (
+                subject,
+                str(row["join_key"]),
+                str(row["condition"]),
+            )
+            groups.setdefault(stratum, []).append(index)
+        if not groups:
+            raise RuntimeError("no public trials survive the mixed-trial boundary")
+
+        train: list[int] = []
+        validation: list[int] = []
+        self.stratum_counts: dict[str, dict[str, int]] = {}
+        for stratum, indices in sorted(groups.items()):
+            ranked = sorted(
+                indices,
+                key=lambda index: _stable_hash({
+                    "seed": self.seed,
+                    "index": index,
+                    "metadata": dataset.lightweight_metadata(index),
+                }),
+            )
+            validation_count = max(
+                1, int(round(len(ranked) * self.validation_fraction))
+            )
+            if validation_count >= len(ranked):
+                raise RuntimeError(
+                    "trial-mixed split requires at least two trials per "
+                    f"subject/record/condition stratum: {stratum}"
+                )
+            validation.extend(ranked[:validation_count])
+            train.extend(ranked[validation_count:])
+            self.stratum_counts["|".join(stratum)] = {
+                "total": len(ranked),
+                "train": len(ranked) - validation_count,
+                "validation": validation_count,
+            }
+
+        self.train_indices = tuple(sorted(train))
+        self.validation_indices = tuple(sorted(validation))
+        self.excluded_subjects = tuple(sorted(excluded_subjects - allowed_subjects))
+        self._validate()
+
+    def _validate(self) -> None:
+        train = set(self.train_indices)
+        validation = set(self.validation_indices)
+        if not train or not validation or train & validation:
+            raise RuntimeError("mixed-trial boundary is empty or has overlapping trials")
+        train_subjects = {
+            self.dataset.lightweight_metadata(index)["subject"]
+            for index in self.train_indices
+        }
+        validation_subjects = {
+            self.dataset.lightweight_metadata(index)["subject"]
+            for index in self.validation_indices
+        }
+        expected = set(self.source.allowed_subjects)
+        if train_subjects != expected or validation_subjects != expected:
+            raise RuntimeError(
+                "every public subject must appear in both mixed-trial roles"
+            )
+
+    def indices_for(
+        self, dataset: EFRMSyncPretrainDataset, role: str
+    ) -> list[int]:
+        if dataset is not self.dataset:
+            raise ValueError("mixed-trial boundary must be used with its source dataset")
+        if role == "train":
+            return list(self.train_indices)
+        if role == "validation":
+            return list(self.validation_indices)
+        raise ValueError("role must be train or validation")
+
+    def manifest(self) -> dict[str, Any]:
+        self._validate()
+        train_subjects = sorted({
+            self.dataset.lightweight_metadata(index)["subject"]
+            for index in self.train_indices
+        })
+        validation_subjects = sorted({
+            self.dataset.lightweight_metadata(index)["subject"]
+            for index in self.validation_indices
+        })
+        result = {
+            "schema": TRIAL_MIXED_BOUNDARY_SCHEMA,
+            "mode": self.mode,
+            "strategy": "within_subject_record_condition_stratified_hash_v1",
+            "protected_test_opened": False,
+            "preprocessing_leakage_boundary": (
+                "full-record normalization state is shared across trial roles"
+            ),
+            "seed": self.seed,
+            "validation_fraction": self.validation_fraction,
+            "public_subject_source": asdict(self.source),
+            "train_indices": self.train_indices,
+            "validation_indices": self.validation_indices,
+            "train_subjects": train_subjects,
+            "validation_subjects": validation_subjects,
+            "subject_overlap_count": len(set(train_subjects) & set(validation_subjects)),
+            "trial_overlap_count": 0,
+            "stratum_counts": self.stratum_counts,
+            "excluded_nonpublic_subjects": self.excluded_subjects,
         }
         result["boundary_sha256"] = _stable_hash(result)
         return result
