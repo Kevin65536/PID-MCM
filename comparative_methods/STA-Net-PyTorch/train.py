@@ -57,6 +57,34 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def initialize_model_from_checkpoint(
+    model: STANet,
+    *,
+    checkpoint_path: Path,
+    task_key: str,
+    model_config: STANetConfig,
+    device: torch.device,
+) -> dict[str, Any]:
+    """Load model weights only, leaving optimizer/scheduler state fresh for fine-tuning."""
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    if checkpoint.get("schema") != SCHEMA:
+        raise ValueError("initialization checkpoint schema does not match this trainer")
+    if checkpoint.get("task", {}).get("key") != task_key:
+        raise ValueError("initialization checkpoint task does not match this run")
+    expected_config = asdict(model_config)
+    if checkpoint.get("model_config") != expected_config:
+        raise ValueError("initialization checkpoint model configuration does not match this run")
+    model.load_state_dict(checkpoint["model_state"])
+    return {
+        "checkpoint": str(checkpoint_path.resolve()),
+        "checkpoint_sha256": sha256(checkpoint_path),
+        "source_epoch": int(checkpoint["epoch"]),
+        "source_optimizer_step": int(checkpoint["optimizer_step"]),
+        "optimizer_state_loaded": False,
+        "scheduler_state_loaded": False,
+    }
+
+
 def jsonable(value: Any) -> Any:
     if isinstance(value, torch.Tensor):
         return value.detach().float().cpu().item() if value.numel() == 1 else value.detach().float().cpu().tolist()
@@ -346,6 +374,8 @@ def run(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGINT, _handle_stop)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    if args.resume and args.init_checkpoint:
+        raise ValueError("--resume and --init-checkpoint are mutually exclusive")
     status_path = output_dir / "status.json"
     write_json(status_path, {"schema": SCHEMA, "status": "initializing", "pid": os.getpid(), "started_at": utc_now()})
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
@@ -412,6 +442,15 @@ def run(args: argparse.Namespace) -> None:
         max_lags=spec.fnirs_lag_count,
     )
     model = STANet(resolved_model).to(device)
+    initialization = None
+    if args.init_checkpoint:
+        initialization = initialize_model_from_checkpoint(
+            model,
+            checkpoint_path=Path(args.init_checkpoint).resolve(),
+            task_key=spec.key,
+            model_config=resolved_model,
+            device=device,
+        )
     loss_cfg = config.get("loss", {})
     class_weight_policy = str(loss_cfg.get("class_weighting", "none"))
     class_weight_tensor = (
@@ -516,6 +555,7 @@ def run(args: argparse.Namespace) -> None:
             "config": sha256(config_path),
         },
         "resume_checkpoint": args.resume,
+        "initialization": initialization,
         "split_manifest_source": None if split_path is None else str(split_path),
         "split_sha256": split_manifest.get("split_sha256"),
         "selection_metric": selection_metric,
@@ -533,6 +573,30 @@ def run(args: argparse.Namespace) -> None:
     write_json(output_dir / "manifest.json", manifest)
     write_json(status_path, {**manifest, "status": "data_ready", "optimizer_step": global_step})
     print(json.dumps({"status": "data_ready", "task": args.task, "train_samples": len(train_indices)}), flush=True)
+
+    if initialization is not None and validation_every > 0:
+        initial_validation = evaluate(
+            model=model, objective=objective, loader=validation_loader, device=device,
+            task_type=spec.task_type, autocast_context=autocast_context,
+            class_count=spec.output_dim,
+        )
+        initial_validation.update({"time": utc_now(), "epoch": 0, "optimizer_step": 0})
+        append_jsonl(output_dir / "metrics" / "validation_epochs.jsonl", initial_validation)
+        best_validation_loss = float(initial_validation["loss"])
+        best_validation_metric = selection_value(
+            initial_validation, selection_metric, selection_mode
+        )
+        atomic_checkpoint(
+            output_dir / "checkpoint_best.pt",
+            checkpoint_payload(
+                spec=spec, model_config=resolved_model, model=model, optimizer=optimizer,
+                scheduler=scheduler, grad_scaler=grad_scaler,
+                epoch=0, optimizer_step=0, target_scaler=scaler,
+                best_validation_loss=best_validation_loss,
+                selection_metric=selection_metric, selection_mode=selection_mode,
+                best_validation_metric=best_validation_metric,
+            ),
+        )
 
     last_epoch = start_epoch - 1
     step_limit_reached = False
@@ -648,6 +712,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--init-checkpoint", default=None)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--split-manifest", default=None)
