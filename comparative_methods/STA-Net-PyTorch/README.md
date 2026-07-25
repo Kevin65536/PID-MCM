@@ -126,6 +126,23 @@ accepts only public manifests and rejects exposed protected indices.
 `evaluate_protocol.py` is the only protected-fold consumer and requires both a
 hash-pinned freeze manifest and the explicit `--unlock-protected-test` flag.
 
+Run the separately labeled non-cross-subject protocol after its endpoint and
+task configurations are frozen:
+
+```bash
+.venv/bin/python comparative_methods/STA-Net-PyTorch/launch_within_subject.py \
+  --run-id 20260724_sta_net_within_subject_all_tasks_v1_100ep \
+  --unlock-protected-test
+```
+
+This protocol permits training and test samples from the same subject while
+keeping session, record, video, or semantic-trial dependency groups disjoint.
+It trains all registered subject/fold pairs, evaluates each protected group
+once, and writes fold-level, subject-level, source-aligned MI/MA/WG, and shared
+within-subject summaries under `runs/within_subject/<run-id>/aggregate/`.
+Pooled-window metrics remain diagnostics and do not replace the subject-level
+primary endpoints.
+
 Classification checkpoints maximize validation macro-F1; REFED checkpoints
 minimize masked scaled RMSE. Accuracy, balanced accuracy, macro-F1 and Kappa
 remain available for reporting. The composite STA-Net loss is an optimization
