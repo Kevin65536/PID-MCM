@@ -61,10 +61,20 @@ def main() -> None:
     task = str(frozen["task"])
     if protected.get("task") != task:
         raise ValueError("frozen task and protected split task differ")
+    if frozen.get("protocol") is not None and frozen["protocol"] != protected.get("protocol"):
+        raise ValueError("frozen protocol and protected split protocol differ")
+    if frozen.get("fold_id") is not None and frozen["fold_id"] != protected.get("fold_id"):
+        raise ValueError("frozen fold and protected split fold differ")
     checkpoint_path = Path(frozen["checkpoint"])
     config_path = Path(frozen["config"])
     if sha256(checkpoint_path) != frozen["checkpoint_sha256"] or sha256(config_path) != frozen["config_sha256"]:
         raise RuntimeError("frozen config/checkpoint hash drift")
+    split_path_raw = frozen.get("split_manifest")
+    split_hash = frozen.get("split_manifest_sha256")
+    if split_path_raw is not None and split_hash is not None:
+        split_path = Path(split_path_raw)
+        if sha256(split_path) != split_hash:
+            raise RuntimeError("frozen public split manifest hash drift")
     test_indices = sorted(int(value) for value in protected["test_indices"])
     if sha256_json(test_indices) != protected["indices_sha256"]:
         raise RuntimeError("protected test index hash drift")
@@ -104,6 +114,9 @@ def main() -> None:
     prediction = np.concatenate(predictions)
     target = np.concatenate(targets)
     mask = np.concatenate(masks)
+    prediction_to_save = prediction
+    target_to_save = target
+    coordinate_space = "class_probability"
     if spec.task_type == "classification":
         metrics = classification_metrics(target, prediction, spec.class_names)
     else:
@@ -111,11 +124,18 @@ def main() -> None:
             raise RuntimeError("regression protected evaluation requires the train-only scaler")
         center = np.asarray(scaler["center"], dtype=np.float32)[None, :, None]
         scale = np.asarray(scaler["scale"], dtype=np.float32)[None, :, None]
-        metrics = regression_metrics(target * scale + center, prediction * scale + center, mask, spec.target_names)
+        target_to_save = target * scale + center
+        prediction_to_save = prediction * scale + center
+        coordinate_space = "native_target_units"
+        metrics = regression_metrics(
+            target_to_save, prediction_to_save, mask, spec.target_names
+        )
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=False)
     np.savez_compressed(
-        output_dir / "protected_predictions.npz", prediction=prediction, target=target,
+        output_dir / "protected_predictions.npz",
+        prediction=prediction_to_save,
+        target=target_to_save,
         target_valid_mask=mask, subject=np.asarray(subjects), sample_id=np.asarray(sample_ids),
     )
     summary = {
@@ -123,6 +143,7 @@ def main() -> None:
         "protocol": protected["protocol"], "fold_id": protected.get("fold_id"),
         "outer_fold": protected.get("outer_fold"), "metrics": metrics,
         "sample_count": len(test_indices), "subject_count": len(set(subjects)),
+        "prediction_coordinate_space": coordinate_space,
         "freeze_manifest": str(frozen_path), "protected_manifest": str(protected_path),
         "protected_test_opened": True,
     }
