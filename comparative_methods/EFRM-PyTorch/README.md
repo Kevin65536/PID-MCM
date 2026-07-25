@@ -181,6 +181,48 @@ per task and transfer mode, 2/8/20/40/100-epoch rungs, and best validation
 checkpoint through each rung. Formal evidence uses seeds 17, 42, and 73 after
 the configuration is frozen.
 
+### Public-development transfer runner
+
+`train_downstream.py` executes one public train/validation task without opening
+protected indices. It supports `linear_probe` and `full_finetune`, EEG-only,
+fNIRS-only, and paired input, pretrained or scratch initialization,
+classification and masked REFED regression, resumable checkpoints, validation
+predictions, calibration metrics, and per-subject metric rows. The MAE decoders
+remain frozen because downstream inference uses only the two encoders.
+
+Both current shared split schemas are accepted: index-addressed
+`sta_net_split_registry_v2` and the older subject-only
+`sta_net_subject_split_v1`. The runner rejects paths below a `protected`
+directory and verifies that every downstream validation subject was held out by
+the selected pretraining boundary.
+
+The detached queue launcher runs task matrices sequentially on each assigned
+GPU:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/launch_downstream.py start \
+  --run-id 20260724_efrm_public_transfer_pilot_v1 \
+  --pretrained-checkpoint comparative_methods/EFRM-PyTorch/runs/pretraining/\
+20260722_efrm_sync_dev_v5/checkpoints/best.pt \
+  --split-root comparative_methods/STA-Net-PyTorch/runs/tuning/\
+20260722_sta_net_hpo_v2_checkpoint_objective_100ep \
+  --gpus 0 1 \
+  --transfer-modes linear_probe full_finetune \
+  --modalities paired \
+  --initializations pretrained
+```
+
+Inspect detached workers with:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/launch_downstream.py status \
+  20260724_efrm_public_transfer_pilot_v1
+```
+
+These runs are `public_development_pilot` evidence. They do not replace
+outer-fold-specific pretraining, frozen HPO, scratch/modality controls, or the
+explicit protected-test unlock required for formal comparison.
+
 ## CLIP alignment evidence and physiological-coupling contrast
 
 Every validation evaluation exports sample IDs, dataset/subject/record/task,

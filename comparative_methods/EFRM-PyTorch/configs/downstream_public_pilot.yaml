@@ -1,0 +1,50 @@
+schema: efrm_downstream_public_v1
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+
+pretraining_model:
+  embedding_dim: 768
+  encoder_depth: 12
+  encoder_heads: 12
+  decoder_embedding_dim: 512
+  decoder_depth: 8
+  decoder_heads: 16
+  mlp_ratio: 4.0
+  mask_ratio: 0.5
+  eeg_patch_samples: 50
+  fnirs_patch_samples: 20
+  clip_logit_multiplier: 0.1
+  activation_checkpointing: false
+
+training:
+  seed: 42
+  linear_probe_epochs: 20
+  full_finetune_epochs: 20
+  linear_probe_batch_size: 32
+  full_finetune_batch_size: 8
+  linear_probe_lr: 0.001
+  full_finetune_lr: 0.00005
+  minimum_lr: 0.000001
+  weight_decay: 0.01
+  dropout: 0.5
+  grad_clip_norm: 5.0
+  class_weighting: none
+  label_smoothing: 0.0
+  regression_loss: smooth_l1
+  amp: true
+  amp_dtype: bfloat16
+  fused_optimizer: true
+  num_workers: 0
+  torch_cpu_threads: 2
+
+task_overrides:
+  dsr:
+    linear_probe_batch_size: 64
+    full_finetune_batch_size: 16
+  visual:
+    linear_probe_batch_size: 24
+    full_finetune_batch_size: 6
+  refed_regression:
+    linear_probe_batch_size: 8
+    full_finetune_batch_size: 2

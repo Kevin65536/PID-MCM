@@ -16,6 +16,7 @@ from src.data.unified_physiology import (
     REFEDContinuousSequenceDataset,
     UnifiedPhysiologyWindowDataset,
     canonical_label,
+    refed_continuous_target_window,
 )
 
 from .data import EFRMPairedWindowAdapter
@@ -142,9 +143,15 @@ class EFRMUnifiedTaskDataset(Dataset):
             raise RuntimeError("target scaling is defined only for regression")
         values: list[list[np.ndarray]] = [[] for _ in self.spec.target_names]
         for index in indices:
-            sample = self.base[self.indices[int(index)]]
-            target = np.asarray(sample["target"], dtype=np.float64)
-            valid = np.asarray(sample["target_valid_mask"], dtype=bool) & np.isfinite(target)
+            window = self.base.windows[self.indices[int(index)]]
+            extracted = refed_continuous_target_window(
+                window.event,
+                window_start_s=window.window_offset_s,
+                window_duration_s=self.base.window_duration_s,
+                target_sample_rate_hz=self.base.target_sample_rate_hz,
+            )
+            target = np.asarray(extracted["values"], dtype=np.float64)
+            valid = np.asarray(extracted["valid_mask"], dtype=bool) & np.isfinite(target)
             for coordinate in range(len(values)):
                 values[coordinate].append(target[coordinate, valid[coordinate]])
         flattened = [np.concatenate(parts) for parts in values]
@@ -207,16 +214,50 @@ class EFRMUnifiedTaskDataset(Dataset):
         return hashlib.sha256(payload).hexdigest()
 
     def validate_shared_public_split(self, manifest_path: str | Path) -> tuple[list[int], list[int]]:
-        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-        if manifest.get("task") != self.spec.key:
+        path = Path(manifest_path).resolve()
+        if "protected" in {part.lower() for part in path.parts}:
+            raise PermissionError(f"refusing to read a protected split manifest: {path}")
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        schema = str(manifest.get("schema"))
+        if schema not in {"sta_net_split_registry_v2", "sta_net_subject_split_v1"}:
+            raise ValueError(f"unsupported public split schema: {schema}")
+        if manifest.get("protected_test_opened", manifest.get("reserved_test_opened", False)):
+            raise PermissionError("public split reports an opened protected test")
+        if manifest.get("task") not in {None, self.spec.key}:
             raise ValueError("split task does not match EFRM task")
         forbidden = {"test_indices", "reserved_test_indices", "protected_indices"}.intersection(manifest)
         if forbidden:
             raise ValueError(f"public split exposes protected indices: {sorted(forbidden)}")
-        if manifest.get("metadata_sha256") and manifest["metadata_sha256"] != self.metadata_fingerprint():
-            raise RuntimeError("shared split metadata fingerprint drifted from EFRM task ordering")
-        train = [int(value) for value in manifest["train_indices"]]
-        validation = [int(value) for value in manifest["validation_indices"]]
+        if schema == "sta_net_split_registry_v2":
+            if manifest.get("metadata_sha256") and manifest["metadata_sha256"] != self.metadata_fingerprint():
+                raise RuntimeError("shared split metadata fingerprint drifted from EFRM task ordering")
+            train = [int(value) for value in manifest["train_indices"]]
+            validation = [int(value) for value in manifest["validation_indices"]]
+        else:
+            train_subjects = {str(value) for value in manifest["train_subjects"]}
+            validation_subjects = {str(value) for value in manifest["validation_subjects"]}
+            reserved_subjects = {
+                str(value) for value in manifest.get("reserved_test_subjects", ())
+            }
+            if not train_subjects or not validation_subjects:
+                raise RuntimeError("subject split has an empty train or validation partition")
+            if train_subjects & validation_subjects:
+                raise RuntimeError("subject split train/validation subjects overlap")
+            if (train_subjects | validation_subjects) & reserved_subjects:
+                raise RuntimeError("public and reserved subjects overlap")
+            rows = [self.lightweight_metadata(index) for index in range(len(self))]
+            available_subjects = {str(row["subject"]) for row in rows}
+            unknown = (train_subjects | validation_subjects | reserved_subjects) - available_subjects
+            if unknown:
+                raise RuntimeError(f"split contains subjects absent from task data: {sorted(unknown)}")
+            train = [
+                index for index, row in enumerate(rows)
+                if str(row["subject"]) in train_subjects
+            ]
+            validation = [
+                index for index, row in enumerate(rows)
+                if str(row["subject"]) in validation_subjects
+            ]
         if not train or not validation or set(train).intersection(validation):
             raise RuntimeError("split has empty or overlapping train/validation indices")
         if min(train + validation) < 0 or max(train + validation) >= len(self):
@@ -263,4 +304,3 @@ def collate_efrm_task(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 def task_contract_sha256(spec: EFRMTaskSpec) -> str:
     payload = json.dumps(asdict(spec), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-

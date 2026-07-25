@@ -23,13 +23,14 @@ from efrm_pytorch.data import (
     collate_efrm_pairs,
 )
 from efrm_pytorch.model import EFRMDownstreamModel, EFRMSyncModel
+from efrm_pytorch.metrics import classification_metrics, regression_metrics
 from efrm_pytorch.pretraining_analysis import analyze_pretraining_run
 from efrm_pytorch.protocol import (
     PublicSplitSubjects,
     TrialMixedBoundary,
     load_public_split_subjects,
 )
-from efrm_pytorch.tasks import TASK_SPECS
+from efrm_pytorch.tasks import EFRMUnifiedTaskDataset, TASK_SPECS
 from efrm_pytorch.training import cached_pretrain_backward
 from efrm_pytorch.visualization import (
     PHYSIOLOGY_EVIDENCE_SCHEMA,
@@ -123,6 +124,16 @@ def test_embedding_removes_invalid_tokens_before_attention() -> None:
     torch.testing.assert_close(baseline, comparison, rtol=1e-5, atol=1e-6)
 
 
+def test_embedding_returns_zero_for_retained_window_without_complete_patch() -> None:
+    model = _small_model().eval()
+    values = torch.randn(2, 1, 5, 40)
+    valid = torch.ones(2, 5, 4, dtype=torch.bool)
+    valid[1] = False
+    embedding = model.eeg_model.forward_embed(values, valid)
+    assert torch.isfinite(embedding).all()
+    torch.testing.assert_close(embedding[1], torch.zeros_like(embedding[1]))
+
+
 def test_downstream_classification_and_regression_shapes() -> None:
     batch = _batch()
     classifier = EFRMDownstreamModel(_small_model(), output_dim=4, modality="paired")
@@ -131,6 +142,36 @@ def test_downstream_classification_and_regression_shapes() -> None:
         _small_model(), output_dim=2, target_length=20, modality="paired"
     )
     assert regressor(**batch).shape == (3, 2, 20)
+
+
+def test_transfer_modes_freeze_pretraining_only_decoders() -> None:
+    linear = EFRMDownstreamModel(_small_model(), output_dim=2, modality="paired")
+    linear.configure_transfer("linear_probe")
+    assert not any(parameter.requires_grad for parameter in linear.backbone.parameters())
+    assert linear.head.weight.requires_grad
+
+    finetune = EFRMDownstreamModel(_small_model(), output_dim=2, modality="eeg")
+    finetune.configure_transfer("full_finetune")
+    assert finetune.backbone.eeg_model.patch_embed.proj.weight.requires_grad
+    assert not finetune.backbone.fnirs_model.patch_embed.proj.weight.requires_grad
+    assert not finetune.backbone.eeg_model.decoder_pred.weight.requires_grad
+
+
+def test_downstream_metrics_cover_classification_and_masked_regression() -> None:
+    classification = classification_metrics(
+        np.asarray([0, 1, 1]),
+        np.asarray([[3.0, 0.0], [0.0, 2.0], [2.0, 0.0]]),
+        ("A", "B"),
+    )
+    assert classification["accuracy"] == pytest.approx(2 / 3)
+    assert 0.0 <= classification["expected_calibration_error"] <= 1.0
+
+    target = np.asarray([[[0.0, 1.0], [2.0, 3.0]]])
+    prediction = target + 0.5
+    valid = np.asarray([[[True, True], [True, False]]])
+    regression = regression_metrics(target, prediction, valid, ("v", "a"))
+    assert regression["mae"] == pytest.approx(0.5)
+    assert regression["valid_count"] == 3
 
 
 def _fake_unified_sample() -> dict:
@@ -298,6 +339,42 @@ def test_shared_public_split_matches_efrm_task_ordering() -> None:
     assert split.train_subjects
     assert split.validation_subjects
     assert set(split.train_subjects).isdisjoint(split.validation_subjects)
+
+
+def test_task_dataset_accepts_legacy_subject_only_public_split(tmp_path: Path) -> None:
+    class FakeTaskDataset(EFRMUnifiedTaskDataset):
+        def __init__(self) -> None:
+            self.spec = TASK_SPECS["motor_imagery"]
+            self.rows = [
+                {
+                    "subject": subject,
+                    "record_id": f"r-{subject}",
+                    "join_key": f"d|{subject}|r",
+                    "condition": "LMI",
+                    "trial_group": f"d|{subject}|trial",
+                    "window_offset_s": 0.0,
+                    "dataset_index": index,
+                }
+                for index, subject in enumerate(("train", "validation", "reserved"))
+            ]
+
+        def __len__(self) -> int:
+            return len(self.rows)
+
+        def lightweight_metadata(self, index: int) -> dict:
+            return dict(self.rows[index])
+
+    path = tmp_path / "public.json"
+    path.write_text(json.dumps({
+        "schema": "sta_net_subject_split_v1",
+        "train_subjects": ["train"],
+        "validation_subjects": ["validation"],
+        "reserved_test_subjects": ["reserved"],
+        "reserved_test_opened": False,
+    }))
+    train, validation = FakeTaskDataset().validate_shared_public_split(path)
+    assert train == [0]
+    assert validation == [1]
 
 
 def test_trial_mixed_boundary_is_stratified_deterministic_and_disjoint() -> None:

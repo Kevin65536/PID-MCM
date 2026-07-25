@@ -260,8 +260,6 @@ class VariableChannelMAE(nn.Module):
         embedded, height, width = self.patch_embed(values)
         valid = self._flatten_valid(patch_valid, height=height, width=width)
         positions = sincos_2d(self.embed_dim, height, width).to(device=embedded.device, dtype=embedded.dtype)
-        if int(valid.sum(dim=1).min()) == 0:
-            raise ValueError("embedding requires at least one valid physical patch")
         embedded = (embedded + positions[:, 1:]) * valid.unsqueeze(-1)
         cls = (self.cls_token + positions[:, :1]).expand(values.shape[0], -1, -1)
         encoded = self.norm(
@@ -271,6 +269,10 @@ class VariableChannelMAE(nn.Module):
                 self._attention_mask(valid, dtype=embedded.dtype),
             )
         )[:, 1:]
+        # A retained partial downstream window may be shorter than one complete
+        # EFRM patch. Its signal/target masks carry the missing-support truth;
+        # represent that modality as a zero pooled embedding rather than
+        # deleting the shared-protocol sample or fabricating a valid patch.
         return (encoded * valid.unsqueeze(-1)).sum(dim=1) / valid.sum(
             dim=1, keepdim=True
         ).clamp_min(1)
@@ -394,6 +396,34 @@ class EFRMDownstreamModel(nn.Module):
     def freeze_backbone(self, frozen: bool = True) -> None:
         for parameter in self.backbone.parameters():
             parameter.requires_grad = not frozen
+
+    def configure_transfer(self, mode: str) -> None:
+        """Expose only encoder parameters used by the requested transfer mode.
+
+        The MAE decoders are pretraining-only components and are never executed
+        by ``forward``. Keeping them frozen avoids presenting unused decoder
+        weights as fine-tuned parameters and prevents unnecessary optimizer
+        state allocation.
+        """
+
+        if mode not in {"linear_probe", "full_finetune"}:
+            raise ValueError("transfer mode must be linear_probe or full_finetune")
+        self.freeze_backbone(True)
+        if mode == "full_finetune":
+            modality_models = []
+            if self.modality in {"eeg", "paired"}:
+                modality_models.append(self.backbone.eeg_model)
+            if self.modality in {"fnirs", "paired"}:
+                modality_models.append(self.backbone.fnirs_model)
+            for modality_model in modality_models:
+                for parameter in modality_model.patch_embed.parameters():
+                    parameter.requires_grad = True
+                modality_model.cls_token.requires_grad = True
+                for block in modality_model.blocks:
+                    for parameter in block.parameters():
+                        parameter.requires_grad = True
+                for parameter in modality_model.norm.parameters():
+                    parameter.requires_grad = True
 
     def forward(
         self,
