@@ -1,21 +1,26 @@
 # Documentation authority and archive map
 
-_Active design entrypoint and historical-document boundary, 2026-07-01_
+_Active design entrypoint and historical-document boundary, 2026-07-25_
 
 ---
 
 ## 📋 Read this first
 
-New tokenizer work is governed by [`physiology_semantic_tokenizer/`](physiology_semantic_tokenizer/README.md). Historical source/observation documents remain available for reproduction, but they are not valid implementation instructions for the new architecture.
+New tokenizer work is governed by [`physiology_semantic_tokenizer/`](physiology_semantic_tokenizer/README.md).
+E0–E2 are a closed historical experiment generation; the proposed SD-SVQ
+architecture uses the new R0–R7 program. Historical source/observation and E2
+documents remain available for reproduction but are not implementation
+instructions for the new generation.
 
 | Question | Active authority |
 | --- | --- |
 | Why redesign? | [`01_LEGACY_DESIGN_POSTMORTEM.md`](physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md) |
 | What should be built? | [`02_TARGET_ARCHITECTURE.md`](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md) |
 | Why should it work? | [`03_THEORETICAL_FOUNDATIONS.md`](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) |
+| What did the long exploration teach us? | [`12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md`](physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md) |
 | How should it be implemented and tested? | [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) |
 | Which experiments are allowed? | [`05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) |
-| What has run under the new design? | [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
+| What has run and what remains planned? | [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
 | How did the four development tracks evolve and affect each other? | [`PROJECT_EVOLUTION_MAP.md`](PROJECT_EVOLUTION_MAP.md) |
 | Where should outputs be saved? | [`STORAGE_LAYOUT.md`](STORAGE_LAYOUT.md) |
 | Which source packages are active? | [`../src/README.md`](../src/README.md) |
@@ -45,7 +50,7 @@ flowchart LR
 
 | Path | Role | Authority |
 | --- | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Runnable pre-redesign implementation truth | Compatibility and baseline only |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current E2 runtime plus explicitly separate planned after-state | Current software truth |
 | [`architecture_changelog/`](architecture_changelog/INDEX.md) | Model structure and scientific data-contract decisions | Architecture record |
 | [`project_changelog/`](project_changelog/INDEX.md) | Repository, storage, archive, and operational changes | Project operations record |
 | [`reliable_survey/`](reliable_survey/) | Literature and external-method research | Background evidence |
@@ -62,4 +67,4 @@ flowchart LR
 - Update this index whenever a document changes authority class.
 - Treat `src.compatibility`, dated script/config archives, and archived tests as explicit historical dependencies only.
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-25_

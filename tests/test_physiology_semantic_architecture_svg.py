@@ -15,6 +15,7 @@ SPEC_SOURCE = "docs/physiology_semantic_tokenizer/architecture/physiology_semant
 REGISTERED_PLANS = [
     "measurement_first_input_contract_plan",
     "physical_teacher_gradient_entry_plan",
+    "shared_driver_semantic_return_plan",
     "shared_state_reconstruction_bound_plan",
 ]
 
@@ -50,9 +51,9 @@ def test_current_svg_preserves_baseline_runtime_content_and_exposes_visual_axes(
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     assert root.attrib["role"] == "img"
     assert root.find("svg:title", namespace).text == "Physiology-Semantic Tokenizer — Current Runtime Architecture"
-    assert "Measurement-first T0 runtime" in root.find("svg:desc", namespace).text
-    assert "adaptive SSM physical teacher accepted" in root.find("svg:desc", namespace).text
-    assert "complete E0 passed" in root.find("svg:desc", namespace).text
+    assert "Implemented E2-compatible runtime" in root.find("svg:desc", namespace).text
+    assert "fixed K=128 health passed" in root.find("svg:desc", namespace).text
+    assert "no E2 teacher semantic row admitted" in root.find("svg:desc", namespace).text
 
     required = {
         "loader",
@@ -158,6 +159,39 @@ def test_physical_teacher_plan_keeps_preservation_discovery_and_certificate_dist
         "gradient"
     )
     assert root.find(".//*[@id='edge-foundation--certificate']").attrib[
+        "data-edge-style"
+    ] == "evaluation"
+
+
+def test_shared_driver_return_plan_keeps_independent_k128_and_scoped_external_evaluation():
+    plan_id = "shared_driver_semantic_return_plan"
+    changes = _load(
+        PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
+    )
+    root = _xml(render_svg(_spec(), changes))
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    assert root.find("svg:title", namespace).text == (
+        "Proposed After-State · Shared-Driver Semantic VQ"
+    )
+    assert root.find(".//*[@id='node-eeg_quantizer']").attrib["data-implementation"] == (
+        "implemented"
+    )
+    assert root.find(".//*[@id='node-fnirs_quantizer']").attrib["data-implementation"] == (
+        "implemented"
+    )
+    assert root.find(".//*[@id='node-eeg_context']").attrib["data-implementation"] == (
+        "planned"
+    )
+    assert root.find(".//*[@id='node-semantic_losses']").attrib["data-implementation"] == (
+        "planned"
+    )
+    assert root.find(".//*[@id='node-eeg_residual']").attrib["data-implementation"] == (
+        "removed"
+    )
+    assert root.find(".//*[@id='node-p6_coupling']").attrib["data-evidence"] == "blocked"
+    assert root.find(".//*[@id='node-consumers-title']").text == "R6A development evaluator"
+    assert root.find(".//*[@id='node-p6_coupling-title']").text == "R6B prospective cutoff"
+    assert root.find(".//*[@id='edge-export--p6_coupling']").attrib[
         "data-edge-style"
     ] == "evaluation"
 

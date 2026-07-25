@@ -4,6 +4,12 @@ _Active target namespace; E2 development completed, protected test closed_
 
 ---
 
+> **2026-07-25 generation boundary:** every config listed below is an E0–E2
+> historical/current-runtime config. The Shared-Driver Semantic VQ plan will use
+> explicit `r0_...`–`r7_...` names (with separate `r6a_...`/`r6b_...` temporal
+> scopes) after its parser and tests exist. No existing
+> YAML is an implicit template for the new semantic estimand.
+
 ## 📋 Contract
 
 New configuration files are added here only when their parser, shape assertions, dry-run behavior, and output namespace have tests. Every configuration must resolve its output below:
@@ -68,4 +74,4 @@ Run the non-gate shared-state bound diagnostic with:
 
 Its validation-oracle PCA is a lower bound only inside the declared rank-limited linear model class. Subject-held-out PCA/CCA results are achievable errors, not universal biological noise floors.
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-25_

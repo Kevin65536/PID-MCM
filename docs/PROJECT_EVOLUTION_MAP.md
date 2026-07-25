@@ -1,6 +1,6 @@
 # 项目架构与研究演进图谱
 
-_审计快照：`main@55cee3f`，覆盖 2025-12-02 至 2026-07-23 的全部 303 个可达 Git 提交，并区分已提交事实、当前工作区草案与未来计划_
+_审计快照：`main@6d6c648`，覆盖 2025-12-02 至 2026-07-25 的全部 319 个可达 Git 提交，并区分已提交事实、历史实验、当前 runtime 与未来计划_
 
 ---
 
@@ -27,9 +27,12 @@ _审计快照：`main@55cee3f`，覆盖 2025-12-02 至 2026-07-23 的全部 303 
 
 [![PID-MCM 项目四线架构与研究演进全图](figures/project_evolution_map.svg)](figures/project_evolution_map.svg)
 
-_图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19` 虚线是跨主线影响；点击图可打开完整尺寸。SVG 内保留可编辑文本、节点 ID、状态、无障碍标题/描述和完整因果索引。_
+_图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F21` 虚线是跨主线影响；点击图可打开完整尺寸。SVG 内保留可编辑文本、节点 ID、状态、无障碍标题/描述和完整因果索引。_
 
-> 📌 **当前关键路径：** `M12 → C5`。统一 EEG/QC 契约、adaptive teacher 重建与符号校准已经完成；完整 E0 已通过，SSM 生理信息完全可接受。后续信息保持、语义、foundation/certificate 与冻结对比测试仍按各自门禁推进。
+> 📌 **当前关键路径：** `M12 → T8 → M13`。E2 已完成并暴露弱 teacher
+> 多入口、稀疏 sidecar、mask 支持口径和 receptive-field 的联合失败；当前先执行
+> R0/R1 合同与 teacher-v2，再以 R2 检查双侧连续可观测性。比较方法的 `C5`
+> 冻结可并行进行，但 protected test 仍保持关闭。
 
 ## 📚 四条主线的版本台账
 
@@ -44,8 +47,8 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `D4` | 四原始数据集统一进入 `UnifiedPhysiologyWindowDataset`，改为 measurement-first | `3308257`, `220c04d` | 当前强制 measured-data 入口 |
 | `D5` | Single-Trial EEG artifact clean v3 经 controlled-artifact 与 sham 验证接纳 | `67fb36c`, `97179ed` | 已提交默认清洗基线 |
 | `D6` | 恢复/修正 Visual、REFED、DSR，统一通道、mask、geometry 与 task contract | `814c0e3`, `f9d8e26` | 比较与自有模型共享的数据边界 |
-| `D7` | clean v4 加入 50 Hz 处理并取消数据集特有坏道动作 | [未提交的 v4 决策与全数据验证](project_changelog/2026-07-23_single_trial_line_noise_no_bad_mask_v4.md) | 全数据 gate 已通过，但提交前仍是工作区草案 |
-| `D8` | 用最终 QC/channel contract 重建 teacher sidecar，并冻结 benchmark/splits | [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md)；[比较工作流](physiology_semantic_tokenizer/11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) | 当前最近的共同前置任务 |
+| `D7` | clean v4 加入 50 Hz 处理并取消数据集特有坏道动作 | [v4 决策与全数据验证](project_changelog/2026-07-23_single_trial_line_noise_no_bad_mask_v4.md) | E2 历史数据合同 |
+| `D8` | artifact mask 退出 validity authority，boundary/finite mask 成为当前唯一有效性合同 | [`6d6c648`](project_changelog/2026-07-25_disable_eeg_artifact_mask_authority.md) | R 系列必须重跑 baseline；旧 E2 不可直接拼接 |
 
 ### 对比方法复现
 
@@ -69,7 +72,8 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `T4` | 显式语义、source/observation 与 Croce 物理目标 | `d6d154a..5b4b77f` | 从“共享码本即语义”转向外部可解释 target |
 | `T5` | 信息阶梯、局部耦合与 whole-brain 审计 | `1204f0f..5cf74fa`; [旧设计 postmortem](physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md) | hard ID 丢信息；全局 coupling 不能替代任务局部证据；X3 会污染检验 |
 | `T6` | physiology-semantic、measurement-first、physical teacher 与 entry routing | `b81c31b..d7255d9`; [理论基础](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) | sign-calibrated SSM teacher 已接纳；推理仍须模态独立 |
-| `T7` | foundation discovery + fresh certificate | [目标架构](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md); [实现计划](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | 最终主张限定为：在 history/marginal/null 控制后，EEG 是否提供未来 fNIRS 的增量信息 |
+| `T7` | preserve–discover–certify 与 foundation/certificate 分段 | [2026-07-19 决策](physiology_semantic_tokenizer/analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md) | 保留冻结外评原则；development 非独立，独立确认仅 R7；shaper/foundation 必需性被取代 |
+| `T8` | shared-driver semantic return | [理论基础](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md); [方法反思](physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md) | raw-only 独立 K128；完整 \(r^J\) 规定语义；共同 teacher 对齐与 coupling discovery 严格分离 |
 
 ### 自有模型架构与实验
 
@@ -83,11 +87,12 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `M5` | Gate1 稳定化、dual decoder、Croce target/local cache、coupling suites | `3cc2724..5cf74fa` | 工程可运行；语义和局部 coupling 仍不足 |
 | `M6` | physiology-semantic P1–P5、独立分支、修正 EMA VQ、trainer 与 export | `b81c31b..43bdef1` | 软件迁移完成，科学门未自动通过 |
 | `M7` | E0/E0-v2 teacher validation | `2b4f3b3..0a38a7c` | 符号校准前历史诊断；旧 fNIRS 负标记不代表当前 E0 状态 |
-| `M8` | adaptive shared-neural SSM、task parameter audit、gauge/sign correction、完整接纳 | `612e8c3..d7255d9` | 完整 E0 通过；physical teacher 与全部 SSM 生理信息（含 fNIRS）可接受 |
+| `M8` | adaptive shared-neural SSM、task parameter audit、gauge/sign correction、治理准入 | `612e8c3..d7255d9` | 正式决定标记 complete E0 pass 并授权 supervision；原始 physical-reconstruction/calibration 诊断仍保留为构念边界 |
 | `M9` | E1 quantizer v2–v23，最终 fixed K=128 diverse-farthest/T2-T2 | `0d00f28`, `7f1149c` | G1 仅在 occupancy/retention 意义上通过；跨模态 hard-token coupling 未证实 |
 | `M10` | E2 T0/T1/T2、sidecar、entry masks、梯度审计与冻结 probe | `b4ffc82`; [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 历史 channel/QC 冲突已由 v4 重建解决 |
 | `M11` | channel-aware E0 重建、训练被试权重校准、9 个 E2 development jobs | [E2 计划](physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md) | 已完成；完整 E0 通过，E2 保留 T0 |
-| `M12` | E6/G2 信息保留、G3 语义、E7 coupling preservation、E8 foundation、E9 certificate | [实验设计](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) | 只有前一门通过才进入后一门 |
+| `M12` | E2 九个 T0/T1/T2 development runs 与事后合同审计 | [E2 review](physiology_semantic_tokenizer/analysis/20260724_E2_COMPREHENSIVE_REVIEW.md); [corrigendum](physiology_semantic_tokenizer/analysis/20260725_E2_FAILURE_MODE_CORRIGENDUM_AND_RETURN_DECISION.md) | teacher 无 endpoint 增益；sidecar 仅覆盖 1/6；旧 probe 178/500 与 loss 500/500 口径分离 |
+| `M13` | SD-SVQ 与 R0–R7 | [目标架构](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md); [R 系列](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) | 计划：R1-D/R1-P → continuous gate → 独立 K128 → R6A 离线关联 / R6B cutoff 预测 |
 
 ## 🔗 跨主线影响证据
 
@@ -102,68 +107,71 @@ _图 1｜原生 SVG 全图。实线是同一主线的版本继承，`F1`–`F19`
 | `F7` | 直接记录 | Croce solver、event-relative cache 和单位统一把物理 target 从理论假设变成可训练 sidecar |
 | `F8–F9` | 直接实验 | hard/quantized 表示丢失 LOSO 信息、全局 coupling 在任务局部失效、X3 直接交换污染检验，直接产生 2026-07-01 redesign |
 | `F10` | 直接记录 | 四数据集原始测量审计否定“物理分解是必需输入”，架构改为 measurement-first、teacher optional |
-| `F11` | 直接实验 | 旧 fNIRS 诊断促成 adaptive SSM；gauge/sign 修正消除坐标歧义并形成完整 E0 接纳 |
+| `F11` | 直接记录 | 旧 fNIRS 诊断促成 adaptive SSM；gauge/sign 修正消除坐标歧义并形成 complete-E0 治理准入，但不覆盖原始构念诊断 |
 | `F12` | 直接审计 | 对比准备暴露 DSR 标签、Visual event/geometry、REFED continuous target 和 mask 消费缺口，反向修改统一 loader |
 | `F13–F15` | 直接实验 | artifact/bad-channel 契约进入 measured-data 后，旧 E0 channel selection 只剩 93/230 target 可用，因此正式 E2 必须先回到数据/teacher 重建 |
 | `F14` | 直接继承 | E1 的 fixed K=128 candidate 是 E2 的固定量化基础；E1 只通过占用，不把 hard-token 共现当作 coupling |
 | `F16` | 计划约束 | 自有模型与 STA-Net/EFRM 必须共享 ordered sample IDs、split hashes、mask 与 target contract，才能进行同轨比较 |
 | `F17` | 当前开发证据 | EFRM epoch-8 的同窗 CLIP 检索接近 chance，只能警告 exact-window identity objective 未激活；它不否定慢时延生理耦合，反而要求 history/lag 控制 |
-| `F18–F19` | 理论到实验 | 因果主张边界决定 E7–E9 的顺序；只有独立冻结证书完成后，项目模型才可与比较方法报告匹配的下游效用 |
+| `F18–F19` | 历史计划约束 | 因果主张边界曾决定 E7–E9 的顺序；其中“冻结后独立证书”被新计划保留，shaper/foundation 必需性被撤销 |
+| `F20` | 直接实验 | E2 的负结果与 realization gap 使 teacher 从弱摘要辅助项升级为待证伪的完整轨迹主目标，并把整窗上下文移到 VQ 之前 |
+| `F21` | 数据/评估审计 | 1/6 sidecar coverage、训练/探针 mask 支持不一致以及 artifact-policy 变化，迫使新代际先冻结数据 estimand 并重跑 baseline |
 
 ## 🧭 当前状态与未来计划
 
 ### 现在已经可以依赖
 
 - 四数据集统一 measured-data 入口、20 秒默认上下文和独立 EEG/fNIRS mask
-- physiology-semantic P1–P5 软件接口与 teacher-free runtime
+- physiology-semantic E2-compatible runtime、trainer、export 与 K128 quantizer
 - E1 fixed `K=128` quantizer 的三 seed occupancy/retention 结果
 - STA-Net 七任务开发 smoke/tuning 工具链和 EFRM 同步数据训练/分析工具链
 - protected subjects/tests 仍关闭这一证据边界
 
 ### 当前不能宣称
 
-- T1/T2 比 T0 更有语义，或 G2/G3 已通过
+- E2 T1/T2 比 T0 更有语义，或 R2/R3 已通过
 - E1 hard tokens 已发现 EEG–fNIRS coupling
 - STA-Net/EFRM 已完成源协议数值复现或正式 protected 比较
 - E0 通过本身证明 SSM 参数唯一可辨识、因果方向成立，或某个 EEG token 导致某个 fNIRS token
 
 ### 推荐执行顺序
 
-1. 以已通过完整 E0 的 sign-calibrated adaptive SSM 作为 physical teacher
-2. 按 E2 结果处理语义目标与信息保持问题，不回退 E0 接纳
-3. 通过 E6/G2 与 G3 后，依次执行 E7 preservation、E8 foundation 和 E9 fresh certificate
-4. 并行完成 comparison 源协议复现与 C0–C5 冻结；只在自有模型和比较方法都冻结后执行 C6
+1. 执行 R0：冻结 E2、更正三个支持分母并注册新 validity policy
+2. 执行 R1：区分 subject-specific LOTO 的 R1-D 与 population-frozen 的 R1-P；development 各自 100% coverage，并重验 R1-P teacher panel
+3. 执行 R2：先检验 EEG 与 fNIRS 各自的 continuous observability；任一失败即停止 VQ
+4. 只有 R2-P 通过才执行 R3；R5 通过后，R6A 离线关联与 R6B completed-window 预测是按主张选择的独立分支
+5. 并行完成 comparison 源协议复现与 C0–C5 冻结；架构、比较方法和 evaluator 全部冻结后才打开 protected test
 
 ## 🧾 Git 分支与文档一致性审计
 
 ### 实际 Git 分支
 
-`main` 含 294 个提交；`--all` 共 303 个唯一提交。五个未合并远端尖端都停留在 2026-03 的 alignment/factorization 阶段，现已落后 `main` 178–205 个提交。它们应作为历史实验分支读取，而不应与图中的四条研究主线等同。
+`main` 含 310 个提交；`--all` 共 319 个唯一提交。五个未合并远端尖端都停留在 2026-03 的 alignment/factorization 阶段。它们应作为历史实验分支读取，而不应与图中的四条研究主线等同。
 
 | 远端分支 | 相对共同祖先新增 | 相对 `main` 落后 | 处理解释 |
 | --- | ---: | ---: | --- |
-| `copilot/add-first-execution-stage-eeg-fnirs` | 1 | 199 | 早期自动执行计划，后续主线已重写 |
-| `copilot/implement-eeg-fnirs-alignment` | 3 | 199 | warm-start/lag-aware 原型；概念已进入后续主线 |
-| `copilot/monitor-alignment-experiment` | 1 | 198 | 监控计划分支，无当前权威性 |
-| `copilot/monitor-labram-tokenizer-tests` | 2 | 205 | shared-codebook 原型；已被后续模型谱系取代 |
-| `feature/private-factorization-tokenizer` | 2 | 178 | factorized tokenizer 原型；主线存在后续等价实现 |
+| `copilot/add-first-execution-stage-eeg-fnirs` | 1 | 215 | 早期自动执行计划，后续主线已重写 |
+| `copilot/implement-eeg-fnirs-alignment` | 3 | 215 | warm-start/lag-aware 原型；概念已进入后续主线 |
+| `copilot/monitor-alignment-experiment` | 1 | 214 | 监控计划分支，无当前权威性 |
+| `copilot/monitor-labram-tokenizer-tests` | 2 | 221 | shared-codebook 原型；已被后续模型谱系取代 |
+| `feature/private-factorization-tokenizer` | 2 | 194 | factorized tokenizer 原型；主线存在后续等价实现 |
 
 ### 已发现的文档漂移
 
-- 根 [`README.md`](../README.md) 仍写着“target code 尚未实现”，但 2026-07-02 以后 P1–P5、trainer、E1 和 E2 软件已经落地
-- [`architecture_changelog/INDEX.md`](architecture_changelog/INDEX.md) 同时使用 `Merged`、`In Progress` 和 `Complete — G1 passed`，但约定区只声明了前三阶段状态中的一部分
-- 个别旧 architecture record 自身仍写 `Planned`/`Active`，而索引把对应谱系概括为已合并；阅读时应以更新的实验日志、当前实现和本图台账交叉判断
-- 当前工作区的 clean v4 尚未提交，因此任何新 run 都必须记录 dirty-worktree flag，不能把 v4 结果归到 `main@55cee3f`
+- dated E0/E2 analysis 保留当时状态，新的 corrigendum 只修正口径，不改写 run
+- canonical SVG 仍表示 E2 runtime；shared-driver 图必须保持 `PLAN, not runtime`
+- 旧 `physical_teacher_gradient_entry` overlay 与 E7–E9 文档属于历史计划，不再指导新实现
+- 所有新 run 仍必须记录 source commit 与 dirty-worktree flag
 
 这些漂移说明旧 changelog 仍适合记录单次 before/after，但不足以承担跨数据、理论、模型和比较方法的全局导航。本图应在每次出现新的 `D/C/T/M` 语义版本或 `F` 跨线影响时更新。
 
 ## 🔍 审计来源
 
-- 全部 Git 历史：`git log --all`，303 个唯一提交，时间范围 2025-12-02 至 2026-07-23
+- 全部 Git 历史：`git log --all`，319 个唯一提交，时间范围 2025-12-02 至 2026-07-25
 - [Architecture changelog](architecture_changelog/INDEX.md) 与 [project operations changelog](project_changelog/INDEX.md)
 - [Physiology-semantic 文档入口](physiology_semantic_tokenizer/README.md)、[实验日志](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) 与 `analysis/`
 - [数据质量/HOMER2 审计](physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md)
 - [对比方法工作流](physiology_semantic_tokenizer/11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
 - [STA-Net PyTorch](../comparative_methods/STA-Net-PyTorch/README.md)、[EFRM PyTorch](../comparative_methods/EFRM-PyTorch/README.md) 与 [UMAP 总结](../comparative_methods/UMAP/EXPERIMENT_SUMMARY.md)
 
-_最后审计：2026-07-23_
+_最后审计：2026-07-25_

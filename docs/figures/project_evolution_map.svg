@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      width="3600"
-     height="3860"
-     viewBox="0 0 3600 3860"
+     height="4180"
+     viewBox="0 0 3600 4180"
      role="img"
      aria-labelledby="svg-title svg-desc"
      data-schema="project-evolution-map-v1"
-     data-snapshot="main@55cee3f">
+     data-snapshot="main@6d6c648">
   <title id="svg-title">PID-MCM 项目四线架构与研究演进全图</title>
-  <desc id="svg-desc">从上到下展示数据集处理与统一化、对比方法复现、自有模型理论讨论、自有模型架构与实验四条版本主线。实线表示同一主线的继承，F1 至 F19 紫色虚线表示跨主线证据如何改变后续设计与计划。</desc>
-  <metadata>{"schema":"project-evolution-map-v1","snapshot":"main@55cee3f","reachable_commits":303,"main_commits":294,"git_tags":0,"semantic_nodes":36,"causal_edges":19}</metadata>
+  <desc id="svg-desc">从上到下展示数据集处理与统一化、对比方法复现、自有模型理论讨论、自有模型架构与实验四条版本主线。实线表示同一主线的继承，F1 至 F21 紫色虚线表示跨主线证据如何改变后续设计与计划；新增 T8 与 M13 记录 shared-driver semantic return。</desc>
+  <metadata>{"schema":"project-evolution-map-v1","snapshot":"main@6d6c648","reachable_commits":319,"main_commits":310,"git_tags":0,"semantic_nodes":38,"causal_edges":21}</metadata>
 
   <defs>
     <marker id="arrow-chain" viewBox="0 0 10 10" refX="9" refY="5"
@@ -111,14 +111,14 @@
     .key-path { font-size: 17px; font-weight: 760; fill: #7F1D1D; }
   </style>
 
-  <rect width="3600" height="3860" fill="#FFFFFF"/>
+  <rect width="3600" height="4180" fill="#FFFFFF"/>
 
   <g id="header">
     <text x="80" y="66" class="page-title">PID-MCM 项目架构与研究演进全图</text>
-    <text x="80" y="103" class="page-subtitle">四条版本主线 · 36 个语义版本节点 · 19 条跨线因果 · 已提交事实 / 工作区草案 / 阻塞 / 未来计划分离</text>
+    <text x="80" y="103" class="page-subtitle">四条版本主线 · 38 个语义版本节点 · 21 条跨线因果 · 当前 runtime / 历史证据 / 未来计划分离</text>
 
     <rect x="80" y="126" width="1840" height="62" rx="14" class="audit-pill"/>
-    <text x="108" y="165" class="audit-text">审计锚点：main@55cee3f · 303 个可达提交 · 0 tags · 5 个未合并远端尖端 · 工作区含 clean v4 草案</text>
+    <text x="108" y="165" class="audit-text">审计锚点：main@6d6c648 · 319 个可达提交 · 0 tags · 5 个未合并远端尖端 · E0–E2 历史冻结</text>
 
     <g id="status-legend" transform="translate(2010 126)">
       <rect x="0" y="0" width="1540" height="62" rx="14" class="audit-pill"/>
@@ -140,10 +140,10 @@
   </g>
 
   <g id="lane-backgrounds">
-    <rect x="80" y="220" width="800" height="3075" rx="24" class="lane"/>
-    <rect x="960" y="220" width="800" height="3075" rx="24" class="lane"/>
-    <rect x="1840" y="220" width="800" height="3075" rx="24" class="lane"/>
-    <rect x="2720" y="220" width="800" height="3075" rx="24" class="lane"/>
+    <rect x="80" y="220" width="800" height="3200" rx="24" class="lane"/>
+    <rect x="960" y="220" width="800" height="3200" rx="24" class="lane"/>
+    <rect x="1840" y="220" width="800" height="3200" rx="24" class="lane"/>
+    <rect x="2720" y="220" width="800" height="3200" rx="24" class="lane"/>
 
     <rect x="80" y="220" width="800" height="112" rx="24" class="lane-header-data"/>
     <rect x="960" y="220" width="800" height="112" rx="24" class="lane-header-compare"/>
@@ -160,11 +160,11 @@
 
     <text x="1872" y="268" class="lane-key">T</text>
     <text x="1922" y="267" class="lane-title">自有模型理论讨论</text>
-    <text x="1922" y="299" class="lane-summary">PID/MCM → tokenizer-first → 可替换 proxy → 增量信息证书</text>
+    <text x="1922" y="299" class="lane-summary">PID/MCM → 强制对齐 → 物理 teacher → shared-driver 极简回归</text>
 
     <text x="2752" y="268" class="lane-key">M</text>
     <text x="2802" y="267" class="lane-title">自有模型架构与实验</text>
-    <text x="2802" y="299" class="lane-summary">合成验证 → 多代 tokenizer → E0/E1/E2 → foundation/certificate</text>
+    <text x="2802" y="299" class="lane-summary">合成验证 → 多代 tokenizer → E0/E1/E2 → SD-SVQ R0–R7</text>
   </g>
 
   <g id="version-edges">
@@ -193,6 +193,7 @@
     <path d="M 2240 1316 L 2240 1450" class="chain"/>
     <path d="M 2240 1576 L 2240 1940" class="chain"/>
     <path d="M 2240 2066 L 2240 2980" class="chain"/>
+    <path d="M 2240 3106 L 2240 3160" class="chain"/>
 
     <!-- Model -->
     <path d="M 3120 486 L 3120 530" class="chain"/>
@@ -207,6 +208,7 @@
     <path d="M 3120 2536 L 3120 2580" class="chain"/>
     <path d="M 3120 2706 L 3120 2850" class="chain"/>
     <path d="M 3120 2976 L 3120 3060" class="chain"/>
+    <path d="M 3120 3186 L 3120 3230" class="chain"/>
   </g>
 
   <g id="causal-edges">
@@ -229,6 +231,8 @@
     <path id="edge-f17" d="M 1710 2743 C 1795 2790, 1805 2990, 1890 3043" class="cause"/>
     <path id="edge-f18" d="M 2590 3043 C 2670 3043, 2690 3110, 2770 3123" class="cause"/>
     <path id="edge-f19" d="M 2770 3123 L 1710 3123" class="cause"/>
+    <path id="edge-f20" d="M 2770 3123 C 2680 3130, 2670 3200, 2590 3223" class="cause"/>
+    <path id="edge-f21" d="M 830 2953 C 1480 3090, 2190 3220, 2770 3293" class="cause-critical"/>
   </g>
 
   <g id="nodes">
@@ -303,25 +307,25 @@
       <text x="24" y="67" class="node-title">统一任务 / 通道 / 几何契约</text>
       <text x="24" y="98" class="node-detail">Visual · REFED · DSR · masks · geometry</text>
     </g>
-    <g id="node-d7" class="node status-progress" transform="translate(130 2510)" role="group" aria-labelledby="node-d7-title node-d7-desc">
-      <title id="node-d7-title">D7 工作区 clean v4 草案</title>
-      <desc id="node-d7-desc">当前未提交工作区版本，增加50赫兹清理并取消数据集特有坏道 mask；全数据 gate 已通过。</desc>
+    <g id="node-d7" class="node status-completed" transform="translate(130 2510)" role="group" aria-labelledby="node-d7-title node-d7-desc">
+      <title id="node-d7-title">D7 clean v4 E2 历史合同</title>
+      <desc id="node-d7-desc">增加50赫兹处理并取消数据集特有坏道动作；作为 E2 的历史数据合同保留。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">D7</text>
-      <text x="676" y="31" class="node-date">WORKTREE · NOT COMMITTED</text>
+      <text x="676" y="31" class="node-date">2026-07-23 · HISTORICAL</text>
       <text x="24" y="67" class="node-title">Single-Trial clean v4</text>
-      <text x="24" y="98" class="node-detail">50 Hz notch · no dataset-specific bad-channel mask</text>
+      <text x="24" y="98" class="node-detail">50 Hz · no dataset-specific bad-channel action</text>
     </g>
-    <g id="node-d8" class="node status-future" transform="translate(130 2890)" role="group" aria-labelledby="node-d8-title node-d8-desc">
-      <title id="node-d8-title">D8 重建 teacher 并冻结 benchmark</title>
-      <desc id="node-d8-desc">下一步按最终 QC 契约重建 teacher sidecar，并冻结 C0 C1 benchmark 和 splits。</desc>
+    <g id="node-d8" class="node status-current" transform="translate(130 2890)" role="group" aria-labelledby="node-d8-title node-d8-desc">
+      <title id="node-d8-title">D8 artifact mask 退出 validity authority</title>
+      <desc id="node-d8-desc">2026年7月25日起 boundary finite mask 是当前有效性合同，artifact 只作 QC annotation 与敏感性分层。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">D8</text>
-      <text x="676" y="31" class="node-date">NEXT</text>
-      <text x="24" y="67" class="node-title">重建 teacher sidecar</text>
-      <text x="24" y="98" class="node-detail">最终 QC/channel contract · 冻结 benchmark/splits</text>
+      <text x="676" y="31" class="node-date">2026-07-25 · CURRENT</text>
+      <text x="24" y="67" class="node-title">boundary-only token validity</text>
+      <text x="24" y="98" class="node-detail">artifact = annotation · R baseline 必须重跑</text>
     </g>
 
     <!-- Comparison nodes -->
@@ -447,25 +451,35 @@
       <text x="24" y="67" class="node-title">信息阶梯与局部 coupling 审计</text>
       <text x="24" y="98" class="node-detail">hard ID · global mapping · X3 均不足</text>
     </g>
-    <g id="node-t6" class="node status-current" transform="translate(1890 1940)" role="group" aria-labelledby="node-t6-title node-t6-desc">
+    <g id="node-t6" class="node status-completed" transform="translate(1890 1940)" role="group" aria-labelledby="node-t6-title node-t6-desc">
       <title id="node-t6-title">T6 physiology semantic 重构</title>
       <desc id="node-t6-desc">2026年7月1至19日，形成 measurement-first、独立推理和可替换 privileged proxy 理论。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">T6</text>
-      <text x="676" y="31" class="node-date">2026-07-01—19 · CURRENT</text>
+      <text x="676" y="31" class="node-date">2026-07-01—19</text>
       <text x="24" y="67" class="node-title">physiology-semantic 重构</text>
       <text x="24" y="98" class="node-detail">measurement-first · replaceable proxy · independent inference</text>
     </g>
-    <g id="node-t7" class="node status-future" transform="translate(1890 2980)" role="group" aria-labelledby="node-t7-title node-t7-desc">
-      <title id="node-t7-title">T7 foundation 与独立证书</title>
-      <desc id="node-t7-desc">未来由 foundation model 发现时序结构，再用 fresh frozen certificate 检验 EEG 增量信息。</desc>
+    <g id="node-t7" class="node status-completed" transform="translate(1890 2980)" role="group" aria-labelledby="node-t7-title node-t7-desc">
+      <title id="node-t7-title">T7 preserve discover certify 历史计划</title>
+      <desc id="node-t7-desc">2026年7月19日提出 shaper、foundation 与 fresh certificate 分段；当前保留冻结外部评估原则，并将独立确认限定为 R7。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">T7</text>
-      <text x="676" y="31" class="node-date">FUTURE CLAIM</text>
-      <text x="24" y="67" class="node-title">foundation discovery</text>
-      <text x="24" y="98" class="node-detail">fresh frozen certificate 只检验增量信息</text>
+      <text x="676" y="31" class="node-date">2026-07-19 · HISTORICAL PLAN</text>
+      <text x="24" y="67" class="node-title">preserve–discover–certify</text>
+      <text x="24" y="98" class="node-detail">保留冻结外评 · 独立确认仅 R7 · 撤销 foundation 必需性</text>
+    </g>
+    <g id="node-t8" class="node status-current" transform="translate(1890 3160)" role="group" aria-labelledby="node-t8-title node-t8-desc">
+      <title id="node-t8-title">T8 shared driver semantic return</title>
+      <desc id="node-t8-desc">2026年7月25日恢复 raw-only 独立 tokenizer，以完整联合共享驱动规定语义，并分离 teacher-grounded alignment 与 coupling discovery。</desc>
+      <rect width="700" height="126" rx="16" class="node-bg"/>
+      <rect width="9" height="126" rx="4.5" class="node-accent"/>
+      <text x="24" y="31" class="node-id">T8</text>
+      <text x="676" y="31" class="node-date">2026-07-25 · CURRENT</text>
+      <text x="24" y="67" class="node-title">shared-driver semantic return</text>
+      <text x="24" y="98" class="node-detail">raw-only · independent K128 · alignment ≠ discovery</text>
     </g>
 
     <!-- Model nodes -->
@@ -550,16 +564,16 @@
       <text x="24" y="98" class="node-detail">旧 fNIRS 负标记已由 calibrated decision 取代</text>
     </g>
     <g id="node-m8" class="node status-completed" transform="translate(2770 2240)" role="group" aria-labelledby="node-m8-title node-m8-desc">
-      <title id="node-m8-title">M8 adaptive SSM complete E0 pass</title>
-      <desc id="node-m8-desc">通过 gauge/sign 修正，adaptive SSM physical teacher 完整通过 E0，生理信息完全可接受。</desc>
+      <title id="node-m8-title">M8 adaptive SSM complete E0 治理准入</title>
+      <desc id="node-m8-desc">通过 gauge/sign 修正，正式决定授权 adaptive SSM teacher 用于监督；原始物理重建和校准诊断仍保留。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M8</text>
       <text x="676" y="31" class="node-date">2026-07-16—19</text>
       <text x="24" y="67" class="node-title">adaptive SSM + gauge correction</text>
-      <text x="24" y="98" class="node-detail">完整 E0 通过 · SSM 生理信息完全可接受</text>
+      <text x="24" y="98" class="node-detail">complete-E0 governance pass · construct diagnostics retained</text>
     </g>
-    <g id="node-m9" class="node status-current" transform="translate(2770 2410)" role="group" aria-labelledby="node-m9-title node-m9-desc">
+    <g id="node-m9" class="node status-completed" transform="translate(2770 2410)" role="group" aria-labelledby="node-m9-title node-m9-desc">
       <title id="node-m9-title">M9 E1 固定 K128 G1 通过</title>
       <desc id="node-m9-desc">2026年7月20至22日，diverse-farthest T2 T2 三种子 occupancy retention G1 通过。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
@@ -589,15 +603,25 @@
       <text x="24" y="67" class="node-title">complete E0 pass + E2 decision</text>
       <text x="24" y="98" class="node-detail">physical teacher accepted · E2 retains T0</text>
     </g>
-    <g id="node-m12" class="node status-current" transform="translate(2770 3060)" role="group" aria-labelledby="node-m12-title node-m12-desc">
-      <title id="node-m12-title">M12 foundation 与 certificate 后续链</title>
-      <desc id="node-m12-desc">后续依次执行 E6 G2 G3、E7 保留、E8 foundation 和 E9 certificate。</desc>
+    <g id="node-m12" class="node status-completed" transform="translate(2770 3060)" role="group" aria-labelledby="node-m12-title node-m12-desc">
+      <title id="node-m12-title">M12 E2 负结果与合同审计</title>
+      <desc id="node-m12-desc">E2 teacher 无 semantic endpoint 增益；事后审计分离 3000 总 patch、500 teacher patch 与 178 个历史 EEG probe patch。</desc>
       <rect width="700" height="126" rx="16" class="node-bg"/>
       <rect width="9" height="126" rx="4.5" class="node-accent"/>
       <text x="24" y="31" class="node-id">M12</text>
-      <text x="676" y="31" class="node-date">CURRENT PATH</text>
-      <text x="24" y="67" class="node-title">E6/G2/G3 → E7 → E8 → E9</text>
-      <text x="24" y="98" class="node-detail">information retention · foundation · fresh certificate</text>
+      <text x="676" y="31" class="node-date">2026-07-24—25 · COMPLETE</text>
+      <text x="24" y="67" class="node-title">E2 no-gain + denominator audit</text>
+      <text x="24" y="98" class="node-detail">1/6 sidecar · probe/loss mask split · new validity policy</text>
+    </g>
+    <g id="node-m13" class="node status-future" transform="translate(2770 3230)" role="group" aria-labelledby="node-m13-title node-m13-desc">
+      <title id="node-m13-title">M13 SD SVQ 与 R0 R7</title>
+      <desc id="node-m13-desc">先区分 R1-D subject-specific LOTO 与 R1-P population-frozen teacher 并重验 R1-P panel，再通过双侧连续可观测性进入独立 K128、R6A 离线关联与 R6B cutoff 预测。</desc>
+      <rect width="700" height="126" rx="16" class="node-bg"/>
+      <rect width="9" height="126" rx="4.5" class="node-accent"/>
+      <text x="24" y="31" class="node-id">M13</text>
+      <text x="676" y="31" class="node-date">PLANNED · R0—R7</text>
+      <text x="24" y="67" class="node-title">Shared-Driver Semantic VQ</text>
+      <text x="24" y="98" class="node-detail">R1-P panel → R2-P → K128 → R6A / R6B cutoff</text>
     </g>
   </g>
 
@@ -621,13 +645,15 @@
     <g class="cause-tag" transform="translate(1800 2870)"><rect x="-32" y="-18" width="64" height="36" rx="10"/><text y="1">F17</text></g>
     <g class="cause-tag" transform="translate(2680 3070)"><rect x="-32" y="-18" width="64" height="36" rx="10"/><text y="1">F18</text></g>
     <g class="cause-tag" transform="translate(2240 3142)"><rect x="-32" y="-18" width="64" height="36" rx="10"/><text y="1">F19</text></g>
+    <g class="cause-tag" transform="translate(2680 3185)"><rect x="-32" y="-18" width="64" height="36" rx="10"/><text y="1">F20</text></g>
+    <g class="cause-tag critical" transform="translate(1800 3185)"><rect x="-32" y="-18" width="64" height="36" rx="10"/><text y="1">F21</text></g>
   </g>
 
-  <g id="causal-index">
-    <rect x="80" y="3335" width="3440" height="455" rx="24" class="causal-panel"/>
+  <g id="causal-index" transform="translate(0 180)">
+    <rect x="80" y="3335" width="3440" height="545" rx="24" class="causal-panel"/>
     <text x="116" y="3380" class="causal-title">F｜跨主线因果索引</text>
-    <text x="116" y="3410" class="causal-note">虚线表示“证据或契约改变了另一条主线”，不是普通时间继承；红色 F13/F15 是当前关键阻塞链。</text>
-    <text x="3450" y="3384" text-anchor="end" class="key-path">当前关键路径：D7/D8 → M11 → M12 → C5</text>
+    <text x="116" y="3410" class="causal-note">虚线表示“证据或契约改变了另一条主线”，不是普通时间继承；F20/F21 共同产生当前回归路径。</text>
+    <text x="3450" y="3384" text-anchor="end" class="key-path">当前关键路径：M12 → T8 → M13（R0 → R1-D/P → R2-P）</text>
 
     <text x="126" y="3455" class="causal-item"><tspan class="causal-id">F1</tspan><tspan dx="12">tokenizer-first 理论 → tokenizer zoo</tspan></text>
     <text x="126" y="3500" class="causal-item"><tspan class="causal-id">F2</tspan><tspan dx="12">真实数据失败 → 泛化问题显性化</tspan></text>
@@ -640,7 +666,7 @@
     <text x="1245" y="3455" class="causal-item"><tspan class="causal-id">F8</tspan><tspan dx="12">coupling suites → hard/global 局限</tspan></text>
     <text x="1245" y="3500" class="causal-item"><tspan class="causal-id">F9</tspan><tspan dx="12">旧设计 postmortem → P1—P5 重构</tspan></text>
     <text x="1245" y="3545" class="causal-item"><tspan class="causal-id">F10</tspan><tspan dx="12">四数据集审计 → measurement-first</tspan></text>
-    <text x="1245" y="3590" class="causal-item"><tspan class="causal-id">F11</tspan><tspan dx="12">符号校准 → adaptive SSM 完整 E0 通过</tspan></text>
+    <text x="1245" y="3590" class="causal-item"><tspan class="causal-id">F11</tspan><tspan dx="12">符号校准 → adaptive SSM 治理准入</tspan></text>
     <text x="1245" y="3635" class="causal-item"><tspan class="causal-id">F12</tspan><tspan dx="12">比较审计 → 标签/几何/mask 修复</tspan></text>
     <text x="1245" y="3680" class="causal-item"><tspan class="causal-id">F13</tspan><tspan dx="12">坏道契约 → 137/230 targets 排除</tspan></text>
 
@@ -650,7 +676,9 @@
     <text x="2365" y="3590" class="causal-item"><tspan class="causal-id">F17</tspan><tspan dx="12">EFRM warning → 同窗检索不等于耦合</tspan></text>
     <text x="2365" y="3635" class="causal-item"><tspan class="causal-id">F18</tspan><tspan dx="12">主张边界 → E7/E8/E9 顺序</tspan></text>
     <text x="2365" y="3680" class="causal-item"><tspan class="causal-id">F19</tspan><tspan dx="12">独立证书 → 同轨下游效用比较</tspan></text>
+    <text x="2365" y="3725" class="causal-item"><tspan class="causal-id">F20</tspan><tspan dx="12">E2 no-gain → 完整 rJ 主目标与 pre-VQ context</tspan></text>
+    <text x="2365" y="3770" class="causal-item"><tspan class="causal-id">F21</tspan><tspan dx="12">coverage/mask/policy 审计 → R0/R1 先行</tspan></text>
   </g>
 
-  <text x="80" y="3830" class="page-subtitle">Source of truth: docs/PROJECT_EVOLUTION_MAP.md · Last audited 2026-07-23 · SVG text and paths remain directly editable</text>
+  <text x="80" y="4150" class="page-subtitle">Source of truth: docs/PROJECT_EVOLUTION_MAP.md · Last audited 2026-07-25 · SVG text and paths remain directly editable</text>
 </svg>

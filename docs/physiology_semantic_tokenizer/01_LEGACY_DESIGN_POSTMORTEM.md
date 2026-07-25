@@ -101,6 +101,16 @@ Frozen event embeddings predicted `source_name` at `0.6476` balanced accuracy an
 
 ## 🎯 Decisions
 
+### 2026-07-25 architecture return
+
+The current return does **not** restore the shared-codebook or same-index
+assumption. It restores own-modality raw inputs, independent codebooks, and
+freeze-then-test discipline, while adding one explicit semantic coordinate:
+the complete E0 joint-driver trajectory. The E2-era routed summaries,
+mandatory residual path, coupling shaper, and foundation-model requirement are
+no longer part of the minimal target architecture. See
+[`12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md`](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md).
+
 ### Retained
 
 - Local 2-second patch grid and whole-brain anchor aggregation

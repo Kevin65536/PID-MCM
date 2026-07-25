@@ -1,364 +1,234 @@
-# Theoretical foundations of physiology-semantic tokenization
+# Shared-Driver Semantic Tokenization 的理论基础
 
-_Formal assumptions, information paths, alignment mechanism, and claim limits_
+_理论合同：2026-07-25；详细历史反思见 [架构回归与方法启示](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md)_
 
 ---
 
-## 📋 Purpose
+## 📋 研究问题
 
-This document explains why the target representation can retain task-relevant information and why independently generated EEG and fNIRS tokens can exhibit stable delayed correspondence. It also states what cannot be guaranteed by architecture alone.
+项目要检验的不是“能否把两种信号压缩成 token”，而是：
 
-The theory is deliberately conditional. A tokenizer cannot preserve physiological information that is absent from the measurements, and no unsupervised objective guarantees that finite codebook capacity will be allocated to a desired task variable.
+> 独立从 EEG 与 fNIRS 原始观测产生的离散状态，是否在合理时延、被试外泛化以及 history/nuisance/null 控制后，仍表现出可重复的条件对应？
 
-## 🧠 Generative assumptions
+这个问题包含四个不能由同一指标替代的层次：
 
-Let `Y` denote a task or physiological condition. Let `R_t` and `S_t` denote fast neural and vasoactive states, `H_t` denote hemodynamic states, and `U_t^E`, `U_t^F` denote modality-private physiology and nuisance.
+1. **压缩**：连续信号能否稳定离散化；
+2. **语义锚定**：prototype 是否保留预先指定的 teacher-defined proxy coordinate；
+3. **耦合发现**：双向整窗 token 是否具有离线时延条件关联；在满足时间截断时，是否还能增加窗外未来 fNIRS 的可预测信息；
+4. **科学确认**：相应 estimand 是否在冻结、被试外和 matched null 下成立。
 
-\[
-Y\rightarrow \{R_t,S_t,H_t,U_t^E,U_t^F\}_{t=1}^{T}
-\rightarrow \{X_t^E,X_t^F\}_{t=1}^{T}
-\]
+SD-SVQ 让模型只承担前两层，把后两层交给模型外的冻结评估。
 
-The observations satisfy:
+## 🧠 生成假设
 
-\[
-X_t^E=g_E(R_t,S_t,U_t^E)+\epsilon_t^E
-\]
+设潜在神经驱动为 \(R_t\)，血流状态为 \(H_t\)，模态私有观测因素为 \(U_t^E,U_t^F\)：
 
 \[
-X_t^F=g_F(H_t,U_t^F)+\epsilon_t^F
+X_t^E=g_E(R_t,U_t^E)+\epsilon_t^E,
 \]
-
-with delayed dynamics:
 
 \[
-p(H_t\mid H_{t-1},S_{\le t})
+H_{t+1}=f(H_t,R_t;\theta)+\omega_t,
 \]
-
-The Croce-style state vector used by the current cache solver is:
 
 \[
-x_t=(s_t,\delta f_t,\delta HbO_t,\delta Hb_t,r_t)
+X_t^F=g_F(H_t,U_t^F)+\epsilon_t^F.
 \]
 
-The target architecture does not require this five-state model, or any single shared neural driver, as an input or semantic truth. Croce is one testable auxiliary hypothesis among self-supervised, task, dynamical and other physics-informed targets. Every target family must establish its own identifiability and uncertainty scope before it can supervise tokens.[^1]
+EEG 与 fNIRS 的对应不是同一时刻、同一尺度、同一观测函数下的相等关系。fNIRS 对神经驱动的反映延迟且被血流自历史强烈解释。因此，理论上需要：
 
-## 🎯 How task information reaches tokens
+- 独立的 modality-specific encoder；
+- 量化前的长时上下文；
+- 显式 neural-time alignment；
+- 超过 fNIRS history 的增量 estimand；
+- 对 task phase、subject 和边际分布的控制。
 
-### Data-processing limit
+这些是观测过程要求的复杂性，不是为了优化而新增的装饰。
 
-For a deterministic or stochastic tokenizer `K = Q(E(X))`, the data-processing inequality gives:
+本文的 `raw-only` 不是“未经任何处理的电压/光密度”。它严格指：**冻结预处理合同下的 measured EEG 或 measured HbO/HbR，加 boundary/finite 计算 mask**。teacher state、task/condition、subject、phase、motion/nuisance feature 和另一模态观测均不属于 tokenizer 输入。
+
+## 🎯 共享驱动作为训练坐标
+
+E0 joint smoother 给出：
 
 \[
-I(Y;K)\le I(Y;X)
+R^J=T(X^E,X^F;\hat\theta_{\mathrm{train}}).
 \]
 
-Discretization cannot create task information. The design objective is therefore to allocate finite token capacity to task-relevant physiological variation while placing high-fidelity but weakly interpretable detail in the residual stream.
-
-### Representation decomposition
-
-The exported representation is:
+\(R^J\) 的角色是 privileged training coordinate。当前 E0 target 的实际 provenance 是 **subject-specific leave-one-trial**：空间 anchor、EEG proxy 投影和 SSM 参数可由同一被试的其他 trial 拟合，再应用到被留出的 trial；这不等于 population-frozen 的被试外 teacher。R1-D 可保留这种 development-crossfit target 做探索，R1-P 则必须只在 development-training subjects 上拟合全部参数，并对 held-out/protected subject 纯 apply。因为 estimand 已改变，R1-P 不能继承旧 E0 admission，必须重新通过 population-frozen teacher panel。两个 student 分别只看本模态：
 
 \[
-T_t=(K_t,Q_t,E[K_t],R_t)
+K^E=Q_E(E_E(X^E)),\qquad
+K^F=Q_F(E_F(X^F)),
 \]
 
-where:
+\[
+\mathcal L_{\mathrm{driver}}
+=d(D_r(K^E),R^J)+d(D_r(K^F),R^J).
+\]
 
-- `K_t` is a nominal physiological state identifier;
-- `Q_t` is the posterior over codewords;
-- `E[K_t]` is the codebook prototype or posterior-weighted expected embedding;
-- `R_t` is the private/residual representation.
+该设计的目标是形成“从各自模态可实现、且能保留同一 joint-driver 坐标的离散区域”；只有 R2/R3 通过后，才可称这种语义在相应总体中可实现。它不把 \(R^J\) 升格为 ground truth。teacher 仍依赖模型族、先验、gauge、训练折参数和 fixed-interval smoothing。
 
-The information paths are complementary:
+E0 的合理解释是：该 teacher 被授权作为受限监督坐标；不是其隐变量或生理参数已经唯一识别。
 
-| Representation element | Information retained | Primary role |
+## 🔗 Teacher-grounded alignment 不等于 coupling
+
+若距离 \(d\) 满足三角不等式，则：
+
+\[
+d(D_r(K^E),D_r(K^F))
+\le d(D_r(K^E),R^J)+d(R^J,D_r(K^F)).
+\]
+
+因此，在两侧重建误差都小的样本上，解码状态接近是训练目标在数学上的预期后果；它并不自动证明这种接近跨被试、跨 seed 或 held-out 稳定，更不能反过来当作独立耦合证据。
+
+证据必须分三级：
+
+1. **grounded alignment**：held-out 检验证明两侧 token 保留同一 \(R^J\) 坐标；
+2. **emergent symbolic correspondence**：在没有 same-ID 或 token-pair loss 时出现稳定的滞后 token-pair 分布；
+3. **offline delayed conditional association**：双向整窗 token 冻结并移除 teacher 后，在 history/phase/null 控制下仍有时延条件关联；
+4. **prospective incremental prediction**：只有 token 的 receptive-field end 早于 endpoint start 时，EEG history 对窗外未来原始 fNIRS endpoint 提供增量信息。
+
+第 3、4 层是不同 temporal estimand，可按主张独立预注册；R6A 不是 R6B 的科学前门。
+
+以下未来预测 estimand 只适用于第 4 层：
+
+\[
+\Delta\ell =
+\log p(Y^F_{t+\tau}\mid K^E_{\le t},H_t^F,C_t)
+-
+\log p(Y^F_{t+\tau}\mid H_t^F,C_t),
+\]
+
+其中 \(H_t^F\) 是 cutoff 前的 fNIRS 自历史，\(C_t\) 是仅在评估阶段使用的 subject/task/phase 等控制；还必须断言所有 \(K^E\) 的 receptive-field end 早于 \(Y^F\) 的起点。双向 token 若与 endpoint 共享同一 20 秒窗口，只能进入第 3 层，不能代入这个式子并称作未来预测。
+
+## 🗣️ 生理 token 的三层语义
+
+token 语义不等于 ID：
+
+| 层面 | 定义 | 证据 |
 | --- | --- | --- |
-| Hard ID | Learned measurement-region membership | Counting, transition statistics, interpretability after probing |
-| Posterior | Assignment uncertainty and secondary prototypes | Robust coupling and downstream inference |
-| Prototype embedding | Geometry among learned regions | Transfer to sequence models |
-| Residual latent | Model-private physiology and reconstruction detail | Information preservation |
-| Contextual sequence state | Duration, transition, and spatial grammar | Fine-grained task prediction |
+| 指称语义 | prototype 能稳定解码出什么 driver trajectory | decoded signature、held-out reconstruction |
+| 分布语义 | 它与哪些前后状态、异模态 token 和时延共同出现 | lagged co-occurrence、matched null |
+| 操作语义 | 它是否改善独立 endpoint 的被试外预测 | fresh frozen incremental evaluator |
 
-### Sufficient-state condition
+只有三层汇合，才可称为稳定的生理 token 语义。
 
-Assume the task decision depends on a physiological trajectory `S_1:T` through a score function `g`. If `g` is `L`-Lipschitz and the correct class has margin `gamma`, then the decision is unchanged whenever:
+两个独立 codebook 分别具有 permutation symmetry。`EEG token 17` 与 `fNIRS token 17` 没有天然同义性，跨 seed 也不能按 ID 对齐。有效比较对象是 decoded driver signature 或其他外部行为。
 
-\[
-\|\hat S_{1:T}-S_{1:T}\| < \frac{\gamma}{2L}
-\]
+## 📐 可识别性边界
 
-This is not a guarantee that the tokenizer will meet the bound. It identifies the correct empirical question: compare registered signature/probe and task-decision error against quantization distortion rather than relying on signal reconstruction alone.
+重建目标缩小了解空间，但没有消除：
 
-### Why sequence context is required
+- token ID 的置换不确定性；
+- encoder/codebook/decoder 的等价变换；
+- teacher 模型的 gauge 和参数非唯一性；
+- 原始测量中 subject、设备、运动和 task phase 的混杂；
+- joint teacher 将两模态信息共同写入训练坐标的 circularity。
 
-Fine-grained cognitive state is unlikely to be a function of one 2-second state ID. It may depend on token dwell time, transition rates, spatial coordination, and delayed cross-modal response. Therefore:
+因此必须区分：
 
-\[
-p(Y\mid K_t)\neq p(Y\mid K_{1:T})
-\]
+- **predictive sufficiency**：某模态是否足以预测 \(R^J\)；
+- **latent identifiability**：\(R^J\) 是否为唯一真实神经驱动；
+- **offline incremental association**：双向整窗 EEG 表示是否增加同一离线记录中的时延条件信息；
+- **prospective prediction**：在严格 cutoff 后是否增加窗外未来 fNIRS 信息；
+- **causality**：EEG 表示的状态是否导致血流变化。
 
-in general. The target makes the token sequence, not an isolated token, the downstream unit. This follows the successful pattern of masked contextual representation learning in EEG and general multimodal self-supervision, while retaining a discrete analysis interface.[^2][^3]
+R 系列可以检验 predictive sufficiency、offline association 和 prospective prediction；它不能由这些指标建立 latent identifiability。没有干预或额外识别假设时，也不声明 causality。
 
-## 🗣️ What the language-model analogy transfers
+## 🔭 为什么必须先做 continuous observability
 
-Modern language modeling does not perform reasoning on integer IDs directly. The full path is:
+数据处理不等式意味着 token 不能创造输入中不存在的信息。若 fNIRS raw window 连续表示都无法在 held-out subject 上恢复 \(R^J\)，更强 VQ、更多 code 或额外 nuisance token 不会使 shared-driver 语义变得可信。
 
-| Stage | Language model | Physiological counterpart | Information status |
-| --- | --- | --- | --- |
-| Segmentation | Text → subword units | Signal → channel/space/time patches | Defines boundaries; can already destroy event structure |
-| Symbolization | Subword → token ID | Encoder patch → codebook ID | ID is only a nominal address |
-| Input embedding | ID → learned vector | ID → saved codebook vector or learned embedding | Carries trainable geometry before context |
-| Context model | Embedding sequence → hidden states | Multimodal temporal/spatial backbone | Adds sequence, lag, duration, and neighborhood meaning |
-| Self-supervision | Next/masked-token likelihood | Masked state/token or future-distribution prediction | Allocates geometry to predictable structure |
-| Task adaptation | Prompt/fine-tune/readout | Frozen probe or fine-tuning | Tests whether the representation exposes task information |
+E2 还揭示了 target-space quantizability 与 raw-to-token realizability 的差别：一个目标可以由 128 个 prototype 很好近似，却不一定能从单模态原始信号推断。因此 R2 必须在 VQ 前检验两侧 continuous student。
 
-Three consequences matter for this project.
+## ⏱️ 时间与因果边界
 
-First, token IDs never contain linear semantics by themselves. Word2vec-style relations are properties of a learned vector space and its objective, not of the integer vocabulary labels. Arbitrarily permuting IDs leaves the symbolic sequence unchanged if the embedding lookup is permuted with it.
+E0 使用整窗 fixed-interval RTS smoother；fNIRS 的晚期观测可修正窗口早期的 driver。与其对齐的 full-window tokenizer 是 offline contextual representation。
 
-Second, an LLM may learn useful contextual geometry even when its input IDs are nominal, because the embedding table and Transformer are optimized jointly by sequence prediction. Our current downstream path breaks the stronger transfer interpretation when it replaces tokenizer prototypes with fresh `nn.Embedding` parameters: it retains category and transition identity, but initially discards the tokenizer codebook geometry.
+它可用于：
 
-Third, a biosignal tokenizer cannot assume that word-like units already exist. The patch boundary, encoder objective, quantizer, and contextual objective jointly determine what becomes a symbol. Therefore the correct analogy is not “physiological token ID equals word”; it is “a learned physiological symbol plus its prototype and context state can play the interface role that a subword token plays in a language model.”
+- 离线状态发现；
+- 整窗条件关联；
+- 表示与 teacher 的一致性分析。
 
-## 🧪 Why reconstruction is necessary but insufficient
+它不可直接用于：
 
-Reconstruction and semantic learning answer different questions:
+- 在线预测；
+- “过去 EEG 预测未来 fNIRS”的因果措辞；
+- 不标注 receptive field 的 Granger-like 解释。
 
-| Objective | What it rewards | What it does not guarantee |
+需要未来预测证书时，首版可只汇总已经完整结束、且通过语义门的双向 token 窗口；也可另建只看过去的 causal token，但新版本必须重过语义门。两者都要按原始 record 的绝对时间证明整个 receptive field（含预处理支持和 embargo）早于 endpoint，并确保 target construction 也不把未来 endpoint 泄漏回 token。
+
+## 🧪 反事实 teacher 控制
+
+真实配对的 candidate joint teacher 必须与至少三类同复杂度目标比较：
+
+1. EEG-only \(R^E\)：检验 joint correction 是否真正有作用；
+2. 在构造 teacher 前破坏 fNIRS 配对/时延的 \(R^{J,\pi}\)：检验共同 task phase 是否足以解释结果；
+3. 频谱、平滑度和条件均值匹配的 pseudo-target：检验模型是否只是编码低频模板。
+
+\(R^E\) 不是独立重拟合的另一个模型：它必须与 \(R^J\) 共用 R1-P 参数、EEG projection、anchor、gauge、sample 和时间坐标，只移除 fNIRS observation update；\(\delta^F=R^J-R^E\) 使用两者 pointwise support 交集。否则所谓 joint correction 会混入参数与坐标差异。
+
+若 registered candidate teacher 不优于这些控制，只能声明模型重建了平滑或任务锁定坐标，不能声明物理目标特异性。
+
+## 💾 private representation 的理论角色
+
+continuous private branch 是 teacher misspecification 的可选保险，而不是被命名即成立的生理本体。它只在 semantic-only 模型已通过、但存在明确的信息保留缺口时引入。
+
+private branch 的存在不证明其中是“噪声”“个体差异”或“模态特异生理”。这些解释必须由外部 probe 建立。若它没有改善预注册 retention，或侵蚀 semantic endpoint，则按简洁性原则删除。
+
+## 🧊 K=128 的解释
+
+`K=128` 是此前预实验和 E1 工程健康审计后冻结的容量预算。E1 证明在该容量下量化器可训练、占用可保持；它没有证明：
+
+- 128 是最优 K；
+- 存在 128 个真实生理状态；
+- 所有码必须均匀使用；
+- 占用率高意味着 semantic 或 coupling 成立。
+
+codebook health、prototype semantics 和 coupling evidence 是三个正交 gate。
+
+## 🧩 复杂性分类
+
+| 类型 | 例子 | 处理 |
 | --- | --- | --- |
-| Raw/spectral reconstruction | High-fidelity local signal content | Task relevance, physical state identity, cross-subject stability |
-| Physical-state/prototype supervision | Codeword organization by teacher-defined state | Retention of all private/task information |
-| Masked state/token prediction | Predictive temporal and spatial grammar | Correct physiological interpretation without grounded targets |
-| Cross-modal sequence prediction | Statistical conditional structure | Causal neurovascular coupling or freedom from marginals |
-| Supervised task loss | Label utility on the selected distribution | General physiology or transfer to unseen tasks |
+| 物理必要复杂性 | 双模态 encoder、采样率、HbO/HbR、时延、整窗上下文 | 保留 |
+| 优化补偿复杂性 | same-ID、orthogonality、多 balance loss、多离散 branch | 默认删除 |
+| 证据必要复杂性 | cross-fit、subject holdout、null、development nested evaluation、protected boundary | 加强 |
 
-Raw reconstruction therefore remains an auxiliary information-preservation objective, not the definition of semantic success. The target architecture combines state/prototype supervision with masked contextual learning and a residual path because no single objective spans interpretability, fidelity, and task utility.
+一个新组件只有在回答已命名失败、产生外部可观察预测、具有独立 ablation、带 stop rule 且不进入最终自证 endpoint 时，才获得进入主线的资格。
 
-## 🧩 Relation to LaBraM and NeuroRVQ
+## 🔐 主张阶梯
 
-LaBraM trains a vector-quantized neural-spectrum tokenizer on EEG channel patches, freezes it, and pretrains a Transformer to predict masked neural codes.[^4] NeuroRVQ targets a different bottleneck: multi-scale feature extraction, hierarchical residual VQ, and phase/amplitude-aware reconstruction improve high-frequency fidelity and compression before masked generative modeling.[^5]
-
-| Design axis | LaBraM | NeuroRVQ | Approved EEG–fNIRS target |
-| --- | --- | --- | --- |
-| Primary modality | EEG | EEG, with broader biosignal motivation | Separate EEG and paired-optical fNIRS |
-| Temporal resolution | Primarily fixed channel patches | Explicit multi-scale patches | Initially fixed 2-second grid; multi-scale is a later ablation |
-| Quantization | Single VQ neural codes | Hierarchical residual VQ | One semantic VQ plus continuous private residual first |
-| Tokenizer target | Neural-spectrum prediction | Phase/amplitude-aware high-fidelity reconstruction | Uncertainty-aware physical state and prototype semantics plus reconstruction |
-| Context objective | Masked neural-code prediction | Generative masked token modeling | Masked physical state/token context and frozen cross-modal distribution prediction |
-| Cross-modal claim | Not an EEG–fNIRS correspondence model | Multimodal integration is a motivation, not demonstrated EEG–fNIRS coupling | Explicitly tests EEG-history incremental prediction of fNIRS distributions |
-| Primary success criterion | Transfer across EEG tasks | Reconstruction/generation and downstream EEG performance | State semantics, information retention, controlled coupling, then downstream utility |
-
-The redesign adopts their separation between tokenizer training and contextual pretraining, but changes the semantic target. It postpones RVQ because adding multiple residual codebooks before the physical-state branch is validated would confound two failures: inadequate semantic organization and insufficient bitrate. NeuroRVQ-style multi-scale RVQ remains a justified E3/E4 extension if the continuous-residual baseline shows that high-frequency or multi-scale information is the remaining bottleneck.
-
-## 🔗 Why EEG and fNIRS tokens can align
-
-### Complementary states, not identical states
-
-EEG and fNIRS observe different coordinates and timescales. EEG tokens should primarily cover neural/electrical states; fNIRS tokens should cover hemodynamic states. Their relationship is:
-
-\[
-p(K_t^F\mid K_{t-L:t}^E)
-=
-\int p(K_t^F\mid H_t)
-p(H_t\mid R_{t-L:t},S_{t-L:t})
-p(R_{t-L:t},S_{t-L:t}\mid K_{t-L:t}^E)
-\,dR\,dS\,dH
-\]
-
-This integral explains why the expected mapping is one EEG sequence to a distribution over future fNIRS tokens.
-
-### Physiological signatures
-
-Each EEG codeword receives a teacher signature:
-
-\[
-\mu_i^E=E[(R,S)\mid K^E=i]
-\]
-
-Each fNIRS codeword receives:
-
-\[
-\mu_j^F=E[(\delta f,\delta HbO,\delta Hb)\mid K^F=j]
-\]
-
-The physical teacher defines the dynamics connecting these two signature spaces. Stable correspondence means that a sequence of EEG signatures yields a reproducible conditional distribution over fNIRS signatures after controlling history and marginals. It does not mean `i = j`.
-
-### Incremental evidence
-
-Let `H_t^F` denote available fNIRS history and nuisance controls. The physiological-coupling statistic is:
-
-\[
-\Delta\ell_t=
-\log p(K_t^F\mid K_{t-L:t}^E,H_t^F)
--\log p(K_t^F\mid H_t^F)
-\]
-
-A positive global mean is insufficient. Evidence must be positive on held-out subjects and remain positive within prespecified dataset/task scopes. Time-shift and spatial-null controls must remove the gain.
-
-### Preserve, discover, certify
-
-Discrete tokenization is lossy. If tokenizer objectives never test delayed
-cross-modal predictability, foundation pretraining cannot recover coupling
-information that the codebooks have already discarded. Conversely, forcing a
-complete EEG-sequence-to-fNIRS mapping into fixed codeword identities would
-collapse context-dependent dynamics into the tokenizer and risk encoding the
-teacher's assumptions as the result.
-
-The scientific responsibility is therefore divided as follows:
-
-| Stage | Responsibility | Not sufficient for |
-| --- | --- | --- |
-| Tokenizer | Preserve local physiological signatures, private information, and broad delayed EEG-to-fNIRS predictive information | Discovering the final contextual law or proving coupling |
-| Foundation model | Learn multi-horizon, context-dependent sequence organization with explicit fNIRS-history baseline and EEG-incremental objectives | Serving as its own unbiased certificate |
-| Frozen evaluator | Estimate held-out `q_1-q_0` gain with nuisance and null controls | Changing token identity or rescuing a lossy tokenizer |
-
-The training-only preservation shaper is intentionally asymmetric. Its
-coupling gradient reaches the EEG semantic tokenizer, while the future fNIRS
-target, fNIRS tokenizer, fNIRS-history baseline, and joint teacher are
-detached. This tests information preservation without allowing both sides to
-collude. A new frozen or cross-fitted evaluator is required after model
-selection.
-
-## ⚙️ How an optional target can change semantics
-
-### Waveform target versus state target
-
-The current cache pathway supervises decoded waveforms:
-
-\[
-\hat X_{src}^m\approx X_{src,PF}^m
-\]
-
-This strongly constrains the decoder output but leaves many latent/codebook organizations equivalent. A flexible decoder can reconstruct the PF waveform even when codeword identity has no stable physical meaning.
-
-A validated auxiliary target may add:
-
-\[
-G_m(e_{K_t^m})\approx \mu_t^m
-\]
-
-which constrains each prototype to cover a target-defined region. This can be stronger at the semantic bottleneck, but the interpretation is scoped to target family `j` and is not an architecture-level truth.
-
-| Property | Reconstruction/self-supervision | Optional target supervision | Target decision |
-| --- | --- | --- | --- |
-| Supervised object | Measured EEG/fNIRS or masked/context objective | Family-specific signature and optional uncertainty | Use only targets admitted for the named experiment |
-| Where constraint acts | Mainly decoder output | Continuous semantic latent and codebook prototype | Constrain the bottleneck explicitly |
-| Constraint dimensionality | High-dimensional and pointwise | Low-dimensional and structured | State target is weaker on samples, stronger on meaning |
-| Equivalent latent solutions | Many rotations/code permutations can reconstruct equally | Fewer solutions if prototypes must decode the same state coordinates | Measure prototype/state stability across seeds |
-| Treatment of inverse uncertainty | Hidden in one cached estimate | Uniform standardized loss by default; calibrated covariance is an explicit later mode | Do not convert uncalibrated confidence into gradient scale |
-| Misspecification risk | Forces the teacher waveform decomposition into the decoder | Can over-organize tokens around an incorrect physical model | Preserve residual and compare shuffled/self-supervised controls |
-| Physiological claim supported alone | Clean-component reconstruction only | Teacher-defined state-region discretization after validation | Neither alone proves causal coupling |
-
-An auxiliary target is therefore not “stronger” in every sense. It is more prescriptive about selected semantic coordinates and can be actively harmful when misspecified. The teacher-free measurement objective is the mainline; hybrid objectives are named ablations until their scoped gates pass.
-
-### Uncertainty weighting
-
-When calibrated, target uncertainty defines which examples should strongly organize the codebook:
-
-\[
-\mathcal L_{state}^m=
-(\hat u_t^m-\mu_t^m)^\top
-(\Sigma_t^m+\epsilon I)^{-1}
-(\hat u_t^m-\mu_t^m)
-\]
-
-Low-confidence targets receive weaker influence. Uncalibrated uncertainty cannot be used merely because a covariance field exists.
-
-For the accepted adaptive physical teacher, the default is
-coordinate-standardized, uniform weighting. The equation above becomes active
-only after coverage and ranking calibration pass for the exact coordinate and
-entrance. A posterior variance field is otherwise diagnostic metadata, not a
-training weight.
-
-### Privileged-information boundary
-
-An optional joint target generator may use EEG and fNIRS during training. The modality student must use only its own input. This is privileged-information distillation, not cross-modal inference leakage, provided that:
-
-1. teacher outputs are stop-gradient;
-2. EEG and fNIRS students have independent forward paths;
-3. coupling evaluation uses independently produced tokens;
-4. teacher targets and hyperparameters are fitted without test-subject information.
-
-The full joint teacher posterior need not be recoverable from either modality
-alone. Requiring that property would replace the intended multimodal-consensus
-estimand with a single-modality translation estimand. The distinction is:
-
-| Question | Required evidence |
+| 若该层级通过 | 通过后允许表述 |
 | --- | --- |
-| May the accepted joint physical teacher supervise a tokenizer experiment? | Complete E0 pass, stable train-only target generation, declared gauge/support, target observability, and non-degenerate finite-vocabulary geometry |
-| Are all physical-teacher parameters uniquely recovered? | Parameter/state identifiability and competing-model controls; E0 acceptance alone is insufficient |
-| Does EEG contain incremental information about future fNIRS tokens? | Frozen independently generated tokens, fNIRS-history/marginal controls, subject holdout, and time/spatial nulls |
+| R2 | 本模态 raw signal 对 joint-driver proxy 具有 held-out 可实现性 |
+| R3 | 固定 K128 hard token 保留该 proxy 的信息 |
+| R5 | 独立 codebook 形成可重复的 driver-grounded prototype |
+| R6A | 双向整窗 token 在 development 数据上具有受控的离线时延条件关联 |
+| R6B | receptive field 截止于 endpoint 之前的 EEG 表示在 development 数据上增加窗外未来 fNIRS 信息 |
+| R7 | 预先冻结且满足相应时间合同的结论在一次性 protected cohort 上确认 |
 
-Consequently, poor EEG-only reconstruction of the teacher's complete fNIRS
-trajectory is a translation/identifiability diagnostic, not an automatic veto
-of a joint privileged teacher. It remains decisive only for claims that require
-EEG-only recovery.
+即使 R7 通过，也根据实际 temporal scope 写“offline delayed conditional correspondence”或“out-of-window incremental predictive information”，不写“发现因果神经血管机制”。
 
-## 🔍 Identifiability and competing explanations
+## 📚 方法论命题
 
-### Shared/private non-identifiability
+1. 压缩不创造信息。
+2. 重建误差不自动定义语义。
+3. branch 名称不构成 latent identification。
+4. token ID 是名义地址。
+5. 共同 teacher 产生 grounded alignment，不自动产生 coupling evidence。
+6. 共现必须来自独立推理，不能由 same-ID、pair loss 或 feature exchange直接写入。
+7. coupling 是超过 fNIRS history、marginal、task/phase 和 null 的增量命题。
+8. teacher 不能认证自身。
+9. codebook health、semantic validity 和 coupling evidence 不可替代。
+10. 数据、mask、channel 与 target coverage 共同定义 estimand。
+11. 负结果应缩小假设空间，而不是默认增加 branch。
+12. 模型极简，证据严格。
 
-The decomposition:
+## 🔗 相关文档
 
-\[
-X^m=X_{semantic}^m+X_{residual}^m
-\]
-
-is not uniquely identified by reconstruction. Information can move between branches while preserving the sum. State supervision, bottleneck capacity, uncertainty, branch ablations, and nuisance probes reduce but do not eliminate this ambiguity.
-
-### Teacher misspecification
-
-The physical teacher can be wrong because of fixed parameters, local lead fields, optical Jacobians, noise assumptions, or an insufficient state dimension. The residual branch is therefore a scientific safeguard: it prevents teacher misspecification from forcing information deletion.
-
-### Dataset and source confounding
-
-If dataset source identifies task family, strong source prediction can masquerade as task representation. All task claims require within-dataset or otherwise nuisance-controlled tests. Combined-dataset global accuracy is secondary evidence.
-
-### Window-history mismatch
-
-The fNIRS response at the start of a crop can depend on EEG before the crop. Coupling losses must either supply sufficient history, use full-session context, or mask targets without visible causal support.
-
-## 📊 Falsifiable claims
-
-| Claim | Required observation | Observation that falsifies it |
-| --- | --- | --- |
-| Semantic tokens retain a registered signature | Prototype-to-signature error beats teacher-free and shuffled-target controls | No improvement or unstable signatures across seeds |
-| Residual preserves omitted information | Semantic plus residual recovers task/reconstruction information lost by hard ID | Residual adds no information or only source leakage |
-| EEG sequence predicts fNIRS response | Held-out incremental NLL gain over the matched fNIRS-history/marginal and nuisance-controlled baseline | Gain disappears under subject holdout or after source/history/marginal controls |
-| Correspondence is physiological | Gain peaks at plausible lags and is destroyed by time/spatial nulls | Gain survives nulls or follows dataset position only |
-| Tokens generalize | Registered signatures and task utility remain stable across subjects and seeds | Token matching is arbitrary and downstream gains are source-specific |
-| Paired optical input is informative | It improves teacher state confidence or downstream retention over highWL-only | No reproducible improvement under matched capacity |
-
-## 🔐 Allowed and prohibited paper language
-
-### Allowed after the corresponding gates pass
-
-- “We use a sign-calibrated, physiology-constrained adaptive SSM physical
-  teacher for independent EEG and fNIRS tokenizers.”
-- “The tokenizer discretizes teacher-defined neural and hemodynamic state regions.”
-- “EEG token sequences provide incremental held-out information about future fNIRS token distributions.”
-- “In a secondary analysis, coupling patterns differed across the examined task conditions.” This language requires direct uncertainty and confound-control evidence but is not a primary gate claim.
-- “Soft token posteriors and residual representations preserve information not available from hard IDs.”
-
-### Prohibited without additional causal evidence
-
-- “A specific EEG token causes a specific fNIRS token.”
-- “Equal token indices represent the same physiological state.”
-- “The residual branch contains only noise.”
-- “A non-uniform coupling heatmap proves neurovascular coupling.”
-- “Global mixed-dataset coupling is task-invariant.”
-
-## 🔗 References
-
-[^1]: Croce, P., Zappasodi, F., Merla, A., & Chiarelli, A. M. (2017). “Exploiting neurovascular coupling: a Bayesian sequential Monte Carlo approach applied to simulated EEG fNIRS data.” *Journal of Neural Engineering*. https://pubmed.ncbi.nlm.nih.gov/28504643/
-
-[^2]: Foumani, N. M., et al. (2024). “EEG2Rep: Enhancing Self-supervised EEG Representation Through Informative Masked Inputs.” https://arxiv.org/abs/2402.17772
-
-[^3]: Baevski, A., et al. (2022). “data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language.” *Proceedings of Machine Learning Research*. https://proceedings.mlr.press/v162/baevski22a.html
-
-[^4]: Jiang, W.-B., Zhao, L.-M., & Lu, B.-L. (2024). “Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI.” https://arxiv.org/abs/2405.18765
-
-[^5]: Barmpas, K., et al. (2025). “NeuroRVQ: Multi-Scale EEG Tokenization for Generative Large Brainwave Models.” https://arxiv.org/abs/2510.13068
-
-_Last updated: 2026-07-19_
+- [目标架构](02_TARGET_ARCHITECTURE.md)
+- [R 系列实验设计](05_EXPERIMENT_DESIGN.md)
+- [架构回归与方法启示](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md)

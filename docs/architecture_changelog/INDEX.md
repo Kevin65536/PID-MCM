@@ -2,7 +2,7 @@
 
 > The authoritative chronological record of every architectural change to the neuro-tokenization mainline.
 > Current architecture state: [ARCHITECTURE.md](../ARCHITECTURE.md)
-> Approved target architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Proposed target architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
 > Target implementation plan: [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
 
 ---
@@ -41,8 +41,9 @@ gantt
         E0 gate + full trainer             :milestone, 2026-07-03, 0d
         E0-v2 teacher contract audit       :milestone, 2026-07-03, 0d
         Measurement-first input revision   :milestone, 2026-07-14, 0d
-        Teacher gradient-entry runtime     :active, 2026-07-19, 2d
+        Teacher gradient-entry plan        :done, 2026-07-19, 5d
         E1 occupancy contract restoration  :done, 2026-07-20, 1d
+        Shared-driver semantic return      :milestone, 2026-07-25, 0d
 ```
 
 ## Change Records
@@ -60,9 +61,10 @@ gantt
 | 9 | 2026-07-03 | Phase 3 E0/P4 | [E0 Gate and Physiology-Semantic Training Runtime](2026-07-03_e0_gate_and_training_runtime.md) | E0 posterior-predictive gate, full trainer, objective-specific authorization, resume | Historical pre-calibration record; superseded |
 | 10 | 2026-07-03 | Phase 3 E0-v2/P3-P4 | [E0-v2 Teacher Information Contract and Validity-Mask Split](2026-07-03_e0_v2_teacher_information_contract.md) | measurement adapter, split teacher masks, layered metrics, visual audit | Historical pre-calibration record; superseded |
 | 11 | 2026-07-14 | Phase 3 input contract | [Measurement-first Input Contract and Optional Teacher Boundary](2026-07-14_measurement_first_input_contract.md) | unified loader, target architecture, experiment matrix, registry | Merged |
-| 12 | 2026-07-19 | Phase 3 coupling architecture | [Physical-Teacher Gradient Entries and Coupling Stages](2026-07-19_physical_teacher_gradient_entry_and_coupling_stages.md) | measurement-local adapter, entry router, masked EMA VQ, preservation/foundation/certificate plan | In Progress |
+| 12 | 2026-07-19 | Phase 3 coupling architecture | [Physical-Teacher Gradient Entries and Coupling Stages](2026-07-19_physical_teacher_gradient_entry_and_coupling_stages.md) | measurement-local adapter, entry router, masked EMA VQ, preservation/foundation/certificate plan | Superseded historical plan |
 | 13 | 2026-07-20 | Phase 3 E1/P2 | [E1 Codebook Occupancy Contract Restoration](2026-07-20_e1_codebook_occupancy_contract_restoration.md) | Fixed-K=128 EMA VQ, gradient-preserving balance, bounded diverse revival, multi-seed retention gate v2 | Complete — G1 passed |
 | 14 | 2026-07-24 | Phase 3 E0 final | [Sign-calibrated physical-teacher acceptance](../physiology_semantic_tokenizer/analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md) | adaptive SSM, gauge/sign calibration, fNIRS status correction | Complete — full E0 passed |
+| 15 | 2026-07-25 | Phase 4 architecture return | [Shared-Driver Semantic VQ architecture return](2026-07-25_shared_driver_semantic_return.md) | full-window raw-only encoders, independent K128, full-driver primary objective, frozen external certificate | Planned — R0–R7 not run |
 
 ## How to Add a New Entry
 
@@ -78,6 +80,6 @@ gantt
 
 - **File naming**: `YYYY-MM-DD_short_snake_case_title.md`
 - **Diagram format**: [Mermaid](https://mermaid.js.org/) — renders natively on GitHub
-- **Status values**: `Planned` → `In Progress` → `Merged`
+- **Status values**: `Planned` → `In Progress` → `Merged`/`Complete`; append a gate qualifier where necessary
 - **Git references**: Use short hashes (`abc1234..def5678`) or tags
 - **Link hygiene**: Use relative links to files within the repo; all file paths from repo root

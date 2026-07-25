@@ -1,6 +1,6 @@
 # Source-code authority map
 
-_Active, reusable, and compatibility boundaries as of 2026-07-02_
+_Active, reusable, and compatibility boundaries as of 2026-07-25_
 
 ---
 
@@ -33,10 +33,10 @@ flowchart LR
 | `data/` | Dataset registry, loaders, preprocessing, channel adjacency, and Croce cache adapter |
 | `inference/` | Neurovascular state-space inference reused by the physical teacher |
 | `tokenizers/` | Base interfaces, corrected EMA VQ, and independent physiology-semantic tokenizer branches |
-| `teachers/` | Stop-gradient physical-state patch teacher used only during training and audit |
-| `losses/` | Reconstruction, alignment, classification, and mask-aware physiology-semantic losses |
+| `teachers/` | Current stop-gradient patch teacher; planned full-trajectory sidecar must be added as a new schema |
+| `losses/` | Current reconstruction/routed losses; planned shared-driver trajectory objective is not yet implemented |
 | `metrics/` | Reconstruction and codebook-health metrics |
-| `foundation/` | Whole-brain consumers for hard, checkpoint-codebook, soft, and semantic-plus-residual modes |
+| `foundation/` | Existing whole-brain consumers; a foundation model is not required by the new minimal architecture |
 | `utils/` | Logging, checkpoint, launch, and I/O infrastructure |
 | `visualization/` | Generic tokenizer, classifier, TensorBoard, and gradient utilities |
 
@@ -48,6 +48,13 @@ flowchart LR
 
 ## 🧪 Implementation placement
 
-The active target now includes the strict `CrocePhysiologySemanticDataset`, corrected EMA quantizer, physical teacher adapter, independent modality tokenizer, gated trainer, and P5 exporter/consumers. These modules are admitted as software-correct interfaces only and do not promote the target architecture before the corresponding scientific gates pass. Do not rename compatibility classes into the active namespace or use archived registry aliases as target config types.
+The current active runtime includes the strict measured-data loader, corrected
+EMA quantizer, physical teacher adapter, independent modality tokenizer, gated
+trainer, and exporter/consumers. The proposed SD-SVQ generation requires a
+full-trajectory sidecar, modality-only full-window encoder, shared driver
+decoder, R6A offline evaluator, and optional strict-cutoff R6B evaluator. These
+must be introduced behind new interfaces and only promoted after R2-P/R3-P. Do not rename compatibility classes
+into the active namespace or use archived registry aliases as target config
+types.
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-07-25_

@@ -2,6 +2,13 @@
 
 _2026-07-24 · development-only · protected subjects 24–29 保持关闭_
 
+> **2026-07-25 口径更正：** 本冻结报告早于 total-loader coverage、
+> teacher-sidecar coverage 与 frozen-probe support 的分母拆分。历史
+> `178/500` EEG 数量是 probe support；teacher state/prototype loss 因未与
+> signal-valid mask 相交，实际使用了 500 个 target patches。当前 artifact
+> validity policy 也已改变。复用 E2 结论前必须同时阅读
+> [更正与架构回归决定](20260725_E2_FAILURE_MODE_CORRIGENDUM_AND_RETURN_DECISION.md)。
+
 ## 结论
 
 本轮复核支持上一轮结论，正式决策仍为：

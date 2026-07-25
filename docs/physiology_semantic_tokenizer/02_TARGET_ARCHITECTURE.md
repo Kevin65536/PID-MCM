@@ -1,354 +1,288 @@
-# Target architecture: physiology-semantic multimodal tokenizer
+# 目标架构：Shared-Driver Semantic VQ
 
-_Revised architecture contract; measurement-first input boundary approved 2026-07-14_
+_设计冻结：2026-07-25；状态：拟实现的 R 系列 after-state，不代表当前 runtime_
 
 ---
 
-## 📋 Architecture status
+## 📋 架构决定
 
-This document specifies the target architecture that replaces reconstruction-centered source-token coupling. It is a forward contract for code changes and experiments, not a description of the current runtime. The 2026-07-14 revision removes the earlier assumption that a Croce-2017 five-state decomposition or one shared neural driver defines the model input or the meaning of every token.
+目标架构简称 **SD-SVQ**（Shared-Driver Semantic Vector Quantization）。它使用两个彼此独立、仅接收本模态原始生理测量的 tokenizer，并让两个 semantic codebook 都以 E0 的完整联合共享驱动代理轨迹 \(r^J\) 为主要训练目标。训练完成后冻结 tokenizer，再按主张选择 R6A 离线时延条件关联和/或独立的 R6B 窗外预测；后者要求显式时间截断保证表示 receptive field 早于 endpoint。
 
-The maintained current-runtime SVG and its implementation-status legend are available in [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md). The SVG is generated from a versioned JSON specification and must accompany future modification plans through a plan-specific change overlay.
+当前可运行代码、E2 runtime 和本设计必须区分：
 
-The current revision is annotated against that runtime diagram in the
-[`measurement-first input-contract plan SVG`](figures/plans/measurement_first_input_contract_plan.svg).
+| 对象 | 权威状态 |
+| --- | --- |
+| 当前已实现软件 | [当前架构](../ARCHITECTURE.md) 与 canonical runtime SVG |
+| E0–E2 结果 | [实验日志](06_EXPERIMENT_LOG.md)，历史合同不改写 |
+| 拟实现架构 | 本文与 [shared-driver plan SVG](figures/plans/shared_driver_semantic_return_plan.svg) |
+| 实施顺序 | [实现与验证计划](04_IMPLEMENTATION_VALIDATION_PLAN.md) |
+| 科学实验与 stop rules | [R 系列实验设计](05_EXPERIMENT_DESIGN.md) |
 
-The target has four separable layers:
+本设计只有在 P1–P5 代码与测试、R1-P population-frozen teacher panel 及 development rows 的 100% coverage、R2
+R2-P continuous observability 和 R3-P development semantic gate 全部通过后，才可升级为当前架构；protected coverage 只能在一次性开启后核验。
 
-1. a mandatory, provenance-preserving **unified measurement loader**;
-2. independent EEG and fNIRS **semantic tokenizers**;
-3. modality-private **residual representations** for information preservation;
-4. optional, replaceable **auxiliary teachers** plus a frozen-token sequence/downstream layer.
+## 🔒 不可妥协的约束
 
-## 🎯 Non-negotiable invariants
+1. EEG encoder 只接收冻结预处理合同下的 measured EEG 与 boundary/finite 计算 mask。
+2. fNIRS encoder 只接收冻结预处理合同下的 measured HbO/HbR 与 boundary/finite 计算 mask。
+3. task、subject、trial phase、nuisance、teacher state 和另一模态不得进入 tokenizer。
+4. EEG 与 fNIRS 使用独立 codebook；不共享参数，不匹配 ID。
+5. 两侧 semantic codebook 均固定为 `K=128, D=64`。这是预先指定的容量预算，不称为已证明的最优状态数。
+6. semantic branch 的主要目标是完整 \(r^J\) 轨迹，不再使用 E2 的 mean/slope 多入口辅助目标。
+7. semantic branch 不承担原始信号重建。
+8. 不在 tokenizer 训练中加入 InfoNCE、co-occurrence、index matching、cross-attention 或 coupling loss。
+9. 生理耦合只在 token 冻结后，用未参与训练塑形的原始 fNIRS endpoint 检验；temporal scope 决定只能声明离线关联还是窗外预测。
+10. protected subjects `24–29` 在架构、配置、endpoint 和 evaluator 冻结前保持关闭。
 
-| Invariant | Required behavior | Prohibited shortcut |
-| --- | --- | --- |
-| Independent inference | EEG tokens use EEG only; fNIRS tokens use fNIRS only | Feeding EEG features into the fNIRS tokenizer in the mainline |
-| Measurement-first input | Tokenizers receive measured EEG or fNIRS plus masks/metadata | Requiring a Croce state, source/observation split, or shared driver as model input |
-| Evidence-defined semantics | Codeword meaning is established by held-out probes and interventions | Declaring a teacher coordinate to be token truth before validation |
-| Structured output | Return ID, posterior, prototype embedding, and residual | Exporting only hard IDs |
-| Delayed correspondence | Model EEG sequence to future fNIRS distribution | Forcing equal indices or diagonal alignment |
-| Incremental coupling | Compare against fNIRS history and lag marginals | Interpreting raw conditional probability as EEG evidence |
-| Optional teacher boundary | Every auxiliary target is named, replaceable, masked, and stop-gradient | Making one teacher family a prerequisite for all experiments |
-| Provenance-preserving normalization | Preserve native measurement family and reversible transform metadata | Claiming that numerical standardization makes physical units identical |
-| Paired chromophore mainline | Use canonical HbO/HbR components where available | Calling highWL-only input a complete hemodynamic representation |
-
-## 🏗️ Component architecture
+## 🏗️ 最小架构
 
 ```mermaid
 flowchart LR
-    accTitle: Physiology semantic tokenizer architecture
-    accDescr: The target architecture uses one unified measurement loader, independent modality semantic tokenizers, optional replaceable teachers, private residual paths, and frozen sequence models.
+    accTitle: Shared-Driver Semantic VQ 目标架构
+    accDescr: EEG 和 fNIRS 原始测量分别进入独立的整窗时序编码器和 K128 量化器，共用一个只在训练期使用的联合共享驱动代理轨迹目标；冻结后 R6A 离线关联与 R6B completed-window 预测是按主张选择的独立分支。
 
-    subgraph data_layer ["Mandatory measurement boundary"]
-        raw_records["Four original datasets"] --> unified_loader["UnifiedPhysiologyWindowDataset"]
-        unified_loader --> eeg_signal["EEG context + mask + geometry"]
-        unified_loader --> fnirs_signal["HbO/HbR context + mask + geometry"]
+    subgraph inputs["推理期输入"]
+        eeg["原始 EEG<br/>20 s · 6 local channels"]
+        fnirs["原始 HbO/HbR<br/>20 s · paired anchor"]
+        masks["boundary / finite mask<br/>不含 nuisance token"]
     end
 
-    subgraph tokenizer_layer ["Independent tokenizers"]
-        eeg_signal --> eeg_encoder["EEG encoder"] --> eeg_semantic["EEG semantic VQ"]
-        fnirs_signal --> fnirs_encoder["fNIRS encoder"] --> fnirs_semantic["fNIRS semantic VQ"]
-        eeg_encoder --> eeg_residual["EEG residual latent"]
-        fnirs_encoder --> fnirs_residual["fNIRS residual latent"]
+    subgraph eeg_path["EEG 独立路径"]
+        eeg_patch["10 × 2 s patch stem"]
+        eeg_context["EEG full-window encoder"]
+        eeg_latent["10 × D64 semantic latent"]
+        eeg_vq["EEG EMA VQ<br/>K=128 · D=64"]
     end
 
-    subgraph auxiliary_layer ["Optional auxiliary targets"]
-        teacher_bank["Self-supervised, task, dynamical, or physics teacher"] --> auxiliary_targets["Named targets + uncertainty + masks"]
-    end
-    auxiliary_targets -.-> eeg_semantic
-    auxiliary_targets -.-> fnirs_semantic
-
-    subgraph sequence_layer ["Frozen sequence models"]
-        eeg_semantic --> coupling_head["EEG sequence to fNIRS distribution"]
-        fnirs_semantic --> coupling_head
-        eeg_semantic --> wholebrain_model["Whole-brain backbone"]
-        fnirs_semantic --> wholebrain_model
-        eeg_residual --> wholebrain_model
-        fnirs_residual --> wholebrain_model
+    subgraph fnirs_path["fNIRS 独立路径"]
+        fnirs_patch["10 × 2 s patch stem"]
+        fnirs_context["fNIRS full-window encoder"]
+        fnirs_latent["10 × D64 semantic latent"]
+        fnirs_vq["fNIRS EMA VQ<br/>K=128 · D=64"]
     end
 
-    classDef data fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-    classDef teacher fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
-    classDef tokenizer fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-    classDef residual fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-    classDef sequence fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
+    subgraph privileged["仅训练期的特权坐标"]
+        joint_teacher["R1-D / R1-P 联合 SSM<br/>完整共享驱动代理 rJ"]
+        target_split["10 × 2 s 轨迹目标<br/>每段 20 samples @ 10 Hz"]
+        driver_decoder["共享 driver decoder Dr"]
+        loss["完整轨迹损失 + VQ"]
+    end
 
-    class raw_records,unified_loader data
-    class teacher_bank,auxiliary_targets teacher
-    class eeg_signal,eeg_encoder,eeg_semantic,fnirs_signal,fnirs_encoder,fnirs_semantic tokenizer
-    class eeg_residual,fnirs_residual residual
-    class coupling_head,wholebrain_model sequence
+    subgraph evaluation["冻结后外部评估"]
+        export["IDs · posterior · vectors<br/>continuous · masks · provenance"]
+        offline["R6A：双向整窗 token<br/>离线时延条件关联 + nulls"]
+        cutoff["R6B：completed-window cutoff<br/>absolute RF + embargo < endpoint"]
+        future["窗外未来 raw fNIRS<br/>q1 − q0 + nulls"]
+    end
+
+    eeg --> eeg_patch --> eeg_context --> eeg_latent --> eeg_vq
+    fnirs --> fnirs_patch --> fnirs_context --> fnirs_latent --> fnirs_vq
+    masks --> eeg_vq
+    masks --> fnirs_vq
+    masks --> eeg_context
+    masks --> fnirs_context
+    masks --> loss
+
+    joint_teacher --> target_split --> loss
+    eeg_vq --> driver_decoder --> loss
+    fnirs_vq --> driver_decoder
+
+    eeg_vq --> export
+    fnirs_vq --> export
+    export --> offline
+    export --> cutoff --> future
+
+    classDef measured fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef model fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef teacher fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef evaluationClass fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class eeg,fnirs,masks measured
+    class eeg_patch,eeg_context,eeg_latent,eeg_vq,fnirs_patch,fnirs_context,fnirs_latent,fnirs_vq model
+    class joint_teacher,target_split,driver_decoder,loss teacher
+    class export,offline,cutoff,future evaluationClass
 ```
 
-## 📥 Measurement input and auxiliary-target contracts
+## 📥 数据与时间合同
 
-### Mandatory unified measurement window
+每个样本沿用统一 20 秒窗口和一个 fNIRS spatial anchor：
 
-Every newly planned E0–E9 experiment reads the four original datasets through `UnifiedPhysiologyWindowDataset`. `croce_local_cache` is a derived supervision artifact and is never counted as a dataset or used as the default signal entrance.
-
-The default event-anchored observation context is **20 seconds**. This is long enough to include a meaningful part of the slow hemodynamic response and matches the existing pilot configuration family; it does not fully resolve the 0.01 Hz filter edge, so spectral-quality estimation must use record-level segments of at least 100 seconds. The model may subdivide a 20-second context into ten two-second patches, but patch duration is an encoder choice rather than a loader constraint.
-
-| Field | Shape or type | Contract |
-| --- | ---: | --- |
-| `eeg` | `[B,C_E,4000]` | 200 Hz, canonical numerical coordinate; channel count remains dataset/record specific |
-| `fnirs` | `[B,C_F,200]` | 10 Hz, interleaved canonical HbO/HbR components |
-| `valid_mask.eeg` | `[B,4000]` | False for boundary padding or rejected support |
-| `valid_mask.fnirs` | `[B,200]` | False for boundary padding or rejected support |
-| `alignment` | metadata | Separate EEG/fNIRS clocks, anchor times, offset and alignment case |
-| `label` | mapping | `canonical_task_label_v1`; task, condition, class and event role remain separate |
-| `channel_geometry` | row lists | `canonical_channel_geometry_v1` with missing coordinates retained explicitly |
-| preprocessing/provenance | metadata | Native unit/family, source path, transform and canonical preprocessing state |
-
-Numerical `robust_standard_deviation` units make amplitudes comparable for model optimization and quality checks; they do not assert that EEG voltage and chromophore concentration are the same physical quantity. Dataset, task, measurement family, channel identity and geometry are never discarded.
-
-### Optional auxiliary-target interface
-
-An experiment may attach a self-supervised target, task target, data-driven dynamical teacher, physics-regularized hybrid, or Croce-2017 diagnostic. Every such target uses the same generic sidecar:
-
-| Field | Meaning |
-| --- | --- |
-| `target_family` / `target_version` | Exact generating method and immutable version |
-| `target_value` | Family-specific tensor; no globally fixed five-state dimension |
-| `target_uncertainty` | Optional calibrated uncertainty, never assumed valid by presence alone |
-| `target_valid_mask` | Receptive-field, solver and support validity |
-| `target_entry` | One of `local`, `prototype`, `context`, or `coupling`; never inferred from coordinate name |
-| `target_entry_mask` | Entry-specific support; a local mask cannot silently authorize a context/coupling loss |
-| `target_provenance` | Generator commit, parameters, source records and transform history |
-| `identifiability_scope` | Which modality, history and population can identify the target |
-
-No auxiliary target may change `eeg`, `fnirs`, event alignment, or tokenizer inference signatures. Croce `(s, delta_f, delta_hbo, delta_hb, r)`, clean means and source/observation decompositions remain admissible only as named ablation/diagnostic fields. A shared neural driver is a hypothesis to test against modality-private and delayed alternatives, not an input-contract invariant.
-
-### Joint privileged-teacher scope
-
-An optional teacher may condition jointly on paired EEG and fNIRS during
-offline target generation. This does not violate independent inference: the
-EEG and fNIRS students still receive only their own measured modality, and the
-teacher is detached and absent from tokenizer inference. E0 admission of such a
-teacher asks whether it yields stable, non-degenerate, learnable physiological
-supervision. The sign-calibrated adaptive SSM satisfies this requirement,
-passes complete E0, and is accepted as the physical teacher. Complete E0 does
-not require the full joint posterior to be independently recoverable from EEG
-alone or fNIRS alone.
-
-Independent single-modality recovery has a different role. It is required when
-claiming that a latent is independently identifiable from that modality, and
-independently generated student tokens are required for the later frozen
-EEG-history-to-fNIRS-distribution coupling evaluation. A joint teacher may
-organize both tokenizers as privileged information, but its own fused posterior
-is never used as evidence that coupling was independently discovered.
-
-### Adaptive physical-teacher routing contract
-
-The gauge/sign-corrected adaptive physical teacher uses an entry-specific
-target registry:
-
-| Entrance | Required coordinates | Optional/development coordinates | Excluded |
-| --- | --- | --- | --- |
-| EEG local/prototype | `r_mean`, `r_slope` | `s_mean`, `s_slope` | fNIRS states and fitted parameters |
-| fNIRS local/prototype | HbO/HbR mean and slope | None | `delta_f_mean`, `delta_f_slope` |
-| Intra-modal context | Future registered state/transition | Family-specific history targets after observability validation | Any target using future input |
-| Cross-modal preservation | Future flow innovation, with aligned HbO/HbR innovation safeguards | Multi-horizon variants | Direct teacher posterior as coupling evidence |
-
-The default loss uses train-fold standardized coordinates with uniform
-weights. Posterior covariance is stored for diagnostics but cannot provide
-inverse-variance weights until a separate calibration gate passes. Fitted SSM
-parameters never receive a semantic-loss entrance by default. The complete
-rationale is in
-[`analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md`](analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md).
-
-## 🧠 Semantic tokenizer contract
-
-### Recommended first formal dimensions
-
-| Component | Shape |
-| --- | ---: |
-| EEG encoder output | `[B, 10, 256]` |
-| fNIRS encoder output | `[B, 10, 160]` |
-| EEG semantic latent | `[B, 10, 64]` |
-| fNIRS semantic latent | `[B, 10, 64]` |
-| EEG semantic codebook | `[128, 64]` |
-| fNIRS semantic codebook | `[128, 64]` |
-| EEG/fNIRS posterior | `[B, 10, 128]` each |
-| EEG/fNIRS hard ID | `[B, 10]` each |
-| EEG/fNIRS expected embedding | `[B, 10, 64]` each |
-
-`D=64` remains a starting point rather than a consequence of a five-dimensional physical state. `D in {48, 64, 128}` remains a preregistered capacity ablation, and the residual path carries information that the discrete vocabulary does not preserve.
-
-### Token semantics
-
-The two vocabularies need not represent the same latent variables:
-
-| Vocabulary | Required evidence | Prohibited interpretation |
+| 张量 | 建议形状 | 说明 |
 | --- | --- | --- |
-| EEG semantic token | Reproducible EEG-local structure plus held-out task/physiology probe results | Automatically equating a token with Croce `r` or `s` |
-| fNIRS semantic token | Reproducible HbO/HbR-local and delayed temporal structure plus held-out probes | Automatically equating a token with Croce flow or hemoglobin states |
+| `eeg_raw` | `[B, 6, 4000]` | 200 Hz，六通道局部 EEG |
+| `fnirs_raw` | `[B, 2, 200]` | 10 Hz，paired HbO/HbR |
+| `valid_mask` | `[B, 10]` | 2 秒 patch 的 boundary/finite 有效性 |
+| `driver_target` | `[B, 10, 20]` | \(r^J\) 的十段完整轨迹 |
+| `eeg_only_driver_control` | `[B, 10, 20]` | 同 R1-P bundle 的 \(r^E\)，仅用于 control/common probe |
+| `teacher_mask` | `[B, 10]` | sidecar 支持且参数来自允许训练折 |
+| `target_point_valid_mask` | `[B, 10, 20]` | teacher 逐点 finite/support；不静默收缩成 patch 数 |
+| `eeg_only_point_valid_mask` | `[B, 10, 20]` | \(r^E\) point support；\(\delta^F\) 使用与 \(r^J\) 的交集 |
 
-Each codeword may have multiple decoded signatures:
-
-\[
-\mu_{k,j}^m = G_{m,j}(e_k^m),
-\]
-
-where `j` names a registered probe or auxiliary target family. Signature claims are family-specific and require held-out validation. Equal token indices across modalities have no privileged meaning, and failure of a Croce probe does not invalidate a teacher-free tokenizer that passes its own information and downstream gates.
-
-### Temporal context boundary
-
-Semantic token identity is patch-local: quantization of a two-second patch cannot depend on another patch or its absolute position inside a crop. Sequence context is modeled after quantization by a separate causal module. The 20-second loader context yields ten two-second tokens. History length is an experiment parameter; the existing five-token/ten-second history remains a baseline, while fNIRS experiments must compare longer histories within record support. Targets without complete declared history are masked, and context representations never replace exported tokenizer IDs.
-
-### Quantizer correctness requirements
-
-The target quantizer must:
-
-- maintain EMA for both cluster counts and codeword sums;
-- leave a codeword unchanged when it receives no current-batch assignments;
-- revive dead codes through an explicitly logged policy;
-- expose hard IDs, logits, normalized posterior, quantized embeddings, and codebook weights;
-- assert runtime codebook size and dimension against the resolved config;
-- report assignment entropy, active codes, effective rank, nearest-neighbor cosine, and prototype drift.
-
-Cosine-only assignment is an ablation. The mainline must preserve amplitude or log-power through either the semantic input, a side feature, or the residual branch.
-
-## 💾 Private and residual representation
-
-The private/residual branch preserves information that the discrete semantic branch cannot explain. It must not be called noise by default.
-
-The first formal experiment keeps residual latents continuous:
-
-| Branch | Suggested shape |
-| --- | ---: |
-| EEG residual latent | `[B, 10, 64]` |
-| fNIRS residual latent | `[B, 10, 32]` |
-
-RVQ or FSQ is introduced only after the semantic branch passes its registered semantic and information-retention gates. This isolates whether failures come from semantic organization or a second quantizer.
-
-The decoder contract is:
+模型有效 loss mask 必须显式计算为：
 
 \[
-\hat X^m = D_m(E[K^m],R^m)
+m^{\mathrm{loss}}_{b,t,u}
+=m^{\mathrm{valid}}_{b,t}
+\land m^{\mathrm{teacher}}_{b,t}
+\land m^{\mathrm{target\_point}}_{b,t,u}.
 \]
 
-with auxiliary semantic-only and residual-only reconstructions for attribution.
+encoder/VQ 只使用 patch-level `valid_mask`；trajectory loss、验证和所有 common probe 使用同一个 pointwise mask。任何 patch-level 汇总都必须报告其从 20 个 point support 得到的固定规则，不能静默改变分母。当前 EEG artifact mask 已退出有效性权威；信号质量可以作为敏感性分层变量，但不能在不同阶段静默改变样本总体。
 
-## ⚙️ Training objectives
+raw view 的通道和窗口选择必须在加入 sidecar 之前冻结。sidecar 只提供目标与 provenance，不得决定模型看到哪个 raw channel，也不得把 target-present 与 raw-view selection 绑定。
 
-### Tokenizer stage
+teacher-v2 分为两个不可混写的 provenance：
 
-The tokenizer objective is a registered combination of information-preserving and optional auxiliary terms:
+| 版本 | 参数来源 | 允许用途 |
+| --- | --- | --- |
+| `R1-D development_crossfit` | 可由同一 development subject 的其他 trial 拟合 | R2/R3 调试与探索；不支持被试外或 protected semantic claim |
+| `R1-P population_frozen` | `R1-P-dev` 在 `01–18` 拟合、对 `19–23` apply；设计冻结后 `R1-P-final` 在 `01–23` 拟合、对 protected 纯 apply | R2-P/R3-P subject-heldout gate 与 R7 的必要前提 |
+
+\(r^E\) 与 \(r^J\) 必须来自同一个 R1-P parameter/anchor/projection/gauge bundle；\(r^E\) 只移除 fNIRS observation update，不得单独重拟合，\(\delta^F=r^J-r^E\) 使用两者 pointwise support 交集。R1-P 是新 estimand，不能继承旧 E0 admission；进入 R2-P 前必须重新通过 population-frozen physical reconstruction、jointness、gauge stability、target observability 和非退化 correction panel。
+
+R1 阶段的 100% coverage 只针对已注册的 development cohort。protected rows 在开启前不得读取；其 coverage 只能在 R7 一次性开启后核验。
+
+## 🧠 整窗编码与神经时间对齐
+
+E2 的 patch-local encoder 与 teacher 的整窗 fixed-interval state 不匹配。SD-SVQ 先对 10 个 patch 形成 modality-specific sequence，再在量化前执行浅层 full-window temporal encoding：
 
 \[
-\mathcal L_{tok}=
-\lambda_{recon}\mathcal L_{recon}
-+\lambda_{vq}\mathcal L_{vq}
-+\lambda_{private}\mathcal L_{private}
-+\sum_j \lambda_j\mathcal L_{aux,j}.
+h_{1:10}^{(m)}
+=E_m\left(P_m(x_{1:T}^{(m)}),m^{\mathrm{valid}}\right).
 \]
 
-When auxiliary target `j` exposes calibrated uncertainty, its loss may be uncertainty weighted:
+量化仍输出十个 2 秒位置，而非单个 window token。fNIRS encoder 可通过整窗上下文利用延迟响应，但不能看 EEG。输出坐标对齐到 teacher 的神经时间 \(t\)，不是直接把同一观测时刻的 EEG/fNIRS patch 当作同步状态。
+
+首轮模型是离线 contextual tokenizer，因为 encoder 和 E0 RTS target 都可使用整窗。若 token 与 endpoint 来自同一 20 秒窗，文档和论文只能称其为 offline conditional association，不得称 causal/online/future prediction。首个 R6B 只使用已经通过 R2-P/R3-P/R5 的同一双向 tokenizer，但只汇总 cutoff 前**已经完整结束**的窗口；任何新 causal tokenizer 必须重新通过自己的门禁。
+
+## 🧊 独立量化合同
+
+两个量化器均使用当前已通过软件健康审计的 fixed-capacity EMA VQ：
+
+```text
+EEG:   K=128, D=64
+fNIRS: K=128, D=64
+```
+
+必须保留：
+
+- matched count/sum EMA；
+- invalid token 排除；
+- commitment gradient；
+- 训练期 dead-code 健康诊断与有界 revival；
+- hard ID、soft posterior、codebook vector 和 pre-VQ continuous latent 的并行导出；
+- 跨 seed 基于 decoded-driver prototype 的匹配。
+
+不得将“128 个条目全部均匀使用”设为 semantic success。有效生理状态可能少于 128；容量、实际使用数和稳定语义数是三个不同量。
+
+## 🎯 共享驱动目标
+
+同一个 decoder \(D_r\) 接受任一模态的 quantized vector，输出对应 2 秒的完整 \(r^J\)：
 
 \[
-\mathcal L_{aux,j}^m =
-(\hat u_{t,j}^m-\mu_{t,j}^m)^\top
-(\Sigma_{t,j}^m+\epsilon I)^{-1}
-(\hat u_{t,j}^m-\mu_{t,j}^m).
+\hat r_{t,1:20}^{J,(m)}=D_r(q_t^{(m)}),\quad
+\mathcal L_{\mathrm{driver}}
+=\frac{\sum_{m,t,u}m_{t,u}^{\mathrm{loss}}
+\rho(\hat r_{t,u}^{J,(m)},r_{t,u}^J)}
+{\sum_{m,t,u}m_{t,u}^{\mathrm{loss}}}.
 \]
 
-An auxiliary prototype or masked-target loss is enabled only after its target family passes modality- and receptive-field-specific validation. Reconstruction/self-supervision and residual attribution provide the teacher-free mainline. No loss is enabled merely because a field exists in a Croce cache.
-
-For the adaptive physical teacher, local, prototype, context, and coupling-preservation
-terms have separate coordinate registries, masks, and weights. The
-training-only coupling shaper predicts future registered fNIRS innovations
-from EEG token history conditional on a detached fNIRS-history baseline. Its
-gradient allowlist ends at the EEG semantic tokenizer; the fNIRS tokenizer,
-target, baseline, and teacher are stop-gradient. This shaper is discarded after
-tokenizer training and cannot serve as the final coupling evaluator.
-
-### Coupling stage
-
-Coupling has three deliberately separated stages:
-
-1. tokenizer training preserves a broad delayed bridge with the low-capacity
-   asymmetric shaper above;
-2. foundation pretraining learns richer causal, context-dependent organization
-   from independently generated token sequences using matched `q_0` and `q_1`
-   objectives;
-3. a fresh frozen or cross-fitted evaluator certifies incremental information
-   without updating the tokenizers or foundation model.
-
-The certificate model is fit after tokenizers and the selected foundation
-checkpoint are frozen:
+\(\rho\) 的首选实现为标准化轨迹 `SmoothL1`，可附加一项低权重的一阶差分损失，但不得重新拆成多个 semantic head。总损失为：
 
 \[
-p(K_t^F\mid K_{t-L:t}^E,H_t^F,\tau)
+\mathcal L
+=\mathcal L_{\mathrm{driver}}
++\lambda_{\mathrm{commit}}\mathcal L_{\mathrm{commit}}
++\lambda_{\mathrm{codebook}}\mathcal L_{\mathrm{EMA-health}}.
 \]
 
-For a 2-second grid, the initial lag support is `0..8` tokens, covering `0..16` seconds. The output contract is:
+主实验不得对 EEG/fNIRS token ID 施加相等约束，也不得让 decoder 通过 modality ID 绕开共享坐标。若共享 decoder 明显欠拟合，可在 R3 的注册 ablation 中与两个同构 decoder 比较，但默认仍是一个 decoder。
 
-| Field | Shape |
-| --- | ---: |
-| EEG context state | `[B, 10, H]` |
-| Lag-conditioned fNIRS logits | `[B, 10, 9, 128]` |
-| Valid-pair mask | `[B, 10, 9]` |
-| fNIRS history baseline logits | `[B, 10, 9, 128]` |
-| Incremental log-likelihood | `[B, 10, 9]` |
+## 💾 可选的连续 private branch
 
-Primary coupling evidence is the held-out gain over a fNIRS-history, lag-, dataset-, and subject-controlled baseline. The coupling head does not update tokenizers in the primary experiment.
+private branch 不属于最小核心。只有 R3 发现 semantic-only 模型对原始信号保留不足，且该不足影响预注册 downstream control 时，才在 R4 引入：
 
-The foundation objective must fit the fNIRS-history baseline and
-EEG-plus-fNIRS-history model with proper likelihoods on identical eligible
-samples and horizons. It may not create apparent gain by jointly weakening the
-baseline. Teacher-derived preservation targets guide tokenizer information
-retention; only the independent frozen certificate supports the paper-level
-coupling claim.
+\[
+p_t^{(m)}=E_m^{\mathrm{private}}(x^{(m)}),\qquad
+\hat x^{(m)}=D_m^{\mathrm{raw}}(p^{(m)},\operatorname{sg}(q^{(m)})).
+\]
 
-## 📦 Export and downstream contract
+它保持连续，不量化，不命名为 nuisance/noise token。raw-reconstruction 梯度不得进入任何 semantic encoder/codebook 参数：使用独立 private encoder/optimizer，或在分支点 detach，并以参数级 gradient allowlist 验证；只把 raw decoder 分开并不足够。
 
-Each semantic token export must contain:
+## 📤 导出合同
 
-| Field | Local shape | Whole-brain shape |
-| --- | ---: | ---: |
-| Hard ID | `[N, 10]` | `[N, A, 2, 10]` |
-| Posterior or top-k posterior | `[N, 10, 128]` | `[N, A, 2, 10, 128]` or sparse equivalent |
-| Expected codebook embedding | `[N, 10, 64]` | `[N, A, 2, 10, 64]` |
-| Residual latent | branch-specific | `[N, A, 2, 10, D_r]` |
-| Auxiliary signatures | optional family-specific | optional family-specific |
-| Masks and metadata | sample-specific | anchor, time, history, subject, source |
+每个冻结样本至少导出：
 
-The whole-brain backbone must support four representation modes:
+- `sample_id`, `subject_id`, `session_id`, `record_id`, `condition`, `anchor_id`；
+- `eeg/fnirs_hard_ids`；
+- `eeg/fnirs_posteriors`；
+- `eeg/fnirs_codebook_vectors`；
+- `eeg/fnirs_continuous_latents`；
+- `valid_mask`, `teacher_mask`, `target_point_valid_mask`；
+- decoded \(r^J\) prototype；
+- codebook、encoder、teacher、split、normalization 与 source commit hashes；
+- `token_temporal_scope=bidirectional_full_window`；
+- `absolute_input_start/end` 与包含预处理支持的逐 token absolute receptive-field start/end；
+- evaluator 另记 `evaluator_temporal_mode=offline_same_window | completed_window_cutoff | semantic_only`，不得与 token scope 混写。
 
-1. hard ID only;
-2. transferred codebook embedding;
-3. soft expected embedding;
-4. semantic embedding plus residual.
+teacher target 可用于审计，但不得作为冻结 coupling evaluator 的输入特征。
 
-The comparison between these modes is a required information-retention result, not an optional diagnostic.
+## 🔬 冻结后的两种 temporal estimand
 
-## 📊 Visualization contract
+### R6A：离线时延条件关联
 
-Publication visualizations must obey the following rules:
+双向 20 秒 token 与同窗 fNIRS endpoint 可以进入容量匹配的 `q0/q1`，检验加入 EEG token 后 held-out proper score 是否改善，并运行 within-subject/condition permutation、circular shift、impossible lag、EEG marginal-only 和 matched smooth-target null。由于 token 的 receptive field 可能覆盖 endpoint，这一结果只能称 **offline delayed conditional association**，即使 lag 为正也不能改写成未来预测。
 
-- do not use expected token index as a physiological scalar;
-- order tokens using a named train-only signature family and lock the order for validation/test;
-- align seeds with Hungarian matching on that registered signature family, not raw IDs;
-- display conditional excess probability or incremental log likelihood rather than raw conditionals alone;
-- include uncertainty intervals and marginal/history baselines;
-- aggregate 128 tokens into a small number of physiological meta-states for the main figure while retaining full matrices in supplementary artifacts;
-- use fixed color scales for task-difference plots.
+### R6B：严格 cutoff 的窗外增量预测
 
-## 🔐 Claim boundary
+未来预测必须先构造 observation cutoff \(c\)：
 
-The architecture can support the claim that tokens preserve reproducible measurement structure and that EEG token sequences predict future fNIRS token distributions only after the corresponding gates pass. A particular physical-state interpretation requires a separately validated target/probe family. The architecture cannot by itself support claims of a single shared neural driver, causal neurovascular coupling, universal task invariance, or one-to-one token correspondence.
+\[
+q_0:\;Y^F_{(c+g):(c+g+h)}\sim H^F_{\le c}+C_c,
+\]
 
-Differences between task-specific coupling patterns are a secondary, non-blocking research objective. Their absence does not invalidate controlled incremental coupling, and their presence supports only a qualified secondary finding; it does not change any gate decision in the current approved program.
+\[
+q_1:\;Y^F_{(c+g):(c+g+h)}
+\sim H^F_{\le c}+S(K^E_{\mathcal W:\operatorname{end}(\mathcal W)\le c})+C_c,
+\]
 
-## 🔗 Related documents
+\[
+\Delta=\operatorname{score}(q_1)-\operatorname{score}(q_0),
+\qquad
+\max \operatorname{RF}_{\mathrm{absolute}}(K^E)+\mathrm{embargo}
+<\min \operatorname{time}_{\mathrm{absolute}}(Y^F).
+\]
 
-- [`Legacy design postmortem`](01_LEGACY_DESIGN_POSTMORTEM.md)
-- [`Theoretical foundations`](03_THEORETICAL_FOUNDATIONS.md)
-- [`Implementation and validation plan`](04_IMPLEMENTATION_VALIDATION_PLAN.md)
-- [`Experiment design`](05_EXPERIMENT_DESIGN.md)
-- [`Active experiment log`](06_EXPERIMENT_LOG.md)
-- [`Current runtime architecture`](../ARCHITECTURE.md)
+\(S\) 首版只消费已结束的双向 token 窗口。token 与 endpoint 必须共享可核验的 `record_id` 与绝对时间基准；row ID 不重叠不能替代 receptive-field interval 不重叠。embargo、gap \(g\)、horizon \(h\)、窗口规则和 fNIRS innovation 定义必须预注册；endpoint 不得进入 token receptive field、normalization、checkpoint selection 或 teacher construction。\(C_c\) 只在 evaluator 中包含 task/phase 等控制。统计单位是 subject，不是 patch；seed 只反映算法方差。
 
-_Last updated: 2026-07-19_
+R6A/R6B 都只是 development frozen evaluation；primary protocol 在 `01–18` 拟合模型/q0/q1、对 `19–23` apply。由于 `19–23` 已参与架构选择，这仍是 post-selection development evidence；可选 nested sensitivity 只有在 teacher、tokenizer、checkpoint 和 evaluator 全部逐 outer fold 重建时才称 whole-pipeline。真正独立的确认只来自一次性 R7 protected cohort。只有 R6B 通过且其 cutoff 合同被冻结，R7 才能确认“窗外增量预测”；否则 R7 最多确认 semantic gate，不确认 coupling prediction。
+
+## ⚠️ teacher 解释边界
+
+\(r^J\) 来自 EEG proxy 与延迟 HbO/HbR 的联合 fixed-interval RTS smoother，是 privileged joint proxy，不是 ground truth。它可用于定义表示坐标，但不能单独证明：
+
+- 潜变量唯一可辨识；
+- fNIRS 对该状态具有充分的独立观测信息；
+- token 共现不是共同监督的产物；
+- EEG 对 fNIRS 存在因果作用。
+
+因此，进入 VQ 前必须先通过 R2-P 的双侧 continuous observability gate；进入生理耦合声明前必须通过 joint-versus-control teacher 和 frozen raw-endpoint gate。
+
+## 🔐 复杂度升级规则
+
+任何新增 branch、loss 或模型阶段都必须同时满足：
+
+1. 对应一个已重复观测且定位明确的失败模式；
+2. 有一个成对 ablation 可否定其必要性；
+3. 不改变原注册 primary endpoint；
+4. 不让训练期目标泄漏到冻结 coupling evaluator。
+
+在此规则下，旧计划中的 discrete effect/nuisance token、coupling shaper 和 foundation model 均退出首轮主线。
+
+## 🔗 相关文档
+
+- [架构回归与理论启示](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md)
+- [实现与验证计划](04_IMPLEMENTATION_VALIDATION_PLAN.md)
+- [R 系列实验设计](05_EXPERIMENT_DESIGN.md)
+- [代码迁移计划](07_CODE_MIGRATION_PLAN.md)
+- [SVG 视觉化规范](08_ARCHITECTURE_VISUALIZATION.md)

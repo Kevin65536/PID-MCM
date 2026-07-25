@@ -1,95 +1,93 @@
-# Physiology-semantic tokenizer redesign archive
+# Physiology-semantic tokenizer：当前研究入口
 
-_Approved design baseline; full trainer implemented; sign-calibrated adaptive SSM physical teacher fully accepted_
+_2026-07-25 架构回归冻结；E2 runtime 已实现，新 SD-SVQ 架构尚待 R 系列验证_
 
 ---
 
-## 📋 Status and authority
+## 📋 当前状态
 
-This directory freezes the design decision reached after the tokenizer coupling lineage, information-retention audits, whole-brain downstream probes, and theoretical review. It defines the **approved target architecture**. P1-P5 software interfaces and the full trainer are implemented. The 2026-07-24 final correction accepts the sign-calibrated adaptive joint SSM physical teacher and all of its physiological information, including fNIRS content: complete E0 is `PASS`, and physical-teacher supervision is authorized. Earlier Croce/E0-v2 and pre-calibration fNIRS error labels remain historical diagnostics only and carry no current E0 status. The 2026-07-19 entry routing still separates tokenizer preservation, foundation discovery, and independent certification; those later experiments do not qualify the E0 pass.
+E2 已完整展示旧架构的主要失败模式：固定 `K=128` 量化器本身保持健康，但以 raw reconstruction 为主、物理 teacher 为弱权重多入口辅助目标时，teacher 没有带来预注册 semantic endpoint 增益。该结果不支持继续堆叠 state/prototype/context/coupling heads。
 
-Raw-data shared-state diagnostics after the architecture visualization are archived under [`archive/diagnostics/`](archive/diagnostics/). They are evidence records, not new architecture chapters. The active status remains in [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md); the authoritative complete-E0 decision is [`analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`](analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md).
+新的目标架构 **Shared-Driver Semantic VQ（SD-SVQ）** 恢复原始项目的核心纪律：两个 tokenizer 分别只看本模态原始生理测量，使用独立 `K=128, D=64` codebook，不进行 same-ID 或跨模态 feature exchange。与最初 raw VQ 不同的是，两侧都以 E0 完整联合共享驱动代理轨迹 \(r^J\) 为主要 semantic 目标。冻结 token 后，可按主张选择 R6A 离线时延条件关联和/或独立的 R6B completed-window 窗外预测。
 
-The current implementation remains the canonical runtime figure below. The
-approved after-state is a separate plan artifact and must not be read as merged
-code:
+这是一份计划，不是已实现结果：
 
-![Proposed coupling-aware foundation pipeline](figures/plans/physical_teacher_gradient_entry_plan.svg)
+![Shared-Driver Semantic VQ proposed after-state](figures/plans/shared_driver_semantic_return_plan.svg)
 
-The currently runnable implementation remains documented in [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). When the current implementation conflicts with this directory, use the distinction below:
+当前 E2 runtime 仍由 canonical 图描述：
 
-| Question | Authoritative document |
+![Current E2-compatible runtime](figures/physiology_semantic_architecture.svg)
+
+## 🧭 文档权威
+
+| 问题 | 权威文档 |
 | --- | --- |
-| What code runs today? | [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) |
-| Why is the old design being retired? | [`01_LEGACY_DESIGN_POSTMORTEM.md`](01_LEGACY_DESIGN_POSTMORTEM.md) |
-| What architecture should be implemented? | [`02_TARGET_ARCHITECTURE.md`](02_TARGET_ARCHITECTURE.md) |
-| What theoretical claims justify it? | [`03_THEORETICAL_FOUNDATIONS.md`](03_THEORETICAL_FOUNDATIONS.md) |
-| How should code and tests change? | [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](04_IMPLEMENTATION_VALIDATION_PLAN.md) |
-| Which experiments can validate or falsify it? | [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md) |
-| Which target-architecture experiments have run? | [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) |
-| How are external comparative methods admitted and evaluated? | [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) |
-| How is resource-bounded EFRM downstream performance frozen? | [`EFRM resource-bounded dual protocol`](../../comparative_methods/EFRM-PyTorch/sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md) |
-| What exact code migration should be executed? | [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) |
-| What does the current implementation look like? | [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) |
-| Which target-architecture diagnostic records are archived? | [`archive/diagnostics/`](archive/diagnostics/) |
+| 当前代码实际运行什么？ | [当前架构](../ARCHITECTURE.md) |
+| 新架构是什么？ | [目标架构](02_TARGET_ARCHITECTURE.md) |
+| 理论上为何这样简化？ | [理论基础](03_THEORETICAL_FOUNDATIONS.md) |
+| 曲折探索带来了什么认识？ | [架构回归与方法启示](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md) |
+| 代码如何迁移和验证？ | [实现与验证计划](04_IMPLEMENTATION_VALIDATION_PLAN.md) 与 [迁移计划](07_CODE_MIGRATION_PLAN.md) |
+| 新实验怎样运行和停止？ | [R0–R7 实验设计](05_EXPERIMENT_DESIGN.md) |
+| E0–E2 到底运行了什么？ | [实验日志](06_EXPERIMENT_LOG.md) |
+| 图的 current/plan 状态如何区分？ | [架构视觉化规范](08_ARCHITECTURE_VISUALIZATION.md) |
+| 对比方法如何进入正式比较？ | [比较方法工作流](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) |
+| 四条研究支路如何相互影响？ | [项目演进图](../PROJECT_EVOLUTION_MAP.md) |
 
-> 📌 **Transition rule:** A target-architecture statement becomes a current-architecture statement only after its code, tests, smoke run, and module-level validity gate all pass.
+dated `analysis/` 与旧 overlay 保留其当时语义。后来的 corrigendum 可以纠正口径，但不得改写原 run、配置或数值。
 
-![Current physiology-semantic tokenizer implementation](figures/physiology_semantic_architecture.svg)
-
-## 🎯 Design decision
-
-The redesign separates three responsibilities that the previous tokenizer attempted to solve with one hard-token coupling mechanism:
-
-1. A **semantic token branch** represents physiologically interpretable state regions.
-2. A **private/residual branch** preserves information not explained by the semantic state model.
-3. A training-only asymmetric shaper preserves broad delayed predictive information, a causal **foundation model** discovers contextual organization, and a fresh frozen evaluator certifies incremental EEG-to-fNIRS structure.
+## 🎯 拟议的最小核心
 
 ```mermaid
 flowchart LR
-    accTitle: Redesign responsibility split
-    accDescr: The approved design separates physiological tokenization, training-only coupling preservation, foundation discovery, and independent frozen certification.
+    accTitle: 拟议回归架构的责任分离
+    accDescr: 计划中的原始 EEG 和 fNIRS 路径分别进入独立整窗编码器和 K128 量化器，共同重建一个训练期联合共享驱动代理坐标；冻结后由独立评估器检验增量关联。
 
-    raw_signal["Raw EEG and fNIRS"] --> semantic_tokens["Semantic token branch"]
-    raw_signal --> residual_stream["Private residual branch"]
-    physical_teacher["Physical state teacher"] --> semantic_tokens
-    physical_teacher --> preservation["Disposable coupling-preservation shaper"]
-    semantic_tokens --> preservation
-    semantic_tokens --> frozen_tokens["Frozen token sequences"]
-    preservation --> frozen_tokens
-    frozen_tokens --> foundation_model["Causal multimodal foundation model"]
-    foundation_model --> coupling_head["Fresh frozen coupling certificate"]
-    frozen_tokens --> downstream_model["Whole-brain downstream model"]
-    residual_stream --> downstream_model
+    eeg["Raw EEG + valid mask"] --> enc_e["EEG full-window encoder"] --> vq_e["EEG VQ K128"]
+    fnirs["Raw HbO/HbR + valid mask"] --> enc_f["fNIRS full-window encoder"] --> vq_f["fNIRS VQ K128"]
+    teacher["E0 joint driver rJ<br/>training only"] --> loss["Full-trajectory semantic loss"]
+    vq_e --> decoder["Shared driver decoder"] --> loss
+    vq_f --> decoder
+    vq_e --> frozen["Frozen token exports"]
+    vq_f --> frozen
+    frozen --> offline["R6A development<br/>offline delayed association"]
+    frozen --> cutoff["R6B completed-window cutoff<br/>future raw fNIRS"]
 
-    classDef current fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-    classDef target fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef measured fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef planned fill:#f3e8ff,stroke:#7e22ce,stroke-width:3px,color:#581c87
+    classDef teacherClass fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
     classDef evaluation fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
 
-    class raw_signal current
-    class physical_teacher,semantic_tokens,residual_stream,preservation,foundation_model target
-    class frozen_tokens,coupling_head,downstream_model evaluation
+    class eeg,fnirs measured
+    class enc_e,vq_e,enc_f,vq_f,decoder planned
+    class teacher,loss teacherClass
+    class frozen,offline,cutoff planned
 ```
 
-## 🔍 Evidence boundary
+上述节点均为 planned。首轮计划不包含 discrete nuisance/effect token、shared codebook、same-ID loss、InfoNCE、cross-attention、coupling shaper 和 foundation model。continuous private branch 只在 R4 证明必要时进入。
 
-The archived evidence supports redesign, not success of the redesign. In particular:
+## 🔍 E2 口径
 
-- the existing architecture can produce statistically positive global coupling while failing most task-local checks;
-- soft assignments retain more usable cross-modal structure than hard IDs or quantized embeddings;
-- strong pre-quantization EEG-to-fNIRS exchange can make conditional plots look cleaner without establishing independent physiological correspondence;
-- current whole-brain token pretraining learns dataset/source style more reliably than fine-grained task state;
-- current cache supervision exposes decoded source waveforms to the tokenizer but not the saved physical-state posterior and its uncertainty.
+- validation 总体：300 windows、3,000 patches；
+- teacher sidecar：50 windows、500 patches，占总体 `16.67%`；
+- 历史 frozen EEG probe：旧 artifact policy 下 `178/500`；
+- teacher semantic loss 当时实际使用 500 target patches，因为没有与 signal mask 相交。
 
-These findings motivate the target design. They do not prove that the physical-state teacher, semantic codebooks, or sequence coupling head will pass their planned gates.
+当前 policy 已取消 artifact mask 的 invalidity authority，因此新 R 系列必须重跑 `N0`，不能把旧 T0 当作匹配基线。完整更正见 [E2 corrigendum](analysis/20260725_E2_FAILURE_MODE_CORRIGENDUM_AND_RETURN_DECISION.md)。
 
-## 🔗 Related records
+## 🔐 研究声明边界
 
-- [`2026-07-01 physiology-semantic redesign`](../architecture_changelog/2026-07-01_physiology_semantic_tokenizer_redesign.md)
-- [`Comparative-method experiment workflow`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md)
-- [`Physical-teacher gradient-entry decision`](analysis/20260719_PHYSICAL_TEACHER_GRADIENT_ENTRY_DECISION.md)
-- [`Archived tokenizer coupling responsibility boundary`](../archive/pre_physiology_semantic_20260701/source_observation/TOKENIZER_COUPLING_RESPONSIBILITY.md)
-- [`Archived physiological coupling plan`](../archive/pre_physiology_semantic_20260701/source_observation/PHYSIOLOGICAL_COUPLING_PLAN.md)
-- [`Archived workflow reconstruction`](../archive/pre_physiology_semantic_20260701/research/workflow-reconstruction-cn/00_WORKFLOW_ARCHITECTURE.md)
+当前只授权：
 
-_Last updated: 2026-07-19_
+- E2 的弱辅助 teacher 入口没有带来指标增益；
+- `K=128` 是冻结的容量预算和健康的软件基础；
+- \(r^J\) 是值得严格检验的 privileged joint proxy；
+- SD-SVQ 是尚未通过 R2/R3 的目标架构。
+
+当前不授权：
+
+- shared driver 是生理 ground truth；
+- 重建同一 teacher 已经发现 coupling；
+- 相同 token ID 具有跨模态同义性；
+- R 系列或 protected test 已通过。
+
+> 架构状态升级规则：只有代码/tests、R1-P population-frozen teacher panel 与 development coverage、R2-P continuous observability 和 R3-P 合取门通过，SD-SVQ 才可从 plan 升级为 current runtime。

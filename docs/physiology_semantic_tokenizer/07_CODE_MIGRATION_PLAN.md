@@ -1,225 +1,235 @@
-# Physiology-semantic tokenizer code migration plan
+# Shared-Driver Semantic VQ 代码迁移计划
 
-_Decision-complete migration boundary from adaptive-teacher routing through the independent coupling certificate_
-
-> Maintenance note: subsequent modification plans must annotate their affected components on a plan-specific copy of the maintained SVG architecture. See [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md).
+_设计迁移，不授权立即删除 E2 runtime；执行门禁见 [04](04_IMPLEMENTATION_VALIDATION_PLAN.md)_
 
 ---
 
-## 📋 Objective and execution boundary
+## 📋 迁移边界
 
-This migration replaces the archived reconstruction-centered `source_observation` mainline with independently inferable EEG and fNIRS semantic tokenizers, an explicitly coupling-aware tokenizer-training ablation, a causal multimodal foundation stage, and an independent frozen certificate. Earlier P2–P5 work remains the implemented base; the 2026-07-19 batches below define the next code order.
+本次迁移尽量复用已验证的软件资产，但不通过修改旧类的默认语义来伪装兼容。推荐新增明确的 architecture generation，并保留 E2 checkpoint 的可重放路径。
 
-The following rules are fixed for all new work after the 2026-07-14 input-contract revision:
+### 复用
 
-- every new run gets measured EEG/fNIRS from `UnifiedPhysiologyWindowDataset`;
-- formal validation of an optional target starts only after its adapter passes deterministic correctness tests and a real-data dry run;
-- target-supervised training does not start before its scoped E0 establishes valid prediction and admissible coordinates;
-- an explicit teacher-free reconstruction-plus-VQ baseline remains available independently of the now-passed E0;
-- legacy aliases, four-branch source/observation quantization, and pre-VQ cross-modal exchange remain archive-only;
-- smoke success is software evidence, not a scientific gate decision.
+- `UnifiedPhysiologyWindowDataset` 的 measured-data window、sample identity、geometry 和 boundary mask；
+- 当前 corrected EMA VQ、fixed `K=128, D=64`、health logging 和 export 基础；
+- adaptive SSM 推断核心与 E0 provenance；
+- split/protected registry、run manifest 和 frozen-evaluation基础设施。
+
+### 新增或替换
+
+- full-trajectory teacher-v2 schema/builder；
+- sidecar 与 raw-view selection 解耦；
+- modality-only full-window temporal encoder；
+- shared driver trajectory decoder；
+- 单一 semantic objective；
+- decoded-prototype signature export/matching；
+- teacher-independent evaluators：双向 token 的离线时延条件关联，以及满足严格 cutoff 的窗外 raw-fNIRS 预测。
+
+### 退出新主线
+
+- E2 的 `r_mean/r_slope` 与 HbO/HbR routed target heads；
+- local/prototype/context/coupling 多入口 loss；
+- post-VQ causal context 作为 token identity 的唯一上下文；
+- semantic + residual 联合 raw reconstruction 默认路径；
+- discrete effect/nuisance token；
+- coupling shaper、InfoNCE、same-index 与 foundation model 必需阶段。
+
+## 🧭 建议模块边界
 
 ```mermaid
-flowchart LR
-    accTitle: Teacher routing through coupling certificate migration order
-    accDescr: Code migration routes admitted teacher coordinates by entrance, verifies asymmetric preservation gradients, exports frozen tokens, pretrains the causal foundation core, and ends with a fresh frozen certificate.
+flowchart TB
+    accTitle: Shared-Driver VQ 代码模块迁移
+    accDescr: 统一 loader 先构造固定 raw view，再附加完整轨迹 teacher；独立 EEG 和 fNIRS full-window encoder 进入独立 K128 VQ，共享 driver decoder 只参与训练；导出后由独立 evaluator 消费。
 
-    p1(["P1 data contract"]) --> p2["P2 corrected quantizer"]
-    p1 --> p3["P3 teacher adapter"]
-    p3 --> check{"P3 correctness passed?"}
-    check -->|No| repair["Repair contract"]
-    repair --> p3
-    check -->|Yes| e0["E0 teacher validity"]
-    p2 --> p4["P4 tokenizer and losses"]
-    e0 --> p4
-    p4 --> p5(["P5 export and consumers"])
-    p5 --> p6a["P6A causal foundation core"]
-    p6a --> p6b["P6B fresh frozen certificate"]
-    p6b --> p7(["P7 publication figures"])
+    loader["Unified measured loader"]
+    view["Frozen local raw-view builder"]
+    sidecar["FullTrajectoryTeacherSidecar"]
+    join["Teacher join + mask intersection"]
+    eeg["EEGWindowSemanticEncoder"]
+    fnirs["FNIRSWindowSemanticEncoder"]
+    qe["EEG K128 EMA VQ"]
+    qf["fNIRS K128 EMA VQ"]
+    decoder["SharedDriverTrajectoryDecoder"]
+    objective["SharedDriverSemanticObjective"]
+    exporter["SemanticTokenExporter v2"]
+    evaluator["FrozenTemporalEvaluator<br/>offline / prospective-cutoff"]
 
-    classDef foundation fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-    classDef decision fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
-    classDef valid fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-    classDef blocked fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    loader --> view
+    loader --> sidecar
+    view --> join
+    sidecar --> join
+    join --> eeg --> qe --> decoder
+    join --> fnirs --> qf --> decoder
+    join --> objective
+    decoder --> objective
+    qe --> exporter
+    qf --> exporter
+    exporter --> evaluator
 
-    class p1,p2,p3,p4,p6a foundation
-    class check decision
-    class e0,p5,p6b,p7 valid
-    class repair blocked
+    classDef data fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef model fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef training fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef eval fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class loader,view,sidecar,join data
+    class eeg,fnirs,qe,qf model
+    class decoder,objective training
+    class exporter,evaluator eval
 ```
 
-## 📥 Runtime data contract
+## 📦 配置 namespace
 
-`UnifiedPhysiologyWindowDataset` with contract `unified_physiology_window_v1` is the only active measured-data entry for newly planned experiments. The earlier `physiology_semantic_v2` Croce cache contract remains a historical/optional target adapter.
+建议新增而不是覆盖：
 
-| Field | Shape | Consumer | Inference input |
-| --- | ---: | --- | :---: |
-| `eeg` | `[B, C_E, 4000]` | EEG tokenizer | Yes |
-| `fnirs` | `[B, C_F, 200]` | fNIRS tokenizer | Yes |
-| `valid_mask.*` | modality time axis | Tokenizer, losses and export | No |
-| `alignment` | Sample metadata | Temporal model and audit | No |
-| `label` | Canonical mapping | Probe/downstream suites | No |
-| `channel_geometry` | Variable row lists | Spatial adapter and audit | No |
-| `auxiliary_target.*` | Family-specific and optional | Named target adapter/loss only | No |
-| normalization/provenance | Sample metadata | Audit and export | No |
+```text
+experiments/configs/physiology_semantic_tokenizer/
+├── r0_contract_freeze.yaml
+├── r1_full_trajectory_teacher.yaml
+├── r2_continuous_observability.yaml
+├── r3_shared_driver_vq.yaml
+├── r4_private_ablation.yaml
+├── r5_prototype_semantics.yaml
+├── r6a_offline_association.yaml
+├── r6b_prospective_cutoff.yaml
+└── r7_protected_confirmation.yaml
+```
 
-The default 20-second context may be divided into ten non-overlapping two-second patches:
+每个 config 必须声明：
 
-- EEG: `[B, 10, C_E, 400]`;
-- fNIRS: `[B, 10, C_F, 20]`.
+```yaml
+architecture_generation: shared_driver_semantic_vq_v1
+codebook_size: 128
+codebook_dim: 64
+semantic_target: adaptive_joint_full_trajectory
+tokenizer_inputs: measured_modality_and_boundary_finite_mask_only
+token_temporal_scope: bidirectional_full_window
+evaluator_temporal_mode: offline_same_window
+artifact_mask_policy: annotation_only
+protected_open: false
+protected_fit_policy: apply_only
+```
 
-The model-facing APIs are `encode_eeg(eeg)` and `encode_fnirs(fnirs)`. Passing the other modality, auxiliary targets, or decomposition fields is a schema error.
+`token_temporal_scope` 只允许 `bidirectional_full_window | causal_past`，描述 tokenizer 本身；`evaluator_temporal_mode` 只允许 `offline_same_window | completed_window_cutoff | semantic_only`。completed-window wrapper 属于 evaluator，不能把 bidirectional token 伪装成 causal token。
 
-## 🧠 Temporal representation boundary
+## 📥 数据迁移
 
-Token identity is patch-local. The pre-quantization encoder may transform samples and channels inside one two-second patch, but it must not attend to another patch and must not use an absolute crop position. This makes a token invariant to where its source patch appears inside a crop.
+迁移顺序：
 
-Sequence learning is a separate post-quantization responsibility. For a target at patch `t`, the context module consumes only patches `[t-5, ..., t-1]`, representing ten seconds of prior history. Targets `t < 5` have incomplete history and contribute zero masked-context loss. The context output never replaces or mutates the exported token identity.
+1. 为现有 registered sample IDs 生成 target coverage table；
+2. 实现 `[10,20]` full trajectory 与 `[10,20]` pointwise-valid sidecar；
+3. 将 raw view builder 移到 teacher join 之前；
+4. 证明有无 sidecar 时 raw tensor/hash 完全一致；
+5. 构造逐点 `valid[:, :, None] ∩ teacher[:, :, None] ∩ target_point_valid` mask；
+6. 对 current policy 与 historical E2 policy 分别记录 manifest；
+7. 完成 R1-D subject-specific leave-one-trial 与 R1-P population-frozen 两种 provenance；R1-P 的参数、anchor、EEG projection 与 normalization 均不得在 held-out subject 重拟合。
+8. 由同一 R1-P bundle 成对生成 \(r^J/r^E\)，仅移除 fNIRS update，并用两者 pointwise support 交集定义 \(\delta^F\)；
+9. R1-P 重新通过 population-frozen physical reconstruction、jointness、gauge stability、observability 与非退化 correction panel，不能继承旧 E0 PASS。
 
-This boundary follows the separation between local latent quantization and contextual prediction in wav2vec 2.0,[^1] and the frozen-tokenizer-then-causal-model division used by NeuroLM.[^2] LaBraM remains the source for generic EEG patch and spectral-tokenizer components, but its full pre-quantization sequence Transformer is not copied because it would make token identity depend on neighboring and future patches.[^3]
+旧 sidecar reader 保留在明确的 `e2_legacy` 入口，不允许自动升级旧 cache。
 
-## ⚙️ P2 corrected quantizer
+## 🧠 模型迁移
 
-Create a new active quantizer module rather than changing `NormEMAVectorQuantizer`, which is still imported by compatibility code.
+新模型应与旧 `PhysiologySemanticTokenizer` 分开注册，直到 R3-P 通过。建议 public forward：
 
-### Public output
+```python
+forward(
+    eeg_raw,
+    fnirs_raw,
+    valid_mask,
+    *,
+    return_posteriors=False,
+    return_private=False,
+)
+```
 
-`QuantizerOutput` contains:
+teacher target 不属于 model forward；它只进入 objective。metadata 也不进入 encoder。
 
-| Field | Shape | Definition |
-| --- | ---: | --- |
-| `logits` | `[B,N,K]` | Negative squared Euclidean distance divided by temperature |
-| `posterior` | `[B,N,K]` | Softmax-normalized logits |
-| `hard_ids` | `[B,N]` | Posterior argmax |
-| `quantized` | `[B,N,D]` | Straight-through hard codebook lookup |
-| `expected_embedding` | `[B,N,D]` | Posterior-weighted codebook expectation |
-| `commitment_loss` | scalar | Encoder-to-selected-code commitment |
-| `health` | dictionary | Entropy, active codes, rank, geometry, drift, and revival count |
+两个 full-window encoder 的层数、宽度和 dropout 应在 R2 前冻结，只允许 train-only 工程校准。输出为 `[B,10,64]`。量化器独立，decoder 共享并输出 `[B,10,20]`。
 
-Mainline assignment is non-normalized Euclidean distance. Cosine assignment is a named ablation. The resolved configuration asserts `K=128` and `D=64` for both modalities before the first forward pass.
+所有 quantizer calibration 也必须在第一次查看 subjects `19–23` 的 R3-P 结果前冻结；launcher 不提供 validation failure 后的 promotion retry。
 
-### EMA update
+## ⚙️ 损失迁移
 
-The quantizer stores codebook weights, assignment-count EMA, vector-sum EMA, initialization state, update count, and revival count in its state dict. For each distributed step:
+新增独立 objective：
 
-1. all-reduce current assignment counts and vector sums;
-2. update both EMA buffers with the configured decay;
-3. update only codewords with a positive current global assignment count;
-4. leave zero-assignment codewords unchanged;
-5. apply a configured, explicitly logged dead-code revival policy after the warm-up interval.
+```text
+driver_trajectory_loss
++ commitment_loss
++ codebook_health_terms
+```
 
-Checkpoint reload must reproduce logits, posterior, IDs, embeddings, EMA buffers, and health counters exactly in evaluation mode.
+删除 semantic objective 中的：
 
-## 🧪 P3 optional target adapters
+```text
+raw reconstruction
+state mean/slope
+prototype head
+context head
+coupling preservation
+same-ID / pair alignment
+```
 
-Every adapter converts one named target family into deterministic, detached local, prototype, context, and coupling target groups with provenance and entry-specific masks. Uncertainty is metadata until calibrated for the exact coordinate and entrance. No adapter changes the measured inputs or tokenizer inference API.
+若 R4 启用 private branch，raw reconstruction 使用单独 module/optimizer 或严格 stop-gradient。必须用参数级 gradient allowlist 测试，不只检查 loss 名称。
 
-For each state coordinate and patch, compute:
+## 📤 导出和 evaluator 迁移
 
-- mean over the patch;
-- least-squares slope against time in seconds;
-- `log(mean posterior variance + temporal variance of posterior means + eps)`.
+export schema v2 新增：
 
-The historical Croce adapter may still expose its six-dimensional EEG and nine-dimensional fNIRS summaries for a named ablation. These dimensions are not the target architecture contract; alternative families define their own versioned shapes and identifiability scope. The adaptive physical teacher registers required EEG `r_mean/r_slope`, optional EEG `s_mean/s_slope`, required observation-aligned HbO/HbR mean/slope, and context/coupling-only flow coordinates.
+- full decoded driver signature；
+- continuous pre-VQ latent；
+- `token_temporal_scope`、逐 token receptive-field absolute start/end、`record_id` 与 input absolute interval；
+- teacher family/scope/hash；
+- raw-view、mask-policy 和 coverage hash。
 
-A target patch is valid only if every underlying cache-valid and causal-valid fNIRS sample is valid and all required means and variances are finite. The first five patches are therefore ineligible under the fixed ten-second history contract. Invalid targets and their weights are finite placeholders with a false mask; they must contribute exactly zero loss. `local_mask`, `prototype_mask`, `context_mask`, and `coupling_mask` are distinct fields and cannot silently fall back to one modality-wide mask.
+evaluator 不 import training loss 或 teacher adapter。它只读取 frozen export、raw fNIRS endpoint 和注册 controls。q0/q1 必须分别初始化和训练，容量匹配，并写出每个 subject/lag/null 的 proper score。
 
-P3 correctness requires family-specific reference trajectories, uncertainty propagation where applicable, mask contraction, stop-gradient behavior, shape assertions, and a one-sample unified-loader join dry run. Only use of that target family remains blocked until its checks pass.
+- `offline_same_window` 模式允许 `bidirectional_full_window` token，但输出 schema 强制使用 offline/association 标签。
+- `completed_window_cutoff` 首版只接受已通过 R2-P/R3-P/R5 的同一双向 tokenizer，并只汇总已结束窗口；按 `(record_id, absolute_start, absolute_end)` 断言 `token_RF_end + embargo < endpoint_start`。receptive field 必须包含预处理/滤波支持，不能用 row ID 代替实际区间。
+- 新 `causal_past` tokenizer 必须重新通过自己的 R2-P/R3-P/R5。
+- primary development protocol 固定在 subjects `01–18` fit q0/q1、对 `19–23` apply，并标记为 post-selection development evidence。若运行 nested sensitivity，R1-P teacher、tokenizer、checkpoint 和 evaluator 必须逐 outer fold 全部重建。只有一次性 protected R7 是独立 confirmation。
 
-## 🧩 P4 tokenizer, losses, and training
+R7 不复用 R6 checkpoint bundle。设计冻结后必须按顺序在 `01–23` 生成 R1-P-final、最终 tokenizer、最终 export、common probe/phase baseline，以及适用时的 q0/q1；全部 hash 冻结后 `24–29` 只能 apply。protected 首先运行冻结阈值的 apply-only teacher panel，任何组件不得在 protected 上 refit 或 early-stop。
 
-### Independent modality branches
+## 🧪 必需测试
 
-Each branch performs:
+- full trajectory 的精确时间切片；
+- teacher join 不改变 raw view；
+- encoder input allowlist；
+- modality perturbation independence；
+- full-window receptive field 与 mask；
+- fixed K128/D64；
+- shared decoder input/shape；
+- semantic loss 的梯度隔离；
+- private stop-gradient；
+- ID permutation 不改变 signature-level 结果；
+- export/checkpoint round trip；
+- lag indexing、双 temporal enum、absolute-time receptive-field cutoff、embargo 与 impossible-lag null；
+- protected access rejection；
+- canonical/runtime SVG 与 plan SVG deterministic drift。
 
-1. reshape raw input into two-second patches;
-2. compute frequency-aware patch embedding using the existing generic `MultiChannelPatchEmbedding`;
-3. apply a patch-local projection/MLP with no cross-patch operation;
-4. split into a 64-dimensional semantic latent and a continuous residual latent;
-5. quantize the semantic latent;
-6. decode registered signatures from the continuous semantic latent and codebook embeddings when the corresponding objective is enabled;
-7. reconstruct normalized raw patches from semantic-plus-residual, semantic-only, and residual-only inputs.
+## 🔄 迁移提交建议
 
-| Modality | Encoder output | Semantic latent | Residual latent | Optional target |
-| --- | ---: | ---: | ---: | ---: |
-| EEG | 256 | 64 | 64 | family-specific |
-| fNIRS | 160 | 64 | 32 | family-specific |
+为了保持可审计性，按下列最小提交单元实施：
 
-The registry name is `physiology_semantic`. It is registered by the active tokenizer package without importing compatibility registration.
+1. teacher-v2 schema、builder、tests；
+2. raw-view/sidecar/mask 解耦；
+3. continuous students 与 R2 runner；
+4. shared-driver VQ model/objective；
+5. export/signature tooling；
+6. optional private branch；
+7. R3-P/R5 合取门 runner 与 fail-closed promotion；
+8. R6A offline evaluator/null suite；
+9. R6B completed-window cutoff evaluator 与绝对时间泄漏测试；
+10. canonical architecture promotion（仅在门禁后）。
 
-### Loss routing
+每个提交只改变一个可命名责任，并附 before/after contract。不得在同一提交同时更改 target、mask、split 和 evaluator。
 
-The loss module exposes independently weighted state, prototype, causal-context, coupling-preservation, reconstruction, VQ, and private terms. State-related terms are train-fold standardized, uniformly weighted, and entry-masked by default. `calibrated_inverse_variance` is a separate future mode that fails closed without a matching calibration artifact. The private term exists in configuration and metrics but defaults to zero until its scientific ablation is specified.
+## ✅ 删除时机
 
-The fixed-history context module predicts state at `t` from the five preceding expected embeddings. It uses relative lag embeddings only. Perturbing patch `t` or any future patch must not change its context prediction. This objective is named `causal_context_state`; it is not called masked modeling unless tokens are actually masked.
+旧 runtime、configs、sidecars 和 tests 在以下条件全部满足前不删除：
 
-The optional coupling-preservation module fits a frozen fNIRS-history baseline
-and a low-capacity EEG-incremental predictor for future flow and aligned
-chromophore innovations. Its only student gradient reaches the EEG semantic
-path. The fNIRS tokenizer, target, baseline, and teacher are detached. The
-module is excluded from export and discarded after tokenizer training.
-
-### Training entry
-
-The active training script supports `--dry-run`, `--smoke`, `--train`, and `--resume`. It implements epoch training and validation, AMP, gradient clipping, AdamW, warm-up/cosine scheduling, early stopping, best/last checkpoints, and complete optimizer/scheduler/scaler state restoration. A run saves resolved configuration, environment, split/cache manifest, JSONL metrics, quantizer health, teacher diagnostics, completion status, and hashes required by the run artifact contract.
-
-The 2026-07-03 pilot is a historical pre-sign-calibration record. The final 2026-07-24 decision accepts the sign-calibrated adaptive SSM physical teacher, passes complete E0, and authorizes its physiological information for supervision. The trainer continues to verify the concrete decision artifact, split hash, data contract, cache roots, and routed coordinates. The teacher-free reconstruction-plus-VQ path remains independently runnable.
-
-## 📤 P5 export and consumer contract
-
-The versioned export stores, per modality:
-
-- hard IDs;
-- full posterior or configured top-k posterior;
-- expected codebook embedding;
-- continuous residual;
-- optional family-specific target/signature, uncertainty, and validity mask;
-- subject, source, task, anchor, crop, cache schema, checkpoint hash, and sample-order hash.
-
-Consumers expose four explicit modes: `hard`, `codebook`, `soft`, and `semantic_residual`. `codebook` indexes the checkpoint codebook directly; creating a fresh embedding table is an error. Round-trip validation reloads the checkpoint and requires identical IDs and posteriors for the exported sample order.
-
-## 🔗 P6 foundation and certificate implementation
-
-Implementation proceeds in four non-overlapping batches:
-
-| Batch | Files | Deliverable | Blocking verification |
-| --- | --- | --- | --- |
-| C1 target routing | `src/teachers/physical_state_teacher.py`, `src/losses/physiology_semantic.py`, dataset/config schemas | Versioned target groups, per-entry masks, uniform weighting | Mask isolation, coordinate rejection, train-only standardization |
-| C2 tokenizer preservation | `src/tokenizers/coupling_preservation.py`, `src/tokenizers/physiology_semantic_tokenizer.py`, trainer | T0–T4 ablations and disposable asymmetric shaper | Gradient allowlist, synthetic lag, shuffle/time-shift, serialization and discard |
-| C3 foundation discovery | `src/foundation/model.py`, foundation trainer/config | Causal multi-horizon `q_0/q_1` objective alongside MLM/InfoNCE baselines | Causal masks, matched samples, proper losses, frozen-export provenance |
-| C4 independent certificate | `experiments/analyze_frozen_sequence_coupling.py`, visualization script | Fresh/cross-fitted evaluator and paper figure tables | No training-shaper reuse, subject holdout, nuisance/null controls, deterministic figures |
-
-Each batch follows `unit → integration → dry-run → smoke → short formal → full
-formal`. C2 cannot start a teacher-supervised smoke before C1 passes; C3 starts
-only from a frozen export that passes P5; C4 starts only after model selection
-and uses disjoint certificate folds or cross-fitted predictions. Full-scale
-experiments never substitute for a failed gradient or causality test.
-
-## ✅ Acceptance tests
-
-| Boundary | Blocking assertion |
-| --- | --- |
-| Patch locality | Identical patch content at different crop positions yields identical logits, IDs, and embeddings |
-| Causality | Future or target-patch changes do not alter a fixed-history prediction |
-| Modality independence | Changing EEG cannot alter fNIRS outputs and vice versa |
-| Gradient isolation | No branch gradient reaches the other modality encoder or codebook |
-| Gradient entry | Each teacher loss reaches exactly its declared tokenizer modules; coupling preservation reaches EEG only |
-| Auxiliary-target mask | Invalid targets contribute exactly zero to that supervised loss |
-| Coordinate routing | Flow cannot enter local/prototype losses; optional `s` never becomes a blocking coordinate implicitly |
-| Weighting | Uncalibrated posterior variance cannot affect the loss |
-| Coupling preservation | Synthetic delayed information survives T4 and disappears under shuffle/time shift; shaper is absent from export |
-| Foundation causality | `q_0/q_1` share targets and masks, use no future inputs, and cannot manufacture gain by degrading `q_0` |
-| Certificate independence | Fresh/cross-fitted evaluator does not reuse the training shaper or protected model-selection outcomes |
-| Quantizer state | Zero-assignment stability, EMA arithmetic, revival logging, and reload equivalence pass |
-| Pipeline | Loader → teacher → tokenizer → loss → checkpoint → export passes on CPU |
-| Consumer | Export modes use checkpoint-native codebook geometry and preserve sample order |
-
-The execution sequence is unit tests, integration tests, unified-loader dry run, scoped target validation when applicable, then objective-specific smoke and short formal. A failed target validation blocks only objectives that consume that target. Foundation discovery and the certificate remain blocked until tokenizer freeze and the G2/G3 information-retention and registered-semantics gates pass.
-
-## 🔗 References
-
-[^1]: Baevski, A., Zhou, H., Mohamed, A., & Auli, M. (2020). “wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations.” https://arxiv.org/abs/2006.11477
-[^2]: Jiang, W.-B., Wang, Y., Lu, B.-L., & Li, D. (2025). “NeuroLM: A Universal Multi-task Foundation Model for Bridging the Gap between Language and EEG Signals.” https://arxiv.org/abs/2409.00101
-[^3]: Jiang, W.-B. et al. (2024). “Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI.” https://proceedings.iclr.cc/paper_files/paper/2024/file/47393e8594c82ce8fd83adc672cf9872-Paper-Conference.pdf
-
-_Last updated: 2026-07-19_
+- E2 可从固定 commit/manifest 重放；
+- R3-P development gate 已完成；
+-新 launcher/export consumer 全部切换；
+- architecture changelog 记录 supersession；
+- history documentation 链接不再依赖可执行旧路径。

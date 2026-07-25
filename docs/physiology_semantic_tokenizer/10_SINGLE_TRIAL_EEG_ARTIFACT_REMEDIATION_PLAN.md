@@ -4,6 +4,12 @@ _Planned: 2026-07-14_
 
 _Execution status: v3 implemented, cached, fully audited and admitted_
 
+> **Authority update, 2026-07-25:** the clean branch remains available, but
+> artifact detection no longer has token-invalidity authority. Current
+> `valid_mask` is boundary/finite measurement validity; artifact fields are QC
+> annotations and sensitivity strata. See
+> [`2026-07-25_disable_eeg_artifact_mask_authority.md`](../project_changelog/2026-07-25_disable_eeg_artifact_mask_authority.md).
+
 ## 最终判定
 
 Single-Trial 原始 EEG 仍必须标记为 `raw_with_ocular_artifact`，但经过受控伪影

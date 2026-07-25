@@ -1,15 +1,57 @@
 # Physiology-semantic tokenizer experiment log
 
-_Active run registry; historical runs retain their original contracts, new runs use the 2026-07-14 measurement-first revision_
+_Active run registry; historical runs retain their original contracts, R-series runs use the 2026-07-25 boundary-only validity and architecture-return generation_
 
 ---
 
 ## 📋 Current status
 
-The complete tokenizer training loop is runnable. After observation-aligned sign calibration, the adaptive SSM physical teacher passes complete E0 and all SSM-derived physiological information, including fNIRS content, is fully accepted for teacher supervision. Earlier Croce/E0-v2 and negative fNIRS labels are historical pre-calibration diagnostics rather than current E0 results. The measurement-first runtime now includes patch-valid mask propagation, entry-specific routing, matched count/sum EMA, K-means/cosine/L2 geometry, annealed-hard reconstruction, gradient-preserving balance, aged occupancy health, logged revival/stop rules, and modality-specific balance temperatures. G1/E1 now passes at fixed K=128 for the registered diverse-farthest/T2-T2 candidate. Three post-stop retention seeds have final effective usage EEG `65.85 ± 1.66` and fNIRS `39.99 ± 1.38`; all retain constant revival totals for eight validation epochs after step 200 and pass the frozen modality-specific ranges. The earlier top-error candidate is rejected because one fNIRS seed transiently fell to `21.18` effective codes. A 2026-07-22 visual audit retains this occupancy/retention decision but finds strong prototype spectral concentration and no reproducible subject-held-out EEG–fNIRS token coupling trace, so full internal-geometry and physiological-coupling claims remain open. Current input normalization is full-record median/MAD, not the archived per-crop source/observation transform; archive-level assignment uniformity is not claimed. G2 information retention, G3 semantics, preservation shaping, foundation discovery, and independent certification remain separate later-stage questions.
+**2026-07-25 architecture-return decision.** E0–E2 are now a closed historical
+experiment generation. E2 retains the development decision
+`no_semantic_row_admitted_retain_T0`, but a post-run audit found that three
+different support populations had been conflated: the validation loader
+contained 300 windows / 3,000 patches; the `session_01/MA` teacher sidecar
+covered 50 windows / 500 patches (`16.67%`); and the historical artifact policy
+left 178/500 EEG patches for the frozen probe. The state/prototype teacher loss
+itself used all 500 target patches because it did not intersect the signal-valid
+mask. Commit `6d6c648` subsequently retired artifact-mask invalidity, so E2 and
+new runs do not share a validity policy. The frozen numbers remain unchanged;
+the corrected interpretation is recorded in
+[`analysis/20260725_E2_FAILURE_MODE_CORRIGENDUM_AND_RETURN_DECISION.md`](analysis/20260725_E2_FAILURE_MODE_CORRIGENDUM_AND_RETURN_DECISION.md).
+
+The next program is R0–R7, not E2.1. Its proposed SD-SVQ architecture uses
+raw-only modality-specific full-window encoders, independent fixed
+`K=128,D=64` codebooks, and full joint-driver-proxy trajectory reconstruction as the
+primary semantic objective. It removes multi-entry teacher routing and
+training-time coupling shaping from the minimal core. No R-series scientific
+gate has run; the current software remains the E2-compatible runtime.
+
+The complete E2-compatible tokenizer training loop is runnable. After
+observation-aligned sign calibration, the project governance decision marked
+the adaptive SSM teacher as passing complete E0 and authorized its states,
+including the fNIRS-informed correction, for development supervision. That
+admission is not a claim that the latent driver or SSM parameters are uniquely
+identified; raw run diagnostics and teacher controls remain part of construct
+validity. The measurement-first runtime includes patch-valid mask propagation,
+entry-specific routing, matched count/sum EMA, K-means/cosine/L2 geometry,
+annealed-hard reconstruction, gradient-preserving balance, aged occupancy
+health, logged revival/stop rules, and modality-specific balance temperatures.
+G1/E1 passes at fixed K=128 for the registered diverse-farthest/T2-T2
+candidate. Three post-stop retention seeds have final effective usage EEG
+`65.85 ± 1.66` and fNIRS `39.99 ± 1.38`; all retain constant revival totals for
+eight validation epochs after step 200 and pass the frozen modality-specific
+ranges. The earlier top-error candidate is rejected because one fNIRS seed
+transiently fell to `21.18` effective codes. A 2026-07-22 visual audit retains
+this occupancy/retention decision but finds strong prototype spectral
+concentration and no reproducible subject-held-out EEG–fNIRS token coupling
+trace. The old E6–E9 preservation/foundation chain is now historical; its frozen
+external-evaluation principle is split into R6A development offline association,
+R6B strict-cutoff prospective prediction, and the genuinely independent R7
+protected confirmation.
 
 | Date | ID | Suite | Status | Result root |
 | --- | --- | --- | --- | --- |
+| 2026-07-25 | `PST-SD-SVQ-RETURN-FREEZE` | Architecture and experiment-generation decision | Complete; R0–R7 planned, no scientific gate run | `docs/physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md` |
 | 2026-07-01 | `PST-DESIGN-FREEZE` | Documentation | Complete | Not applicable |
 | 2026-07-02 | `PST-P1-DRYRUN` | E0 contract dry-run | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_dry_run/` |
 | 2026-07-02 | `PST-P1-SMOKE` | E0 contract smoke | Passed; G0 not evaluated | `experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260702_191234_p1_contract_smoke/` |
