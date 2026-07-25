@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import numpy as np
-from sklearn.model_selection import GroupKFold, KFold, StratifiedGroupKFold
+from sklearn.model_selection import GroupKFold, KFold, StratifiedGroupKFold, StratifiedKFold
 
 from .data import STANetUnifiedTaskDataset
 
@@ -196,6 +196,105 @@ def build_cross_subject_registry(
             "test_indices": sorted(test_indices),
             "indices_sha256": _sha256_json(sorted(test_indices)),
         })
+    return public, protected
+
+
+def build_sample_random_registry(
+    dataset: STANetUnifiedTaskDataset,
+    *,
+    seed: int = 42,
+    outer_folds: int = 5,
+    inner_folds: int = 3,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build nested CV folds by sample index, deliberately ignoring dependency groups.
+
+    The outer test folds partition the complete task dataset exactly once.  The
+    first inner fold of each outer development partition is retained as the
+    public validation partition.  This mirrors the train/validation/test
+    proportions of the cross-subject registry while changing only the split
+    unit from subject to sample.
+    """
+
+    rows = _metadata(dataset)
+    indices = np.arange(len(rows), dtype=np.int64)
+    if len(indices) < outer_folds:
+        raise ValueError("outer_folds exceeds the available sample count")
+    classification = dataset.spec.task_type == "classification"
+    labels = np.asarray([
+        int(row["class_index"] if row["class_index"] is not None else 0) for row in rows
+    ])
+    if classification:
+        outer = StratifiedKFold(n_splits=outer_folds, shuffle=True, random_state=seed)
+        outer_splits = outer.split(indices, labels)
+    else:
+        outer = KFold(n_splits=outer_folds, shuffle=True, random_state=seed)
+        outer_splits = outer.split(indices)
+
+    public, protected = [], []
+    all_test_indices: list[int] = []
+    for outer_index, (development_pos, test_pos) in enumerate(outer_splits):
+        development_indices = indices[np.asarray(development_pos)]
+        test_indices = sorted(int(value) for value in indices[np.asarray(test_pos)])
+        development_labels = labels[np.asarray(development_pos)]
+        inner_count = min(inner_folds, len(development_indices))
+        if inner_count < 2:
+            raise ValueError("sample-random inner CV requires at least two folds")
+        if classification:
+            inner = StratifiedKFold(
+                n_splits=inner_count, shuffle=True, random_state=seed + outer_index + 1
+            )
+            inner_splits = inner.split(development_indices, development_labels)
+        else:
+            inner = KFold(
+                n_splits=inner_count, shuffle=True, random_state=seed + outer_index + 1
+            )
+            inner_splits = inner.split(development_indices)
+        train_pos, validation_pos = next(iter(inner_splits))
+        train_indices = sorted(int(value) for value in development_indices[np.asarray(train_pos)])
+        validation_indices = sorted(
+            int(value) for value in development_indices[np.asarray(validation_pos)]
+        )
+        descriptor = {
+            "scope": "random_samples",
+            "outer_fold": outer_index,
+            "sample_count": len(test_indices),
+            "subject_count": len({str(rows[index]["subject"]) for index in test_indices}),
+            "indices_sha256": _sha256_json(test_indices),
+        }
+        fold_id = f"outer{outer_index}"
+        manifest = _public_manifest(
+            dataset,
+            rows,
+            protocol="sample_random_nested_cv",
+            fold_id=fold_id,
+            seed=seed,
+            train_indices=train_indices,
+            validation_indices=validation_indices,
+            protected_descriptor=descriptor,
+        )
+        manifest.update({
+            "split_axis": "dataset_sample_index",
+            "outer_folds": outer_folds,
+            "inner_folds": inner_folds,
+            "selected_inner_fold": 0,
+            "dependency_group_isolation": False,
+        })
+        manifest.pop("split_sha256")
+        manifest["split_sha256"] = _sha256_json(manifest)
+        public.append(manifest)
+        protected.append({
+            "schema": PROTECTED_SCHEMA,
+            "task": dataset.spec.key,
+            "protocol": "sample_random_nested_cv",
+            "fold_id": fold_id,
+            "outer_fold": outer_index,
+            "test_indices": test_indices,
+            "indices_sha256": _sha256_json(test_indices),
+        })
+        all_test_indices.extend(test_indices)
+
+    if sorted(all_test_indices) != indices.tolist():
+        raise RuntimeError("sample-random outer test folds do not partition the complete dataset")
     return public, protected
 
 
