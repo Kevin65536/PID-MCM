@@ -94,6 +94,23 @@ reconstructed best historical validation checkpoint. It
 writes machine-readable CSV/JSON, a Markdown audit, and SVG/300-DPI PNG figures
 under the run's `analysis/` directory.
 
+The final MI/WG development round uses the frozen
+`configs/final_mi_wg_targeted.yaml` profile. It enqueues control-like, slow,
+regularized, and slow-plus-regularized anchors, gives every trial at least 20
+epochs before pruning, and assigns MI/WG to separate GPUs:
+
+```bash
+.venv/bin/python comparative_methods/STA-Net-PyTorch/launch_tuning.py \
+  --study-id 20260724_sta_net_mi_wg_final_targeted_v1_100ep \
+  --n-trials 16 --startup-trials 8 \
+  --base-config comparative_methods/STA-Net-PyTorch/configs/final_mi_wg_targeted.yaml \
+  --tasks motor_imagery wg
+```
+
+This profile is a final development selection procedure, not permission to
+open protected manifests. The selected configuration must still be frozen
+before the one-time protected outer-subject evaluation.
+
 Training uses only the public development split. A winner may be frozen only
 after it completes the 100-epoch rung:
 

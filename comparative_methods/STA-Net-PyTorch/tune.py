@@ -26,8 +26,9 @@ from sta_net_pytorch.data import STANetUnifiedTaskDataset, get_sta_net_task_spec
 from sta_net_pytorch.splits import development_subject_split
 
 RUNG_EPOCHS = (2, 8, 20, 40, 100)
-SCHEMA = "sta_net_optuna_tuning_v2"
+SCHEMA = "sta_net_optuna_tuning_v3"
 OBJECTIVE_POLICY = "best_validation_checkpoint_through_rung"
+DEFAULT_PRUNE_AFTER_EPOCH = 2
 
 
 def utc_now() -> str:
@@ -54,8 +55,12 @@ def prepare_split(task: str, cache_root: str, seed: int, study_root: Path) -> Pa
     return path
 
 
-def sample_config(trial: optuna.Trial, base: dict[str, Any], task: str) -> dict[str, Any]:
-    config = json.loads(json.dumps(base))
+def _sample_standard_config(
+    trial: optuna.Trial,
+    config: dict[str, Any],
+    task: str,
+) -> None:
+    """Preserve the original broad v2 search space."""
     config["model"]["dropout"] = trial.suggest_float("dropout", 0.2, 0.6)
     config["loss"]["eeg_aux_weight"] = trial.suggest_categorical(
         "eeg_aux_weight", [0.0, 0.25, 0.5, 1.0]
@@ -76,15 +81,127 @@ def sample_config(trial: optuna.Trial, base: dict[str, Any], task: str) -> dict[
     training["grad_clip_norm"] = trial.suggest_categorical("grad_clip_norm", [0.5, 1.0, 2.0, 5.0])
     training["scheduler"] = trial.suggest_categorical("scheduler", ["constant", "cosine"])
     training["warmup_ratio"] = trial.suggest_categorical("warmup_ratio", [0.0, 0.05, 0.1])
+
+
+def _sample_final_mi_wg_config(
+    trial: optuna.Trial,
+    config: dict[str, Any],
+    task: str,
+) -> str:
+    """Sample the preregistered slow-convergence/regularization intervention space."""
+    if task not in {"motor_imagery", "wg"}:
+        raise ValueError("final_mi_wg profile is restricted to motor_imagery and wg")
+
+    regime = trial.suggest_categorical(
+        "intervention_regime",
+        ["control_like", "slow", "regularized", "slow_regularized"],
+    )
+    config["loss"]["eeg_aux_weight"] = trial.suggest_categorical(
+        "eeg_aux_weight", [0.0, 0.25, 0.5, 1.0]
+    )
+    config["loss"]["alignment_weight"] = trial.suggest_categorical(
+        "alignment_weight", [0.0, 0.1, 0.3, 1.0]
+    )
+    # The source tasks are balanced binary problems. Avoid spending the small
+    # final-round budget on equivalent class-weighting policies.
+    config["loss"]["class_weighting"] = "none"
+    training = config["training"]
+
+    if regime == "control_like":
+        config["model"]["dropout"] = trial.suggest_float("control_dropout", 0.25, 0.50)
+        config["loss"]["label_smoothing"] = trial.suggest_categorical(
+            "control_label_smoothing", [0.0, 0.05, 0.1]
+        )
+        training["lr"] = trial.suggest_float("control_lr", 3e-5, 5e-4, log=True)
+        training["weight_decay"] = trial.suggest_float(
+            "control_weight_decay", 1e-6, 5e-3, log=True
+        )
+        training["scheduler"] = trial.suggest_categorical(
+            "control_scheduler", ["constant", "cosine"]
+        )
+        training["warmup_ratio"] = trial.suggest_categorical(
+            "control_warmup_ratio", [0.0, 0.05, 0.1]
+        )
+    elif regime == "slow":
+        config["model"]["dropout"] = trial.suggest_float("slow_dropout", 0.30, 0.60)
+        config["loss"]["label_smoothing"] = trial.suggest_categorical(
+            "slow_label_smoothing", [0.05, 0.1, 0.15]
+        )
+        training["lr"] = trial.suggest_float("slow_lr", 1e-5, 8e-5, log=True)
+        training["weight_decay"] = trial.suggest_float(
+            "slow_weight_decay", 1e-5, 1e-2, log=True
+        )
+        training["scheduler"] = trial.suggest_categorical(
+            "slow_scheduler", ["constant", "cosine"]
+        )
+        training["warmup_ratio"] = trial.suggest_categorical(
+            "slow_warmup_ratio", [0.1, 0.2]
+        )
+    elif regime == "regularized":
+        config["model"]["dropout"] = trial.suggest_float("regularized_dropout", 0.45, 0.70)
+        config["loss"]["label_smoothing"] = trial.suggest_categorical(
+            "regularized_label_smoothing", [0.1, 0.15, 0.2]
+        )
+        training["lr"] = trial.suggest_float("regularized_lr", 3e-5, 3e-4, log=True)
+        training["weight_decay"] = trial.suggest_float(
+            "regularized_weight_decay", 1e-3, 5e-2, log=True
+        )
+        training["scheduler"] = trial.suggest_categorical(
+            "regularized_scheduler", ["constant", "cosine"]
+        )
+        training["warmup_ratio"] = trial.suggest_categorical(
+            "regularized_warmup_ratio", [0.05, 0.1]
+        )
+    else:
+        config["model"]["dropout"] = trial.suggest_float(
+            "slow_regularized_dropout", 0.45, 0.70
+        )
+        config["loss"]["label_smoothing"] = trial.suggest_categorical(
+            "slow_regularized_label_smoothing", [0.1, 0.15, 0.2]
+        )
+        training["lr"] = trial.suggest_float("slow_regularized_lr", 1e-5, 1e-4, log=True)
+        training["weight_decay"] = trial.suggest_float(
+            "slow_regularized_weight_decay", 5e-4, 5e-2, log=True
+        )
+        training["scheduler"] = trial.suggest_categorical(
+            "slow_regularized_scheduler", ["constant", "cosine"]
+        )
+        training["warmup_ratio"] = trial.suggest_categorical(
+            "slow_regularized_warmup_ratio", [0.1, 0.2]
+        )
+
+    training["grad_clip_norm"] = trial.suggest_categorical(
+        "grad_clip_norm", [0.5, 1.0, 2.0]
+    )
+    config.setdefault("task_overrides", {}).setdefault(task, {})["batch_size"] = (
+        trial.suggest_categorical("batch_size", [16, 32])
+    )
+    return regime
+
+
+def sample_config(trial: optuna.Trial, base: dict[str, Any], task: str) -> dict[str, Any]:
+    config = json.loads(json.dumps(base))
+    search = dict(config.pop("tuning_search", {}))
+    profile = str(search.get("profile", "standard"))
+    intervention_regime = "standard"
+    if profile == "standard":
+        _sample_standard_config(trial, config, task)
+    elif profile == "final_mi_wg":
+        intervention_regime = _sample_final_mi_wg_config(trial, config, task)
+    else:
+        raise ValueError(f"unsupported tuning search profile: {profile}")
+
+    training = config["training"]
     if task == "refed_regression":
         choices = [4, 8]
     elif task == "visual":
         choices = [16, 24, 32]
     else:
         choices = [16, 32, 64]
-    config.setdefault("task_overrides", {}).setdefault(task, {})["batch_size"] = trial.suggest_categorical(
-        "batch_size", choices
-    )
+    if profile == "standard":
+        config.setdefault("task_overrides", {}).setdefault(task, {})["batch_size"] = (
+            trial.suggest_categorical("batch_size", choices)
+        )
     training["selection_metric"] = "masked_rmse_scaled" if task == "refed_regression" else "macro_f1"
     training["selection_mode"] = "min" if task == "refed_regression" else "max"
     config["tuning"] = {
@@ -92,6 +209,8 @@ def sample_config(trial: optuna.Trial, base: dict[str, Any], task: str) -> dict[
         "trial_number": trial.number,
         "rung_epochs": list(RUNG_EPOCHS),
         "selection_metric": training["selection_metric"],
+        "search_profile": profile,
+        "intervention_regime": intervention_regime,
     }
     return config
 
@@ -131,6 +250,7 @@ def objective_factory(
     split_path: Path,
     study_root: Path,
     physical_gpu: int,
+    prune_after_epoch: int,
 ):
     def objective(trial: optuna.Trial) -> float:
         trial_dir = study_root / "trials" / task / f"trial_{trial.number:05d}"
@@ -143,6 +263,7 @@ def objective_factory(
             "trial_number": trial.number, "physical_gpu": physical_gpu,
             "created_at": utc_now(), "rung_epochs": list(RUNG_EPOCHS),
             "objective_policy": OBJECTIVE_POLICY,
+            "prune_after_epoch": prune_after_epoch,
             "split_manifest": str(split_path), "parameters": trial.params,
         })
         trial.set_user_attr("schema", SCHEMA)
@@ -192,11 +313,16 @@ def objective_factory(
             write_json(trial_dir / "rungs.json", {"schema": SCHEMA, "rungs": rung_rows})
             trial.set_user_attr("best_checkpoint_epoch", selected_epoch)
             trial.report(score, step=rung_index + 1)
-            if epochs < RUNG_EPOCHS[-1] and trial.should_prune():
+            if (
+                epochs < RUNG_EPOCHS[-1]
+                and epochs >= prune_after_epoch
+                and trial.should_prune()
+            ):
                 write_json(trial_dir / "trial_manifest.json", {
                     "schema": SCHEMA, "status": "pruned", "task": task,
                     "trial_number": trial.number, "physical_gpu": physical_gpu,
                     "objective_policy": OBJECTIVE_POLICY,
+                    "prune_after_epoch": prune_after_epoch,
                     "pruned_at_epochs": epochs, "selected_checkpoint_epoch": selected_epoch,
                     "score": score, "parameters": trial.params,
                 })
@@ -205,6 +331,7 @@ def objective_factory(
             "schema": SCHEMA, "status": "completed_100_epochs", "task": task,
             "trial_number": trial.number, "physical_gpu": physical_gpu,
             "objective_policy": OBJECTIVE_POLICY,
+            "prune_after_epoch": prune_after_epoch,
             "selected_checkpoint_epoch": selected_epoch,
             "completed_at": utc_now(), "score": score, "parameters": trial.params,
         })
@@ -230,10 +357,12 @@ def run_task(args: argparse.Namespace, task: str, base: dict[str, Any], root: Pa
     study.set_user_attr("schema", SCHEMA)
     study.set_user_attr("objective_policy", OBJECTIVE_POLICY)
     study.set_user_attr("rung_epochs", list(RUNG_EPOCHS))
+    study.set_user_attr("prune_after_epoch", args.prune_after_epoch)
     study.optimize(
         objective_factory(
             task=task, base_config=base, split_path=split_path,
             study_root=root, physical_gpu=args.physical_gpu,
+            prune_after_epoch=args.prune_after_epoch,
         ),
         n_trials=args.n_trials, gc_after_trial=True, catch=(RuntimeError,),
     )
@@ -241,6 +370,7 @@ def run_task(args: argparse.Namespace, task: str, base: dict[str, Any], root: Pa
         "schema": SCHEMA, "task": task, "study_name": study.study_name,
         "trial_count": len(study.trials), "best_value": study.best_value,
         "best_params": study.best_params, "objective_policy": OBJECTIVE_POLICY,
+        "prune_after_epoch": args.prune_after_epoch,
         "worker_id": args.worker_id, "updated_at": utc_now(),
     })
 
@@ -254,6 +384,7 @@ def main() -> None:
     parser.add_argument("--tasks", nargs="+", required=True)
     parser.add_argument("--n-trials", type=int, default=12)
     parser.add_argument("--startup-trials", type=int, default=6)
+    parser.add_argument("--prune-after-epoch", type=int, default=None)
     parser.add_argument("--sampler-seed-offset", type=int, default=0)
     parser.add_argument("--worker-id", default="worker")
     args = parser.parse_args()
@@ -261,6 +392,16 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
     base_path = Path(args.base_config).resolve()
     base = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    configured_prune_epoch = int(
+        base.get("tuning_search", {}).get("prune_after_epoch", DEFAULT_PRUNE_AFTER_EPOCH)
+    )
+    args.prune_after_epoch = (
+        configured_prune_epoch if args.prune_after_epoch is None else int(args.prune_after_epoch)
+    )
+    if args.prune_after_epoch not in RUNG_EPOCHS[:-1]:
+        raise ValueError(
+            f"prune_after_epoch must be one of {RUNG_EPOCHS[:-1]}, got {args.prune_after_epoch}"
+        )
     status_path = root / "workers" / f"{args.worker_id}.json"
     write_json(status_path, {
         "schema": SCHEMA,
@@ -269,6 +410,7 @@ def main() -> None:
         "physical_gpu": args.physical_gpu,
         "tasks": args.tasks,
         "trial_quota_per_task": args.n_trials,
+        "prune_after_epoch": args.prune_after_epoch,
         "started_at": utc_now(),
     })
     completed_tasks: list[str] = []
@@ -284,6 +426,7 @@ def main() -> None:
                 "tasks": args.tasks,
                 "completed_tasks": completed_tasks,
                 "trial_quota_per_task": args.n_trials,
+                "prune_after_epoch": args.prune_after_epoch,
                 "updated_at": utc_now(),
             })
     except Exception as error:
@@ -295,6 +438,7 @@ def main() -> None:
             "tasks": args.tasks,
             "completed_tasks": completed_tasks,
             "trial_quota_per_task": args.n_trials,
+            "prune_after_epoch": args.prune_after_epoch,
             "error_type": type(error).__name__,
             "error": str(error),
             "updated_at": utc_now(),

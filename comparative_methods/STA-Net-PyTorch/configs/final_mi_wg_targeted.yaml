@@ -1,0 +1,142 @@
+schema: sta_net_pytorch_training_v2
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+
+model:
+  dropout: 0.5
+  embedding_dim: 256
+  attention_heads: 10
+  attention_key_dim: 256
+
+loss:
+  main_weight: 1.0
+  eeg_aux_weight: 1.0
+  alignment_weight: 1.0
+  regression_loss: smooth_l1
+  class_weighting: none
+  label_smoothing: 0.0
+
+training:
+  seed: 42
+  epochs: 100
+  batch_size: 32
+  num_workers: 8
+  prefetch_factor: 2
+  pack_record_batches: false
+  adapted_sample_cache_size: 0
+  torch_cpu_threads: 2
+  lr: 0.0001
+  weight_decay: 0.0001
+  grad_clip_norm: 1.0
+  log_every_steps: 25
+  max_steps: 0
+  validation_every_epochs: 1
+  amp: true
+  amp_dtype: bfloat16
+  fused_optimizer: true
+  scheduler: cosine
+  scheduler_total_epochs: 100
+  warmup_ratio: 0.05
+  selection_min_delta: 0.0
+
+task_overrides:
+  motor_imagery:
+    batch_size: 16
+  wg:
+    batch_size: 32
+
+tuning_search:
+  profile: final_mi_wg
+  prune_after_epoch: 20
+  anchors:
+    motor_imagery:
+      - intervention_regime: control_like
+        eeg_aux_weight: 1.0
+        alignment_weight: 1.0
+        grad_clip_norm: 0.5
+        batch_size: 16
+        control_dropout: 0.40625676445187753
+        control_label_smoothing: 0.0
+        control_lr: 0.00005674269927750071
+        control_weight_decay: 0.000013692847470315544
+        control_scheduler: cosine
+        control_warmup_ratio: 0.1
+      - intervention_regime: slow
+        eeg_aux_weight: 1.0
+        alignment_weight: 1.0
+        grad_clip_norm: 0.5
+        batch_size: 16
+        slow_dropout: 0.4
+        slow_label_smoothing: 0.1
+        slow_lr: 0.00002
+        slow_weight_decay: 0.0001
+        slow_scheduler: constant
+        slow_warmup_ratio: 0.2
+      - intervention_regime: regularized
+        eeg_aux_weight: 1.0
+        alignment_weight: 1.0
+        grad_clip_norm: 0.5
+        batch_size: 16
+        regularized_dropout: 0.6
+        regularized_label_smoothing: 0.15
+        regularized_lr: 0.00006
+        regularized_weight_decay: 0.01
+        regularized_scheduler: cosine
+        regularized_warmup_ratio: 0.1
+      - intervention_regime: slow_regularized
+        eeg_aux_weight: 1.0
+        alignment_weight: 1.0
+        grad_clip_norm: 0.5
+        batch_size: 16
+        slow_regularized_dropout: 0.55
+        slow_regularized_label_smoothing: 0.15
+        slow_regularized_lr: 0.00002
+        slow_regularized_weight_decay: 0.005
+        slow_regularized_scheduler: constant
+        slow_regularized_warmup_ratio: 0.2
+    wg:
+      - intervention_regime: control_like
+        eeg_aux_weight: 0.0
+        alignment_weight: 0.3
+        grad_clip_norm: 1.0
+        batch_size: 32
+        control_dropout: 0.3241068384647813
+        control_label_smoothing: 0.1
+        control_lr: 0.0003844780038716483
+        control_weight_decay: 0.0010631693721371114
+        control_scheduler: cosine
+        control_warmup_ratio: 0.05
+      - intervention_regime: slow
+        eeg_aux_weight: 0.0
+        alignment_weight: 0.3
+        grad_clip_norm: 1.0
+        batch_size: 32
+        slow_dropout: 0.4
+        slow_label_smoothing: 0.1
+        slow_lr: 0.00004
+        slow_weight_decay: 0.001
+        slow_scheduler: cosine
+        slow_warmup_ratio: 0.2
+      - intervention_regime: regularized
+        eeg_aux_weight: 0.0
+        alignment_weight: 0.3
+        grad_clip_norm: 1.0
+        batch_size: 32
+        regularized_dropout: 0.6
+        regularized_label_smoothing: 0.15
+        regularized_lr: 0.0001
+        regularized_weight_decay: 0.01
+        regularized_scheduler: cosine
+        regularized_warmup_ratio: 0.1
+      - intervention_regime: slow_regularized
+        eeg_aux_weight: 0.0
+        alignment_weight: 0.3
+        grad_clip_norm: 1.0
+        batch_size: 32
+        slow_regularized_dropout: 0.55
+        slow_regularized_label_smoothing: 0.15
+        slow_regularized_lr: 0.00003
+        slow_regularized_weight_decay: 0.005
+        slow_regularized_scheduler: constant
+        slow_regularized_warmup_ratio: 0.2
