@@ -28,6 +28,7 @@ The currently runnable implementation remains documented in [`docs/ARCHITECTURE.
 | Which experiments can validate or falsify it? | [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md) |
 | Which target-architecture experiments have run? | [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) |
 | How are external comparative methods admitted and evaluated? | [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) |
+| How is resource-bounded EFRM downstream performance frozen? | [`EFRM resource-bounded dual protocol`](../../comparative_methods/EFRM-PyTorch/sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md) |
 | What exact code migration should be executed? | [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) |
 | What does the current implementation look like? | [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) |
 | Which target-architecture diagnostic records are archived? | [`archive/diagnostics/`](archive/diagnostics/) |

@@ -1,0 +1,120 @@
+schema: efrm_resource_bounded_dual_protocol_v1
+protocol_id: efrm_resource_bounded_dual_protocol_v1
+status: protocol_frozen_splits_not_materialized
+frozen_on: 2026-07-25
+authority: active_efrm_resource_bounded_downstream_performance_protocol
+
+method:
+  method_id: efrm_sync_200_10_variable_channel_v1
+  pretraining_regime: synchronized_in_domain_source_cohort_only
+  pretrained_checkpoint_count: 1
+  pretrained_checkpoint_seed: 42
+  base_config: ../configs/pretrain_sync.yaml
+  source_validation:
+    unit: canonical_subject_id
+    splitter: KFold
+    n_splits: min_5_or_source_subject_count
+    shuffle: true
+    random_state: 43
+    validation_partition: first_test_partition
+  checkpoint_selection_scope: source_validation_only
+  checkpoint_selection_metric: total_validation_loss_min
+  target_exposure_allowed: false
+
+cohort_partition:
+  unit: canonical_subject_id
+  scope: dataset_level_shared_by_tasks
+  splitter: KFold
+  n_splits: 3
+  shuffle: true
+  random_state: 42
+  source_partition: first_test_partition
+  target_partition: complement
+  minimum_target_subjects_per_task: 5
+  source_target_overlap_allowed: false
+
+downstream:
+  cohort: target_only
+  tasks:
+    - motor_imagery
+    - mental_arithmetic
+    - wg
+    - nback
+    - dsr
+    - visual
+    - refed_regression
+  required_transfer_mode: linear_probe
+  optional_transfer_mode: full_finetune
+  modality: paired
+  initialization: pretrained
+  seed: 42
+  base_config: ../configs/downstream_public_pilot.yaml
+  target_hyperparameter_tuning_allowed: false
+  required_linear_probe_job_count: 70
+  protocols:
+    strict_cross_subject:
+      reporting_name: efrm_source_target_strict_cross_subject_5fold_v1
+      outer_unit: canonical_subject_id
+      outer_splitter: KFold
+      outer_folds: 5
+      inner_folds: 3
+      selected_inner_fold: 0
+      inner_random_state: 43_plus_outer_index
+      dependency_group_isolation: true
+    sample_random:
+      reporting_name: efrm_source_target_sample_random_5fold_v1
+      outer_unit: target_dataset_sample_index
+      classification_outer_splitter: StratifiedKFold
+      regression_outer_splitter: KFold
+      outer_folds: 5
+      inner_folds: 3
+      selected_inner_fold: 0
+      inner_random_state: 43_plus_outer_index
+      dependency_group_isolation: false
+      same_subject_across_partitions_allowed: true
+
+selection:
+  classification: validation_macro_f1_max
+  regression: validation_masked_scaled_rmse_min
+  regression_scaler_fit_scope: current_outer_fold_training_indices_only
+  protected_test_access: once_after_protocol_and_jobs_are_frozen
+
+reporting:
+  classification_primary: macro_f1
+  classification_source_aligned: accuracy
+  classification_required:
+    - balanced_accuracy
+    - cohen_kappa
+    - per_class_precision
+    - per_class_recall
+    - per_class_f1
+    - confusion_matrix
+    - calibration
+  regression_primary: native_ccc
+  regression_required:
+    - native_mae
+    - native_rmse
+    - native_r2
+    - native_pearson
+    - native_spearman
+    - native_coverage
+  aggregation_unit: target_outer_fold
+  fold_count: 5
+  standard_deviation: sample_sd_ddof_1_across_outer_folds
+  confidence_interval: two_sided_t_95_df_4
+  pooled_out_of_fold_role: diagnostic_only
+
+comparison:
+  directly_comparable_sta_net_requirement: exact_same_target_cohort_and_fold_manifests
+  current_full_dataset_sta_net_fivefold_direct_ranking_allowed: false
+  unmatched_results_table_policy: separate_tables_no_shared_rank
+
+prohibited:
+  - target_samples_in_pretraining_or_pretraining_selection
+  - existing_development_checkpoint_in_primary_tables
+  - global_in_domain_checkpoint_labeled_as_inductive
+  - seed_sd_labeled_as_fold_sd
+  - pooled_out_of_fold_metric_replacing_fold_mean
+  - partial_grid_cherry_picking
+  - target_outcome_driven_protocol_revision
+  - transductive_diagnostic_in_primary_comparison

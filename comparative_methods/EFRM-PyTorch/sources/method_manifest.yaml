@@ -17,5 +17,18 @@ declared_deviations:
   - valid measured channel counts are variable and channels are never duplicated
   - all seven shared benchmark tasks are evaluated
   - REFED uses an explicitly named sequence-regression adapter
-  - formal checkpoints are retrained inside every protected outer-fold boundary
-
+  - the active resource-bounded formal track uses one source-only checkpoint and a disjoint target-only dual five-fold benchmark
+  - exact full-dataset fold-matched evaluation would require fold-specific pretraining and is inactive under the current compute budget
+active_downstream_protocol:
+  protocol_id: efrm_resource_bounded_dual_protocol_v1
+  document: 20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md
+  machine_contract: resource_bounded_dual_protocol_v1.yaml
+  pretraining_checkpoint_count: 1
+  pretraining_scope: source_cohort_only
+  downstream_scope: disjoint_target_cohort_only
+  result_families:
+    - strict_cross_subject_fivefold
+    - sample_random_fivefold
+  primary_transfer_mode: linear_probe
+  full_finetune_role: secondary_resource_contingent
+  direct_current_sta_net_full_dataset_ranking_allowed: false

@@ -230,12 +230,30 @@ The isolated reproduction is [`comparative_methods/EFRM-PyTorch`](../../comparat
 - retain every measured good EEG channel and every name-paired HbO/HbR location, consume validity masks in reconstruction and pooling, and never repeat/mirror channels;
 - form stackable batches within the same measured channel inventory but sample records round-robin, so CLIP negatives are not systematically adjacent/overlapping windows from one recording;
 - cover MI, MA, WG, n-back, DSR, Visual, and the explicitly named `efrm_sync_regression_adapter` for REFED;
-- use one public-only development checkpoint for development, but retrain a separate checkpoint inside every formal outer-fold boundary; all-subject pretraining is diagnostic/transductive only;
+- retain fold-specific pretraining as the requirement for any future exact full-dataset fold-matched benchmark, while the active compute-bounded track uses one source-only checkpoint and a completely disjoint target cohort for both strict and sample-random five-fold downstream evaluation; all-subject pretraining remains diagnostic/transductive only;
 - export the exact identity positive-pair mask, raw cosine matrix, scaled logits, bidirectional ranks/top-k/MRR, within-record hard negatives, and paired embedding projection. The side-by-side physiological figure labels EFRM's diagonal as synchronized co-occurrence, not direction, hemodynamic delay, or mechanism.
 
 Public-boundary preflight reuses the seven frozen STA-Net development split manifests. With the strict “common allowed subjects; validation role wins” rule, it admits 14,194 synchronized training windows and 3,540 validation windows across the four datasets, with no protected manifest opened. Ten implementation tests and a real Single-Trial CPU forward/backward smoke pass; these are connectivity evidence, not performance estimates.
 
 EFRM may enter the **pretrained transfer track** only with the pretraining data regime explicit. The unavailable paper checkpoint cannot populate the `external_pretraining` track. The primary run is instead `in_domain_pretraining`, trained only on the four admitted synchronized datasets. It must not be described as a numerical reproduction of the paper's 1,247.5-hour pretraining result.
+
+The active EFRM performance protocol is frozen in
+[`20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](../../comparative_methods/EFRM-PyTorch/sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md).
+Dataset-level subjects are divided once into a source cohort and a disjoint
+target cohort. One source-only EFRM checkpoint is frozen before the target
+cohort supplies strict cross-subject and direct sample-random five-fold
+downstream folds. The required primary matrix is paired-modality linear
+probing for seven tasks, two protocols, and five outer folds. Macro-F1 and
+Accuracy are reported for classification, native CCC is primary for REFED,
+and the formal standard deviation is the sample SD across the five target
+outer folds. Seed SD and pooled out-of-fold metrics cannot replace fold SD.
+
+This design estimates resource-bounded source-to-target transfer rather than
+the current STA-Net full-dataset estimand. Direct EFRM-versus-STA-Net ranking
+is permitted only after STA-Net is run on the exact same EFRM target cohort
+and fold manifests. A fixed checkpoint that has seen target samples during
+self-supervised pretraining may be reported only as a separately named
+transductive diagnostic and is excluded from both primary result families.
 
 ### Method-selection rule
 

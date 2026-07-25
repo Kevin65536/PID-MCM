@@ -148,13 +148,17 @@ training subjects from all four datasets; validation subjects are used only
 for self-supervised stopping and downstream model selection. Reserved test
 subjects are never loaded.
 
-Formal cross-subject evaluation retrains one EFRM checkpoint for every outer
-fold and excludes that fold's protected subjects from pretraining, tuning,
-normalization, and stopping. Formal within-subject evaluation likewise
-excludes the protected session/record/video/trial group from self-supervised
-pretraining. A global all-subject checkpoint, if generated for exploratory
-embedding plots, is labeled `transductive_diagnostic` and cannot enter the
-primary result table.
+An exact full-dataset cross-subject evaluation would retrain one EFRM
+checkpoint for every outer fold and exclude that fold's protected subjects
+from pretraining, tuning, normalization, and stopping. That track is not
+active under the current compute budget. The active formal performance path
+is instead frozen in
+[`sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md):
+one EFRM checkpoint is pretrained on a fixed source cohort, while a disjoint
+target cohort supplies both strict cross-subject and sample-random five-fold
+downstream evaluation. Target data are absent from pretraining and pretraining
+selection. A global all-subject checkpoint remains a
+`transductive_diagnostic` and cannot enter either primary result table.
 
 The downstream matrix matches STA-Net:
 
@@ -168,18 +172,46 @@ The downstream matrix matches STA-Net:
 | Visual motivation | RR/RF/FF/FR | paired 8 s | `efrm_sync_classification` |
 | REFED | 20-point valence/arousal sequence | paired 20 s | `efrm_sync_regression_adapter` |
 
-Every task reports both frozen-backbone linear probing and full fine-tuning.
-Classification selects checkpoints by validation macro-F1 and reports macro
-F1, accuracy, balanced accuracy, Cohen's kappa, per-class recall, calibration,
-and subject-level uncertainty. REFED selects by masked scaled RMSE and reports
-native-coordinate CCC, MAE, RMSE, R2, Pearson/Spearman correlation, coverage,
-and subject-level uncertainty. Protected results are opened only through the
-shared protocol's explicit unlock path.
+The resource-bounded protocol requires frozen-backbone linear probing for all
+seven tasks and treats full fine-tuning as a secondary resource-contingent
+matrix. Classification selects checkpoints by validation macro-F1 and reports
+outer-fold macro-F1 and Accuracy mean with sample SD, balanced accuracy,
+Cohen's kappa, per-class recall, calibration, and fold-level uncertainty.
+REFED selects by masked scaled RMSE and reports outer-fold native-coordinate
+CCC mean with sample SD, MAE, RMSE, R2, Pearson/Spearman correlation, and
+coverage. Protected results are opened only through the frozen protocol's
+explicit unlock path.
 
-Development tuning follows the active STA-Net policy: seed 42, 12 Optuna trials
-per task and transfer mode, 2/8/20/40/100-epoch rungs, and best validation
-checkpoint through each rung. Formal evidence uses seeds 17, 42, and 73 after
-the configuration is frozen.
+The earlier public-development tuning plan follows the STA-Net policy: seed
+42, 12 Optuna trials per task and transfer mode, 2/8/20/40/100-epoch rungs,
+and best validation checkpoint through each rung. It remains development
+evidence. The active resource-bounded protocol instead freezes the completed
+development configuration before target access and uses downstream seed 42;
+its primary standard deviation is across target outer folds. Additional
+downstream seeds are sensitivity evidence only, and the previous three-seed
+formal plan does not override the active protocol.
+
+### Active resource-bounded performance protocol
+
+The normative protocol and its machine-readable contract are:
+
+- [`20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md)
+- [`resource_bounded_dual_protocol_v1.yaml`](sources/resource_bounded_dual_protocol_v1.yaml)
+
+Dataset-level subjects are deterministically divided into a source cohort and
+a disjoint target cohort. The source cohort supplies one source-only
+pretraining run. The target cohort supplies two independent five-fold
+downstream registries: subject-disjoint strict cross-subject folds and direct
+sample-random folds that deliberately permit participant and acquisition
+dependencies to cross partitions. The required linear-probe grid is 7 tasks ×
+2 protocols × 5 outer folds at fixed seed 42. Its primary uncertainty is
+sample SD across the five target outer folds (`ddof=1`), not seed SD.
+
+These EFRM aggregates estimate source-to-target transfer and are not directly
+ranked against the current full-dataset STA-Net five-fold aggregate. A direct
+STA-Net comparison requires a matched rerun on the exact EFRM target cohort
+and folds. The existing development checkpoint and any checkpoint exposed to
+target samples remain transductive diagnostics only.
 
 ### Public-development transfer runner
 
