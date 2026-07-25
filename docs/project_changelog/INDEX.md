@@ -24,3 +24,4 @@ Included here:
 | 2026-07-10 | [Four-dataset Unified Quality Loader](2026-07-10_four_dataset_unified_quality_loader.md) | Correct dataset scope, unified loading contract, and quality-report verification |
 | 2026-07-14 | [Single-Trial EEG Artifact-cleaning Candidate](2026-07-14_single_trial_eeg_artifact_candidate.md) | Raw/clean loader branch, adaptive artifact QC, full audit, and admission decision |
 | 2026-07-14 | [Single-Trial EEG Artifact-cleaning v3 Admission](2026-07-14_single_trial_eeg_artifact_final_admission.md) | Controlled-artifact sham validation, versioned cache, and default-branch admission |
+| 2026-07-25 | [Disable EEG Artifact-mask Authority](2026-07-25_disable_eeg_artifact_mask_authority.md) | All-false compatibility mask, boundary-only validity, and retirement of artifact-gated patch exclusion |

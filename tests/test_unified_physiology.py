@@ -14,6 +14,7 @@ from src.data.unified_physiology import (
     CANONICAL_FNIRS_SAMPLE_RATE_HZ,
     CANONICAL_UNIT,
     DEFAULT_UNIFIED_WINDOW_DURATION_S,
+    EEG_ARTIFACT_MASK_POLICY,
     FORBIDDEN_TASK_NAMESPACES,
     NativeEEGRecord,
     ChannelGeometryIndex,
@@ -38,6 +39,56 @@ def test_unified_loader_default_observation_window_is_twenty_seconds():
 def test_unified_loader_default_eeg_branch_is_single_trial_v4():
     default = inspect.signature(UnifiedPhysiologyWindowDataset).parameters["eeg_signal_branch"].default
     assert default == "single_trial_eeg_artifact_clean_v4"
+
+
+def test_unified_window_disables_artifact_marking_and_invalidity():
+    dataset = object.__new__(UnifiedPhysiologyWindowDataset)
+    dataset.window_duration_s = 1.0
+    dataset.window_offset_s = 0.0
+    record = SimpleNamespace(
+        dataset_id="eeg_fnirs_single_trial",
+        canonical_subject_id="subject_01",
+        base_record_id="session_01",
+        signal_branch="homer2_wavelength_pair",
+        join_key="eeg_fnirs_single_trial|subject_01|session_01",
+    )
+    event = {
+        "event_type": "trial",
+        "label": "MA",
+        "label_index": 1,
+        "eeg_time_ms": 0.0,
+        "fnirs_time_ms": 0.0,
+        "onset_ms": 0.0,
+        "metadata": {"task": "mental_arithmetic"},
+    }
+    dataset.windows = [SimpleNamespace(record=record, event=event, window_offset_s=0.0)]
+    record_data = {
+        "eeg": np.ones((200, 2), dtype=np.float32),
+        "fnirs": np.ones((10, 2), dtype=np.float32),
+        "eeg_channel_names": ("F3", "F4"),
+        "fnirs_channel_names": ("CH1_HbO", "CH1_HbR"),
+        "fnirs_component_roles": ("HbO", "HbR"),
+        "eeg_preprocessing_state": {"signal_branch": "single_trial_eeg_artifact_clean_v4"},
+        "fnirs_preprocessing_state": {},
+        "eeg_quality": {
+            "artifact_mask": np.ones(200, dtype=bool),
+            "bad_channel_mask": np.zeros(2, dtype=bool),
+        },
+        "eeg_geometry": [{"channel_name": "F3"}, {"channel_name": "F4"}],
+    }
+    dataset._load_canonical_record = lambda _: record_data
+    dataset.geometry_index = SimpleNamespace(
+        for_channels=lambda **_: [{"channel_name": "CH1_HbO"}, {"channel_name": "CH1_HbR"}]
+    )
+
+    sample = dataset[0]
+
+    assert sample["artifact_mask_policy"] == EEG_ARTIFACT_MASK_POLICY
+    assert not sample["artifact_mask"]["eeg"].any()
+    np.testing.assert_array_equal(
+        sample["analysis_valid_mask"]["eeg"],
+        sample["valid_mask"]["eeg"],
+    )
 
 
 def test_fnirs_names_are_unified_to_hbo_hbr_components():
@@ -423,7 +474,7 @@ def test_v4_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
         source_size_bytes=np.asarray(source.stat().st_size, dtype=np.int64),
         source_mtime_ns=np.asarray(source.stat().st_mtime_ns, dtype=np.int64),
         eeg=np.zeros((20, 2), dtype=np.float32),
-        artifact_mask=np.zeros(20, dtype=bool),
+        artifact_mask=np.ones(20, dtype=bool),
         bad_channel_mask=np.zeros(2, dtype=bool),
         channel_names=np.asarray(["F3", "F4"]),
         preprocessing_state_json=np.asarray(json.dumps(state)),
@@ -461,7 +512,10 @@ def test_v4_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
     assert eeg.shape == (20, 2)
     assert names == ("F3", "F4")
     assert loaded_state["artifact_cache"]["used"] is True
+    assert loaded_state["artifact_cache"]["stored_detected_artifact_fraction"] == 1.0
+    assert loaded_state["artifact_cache"]["stored_detected_artifact_mask_exposed"] is False
     assert quality["artifact_mask"].shape == (20,)
+    assert not quality["artifact_mask"].any()
     record.join_key = "eeg_fnirs_single_trial|subject_01|session_wrong"
     with pytest.raises(RuntimeError, match="manifest has no record"):
         dataset._load_cached_single_trial_eeg(record, "single_trial_eeg_artifact_clean_v4")

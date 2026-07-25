@@ -55,6 +55,10 @@ def _base_dataset(*, fnirs_units="normalized_head_unit"):
     sample = {
         "eeg": np.ones((8, 4000), dtype=np.float32),
         "fnirs": np.ones((4, 200), dtype=np.float32),
+        "valid_mask": {
+            "eeg": np.ones(4000, dtype=bool),
+            "fnirs": np.ones(200, dtype=bool),
+        },
         "analysis_valid_mask": {
             "eeg": eeg_valid,
             "fnirs": np.ones(200, dtype=bool),
@@ -92,7 +96,7 @@ class _Base:
         return self.sample
 
 
-def test_unified_local_view_consumes_masks_and_bad_channels():
+def test_unified_local_view_ignores_retired_artifact_invalidity_but_consumes_bad_channels():
     namespace, sample = _base_dataset()
     dataset = UnifiedPhysiologyLocalViewDataset(
         base_dataset=_Base(namespace, sample),
@@ -106,10 +110,9 @@ def test_unified_local_view_consumes_masks_and_bad_channels():
     assert item["schema"] == LOCAL_VIEW_SCHEMA
     assert tuple(item["eeg"].shape) == (6, 4000)
     assert tuple(item["fnirs"].shape) == (2, 200)
-    assert not item["token_valid_mask"]["eeg"][0]
-    assert item["token_valid_mask"]["eeg"][1:].all()
+    assert item["token_valid_mask"]["eeg"].all()
     assert item["token_valid_mask"]["fnirs"].all()
-    assert not item["eeg"][:, :400].any()
+    assert item["eeg"][:, :400].all()
     assert "E0" not in item["selected_eeg_channels"]
 
 

@@ -90,7 +90,7 @@ def test_cleaning_is_deterministic():
     assert first.state == second.state
 
 
-def test_unified_preprocessing_clean_branch_propagates_masks():
+def test_unified_preprocessing_clean_branch_does_not_expose_artifact_masks():
     eeg, eog, _, sample_rate = _synthetic_record(duration_s=20.0)
     record = NativeEEGRecord(
         values=eeg,
@@ -107,9 +107,12 @@ def test_unified_preprocessing_clean_branch_propagates_masks():
     )
     assert canonical.shape == eeg.shape
     assert quality["artifact_mask"].shape == (len(eeg),)
+    assert not np.any(quality["artifact_mask"])
     assert quality["bad_channel_mask"].shape == (eeg.shape[1],)
     assert state["signal_branch"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
     assert state["artifact_cleaning"]["schema"] == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA
+    assert state["artifact_cleaning"]["artifact_fraction"] > 0.0
+    assert state["artifact_mask_policy"] == "disabled_all_false_no_invalid_authority_v1"
 
 
 def test_clean_branch_requires_eog_auxiliary_channels():

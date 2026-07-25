@@ -45,6 +45,7 @@ RAW_DATASET_IDS: tuple[str, ...] = (
 )
 
 UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v1"
+EEG_ARTIFACT_MASK_POLICY = "disabled_all_false_no_invalid_authority_v1"
 REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v1"
 REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
 REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ = 1.0
@@ -320,7 +321,6 @@ def preprocess_eeg_record_with_quality(
             config=resolved_config,
         )
         filtered = np.asarray(cleaned.cleaned_values, dtype=np.float64)
-        artifact_mask = cleaned.artifact_mask
         bad_channel_mask = cleaned.bad_channel_mask
         cleaning_state = cleaned.state
         stride = max(1, len(filtered) // 20_000)
@@ -371,6 +371,7 @@ def preprocess_eeg_record_with_quality(
         "source_path": str(record.source_path),
         "signal_branch": signal_branch,
         "artifact_cleaning": cleaning_state,
+        "artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
     })
     return canonical, state, {
         "artifact_mask": canonical_artifact_mask,
@@ -1047,17 +1048,23 @@ class UnifiedPhysiologyWindowDataset:
             if source_stat.st_size != expected_size or source_stat.st_mtime_ns != expected_mtime:
                 raise RuntimeError(f"source EEG changed after artifact cache build: {source_path}")
             state = json.loads(str(np.asarray(payload["preprocessing_state_json"]).item()))
+            state["artifact_mask_policy"] = EEG_ARTIFACT_MASK_POLICY
             state["artifact_cache"] = {
                 "used": True,
                 "path": str(path),
                 "schema": schema,
+                "stored_detected_artifact_fraction": float(
+                    np.mean(np.asarray(payload["artifact_mask"], dtype=bool))
+                ),
+                "stored_detected_artifact_mask_exposed": False,
             }
+            stored_artifact_mask = np.asarray(payload["artifact_mask"], dtype=bool)
             return (
                 np.asarray(payload["eeg"], dtype=np.float32),
                 tuple(str(value) for value in np.asarray(payload["channel_names"]).tolist()),
                 state,
                 {
-                    "artifact_mask": np.asarray(payload["artifact_mask"], dtype=bool),
+                    "artifact_mask": np.zeros_like(stored_artifact_mask),
                     "bad_channel_mask": np.asarray(payload["bad_channel_mask"], dtype=bool),
                 },
             )
@@ -1128,17 +1135,23 @@ class UnifiedPhysiologyWindowDataset:
             ):
                 raise RuntimeError(f"source EEG changed after Simultaneous EOG cache build: {source_path}")
             state = json.loads(str(np.asarray(payload["preprocessing_state_json"]).item()))
+            state["artifact_mask_policy"] = EEG_ARTIFACT_MASK_POLICY
             state["artifact_cache"] = {
                 "used": True,
                 "path": str(path),
                 "schema": schema,
+                "stored_detected_artifact_fraction": float(
+                    np.mean(np.asarray(payload["artifact_mask"], dtype=bool))
+                ),
+                "stored_detected_artifact_mask_exposed": False,
             }
+            stored_artifact_mask = np.asarray(payload["artifact_mask"], dtype=bool)
             return (
                 np.asarray(payload["eeg"], dtype=np.float32),
                 tuple(str(value) for value in np.asarray(payload["channel_names"]).tolist()),
                 state,
                 {
-                    "artifact_mask": np.asarray(payload["artifact_mask"], dtype=bool),
+                    "artifact_mask": np.zeros_like(stored_artifact_mask),
                     "bad_channel_mask": np.asarray(payload["bad_channel_mask"], dtype=bool),
                 },
             )
@@ -1186,21 +1199,19 @@ class UnifiedPhysiologyWindowDataset:
         fnirs, fnirs_mask = _slice_window(
             record_data["fnirs"], fnirs_time_ms, self.window_duration_s, CANONICAL_FNIRS_SAMPLE_RATE_HZ
         )
-        eeg_artifact, _ = _slice_window(
-            record_data["eeg_quality"]["artifact_mask"][:, None].astype(np.float32),
-            eeg_time_ms,
-            self.window_duration_s,
-            CANONICAL_EEG_SAMPLE_RATE_HZ,
-        )
-        eeg_artifact_mask = eeg_artifact[0].astype(bool)
+        # Artifact detections retained in historical cleaning caches are audit
+        # provenance only. They are deliberately not exposed as sample labels
+        # and have no authority over measurement validity.
+        eeg_artifact_mask = np.zeros_like(eeg_mask)
         label = canonical_label(ref.event, ref.record.dataset_id)
         return {
             "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
             "eeg": eeg,
             "fnirs": fnirs,
             "valid_mask": {"eeg": eeg_mask, "fnirs": fnirs_mask},
-            "analysis_valid_mask": {"eeg": eeg_mask & ~eeg_artifact_mask, "fnirs": fnirs_mask.copy()},
+            "analysis_valid_mask": {"eeg": eeg_mask.copy(), "fnirs": fnirs_mask.copy()},
             "artifact_mask": {"eeg": eeg_artifact_mask, "fnirs": np.zeros_like(fnirs_mask)},
+            "artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
             "bad_channel_mask": {
                 "eeg": record_data["eeg_quality"]["bad_channel_mask"].copy(),
                 "fnirs": np.zeros(fnirs.shape[0], dtype=bool),
@@ -1266,6 +1277,7 @@ class UnifiedPhysiologyWindowDataset:
             "excluded_alignment_record_count": len(self.excluded_alignment_records),
             "excluded_alignment_records": dict(self.excluded_alignment_records),
             "eeg_signal_branch": self.eeg_signal_branch,
+            "eeg_artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
             "preprocessing": CANONICAL_PREPROCESSING.to_dict(),
             "fnirs_components": list(CANONICAL_FNIRS_COMPONENTS),
             "label_schema": "canonical_task_label_v1",

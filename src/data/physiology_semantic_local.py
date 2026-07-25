@@ -252,8 +252,11 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
             hbo_index, hbr_index = pairs[pair_index]
             eeg_indices = self._select_eeg(sample, hbo_index)
 
-        eeg_valid = np.asarray(sample["analysis_valid_mask"]["eeg"], dtype=bool)
-        fnirs_valid = np.asarray(sample["analysis_valid_mask"]["fnirs"], dtype=bool)
+        # Boundary/data-presence validity is authoritative. Historical
+        # analysis masks may contain retired artifact exclusions and must not
+        # silently remove measured samples or entire tokenizer patches.
+        eeg_valid = np.asarray(sample["valid_mask"]["eeg"], dtype=bool)
+        fnirs_valid = np.asarray(sample["valid_mask"]["fnirs"], dtype=bool)
         eeg = np.asarray(sample["eeg"], dtype=np.float32)[eeg_indices].copy()
         fnirs = np.asarray(sample["fnirs"], dtype=np.float32)[[hbo_index, hbr_index]].copy()
         eeg[:, ~eeg_valid] = 0.0

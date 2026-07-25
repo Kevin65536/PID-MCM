@@ -444,6 +444,10 @@ channels。
 EEG 使用 `analysis_valid_mask`，fNIRS 使用 `valid_mask`；单位均为 canonical
 `robust_standard_deviation`：
 
+该段描述的是 2026-07-18 历史 audit。自 2026-07-25 起，当前统一 loader 的
+`analysis_valid_mask` 与 `valid_mask` 相同，只表达边界/数据存在性；
+`artifact_mask` 为全 false 兼容字段，不再标记或排除样本。
+
 | 数据集 / 任务 | Subjects | Records | Samples | EEG / fNIRS channels | 标签分布 | EEG std / var | fNIRS std / var |
 | --- | ---: | ---: | ---: | --- | --- | ---: | ---: |
 | Single-Trial / mental arithmetic | 29 | 87 | 1,740 | 30 / 72 | BL 870；MA 870 | 1.0431 / 1.0880 | 1.0211 / 1.0427 |
