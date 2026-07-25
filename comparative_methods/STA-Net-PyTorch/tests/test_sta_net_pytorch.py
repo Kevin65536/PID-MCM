@@ -3,7 +3,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import optuna
 import torch
+import yaml
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = METHOD_ROOT.parents[1]
@@ -18,9 +20,14 @@ from sta_net_pytorch.data import (
     get_sta_net_task_spec,
 )
 from sta_net_pytorch.model import STANet, STANetConfig, STANetObjective, SamePadConv3d
-from train import PackedRecordBatchSampler, RecordGroupedBatchSampler, classification_weights
-from launch_tuning import lane_plan
-from tune import RUNG_EPOCHS, best_validation_metric_through_epoch
+from train import (
+    PackedRecordBatchSampler,
+    RecordGroupedBatchSampler,
+    classification_weights,
+    initialize_model_from_checkpoint,
+)
+from launch_tuning import lane_plan, targeted_lane_plan, tuning_anchors
+from tune import RUNG_EPOCHS, best_validation_metric_through_epoch, sample_config
 from select_best_checkpoints import metric_contract, select_candidate
 from sta_net_pytorch.metrics import classification_metrics as core_classification_metrics, improved
 from sta_net_pytorch.splits import development_subject_split, validate_public_manifest
@@ -79,6 +86,53 @@ def test_sta_net_sequence_regression_consumes_target_mask():
     assert outputs["prediction"].shape == (2, 2, 5)
     assert torch.allclose(first["main"], second["main"])
     assert torch.isfinite(first["total"])
+
+
+def test_finetune_initialization_loads_weights_without_optimizer_state(tmp_path):
+    config = STANetConfig(
+        task_type="classification",
+        output_dim=2,
+        dropout=0.0,
+        embedding_dim=32,
+        attention_heads=2,
+        attention_key_dim=16,
+        max_lags=3,
+    )
+    source = STANet(config)
+    checkpoint = tmp_path / "pretrained.pt"
+    torch.save({
+        "schema": "sta_net_pytorch_training_v2",
+        "task": {"key": "motor_imagery"},
+        "model_config": {
+            "task_type": "classification",
+            "output_dim": 2,
+            "sequence_length": 1,
+            "dropout": 0.0,
+            "embedding_dim": 32,
+            "attention_heads": 2,
+            "attention_key_dim": 16,
+            "max_lags": 3,
+        },
+        "model_state": source.state_dict(),
+        "optimizer_state": {"must_not": "load"},
+        "epoch": 17,
+        "optimizer_step": 123,
+    }, checkpoint)
+    target = STANet(config)
+    metadata = initialize_model_from_checkpoint(
+        target,
+        checkpoint_path=checkpoint,
+        task_key="motor_imagery",
+        model_config=config,
+        device=torch.device("cpu"),
+    )
+    assert metadata["source_epoch"] == 17
+    assert metadata["source_optimizer_step"] == 123
+    assert metadata["optimizer_state_loaded"] is False
+    assert all(
+        torch.equal(source_value, target.state_dict()[name])
+        for name, source_value in source.state_dict().items()
+    )
 
 
 def test_official_wg_adapter_emits_released_sta_net_tensor_shapes():
@@ -244,6 +298,33 @@ def test_tuning_lane_plan_preserves_total_trials_and_shards_long_tasks():
     assert set(totals.values()) == {11}
     assert workers["visual"] == 2
     assert workers["refed_regression"] == 2
+
+
+def test_targeted_tuning_plan_gives_each_task_one_gpu_and_preserves_quotas():
+    plan = targeted_lane_plan(("motor_imagery", "wg"), 16)
+    totals = {}
+    task_gpus = {}
+    for lane in plan:
+        for task in lane["tasks"]:
+            totals[task] = totals.get(task, 0) + lane["quota"]
+            task_gpus.setdefault(task, set()).add(lane["gpu"])
+    assert totals == {"motor_imagery": 16, "wg": 16}
+    assert task_gpus == {"motor_imagery": {0}, "wg": {1}}
+    assert len({lane["worker_id"] for lane in plan}) == len(plan) == 6
+
+
+def test_final_mi_wg_anchor_resolves_to_preregistered_training_config():
+    path = METHOD_ROOT / "configs" / "final_mi_wg_targeted.yaml"
+    base = yaml.safe_load(path.read_text(encoding="utf-8"))
+    anchor = tuning_anchors(base, "motor_imagery")[2]
+    config = sample_config(optuna.trial.FixedTrial(anchor), base, "motor_imagery")
+    assert config["tuning"]["search_profile"] == "final_mi_wg"
+    assert config["tuning"]["intervention_regime"] == "regularized"
+    assert config["model"]["dropout"] == 0.6
+    assert config["loss"]["label_smoothing"] == 0.15
+    assert config["training"]["weight_decay"] == 0.01
+    assert config["task_overrides"]["motor_imagery"]["batch_size"] == 16
+    assert "tuning_search" not in config
 
 
 def test_checkpoint_metric_prefers_macro_f1_instead_of_lower_loss_proxy():
