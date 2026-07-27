@@ -15,6 +15,7 @@ from .tasks import EFRMUnifiedTaskDataset, get_task_spec
 BOUNDARY_SCHEMA = "efrm_pretraining_boundary_v1"
 TRIAL_MIXED_BOUNDARY_SCHEMA = "efrm_trial_mixed_boundary_v1"
 PUBLIC_SPLIT_SCHEMAS = {"sta_net_split_registry_v2", "sta_net_subject_split_v1"}
+SOURCE_TARGET_COHORT_SCHEMA = "efrm_source_target_cohort_v1"
 
 
 def sha256_file(path: str | Path) -> str:
@@ -197,6 +198,80 @@ class PretrainingBoundary:
             "train_subjects_by_dataset": self.train_subjects,
             "validation_subjects_by_dataset": self.validation_subjects,
             "sources": [asdict(source) for source in self.sources],
+        }
+        result["boundary_sha256"] = _stable_hash(result)
+        return result
+
+
+class SourceTargetBoundary:
+    """Frozen source-only pretraining boundary for the dual-protocol track."""
+
+    def __init__(self, manifest_path: str | Path) -> None:
+        self.manifest_path = Path(manifest_path).resolve()
+        cohort = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        if cohort.get("schema") != SOURCE_TARGET_COHORT_SCHEMA:
+            raise ValueError(
+                f"expected {SOURCE_TARGET_COHORT_SCHEMA} at {self.manifest_path}"
+            )
+        if cohort.get("protocol_id") != "efrm_resource_bounded_dual_protocol_v1":
+            raise ValueError("source/target cohort protocol ID does not match frozen v1")
+        if cohort.get("target_opened_during_pretraining") is not False:
+            raise PermissionError(
+                "source-only pretraining requires target_opened_during_pretraining=false"
+            )
+        datasets = cohort.get("datasets", {})
+        if not datasets:
+            raise ValueError("source/target cohort manifest has no datasets")
+        self.train_subjects: dict[str, tuple[str, ...]] = {}
+        self.validation_subjects: dict[str, tuple[str, ...]] = {}
+        self.target_subjects: dict[str, tuple[str, ...]] = {}
+        for dataset_id, row in sorted(datasets.items()):
+            source = {str(value) for value in row["source_subjects"]}
+            train = {str(value) for value in row["source_train_subjects"]}
+            validation = {str(value) for value in row["source_validation_subjects"]}
+            target = {str(value) for value in row["target_subjects"]}
+            if not train or not validation or train & validation:
+                raise RuntimeError(
+                    f"invalid source train/validation boundary for {dataset_id}"
+                )
+            if train | validation != source:
+                raise RuntimeError(
+                    f"source roles do not exactly cover source cohort for {dataset_id}"
+                )
+            if source & target:
+                raise RuntimeError(f"source/target subjects overlap for {dataset_id}")
+            self.train_subjects[str(dataset_id)] = tuple(sorted(train))
+            self.validation_subjects[str(dataset_id)] = tuple(sorted(validation))
+            self.target_subjects[str(dataset_id)] = tuple(sorted(target))
+        self.cohort = cohort
+
+    def indices_for(self, dataset: EFRMSyncPretrainDataset, role: str) -> list[int]:
+        if role not in {"train", "validation"}:
+            raise ValueError("role must be train or validation")
+        admitted = self.train_subjects if role == "train" else self.validation_subjects
+        indices = [
+            index
+            for index in range(len(dataset))
+            if str(dataset.lightweight_metadata(index)["subject"])
+            in admitted.get(str(dataset.lightweight_metadata(index)["dataset_id"]), ())
+        ]
+        if not indices:
+            raise RuntimeError(f"no pretraining windows survive the source {role} boundary")
+        return indices
+
+    def manifest(self) -> dict[str, Any]:
+        result = {
+            "schema": BOUNDARY_SCHEMA,
+            "mode": "source_target_source_only_v1",
+            "protocol_id": "efrm_resource_bounded_dual_protocol_v1",
+            "protected_test_opened": False,
+            "target_opened_during_pretraining": False,
+            "cohort_manifest_path": str(self.manifest_path),
+            "cohort_manifest_sha256": sha256_file(self.manifest_path),
+            "train_subjects_by_dataset": self.train_subjects,
+            "validation_subjects_by_dataset": self.validation_subjects,
+            "target_subjects_by_dataset": self.target_subjects,
+            "combination_rule": "frozen dataset-level source cohort; source validation held out",
         }
         result["boundary_sha256"] = _stable_hash(result)
         return result

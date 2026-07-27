@@ -40,6 +40,7 @@ from efrm_pytorch.data import (
 from efrm_pytorch.model import EFRMSyncModel
 from efrm_pytorch.protocol import (
     PretrainingBoundary,
+    SourceTargetBoundary,
     TrialMixedBoundary,
     load_public_split_subjects,
     role_counts,
@@ -77,7 +78,13 @@ def _subset(dataset: EFRMSyncPretrainDataset, selected: Iterable[int]) -> EFRMSy
 def _build_boundary(
     config: dict[str, Any],
     dataset: EFRMSyncPretrainDataset,
-) -> tuple[list[str], PretrainingBoundary | TrialMixedBoundary]:
+) -> tuple[list[str], PretrainingBoundary | SourceTargetBoundary | TrialMixedBoundary]:
+    cohort_manifest = config["data"].get("cohort_manifest")
+    if cohort_manifest:
+        path = Path(str(cohort_manifest))
+        if not path.is_absolute():
+            path = (METHOD_ROOT / path).resolve()
+        return [], SourceTargetBoundary(path)
     tasks = [
         str(value)
         for value in config["data"].get("split_tasks", DEVELOPMENT_MANIFESTS)

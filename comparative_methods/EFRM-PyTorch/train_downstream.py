@@ -241,13 +241,30 @@ def _validate_pretraining_boundary(
     }
     downstream_train = _subject_sets(dataset, train_indices)
     downstream_validation = _subject_sets(dataset, validation_indices)
-    if downstream_validation - pretrain_validation:
-        raise RuntimeError(
-            "downstream validation subjects were not held out by pretraining: "
-            f"{sorted(downstream_validation - pretrain_validation)}"
-        )
-    if downstream_validation & pretrain_train:
-        raise RuntimeError("downstream validation subjects leaked into pretraining train")
+    if boundary.get("mode") == "source_target_source_only_v1":
+        pretrain_source = pretrain_train | pretrain_validation
+        target = {
+            str(value)
+            for value in boundary["target_subjects_by_dataset"].get(dataset_id, ())
+        }
+        downstream = downstream_train | downstream_validation
+        if downstream & pretrain_source:
+            raise RuntimeError(
+                "target downstream subjects leaked into source-only pretraining"
+            )
+        if downstream - target:
+            raise RuntimeError(
+                "downstream fold contains subjects outside the frozen target cohort: "
+                f"{sorted(downstream - target)}"
+            )
+    else:
+        if downstream_validation - pretrain_validation:
+            raise RuntimeError(
+                "downstream validation subjects were not held out by pretraining: "
+                f"{sorted(downstream_validation - pretrain_validation)}"
+            )
+        if downstream_validation & pretrain_train:
+            raise RuntimeError("downstream validation subjects leaked into pretraining train")
     return {
         "boundary_path": str(boundary_path),
         "boundary_sha256": str(boundary["boundary_sha256"]),
@@ -255,6 +272,7 @@ def _validate_pretraining_boundary(
         "pretraining_validation_subject_count": len(pretrain_validation),
         "downstream_train_subject_count": len(downstream_train),
         "downstream_validation_subject_count": len(downstream_validation),
+        "boundary_mode": str(boundary.get("mode")),
     }
 
 
@@ -674,7 +692,11 @@ def run(args: argparse.Namespace) -> None:
     manifest: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "running",
-        "scope": "public_development_pilot",
+        "scope": (
+            "source_target_public_fold_training"
+            if split_manifest.get("schema") == "efrm_target_public_fold_v1"
+            else "public_development_pilot"
+        ),
         "protected_test_opened": False,
         "task": asdict(spec),
         "transfer_mode": args.transfer_mode,

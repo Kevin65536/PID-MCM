@@ -32,3 +32,13 @@ active_downstream_protocol:
   primary_transfer_mode: linear_probe
   full_finetune_role: secondary_resource_contingent
   direct_current_sta_net_full_dataset_ranking_allowed: false
+  status: completed
+  completed_on: 2026-07-27
+  required_jobs_completed: 70
+  protected_evaluations_completed: 70
+  result_report: 20260727_RESOURCE_BOUNDED_DUAL_PROTOCOL_RESULTS.md
+  evidence:
+    cohort_manifest_sha256: 44a45d2e68b458a4999c21ab66662f9060c9bd1cd3256bb80f954d8b32b72f7e
+    source_checkpoint_sha256: 70367851bebed1a28a8406e3d4e1d87e603486f93ce460b212f98964e05fe8fa
+    job_matrix_sha256: bcc58418a58e0b92b94d2bc311b2b5b09889d4a6554d42371db335267e576854
+    aggregate_summary_sha256: da6daba692e502883481f273ae42c7af75460f8669b4a0b1bb212dfe8a8f27a9

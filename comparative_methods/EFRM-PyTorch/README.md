@@ -197,6 +197,7 @@ The normative protocol and its machine-readable contract are:
 
 - [`20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md)
 - [`resource_bounded_dual_protocol_v1.yaml`](sources/resource_bounded_dual_protocol_v1.yaml)
+- [`20260727_RESOURCE_BOUNDED_DUAL_PROTOCOL_RESULTS.md`](sources/20260727_RESOURCE_BOUNDED_DUAL_PROTOCOL_RESULTS.md)
 
 Dataset-level subjects are deterministically divided into a source cohort and
 a disjoint target cohort. The source cohort supplies one source-only
@@ -212,6 +213,14 @@ ranked against the current full-dataset STA-Net five-fold aggregate. A direct
 STA-Net comparison requires a matched rerun on the exact EFRM target cohort
 and folds. The existing development checkpoint and any checkpoint exposed to
 target samples remain transductive diagnostics only.
+
+The frozen matrix is complete: all 70 linear-probe jobs and protected
+evaluations passed exact five-fold coverage checks. The final result report
+records fold means, sample SDs, uncertainty intervals, protocol sensitivity,
+and the claim boundary. The main finding is weak task-dependent transfer:
+sample-random improves six of seven primary endpoints, most clearly for visual
+motivation, while DSR macro-F1 is the exception and strict motor imagery,
+N-back, visual, and REFED remain near chance or weak in absolute terms.
 
 ### Public-development transfer runner
 

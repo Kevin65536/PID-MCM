@@ -219,7 +219,11 @@ class EFRMUnifiedTaskDataset(Dataset):
             raise PermissionError(f"refusing to read a protected split manifest: {path}")
         manifest = json.loads(path.read_text(encoding="utf-8"))
         schema = str(manifest.get("schema"))
-        if schema not in {"sta_net_split_registry_v2", "sta_net_subject_split_v1"}:
+        if schema not in {
+            "sta_net_split_registry_v2",
+            "sta_net_subject_split_v1",
+            "efrm_target_public_fold_v1",
+        }:
             raise ValueError(f"unsupported public split schema: {schema}")
         if manifest.get("protected_test_opened", manifest.get("reserved_test_opened", False)):
             raise PermissionError("public split reports an opened protected test")
@@ -228,7 +232,7 @@ class EFRMUnifiedTaskDataset(Dataset):
         forbidden = {"test_indices", "reserved_test_indices", "protected_indices"}.intersection(manifest)
         if forbidden:
             raise ValueError(f"public split exposes protected indices: {sorted(forbidden)}")
-        if schema == "sta_net_split_registry_v2":
+        if schema in {"sta_net_split_registry_v2", "efrm_target_public_fold_v1"}:
             if manifest.get("metadata_sha256") and manifest["metadata_sha256"] != self.metadata_fingerprint():
                 raise RuntimeError("shared split metadata fingerprint drifted from EFRM task ordering")
             train = [int(value) for value in manifest["train_indices"]]
