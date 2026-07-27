@@ -12,6 +12,22 @@ reproduction: the original checkpoint and processed pretraining arrays were
 not released, all project data are paired, the sampling rates are changed to
 the repository-wide 200/10 Hz contract, and channels are not duplicated.
 
+## Active performance-testing protocol
+
+Future comparison-grade experiments follow
+[`sources/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md`](sources/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md)
+and its machine contract
+[`sources/lodo_full_target_fivefold_v2.yaml`](sources/lodo_full_target_fivefold_v2.yaml).
+The active design pretrains four leave-one-dataset-out checkpoints and performs
+downstream five-fold evaluation on every eligible subject in the complete
+target dataset. Inner validation selects the downstream training epoch, after
+which the head is reinitialized and refitted on the complete outer-training
+partition before protected evaluation.
+
+The completed source/target dual-protocol v1 remains historical development
+evidence. It is not the protocol for future EFRM-versus-mainline ranking and
+its checkpoint must not be reused in v2.
+
 ## Frozen scientific and data contract
 
 ### What the source pretraining corpus actually aligns
@@ -148,17 +164,17 @@ training subjects from all four datasets; validation subjects are used only
 for self-supervised stopping and downstream model selection. Reserved test
 subjects are never loaded.
 
-An exact full-dataset cross-subject evaluation would retrain one EFRM
-checkpoint for every outer fold and exclude that fold's protected subjects
-from pretraining, tuning, normalization, and stopping. That track is not
-active under the current compute budget. The active formal performance path
-is instead frozen in
-[`sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md):
-one EFRM checkpoint is pretrained on a fixed source cohort, while a disjoint
-target cohort supplies both strict cross-subject and sample-random five-fold
-downstream evaluation. Target data are absent from pretraining and pretraining
-selection. A global all-subject checkpoint remains a
-`transductive_diagnostic` and cannot enter either primary result table.
+The active v2 formal path does not pretrain inside every outer fold. Instead,
+it trains one checkpoint per target dataset using all subjects from the other
+three datasets. The active target dataset is excluded in its entirety from
+representation pretraining, so the same frozen checkpoint can be reused across
+all five downstream folds without making the result transductive.
+
+A method-neutral full-target fold registry is mandatory. EFRM, the project
+mainline, STA-Net, and any other directly ranked method must consume identical
+eligible subjects, samples, outer test folds, labels, modalities, and
+endpoints. A global checkpoint pretrained on the active target dataset remains
+a `transductive_diagnostic` and cannot enter the inductive primary table.
 
 The downstream matrix matches STA-Net:
 
@@ -172,28 +188,44 @@ The downstream matrix matches STA-Net:
 | Visual motivation | RR/RF/FF/FR | paired 8 s | `efrm_sync_classification` |
 | REFED | 20-point valence/arousal sequence | paired 20 s | `efrm_sync_regression_adapter` |
 
-The resource-bounded protocol requires frozen-backbone linear probing for all
-seven tasks and treats full fine-tuning as a secondary resource-contingent
-matrix. Classification selects checkpoints by validation macro-F1 and reports
-outer-fold macro-F1 and Accuracy mean with sample SD, balanced accuracy,
-Cohen's kappa, per-class recall, calibration, and fold-level uncertainty.
-REFED selects by masked scaled RMSE and reports outer-fold native-coordinate
-CCC mean with sample SD, MAE, RMSE, R2, Pearson/Spearman correlation, and
-coverage. Protected results are opened only through the frozen protocol's
-explicit unlock path.
+The active protocol requires frozen-backbone linear probing for all seven
+tasks and treats full fine-tuning as a secondary resource-contingent matrix.
+Classification selects an epoch by inner-validation macro-F1, then refits a
+fresh head on all outer-training subjects for that epoch count. REFED follows
+the same procedure with masked scaled RMSE. Protected results are opened only
+through the frozen protocol's explicit unlock path.
 
 The earlier public-development tuning plan follows the STA-Net policy: seed
 42, 12 Optuna trials per task and transfer mode, 2/8/20/40/100-epoch rungs,
 and best validation checkpoint through each rung. It remains development
-evidence. The active resource-bounded protocol instead freezes the completed
-development configuration before target access and uses downstream seed 42;
-its primary standard deviation is across target outer folds. Additional
-downstream seeds are sensitivity evidence only, and the previous three-seed
-formal plan does not override the active protocol.
+evidence. The active v2 protocol uses downstream seeds 17, 42, and 73. Seed
+results are averaged inside each outer fold before fold aggregation, and seed
+dispersion is reported separately.
 
-### Active resource-bounded performance protocol
+### Active LODO full-target performance protocol
 
 The normative protocol and its machine-readable contract are:
+
+- [`20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md`](sources/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md)
+- [`lodo_full_target_fivefold_v2.yaml`](sources/lodo_full_target_fivefold_v2.yaml)
+
+Four target-excluded checkpoints serve the four datasets. The seven-task
+primary matrix is strict cross-subject five-fold frozen-backbone linear
+probing on the complete target dataset. Its reporting name is
+`efrm_lodo_strict_cross_subject_5fold_v2`. A complete sample-random matrix is
+reported separately as
+`efrm_lodo_sample_random_5fold_secondary_v2` and cannot support new-subject
+claims.
+
+Every fold performs inner epoch selection followed by a fresh full-outer
+refit. Primary uncertainty includes fold mean and sample SD, pooled
+out-of-fold metrics, separately reported seed dispersion, and a 10,000-draw
+subject-cluster bootstrap interval. Direct ranking is allowed only against
+methods using the exact shared fold registry.
+
+### Historical completed resource-bounded protocol
+
+The immutable v1 protocol, machine-readable contract, and final results are:
 
 - [`20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md`](sources/20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md)
 - [`resource_bounded_dual_protocol_v1.yaml`](sources/resource_bounded_dual_protocol_v1.yaml)
@@ -221,6 +253,12 @@ and the claim boundary. The main finding is weak task-dependent transfer:
 sample-random improves six of seven primary endpoints, most clearly for visual
 motivation, while DSR macro-F1 is the exception and strict motor imagery,
 N-back, visual, and REFED remain near chance or weak in absolute terms.
+
+These aggregates are retained to explain why the source/target allocation was
+replaced. They must be labeled
+`historical_resource_bounded_source_to_target_transfer`, may not be mixed with
+v2 folds, and may not be selected task-by-task according to which protocol
+produces the higher score.
 
 ### Public-development transfer runner
 
@@ -261,8 +299,9 @@ Inspect detached workers with:
 ```
 
 These runs are `public_development_pilot` evidence. They do not replace
-outer-fold-specific pretraining, frozen HPO, scratch/modality controls, or the
-explicit protected-test unlock required for formal comparison.
+target-excluded LODO pretraining, the full-outer refit, frozen selection
+rules, scratch/modality controls, or the explicit protected-test unlock
+required for formal comparison.
 
 ## CLIP alignment evidence and physiological-coupling contrast
 

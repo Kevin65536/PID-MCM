@@ -1,9 +1,15 @@
 # EFRM resource-bounded dual-protocol evaluation freeze
 
 **Protocol ID:** `efrm_resource_bounded_dual_protocol_v1`
-**Status:** protocol frozen; cohort and fold manifests not yet materialized
+**Status:** completed historical protocol; superseded for future experiments
 **Frozen on:** 2026-07-25
 **Machine-readable contract:** [`resource_bounded_dual_protocol_v1.yaml`](resource_bounded_dual_protocol_v1.yaml)
+
+> **Future-run notice (2026-07-27):** This document remains the immutable
+> authority for the completed v1 source-to-target experiment. New
+> comparison-grade EFRM experiments must follow
+> [`20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md`](20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md).
+> v1 and v2 results may not be mixed or selected task-by-task.
 
 ## Authority and purpose
 

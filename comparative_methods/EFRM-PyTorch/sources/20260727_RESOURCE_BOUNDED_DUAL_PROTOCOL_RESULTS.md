@@ -6,7 +6,13 @@
 
 **Completed:** 2026-07-27
 
-**Status:** complete; 70/70 public jobs and 70/70 protected evaluations
+**Status:** complete historical evidence; 70/70 public jobs and 70/70 protected evaluations
+
+> **Comparison notice:** These results estimate resource-bounded
+> source-to-target transfer and are retained as historical development
+> evidence. Future EFRM-versus-mainline claims use
+> [`20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md`](20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md).
+> Do not substitute v1 or v2 per task according to which score is higher.
 
 ## Result authority
 

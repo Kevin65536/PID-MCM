@@ -1,0 +1,179 @@
+schema: efrm_lodo_full_target_fivefold_v2
+protocol_id: efrm_lodo_full_target_fivefold_v2
+status: protocol_frozen_splits_not_materialized
+frozen_on: 2026-07-27
+authority: active_efrm_comparison_grade_performance_protocol
+
+method:
+  method_id: efrm_sync_200_10_variable_channel_v1
+  base_pretraining_config: ../configs/pretrain_sync.yaml
+  base_downstream_config: ../configs/downstream_public_pilot.yaml
+  pretraining_seed: 42
+  downstream_seeds: [17, 42, 73]
+  primary_transfer_mode: linear_probe
+  primary_modality: paired
+  primary_initialization: pretrained
+
+dataset_task_map:
+  eeg_fnirs_single_trial:
+    tasks: [motor_imagery, mental_arithmetic]
+    total_subjects: 29
+  simultaneous_eeg_nirs:
+    tasks: [wg, nback, dsr]
+    total_subjects: 26
+    dsr_eligible_subjects: 25
+  refed:
+    tasks: [refed_regression]
+    total_subjects: 32
+  visual_cognitive_motivation:
+    tasks: [visual]
+    total_subjects: 16
+
+pretraining:
+  strategy: leave_one_dataset_out
+  final_checkpoint_count: 4
+  target_dataset_exposure_allowed: false
+  selection_stage:
+    split_unit: canonical_subject_id
+    split_scope: within_each_included_dataset
+    splitter: KFold
+    n_splits: 5
+    shuffle: true
+    random_state: 43
+    validation_partition: first_test_partition
+    maximum_epochs: 100
+    minimum_epochs: 20
+    early_stopping_patience: 15
+    checkpoint_selection_metric: total_non_target_validation_loss_min
+  final_refit_stage:
+    initialization: random_from_seed_42
+    data_scope: all_subjects_and_samples_from_three_non_target_datasets
+    epoch_count: selected_by_non_target_selection_stage
+    early_stopping: false
+    checkpoint: terminal_epoch_only
+  required_diagnostics:
+    - eeg_reconstruction_loss
+    - fnirs_reconstruction_loss
+    - bidirectional_clip_retrieval
+    - positive_negative_separation
+    - embedding_effective_rank
+    - finite_value_check
+  checkpoint_sharing:
+    eeg_fnirs_single_trial: [motor_imagery, mental_arithmetic]
+    simultaneous_eeg_nirs: [wg, nback, dsr]
+    refed: [refed_regression]
+    visual_cognitive_motivation: [visual]
+
+fold_registry:
+  scope: complete_target_dataset
+  authority: method_neutral_shared_comparison_registry
+  exact_same_registry_required_for_method_ranking: true
+  protected_test_default: locked
+  outer_seed: 42
+  inner_seed: 43_plus_outer_index
+  outer_folds: 5
+  inner_folds: 3
+  selected_inner_fold: 0
+
+downstream:
+  selection_epochs:
+    linear_probe_maximum: 20
+    full_finetune_maximum: 20
+  final_outer_refit:
+    required: true
+    initialization: same_checkpoint_and_downstream_seed_as_selection
+    data_scope: complete_outer_train
+    epoch_count: selected_on_inner_validation
+    validation_stopping: false
+    refit_all_learned_transforms_on_outer_train: true
+  protocols:
+    strict_cross_subject:
+      role: primary
+      reporting_name: efrm_lodo_strict_cross_subject_5fold_v2
+      outer_unit: canonical_subject_id
+      outer_splitter: KFold
+      dependency_group_isolation: subject
+      target_subject_fraction_available_per_outer_train: approximately_0.8
+    sample_random:
+      role: secondary_protocol_sensitivity
+      reporting_name: efrm_lodo_sample_random_5fold_secondary_v2
+      outer_unit: target_dataset_sample_index
+      classification_outer_splitter: StratifiedKFold
+      regression_outer_splitter: KFold
+      dependency_group_isolation: false
+      same_subject_or_context_across_partitions_allowed: true
+      new_subject_generalization_claim_allowed: false
+
+tasks:
+  - motor_imagery
+  - mental_arithmetic
+  - wg
+  - nback
+  - dsr
+  - visual
+  - refed_regression
+
+sanity_gates:
+  - checkpoint_hash_and_target_exclusion
+  - split_disjointness_and_exact_coverage
+  - strict_subject_disjointness
+  - finite_nonconstant_encoder_features
+  - label_class_and_regression_mask_audit
+  - majority_or_class_prior_baseline
+  - fixed_seed_label_permutation_control
+  - prediction_class_coverage
+  - full_outer_refit_data_coverage
+
+reporting:
+  classification_primary: macro_f1
+  classification_required:
+    - accuracy
+    - balanced_accuracy
+    - cohen_kappa
+    - per_class_precision
+    - per_class_recall
+    - per_class_f1
+    - confusion_matrix
+    - calibration
+  regression_primary: native_ccc
+  regression_required:
+    - native_mae
+    - native_rmse
+    - native_r2
+    - native_pearson
+    - native_spearman
+    - native_coverage
+    - coordinate_level_metrics
+  fold_aggregation: mean_after_averaging_seeds_within_outer_fold
+  fold_standard_deviation: sample_sd_ddof_1
+  pooled_out_of_fold_metric: required_companion
+  seed_dispersion: reported_separately
+  confidence_interval:
+    method: subject_cluster_bootstrap
+    replicates: 10000
+    confidence_level: 0.95
+    seed: 20260727
+  paired_method_comparison: paired_subject_cluster_bootstrap_difference
+  primary_table_protocol: strict_cross_subject_only
+  sample_random_table: separate_secondary_sensitivity
+
+comparison:
+  direct_ranking_requires:
+    - identical_target_eligibility
+    - identical_outer_fold_manifests
+    - identical_labels_and_endpoints
+    - identical_modality_access
+    - compatible_transfer_setting
+  completed_v1_role: historical_resource_bounded_source_to_target_transfer
+  choose_v1_or_v2_by_task_score_allowed: false
+
+prohibited:
+  - active_target_dataset_in_pretraining_or_pretraining_selection
+  - completed_v1_checkpoint_in_v2
+  - global_all_dataset_checkpoint_labeled_inductive
+  - inner_selected_head_evaluated_without_full_outer_refit
+  - validation_or_test_fitted_transforms_in_final_refit
+  - protected_outcome_driven_revision
+  - sample_random_labeled_cross_subject
+  - unmatched_fold_method_ranking
+  - protected_metric_threshold_chasing

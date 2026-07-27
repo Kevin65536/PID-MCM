@@ -1,8 +1,10 @@
 schema: efrm_resource_bounded_dual_protocol_v1
 protocol_id: efrm_resource_bounded_dual_protocol_v1
-status: protocol_frozen_splits_not_materialized
+status: completed_historical_superseded_for_future_runs
 frozen_on: 2026-07-25
-authority: active_efrm_resource_bounded_downstream_performance_protocol
+completed_on: 2026-07-27
+authority: historical_efrm_resource_bounded_downstream_performance_protocol
+superseded_for_future_runs_by: efrm_lodo_full_target_fivefold_v2
 
 method:
   method_id: efrm_sync_200_10_variable_channel_v1
