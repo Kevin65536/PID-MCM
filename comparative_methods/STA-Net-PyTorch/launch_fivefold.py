@@ -93,7 +93,7 @@ def cached_execution_configs(
     tasks: Sequence[str],
     output_dir: Path,
 ) -> dict[str, dict[str, Any]]:
-    """Copy selected configs with semantics-preserving input-pipeline overrides."""
+    """Copy selected configs with fixed input and convergence-control overrides."""
 
     result: dict[str, dict[str, Any]] = {}
     for task in tasks:
@@ -101,9 +101,29 @@ def cached_execution_configs(
         payload = yaml.safe_load(source.read_text(encoding="utf-8"))
         payload.setdefault("training", {})["num_workers"] = 1
         payload["training"]["adapted_sample_cache_size"] = 10_000
+        payload["training"].update({
+            "scheduler": "reduce_on_plateau",
+            "warmup_ratio": 0.0,
+            "plateau_factor": 0.5,
+            "plateau_patience": 8,
+            "plateau_threshold": 1e-4,
+            "min_lr": 1e-6,
+            "early_stopping_min_epochs": 40,
+            "early_stopping_patience": 30,
+        })
         task_override = payload.setdefault("task_overrides", {}).setdefault(task, {})
         task_override["num_workers"] = 1
         task_override["adapted_sample_cache_size"] = 10_000
+        task_override.update({
+            "scheduler": "reduce_on_plateau",
+            "warmup_ratio": 0.0,
+            "plateau_factor": 0.5,
+            "plateau_patience": 8,
+            "plateau_threshold": 1e-4,
+            "min_lr": 1e-6,
+            "early_stopping_min_epochs": 40,
+            "early_stopping_patience": 30,
+        })
         destination = output_dir / f"{task}.yaml"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
@@ -116,10 +136,22 @@ def cached_execution_configs(
             "runtime_only_overrides": {
                 "num_workers": 1,
                 "adapted_sample_cache_size": 10_000,
-                "numerical_semantics": (
+                "input_numerical_semantics": (
                     "unchanged deterministic tensors and batch ordering; adapted samples are "
                     "memoized in each persistent loader worker"
                 ),
+                "convergence_control": {
+                    "scheduler": "reduce_on_plateau",
+                    "monitor": (
+                        "masked_rmse_scaled" if task == "refed_regression" else "macro_f1"
+                    ),
+                    "plateau_factor": 0.5,
+                    "plateau_patience": 8,
+                    "plateau_threshold": 1e-4,
+                    "min_lr": 1e-6,
+                    "early_stopping_min_epochs": 40,
+                    "early_stopping_patience": 30,
+                },
             },
         }
     return result
@@ -272,18 +304,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--run-id",
-        default=datetime.now().strftime("%Y%m%d_sta_net_strict_vs_sample_random_5fold_v1_100ep"),
+        default=datetime.now().strftime("%Y%m%d_sta_net_no_artifact_mask_converged_5fold_v1"),
     )
     parser.add_argument("--tasks", nargs="+", choices=TASKS, default=list(TASKS))
     parser.add_argument("--gpus", nargs="+", type=int, default=[0, 1])
     parser.add_argument("--lanes-per-gpu", type=int, default=3)
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument(
+        "--epochs", type=int, default=300,
+        help="maximum epoch safety cap; normal completion is validation-convergence early stopping",
+    )
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--unlock-protected-test", action="store_true")
     args = parser.parse_args()
-    if args.epochs != 100:
-        raise ValueError("formal five-fold protocol is frozen at 100 epochs")
+    if args.epochs < 100:
+        raise ValueError("formal convergence protocol requires a maximum budget of at least 100 epochs")
     if not args.dry_run and not args.unlock_protected_test:
         raise RuntimeError("launch requires explicit --unlock-protected-test")
     if len(set(args.tasks)) != len(args.tasks):
@@ -311,7 +346,7 @@ def main() -> None:
     lanes, estimated_loads = distribute(jobs, lane_count, args.epochs)
     jobs = [job for lane in lanes for job in lane]
     protocol = {
-        "schema": "sta_net_strict_vs_sample_random_5fold_protocol_freeze_v1",
+        "schema": "sta_net_strict_vs_sample_random_5fold_protocol_freeze_v2",
         "run_id": args.run_id,
         "created_at": utc_now(),
         "protocols": {
@@ -331,12 +366,16 @@ def main() -> None:
             },
         },
         "tasks": list(args.tasks),
-        "epochs": args.epochs,
+        "maximum_epochs": args.epochs,
         "seed": 42,
         "selection_rule": (
             "fixed final cross-subject-selected hyperparameters; select the best checkpoint "
-            "within 100 epochs using only the public inner0 validation partition"
+            "using only the public inner0 validation partition; reduce learning rate after "
+            "8 unimproved validations and stop only after at least 40 epochs plus 30 "
+            "unimproved validations, subject to the frozen maximum-epoch safety cap"
         ),
+        "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
+        "adapter_validity_source": "valid_mask_only",
         "runtime_input_pipeline": (
             "one persistent DataLoader worker per loader with deterministic adapted-sample "
             "memoization; this changes neither tensor values nor batch order"

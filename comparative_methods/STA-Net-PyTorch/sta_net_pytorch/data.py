@@ -247,7 +247,11 @@ class STANetSampleAdapter:
         fnirs_required = fnirs_segment + (self.spec.fnirs_lag_count - 1) * fnirs_step
 
         eeg_values = self._take_with_padding(np.asarray(sample["eeg"], dtype=np.float32), eeg_length)
-        eeg_time_valid = self._time_mask(np.asarray(sample["analysis_valid_mask"]["eeg"], dtype=bool), eeg_length)
+        # `valid_mask` represents only real record support.  In particular, do not
+        # consume the legacy `analysis_valid_mask`: historical caches could encode
+        # dataset-specific artifact detections there, while the current unified
+        # contract deliberately gives artifact masks no invalidity authority.
+        eeg_time_valid = self._time_mask(np.asarray(sample["valid_mask"]["eeg"], dtype=bool), eeg_length)
         eeg_values[:, ~eeg_time_valid] = 0.0
         eeg_keep = ~np.asarray(sample["bad_channel_mask"]["eeg"], dtype=bool)
         eeg_coordinates, eeg_coordinate_mode = self._eeg_coordinates(sample, eeg_keep)
@@ -255,7 +259,7 @@ class STANetSampleAdapter:
 
         fnirs_values = self._take_with_padding(np.asarray(sample["fnirs"], dtype=np.float32), fnirs_required)
         fnirs_time_valid = self._time_mask(
-            np.asarray(sample["analysis_valid_mask"]["fnirs"], dtype=bool), fnirs_required
+            np.asarray(sample["valid_mask"]["fnirs"], dtype=bool), fnirs_required
         )
         fnirs_values[:, ~fnirs_time_valid] = 0.0
         roles = np.asarray(sample["component_roles"]["fnirs"], dtype=object)
@@ -284,8 +288,10 @@ class STANetSampleAdapter:
             "adapter_state": {
                 "eeg_coordinate_mode": eeg_coordinate_mode,
                 "fnirs_coordinate_modes": sorted(set(fnirs_coordinate_modes)),
-                "eeg_analysis_valid_fraction": float(eeg_time_valid.mean()),
-                "fnirs_analysis_valid_fraction": float(fnirs_time_valid.mean()),
+                "eeg_record_support_fraction": float(eeg_time_valid.mean()),
+                "fnirs_record_support_fraction": float(fnirs_time_valid.mean()),
+                "artifact_mask_consumed": False,
+                "validity_source": "valid_mask_only",
                 "eeg_bad_channel_count": int((~eeg_keep).sum()),
                 "fnirs_bad_channel_count": int(bad_fnirs.sum()),
             },
@@ -315,11 +321,15 @@ class STANetSampleAdapter:
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "schema": "sta_net_unified_adapter_v1",
+            "schema": "sta_net_unified_adapter_v2",
             "task": asdict(self.spec),
             "pytorch_eeg_shape": [1, 16, 16, "eeg_samples"],
             "pytorch_fnirs_shape": [self.spec.fnirs_lag_count, 2, 16, 16, "fnirs_segment_samples"],
-            "mask_policy": "zero invalid time support; omit bad channels before spatial interpolation",
+            "mask_policy": (
+                "artifact masks have no authority; valid_mask only marks real record support; "
+                "omit independently defined bad channels before spatial interpolation"
+            ),
+            "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
             "spatial_projection": "official source grid when channel inventory matches; otherwise normalized unified geometry",
             "target_policy": "explicit class order or native REFED sequence plus per-coordinate validity mask",
             "target_scaler": None if self.target_center is None else {

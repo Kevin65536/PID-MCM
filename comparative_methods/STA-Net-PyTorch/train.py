@@ -225,7 +225,7 @@ def checkpoint_payload(
     model_config: STANetConfig,
     model: STANet,
     optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LRScheduler | None,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | torch.optim.lr_scheduler.ReduceLROnPlateau | None,
     grad_scaler: torch.amp.GradScaler,
     epoch: int,
     optimizer_step: int,
@@ -234,6 +234,8 @@ def checkpoint_payload(
     selection_metric: str,
     selection_mode: str,
     best_validation_metric: float,
+    best_validation_epoch: int | None,
+    epochs_without_improvement: int,
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -250,6 +252,8 @@ def checkpoint_payload(
         "selection_metric": selection_metric,
         "selection_mode": selection_mode,
         "best_validation_metric": best_validation_metric,
+        "best_validation_epoch": best_validation_epoch,
+        "epochs_without_improvement": epochs_without_improvement,
         "rng_state": {
             "python": random.getstate(),
             "numpy": np.random.get_state(),
@@ -353,11 +357,28 @@ def make_scheduler(
     name: str,
     warmup_ratio: float,
     total_steps: int,
-) -> torch.optim.lr_scheduler.LRScheduler | None:
+    selection_mode: str,
+    plateau_factor: float = 0.5,
+    plateau_patience: int = 8,
+    plateau_threshold: float = 1e-4,
+    min_lr: float = 1e-6,
+) -> torch.optim.lr_scheduler.LRScheduler | torch.optim.lr_scheduler.ReduceLROnPlateau | None:
     if name == "constant" and warmup_ratio <= 0.0:
         return None
+    if name == "reduce_on_plateau":
+        if warmup_ratio > 0.0:
+            raise ValueError("reduce_on_plateau does not support step-based warmup")
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode=selection_mode,
+            factor=plateau_factor,
+            patience=plateau_patience,
+            threshold=plateau_threshold,
+            threshold_mode="abs",
+            min_lr=min_lr,
+        )
     if name not in {"constant", "cosine"}:
-        raise ValueError("scheduler must be constant or cosine")
+        raise ValueError("scheduler must be constant, cosine, or reduce_on_plateau")
     warmup_steps = int(round(total_steps * warmup_ratio))
     def lr_lambda(step: int) -> float:
         if warmup_steps > 0 and step < warmup_steps:
@@ -367,6 +388,19 @@ def make_scheduler(
         progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
         return 0.5 * (1.0 + math.cos(math.pi * min(1.0, max(0.0, progress))))
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+
+def should_early_stop(
+    *,
+    epoch: int,
+    epochs_without_improvement: int,
+    minimum_epochs: int,
+    patience: int,
+) -> bool:
+    """Return whether validation has supplied enough evidence of convergence."""
+    if patience <= 0:
+        return False
+    return epoch >= minimum_epochs and epochs_without_improvement >= patience
 
 
 def run(args: argparse.Namespace) -> None:
@@ -494,14 +528,32 @@ def run(args: argparse.Namespace) -> None:
     selection_min_delta = float(train_cfg.get("selection_min_delta", 0.0))
     scheduler_name = str(train_cfg.get("scheduler", "constant"))
     scheduler_total_epochs = int(train_cfg.get("scheduler_total_epochs", max(epochs, 100)))
+    early_stopping_patience = int(train_cfg.get("early_stopping_patience", 0))
+    early_stopping_min_epochs = int(train_cfg.get("early_stopping_min_epochs", 0))
+    if early_stopping_patience < 0 or early_stopping_min_epochs < 0:
+        raise ValueError("early-stopping patience and minimum epochs must be non-negative")
+    plateau_patience = int(train_cfg.get("plateau_patience", 8))
+    if scheduler_name == "reduce_on_plateau" and early_stopping_patience > 0:
+        if early_stopping_patience <= plateau_patience:
+            raise ValueError(
+                "early_stopping_patience must exceed plateau_patience so learning-rate "
+                "reduction has time to take effect"
+            )
     scheduler = make_scheduler(
         optimizer, name=scheduler_name, warmup_ratio=float(train_cfg.get("warmup_ratio", 0.0)),
         total_steps=max(1, scheduler_total_epochs * len(train_loader)),
+        selection_mode=selection_mode,
+        plateau_factor=float(train_cfg.get("plateau_factor", 0.5)),
+        plateau_patience=plateau_patience,
+        plateau_threshold=float(train_cfg.get("plateau_threshold", 1e-4)),
+        min_lr=float(train_cfg.get("min_lr", 1e-6)),
     )
     global_step = 0
     start_epoch = 1
     best_validation_loss = math.inf
     best_validation_metric = math.inf if selection_mode == "min" else -math.inf
+    best_validation_epoch: int | None = None
+    epochs_without_improvement = 0
     if args.resume:
         resumed = torch.load(Path(args.resume), map_location=device, weights_only=False)
         if resumed.get("schema") != SCHEMA or resumed.get("task", {}).get("key") != spec.key:
@@ -516,6 +568,10 @@ def run(args: argparse.Namespace) -> None:
         global_step = int(resumed["optimizer_step"])
         best_validation_loss = float(resumed.get("best_validation_loss", math.inf))
         best_validation_metric = float(resumed.get("best_validation_metric", best_validation_metric))
+        best_validation_epoch = resumed.get("best_validation_epoch")
+        if best_validation_epoch is not None:
+            best_validation_epoch = int(best_validation_epoch)
+        epochs_without_improvement = int(resumed.get("epochs_without_improvement", 0))
         rng = resumed.get("rng_state")
         if rng:
             random.setstate(rng["python"])
@@ -563,6 +619,9 @@ def run(args: argparse.Namespace) -> None:
         "class_weighting": class_weight_policy,
         "label_smoothing": float(loss_cfg.get("label_smoothing", 0.0)),
         "scheduler": scheduler_name,
+        "scheduler_monitor": selection_metric if scheduler_name == "reduce_on_plateau" else None,
+        "early_stopping_patience": early_stopping_patience,
+        "early_stopping_min_epochs": early_stopping_min_epochs,
         "started_at": utc_now(),
     }
     (output_dir / "config.yaml").write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -586,6 +645,8 @@ def run(args: argparse.Namespace) -> None:
         best_validation_metric = selection_value(
             initial_validation, selection_metric, selection_mode
         )
+        best_validation_epoch = 0
+        epochs_without_improvement = 0
         atomic_checkpoint(
             output_dir / "checkpoint_best.pt",
             checkpoint_payload(
@@ -595,11 +656,14 @@ def run(args: argparse.Namespace) -> None:
                 best_validation_loss=best_validation_loss,
                 selection_metric=selection_metric, selection_mode=selection_mode,
                 best_validation_metric=best_validation_metric,
+                best_validation_epoch=best_validation_epoch,
+                epochs_without_improvement=epochs_without_improvement,
             ),
         )
 
     last_epoch = start_epoch - 1
     step_limit_reached = False
+    convergence_reached = False
     for epoch in range(start_epoch, epochs + 1):
         last_epoch = epoch
         train_sampler.epoch = epoch - 1
@@ -625,7 +689,7 @@ def run(args: argparse.Namespace) -> None:
             gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             grad_scaler.step(optimizer)
             grad_scaler.update()
-            if scheduler is not None:
+            if scheduler is not None and scheduler_name != "reduce_on_plateau":
                 scheduler.step()
             global_step += 1
             current_batch = int(batch["eeg"].shape[0])
@@ -663,7 +727,6 @@ def run(args: argparse.Namespace) -> None:
                 class_count=spec.output_dim,
             )
             validation_metrics.update({"time": utc_now(), "epoch": epoch, "optimizer_step": global_step})
-            append_jsonl(output_dir / "metrics" / "validation_epochs.jsonl", validation_metrics)
         validation_improved = False
         if validation_metrics is not None:
             best_validation_loss = min(best_validation_loss, float(validation_metrics["loss"]))
@@ -673,6 +736,28 @@ def run(args: argparse.Namespace) -> None:
             )
             if validation_improved:
                 best_validation_metric = current_selection
+                best_validation_epoch = epoch
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += validation_every
+            if scheduler is not None and scheduler_name == "reduce_on_plateau":
+                scheduler.step(current_selection)
+            validation_metrics.update({
+                "selection_metric": selection_metric,
+                "selection_value": current_selection,
+                "validation_improved": validation_improved,
+                "best_validation_metric": best_validation_metric,
+                "best_validation_epoch": best_validation_epoch,
+                "epochs_without_improvement": epochs_without_improvement,
+                "learning_rate": float(optimizer.param_groups[0]["lr"]),
+            })
+            append_jsonl(output_dir / "metrics" / "validation_epochs.jsonl", validation_metrics)
+            convergence_reached = should_early_stop(
+                epoch=epoch,
+                epochs_without_improvement=epochs_without_improvement,
+                minimum_epochs=early_stopping_min_epochs,
+                patience=early_stopping_patience,
+            )
         payload = checkpoint_payload(
             spec=spec, model_config=resolved_model, model=model, optimizer=optimizer,
             scheduler=scheduler, grad_scaler=grad_scaler,
@@ -680,11 +765,13 @@ def run(args: argparse.Namespace) -> None:
             best_validation_loss=best_validation_loss,
             selection_metric=selection_metric, selection_mode=selection_mode,
             best_validation_metric=best_validation_metric,
+            best_validation_epoch=best_validation_epoch,
+            epochs_without_improvement=epochs_without_improvement,
         )
         atomic_checkpoint(output_dir / "checkpoint_latest.pt", payload)
         if validation_improved:
             atomic_checkpoint(output_dir / "checkpoint_best.pt", payload)
-        if _STOP_REQUESTED or step_limit_reached:
+        if _STOP_REQUESTED or step_limit_reached or convergence_reached:
             break
 
     if _STOP_REQUESTED:
@@ -693,11 +780,21 @@ def run(args: argparse.Namespace) -> None:
         final_status = "step_limit_reached"
     else:
         final_status = "completed"
+    stop_reason = (
+        "signal_interrupted" if _STOP_REQUESTED else
+        "step_limit_reached" if step_limit_reached else
+        "early_stopping_converged" if convergence_reached else
+        "max_epochs_reached"
+    )
     manifest.update({
         "status": final_status, "completed_at": utc_now(), "optimizer_steps": global_step,
         "last_epoch": last_epoch, "best_validation_loss": None if math.isinf(best_validation_loss) else best_validation_loss,
         "selection_metric": selection_metric, "selection_mode": selection_mode,
         "best_validation_metric": None if math.isinf(best_validation_metric) else best_validation_metric,
+        "best_validation_epoch": best_validation_epoch,
+        "epochs_without_improvement": epochs_without_improvement,
+        "stop_reason": stop_reason,
+        "convergence_reached": convergence_reached,
     })
     write_json(output_dir / "manifest.json", manifest)
     write_json(status_path, manifest)

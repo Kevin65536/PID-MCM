@@ -58,7 +58,7 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = sorted({key for row in rows for key in row})
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -100,7 +100,11 @@ def metric_names(task: str) -> tuple[str, ...]:
 
 def formatted(summary: Mapping[str, Any], *, percent: bool) -> str:
     scale = 100.0 if percent else 1.0
-    return f"{float(summary['mean']) * scale:.2f} ± {float(summary['sample_sd']) * scale:.2f}"
+    decimals = 2 if percent else 3
+    return (
+        f"{float(summary['mean']) * scale:.{decimals}f} ± "
+        f"{float(summary['sample_sd']) * scale:.{decimals}f}"
+    )
 
 
 def latex_escape(value: str) -> str:
@@ -119,6 +123,7 @@ def main() -> None:
 
     grouped_jobs: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
     fold_rows: list[dict[str, Any]] = []
+    convergence_rows: list[dict[str, Any]] = []
     for job in jobs:
         grouped_jobs[(str(job["protocol_key"]), str(job["task"]))].append(job)
 
@@ -138,6 +143,28 @@ def main() -> None:
             if not summary_path.is_file() or not prediction_path.is_file():
                 raise RuntimeError(f"incomplete fold {protocol_key}/{task}/{job['fold_id']}")
             evaluation = json.loads(summary_path.read_text(encoding="utf-8"))
+            training_path = fold_dir.parent / "training" / "manifest.json"
+            training = json.loads(training_path.read_text(encoding="utf-8"))
+            if (
+                training.get("status") != "completed"
+                or training.get("convergence_reached") is not True
+                or training.get("stop_reason") != "early_stopping_converged"
+            ):
+                raise RuntimeError(f"fold lacks validated convergence evidence: {training_path}")
+            convergence_rows.append({
+                "protocol": protocol_key,
+                "task": task,
+                "outer_fold": int(job["outer_fold"]),
+                "last_epoch": int(training["last_epoch"]),
+                "best_validation_epoch": int(training["best_validation_epoch"]),
+                "epochs_after_best": (
+                    int(training["last_epoch"]) - int(training["best_validation_epoch"])
+                ),
+                "epochs_without_improvement": int(training["epochs_without_improvement"]),
+                "stop_reason": str(training["stop_reason"]),
+                "selection_metric": str(training["selection_metric"]),
+                "best_validation_metric": float(training["best_validation_metric"]),
+            })
             protected = json.loads(Path(job["protected_manifest"]).read_text(encoding="utf-8"))
             if evaluation.get("task") != task:
                 raise RuntimeError(f"evaluation task mismatch in {summary_path}")
@@ -269,6 +296,16 @@ def main() -> None:
         "classification_accuracy_comparison": accuracy_rows,
         "source_paper_accuracy_comparison": source_rows,
         "source_paper": protocol["source_paper"],
+        "artifact_mask_policy": protocol.get("artifact_mask_policy"),
+        "adapter_validity_source": protocol.get("adapter_validity_source"),
+        "convergence_audit": {
+            "all_folds_converged": True,
+            "fold_count": len(convergence_rows),
+            "stop_rule": (
+                "at least 40 epochs and at least 30 validation epochs without an "
+                "improvement in the task checkpoint-selection metric"
+            ),
+        },
         "protected_test_opened": True,
     }
     write_json(output / "summary.json", result)
@@ -276,6 +313,7 @@ def main() -> None:
     write_csv(output / "primary_comparison.csv", comparison_rows)
     write_csv(output / "classification_accuracy_comparison.csv", accuracy_rows)
     write_csv(output / "source_paper_accuracy_comparison.csv", source_rows)
+    write_csv(output / "training_convergence.csv", convergence_rows)
 
     lines = [
         "# STA-Net five-fold benchmark: strict cross-subject vs sample-level random split",
@@ -283,6 +321,12 @@ def main() -> None:
         "Values are mean ± sample SD across the five outer folds. Classification values "
         "are percentages; REFED CCC is unitless. Hyperparameters were frozen before opening "
         "any outer test fold.",
+        "",
+        (
+            f"All {len(convergence_rows)} fold trainings ended by the frozen validation-"
+            "convergence rule rather than the maximum-epoch cap. Artifact masks were not "
+            "consumed; only real record support from `valid_mask` was used."
+        ),
         "",
         "## Primary endpoints",
         "",
@@ -296,7 +340,7 @@ def main() -> None:
             f"| {row['task_label']} | {'Macro-F1 (%)' if percent else 'CCC'} | "
             f"{formatted({'mean': row['strict_mean'], 'sample_sd': row['strict_sample_sd']}, percent=percent)} | "
             f"{formatted({'mean': row['sample_random_mean'], 'sample_sd': row['sample_random_sample_sd']}, percent=percent)} | "
-            f"{row['sample_random_minus_strict'] * delta_scale:+.2f} |"
+            f"{row['sample_random_minus_strict'] * delta_scale:+.{2 if percent else 3}f} |"
         )
     lines.extend([
         "",
@@ -358,13 +402,15 @@ def main() -> None:
     for row in comparison_rows:
         percent = row["metric"] == "macro_f1"
         scale = 100.0 if percent else 1.0
+        decimals = 2 if percent else 3
         metric_label = "Macro-F1 (\\%)" if percent else "CCC"
         latex.append(
             f"{latex_escape(row['task_label'])} & {metric_label} & "
-            f"{row['strict_mean'] * scale:.2f} $\\pm$ {row['strict_sample_sd'] * scale:.2f} & "
-            f"{row['sample_random_mean'] * scale:.2f} $\\pm$ "
-            f"{row['sample_random_sample_sd'] * scale:.2f} & "
-            f"{row['sample_random_minus_strict'] * scale:+.2f} \\\\"
+            f"{row['strict_mean'] * scale:.{decimals}f} $\\pm$ "
+            f"{row['strict_sample_sd'] * scale:.{decimals}f} & "
+            f"{row['sample_random_mean'] * scale:.{decimals}f} $\\pm$ "
+            f"{row['sample_random_sample_sd'] * scale:.{decimals}f} & "
+            f"{row['sample_random_minus_strict'] * scale:+.{decimals}f} \\\\"
         )
     latex.extend([
         r"\bottomrule",

@@ -147,3 +147,9 @@ Classification checkpoints maximize validation macro-F1; REFED checkpoints
 minimize masked scaled RMSE. Accuracy, balanced accuracy, macro-F1 and Kappa
 remain available for reporting. The composite STA-Net loss is an optimization
 diagnostic, not a checkpoint-selection endpoint.
+
+The 2026-07-27 formal rerun follows
+`sources/20260727_no_artifact_mask_convergence_protocol.md`: the adapter reads
+only record-support `valid_mask`, never artifact-gated
+`analysis_valid_mask`, and formal training uses validation-driven learning-rate
+reduction plus audited early convergence instead of a fixed 100-epoch cutoff.

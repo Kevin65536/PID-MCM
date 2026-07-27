@@ -40,7 +40,12 @@ def completed_training(run_dir: Path) -> bool:
     if not manifest_path.exists():
         return False
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return manifest.get("status") == "completed" and (run_dir / "checkpoint_best.pt").is_file()
+    return (
+        manifest.get("status") == "completed"
+        and manifest.get("convergence_reached") is True
+        and manifest.get("stop_reason") == "early_stopping_converged"
+        and (run_dir / "checkpoint_best.pt").is_file()
+    )
 
 
 def run_command(command: list[str], log_path: Path) -> None:
@@ -178,6 +183,13 @@ def main() -> None:
                 if resume.is_file():
                     command.extend(["--resume", str(resume)])
                 run_command(command, fold_dir / "train.log")
+            if not completed_training(training_dir):
+                training = json.loads((training_dir / "manifest.json").read_text(encoding="utf-8"))
+                raise RuntimeError(
+                    "training reached its safety cap without validation convergence: "
+                    f"{key}, last_epoch={training.get('last_epoch')}, "
+                    f"best_epoch={training.get('best_validation_epoch')}"
+                )
             freeze_fold(job, training_dir, freeze_path)
             run_command([
                 sys.executable,

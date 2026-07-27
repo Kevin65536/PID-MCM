@@ -1,0 +1,38 @@
+{
+  "created_at": "2026-07-27T07:26:51.312795+00:00",
+  "jobs": 70,
+  "lanes": [
+    {
+      "estimated_training_seconds": 210948.90000000002,
+      "job_count": 26,
+      "jobs": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/jobs/lane_00.json",
+      "lane_id": "lane_00",
+      "log": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/logs/lane_00.log",
+      "physical_gpu": 1,
+      "pid": 24407
+    },
+    {
+      "estimated_training_seconds": 210854.58000000002,
+      "job_count": 19,
+      "jobs": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/jobs/lane_01.json",
+      "lane_id": "lane_01",
+      "log": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/logs/lane_01.log",
+      "physical_gpu": 1,
+      "pid": 24408
+    },
+    {
+      "estimated_training_seconds": 209392.80000000002,
+      "job_count": 25,
+      "jobs": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/jobs/lane_02.json",
+      "lane_id": "lane_02",
+      "log": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/logs/lane_02.log",
+      "physical_gpu": 1,
+      "pid": 24409
+    }
+  ],
+  "run_root": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1",
+  "schema": "sta_net_strict_vs_sample_random_5fold_launch_v1",
+  "status": "launched",
+  "supervisor_log": "/SSD_2/pid-mcm-implementation/comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/logs/supervisor.log",
+  "supervisor_pid": 24410
+}

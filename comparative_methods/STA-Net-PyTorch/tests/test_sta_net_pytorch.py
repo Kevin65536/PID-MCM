@@ -25,6 +25,7 @@ from train import (
     RecordGroupedBatchSampler,
     classification_weights,
     initialize_model_from_checkpoint,
+    should_early_stop,
 )
 from launch_tuning import lane_plan, targeted_lane_plan, tuning_anchors
 from tune import RUNG_EPOCHS, best_validation_metric_through_epoch, sample_config
@@ -143,6 +144,7 @@ def test_official_wg_adapter_emits_released_sta_net_tensor_shapes():
     sample = {
         "eeg": np.random.default_rng(0).normal(size=(28, 4000)).astype(np.float32),
         "fnirs": np.random.default_rng(1).normal(size=(72, 200)).astype(np.float32),
+        "valid_mask": {"eeg": np.ones(4000, dtype=bool), "fnirs": np.ones(200, dtype=bool)},
         "analysis_valid_mask": {"eeg": np.ones(4000, dtype=bool), "fnirs": np.ones(200, dtype=bool)},
         "bad_channel_mask": {"eeg": np.zeros(28, dtype=bool), "fnirs": np.zeros(72, dtype=bool)},
         "sample_rate_hz": {"eeg": 200.0, "fnirs": 10.0},
@@ -170,6 +172,48 @@ def test_official_wg_adapter_emits_released_sta_net_tensor_shapes():
     assert torch.isfinite(adapted["eeg"]).all()
     assert torch.isfinite(adapted["fnirs"]).all()
     assert adapted["adapter_state"]["eeg_coordinate_mode"] == "official_sta_net_wg_grid"
+    assert adapted["adapter_state"]["artifact_mask_consumed"] is False
+    assert adapted["adapter_state"]["validity_source"] == "valid_mask_only"
+
+
+def test_adapter_ignores_legacy_artifact_gated_analysis_valid_mask():
+    eeg_names = list(OFFICIAL_EEG_GRID)
+    fnirs_locations = list(OFFICIAL_FNIRS_GRID)
+    fnirs_names = [f"{name}_{component}" for name in fnirs_locations for component in ("HbO", "HbR")]
+    fnirs_roles = [component for _ in fnirs_locations for component in ("HbO", "HbR")]
+    sample = {
+        "eeg": np.ones((28, 600), dtype=np.float32),
+        "fnirs": np.ones((72, 130), dtype=np.float32),
+        "valid_mask": {"eeg": np.ones(600, dtype=bool), "fnirs": np.ones(130, dtype=bool)},
+        "analysis_valid_mask": {
+            "eeg": np.zeros(600, dtype=bool),
+            "fnirs": np.zeros(130, dtype=bool),
+        },
+        "bad_channel_mask": {"eeg": np.zeros(28, dtype=bool), "fnirs": np.zeros(72, dtype=bool)},
+        "sample_rate_hz": {"eeg": 200.0, "fnirs": 10.0},
+        "channel_names": {"eeg": eeg_names, "fnirs": fnirs_names},
+        "component_roles": {"eeg": ["electrical_potential"] * 28, "fnirs": fnirs_roles},
+        "channel_geometry": {
+            "eeg": [{"x": float(x), "y": float(y)} for x, y in OFFICIAL_EEG_GRID.values()],
+            "fnirs": [
+                {"x": float(OFFICIAL_FNIRS_GRID[name][0]), "y": float(OFFICIAL_FNIRS_GRID[name][1])}
+                for name in fnirs_locations
+                for _ in ("HbO", "HbR")
+            ],
+        },
+        "label": {"condition": "WG"},
+        "subject": "VP001",
+        "record_id": "cnt_wg",
+        "join_key": "simultaneous_eeg_nirs|VP001|cnt_wg",
+        "event": {"event_index": 0},
+        "alignment": {"event_relative_window_start_s": 0.0},
+    }
+    adapted = STANetSampleAdapter(get_sta_net_task_spec("wg")).adapt(sample)
+    assert torch.count_nonzero(adapted["eeg"]) > 0
+    assert torch.count_nonzero(adapted["fnirs"]) > 0
+    assert adapted["adapter_state"]["eeg_record_support_fraction"] == 1.0
+    assert adapted["adapter_state"]["fnirs_record_support_fraction"] == 1.0
+    assert adapted["adapter_state"]["artifact_mask_consumed"] is False
 
 
 def test_task_variants_cover_binary_multiclass_and_regression():
@@ -332,6 +376,18 @@ def test_checkpoint_metric_prefers_macro_f1_instead_of_lower_loss_proxy():
     assert np.isclose(metrics["macro_f1"], (0.8 + 2.0 / 3.0) / 2.0)
     assert improved(metrics["macro_f1"], 0.5, "max")
     assert not improved(metrics["macro_f1"], 0.9, "max")
+
+
+def test_early_stopping_requires_both_minimum_budget_and_patience():
+    assert not should_early_stop(
+        epoch=39, epochs_without_improvement=35, minimum_epochs=40, patience=30
+    )
+    assert not should_early_stop(
+        epoch=80, epochs_without_improvement=29, minimum_epochs=40, patience=30
+    )
+    assert should_early_stop(
+        epoch=80, epochs_without_improvement=30, minimum_epochs=40, patience=30
+    )
 
 
 def test_public_split_manifest_never_exposes_protected_indices():
