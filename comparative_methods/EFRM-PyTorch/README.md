@@ -28,6 +28,15 @@ The completed source/target dual-protocol v1 remains historical development
 evidence. It is not the protocol for future EFRM-versus-mainline ranking and
 its checkpoint must not be reused in v2.
 
+The v2 protocol was materialized and execution started on 2026-07-27. The
+detached queue runs all four Stage-A target-excluded selection jobs first,
+freezes each selected epoch, and then runs the four Stage-B full non-target
+refits. Inspect it with:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/run_lodo_pretraining.py status
+```
+
 ## Frozen scientific and data contract
 
 ### What the source pretraining corpus actually aligns

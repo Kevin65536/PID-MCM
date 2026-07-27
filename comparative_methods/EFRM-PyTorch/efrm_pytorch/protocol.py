@@ -16,6 +16,7 @@ BOUNDARY_SCHEMA = "efrm_pretraining_boundary_v1"
 TRIAL_MIXED_BOUNDARY_SCHEMA = "efrm_trial_mixed_boundary_v1"
 PUBLIC_SPLIT_SCHEMAS = {"sta_net_split_registry_v2", "sta_net_subject_split_v1"}
 SOURCE_TARGET_COHORT_SCHEMA = "efrm_source_target_cohort_v1"
+LODO_PRETRAINING_MANIFEST_SCHEMA = "efrm_lodo_pretraining_manifest_v2"
 
 
 def sha256_file(path: str | Path) -> str:
@@ -272,6 +273,111 @@ class SourceTargetBoundary:
             "validation_subjects_by_dataset": self.validation_subjects,
             "target_subjects_by_dataset": self.target_subjects,
             "combination_rule": "frozen dataset-level source cohort; source validation held out",
+        }
+        result["boundary_sha256"] = _stable_hash(result)
+        return result
+
+
+class LODOPretrainingBoundary:
+    """Target-dataset-excluded boundary for the frozen EFRM v2 protocol."""
+
+    def __init__(self, manifest_path: str | Path, *, stage: str) -> None:
+        self.manifest_path = Path(manifest_path).resolve()
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("schema") != LODO_PRETRAINING_MANIFEST_SCHEMA:
+            raise ValueError(
+                f"expected {LODO_PRETRAINING_MANIFEST_SCHEMA} at "
+                f"{self.manifest_path}"
+            )
+        if manifest.get("protocol_id") != "efrm_lodo_full_target_fivefold_v2":
+            raise ValueError("LODO manifest protocol ID does not match frozen v2")
+        if manifest.get("target_dataset_exposure") is not False:
+            raise PermissionError("LODO pretraining requires target_dataset_exposure=false")
+        if stage not in {"selection", "final_refit"}:
+            raise ValueError("LODO stage must be selection or final_refit")
+
+        self.stage = stage
+        self.target_dataset = str(manifest["excluded_target_dataset"])
+        included = tuple(str(value) for value in manifest["included_datasets"])
+        if not included or self.target_dataset in included:
+            raise RuntimeError("invalid LODO included/excluded dataset declaration")
+
+        datasets = manifest.get("datasets", {})
+        if set(datasets) != set(included):
+            raise RuntimeError("LODO dataset rows do not exactly match included datasets")
+        self.train_subjects: dict[str, tuple[str, ...]] = {}
+        self.validation_subjects: dict[str, tuple[str, ...]] = {}
+        self.all_subjects: dict[str, tuple[str, ...]] = {}
+        for dataset_id, row in sorted(datasets.items()):
+            all_subjects = {str(value) for value in row["all_subjects"]}
+            selection_train = {
+                str(value) for value in row["selection_train_subjects"]
+            }
+            selection_validation = {
+                str(value) for value in row["selection_validation_subjects"]
+            }
+            if (
+                not selection_train
+                or not selection_validation
+                or selection_train & selection_validation
+                or selection_train | selection_validation != all_subjects
+            ):
+                raise RuntimeError(
+                    f"invalid LODO selection split for {dataset_id}"
+                )
+            self.all_subjects[str(dataset_id)] = tuple(sorted(all_subjects))
+            if stage == "selection":
+                self.train_subjects[str(dataset_id)] = tuple(
+                    sorted(selection_train)
+                )
+            else:
+                self.train_subjects[str(dataset_id)] = tuple(sorted(all_subjects))
+            # Stage-B validation is diagnostic only. It deliberately overlaps
+            # the full refit train pool and cannot select or stop a checkpoint.
+            self.validation_subjects[str(dataset_id)] = tuple(
+                sorted(selection_validation)
+            )
+        self.manifest_data = manifest
+
+    def indices_for(self, dataset: EFRMSyncPretrainDataset, role: str) -> list[int]:
+        if role not in {"train", "validation"}:
+            raise ValueError("role must be train or validation")
+        admitted = self.train_subjects if role == "train" else self.validation_subjects
+        indices: list[int] = []
+        for index in range(len(dataset)):
+            row = dataset.lightweight_metadata(index)
+            dataset_id = str(row["dataset_id"])
+            if dataset_id == self.target_dataset:
+                raise PermissionError(
+                    f"active target dataset {self.target_dataset} entered LODO loader"
+                )
+            if str(row["subject"]) in admitted.get(dataset_id, ()):
+                indices.append(index)
+        if not indices:
+            raise RuntimeError(f"no pretraining windows survive LODO {role} boundary")
+        return indices
+
+    def manifest(self) -> dict[str, Any]:
+        result = {
+            "schema": BOUNDARY_SCHEMA,
+            "mode": f"lodo_{self.stage}_v2",
+            "protocol_id": "efrm_lodo_full_target_fivefold_v2",
+            "protected_test_opened": False,
+            "target_dataset_exposure": False,
+            "excluded_target_dataset": self.target_dataset,
+            "included_datasets": tuple(sorted(self.all_subjects)),
+            "lodo_manifest_path": str(self.manifest_path),
+            "lodo_manifest_sha256": sha256_file(self.manifest_path),
+            "train_subjects_by_dataset": self.train_subjects,
+            "validation_subjects_by_dataset": self.validation_subjects,
+            "all_included_subjects_by_dataset": self.all_subjects,
+            "validation_role": (
+                "checkpoint_selection"
+                if self.stage == "selection"
+                else "diagnostic_only_overlaps_full_refit_train"
+            ),
+            "checkpoint_selection_allowed": self.stage == "selection",
+            "early_stopping_allowed": self.stage == "selection",
         }
         result["boundary_sha256"] = _stable_hash(result)
         return result

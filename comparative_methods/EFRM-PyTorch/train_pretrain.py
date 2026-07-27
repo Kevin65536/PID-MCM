@@ -39,6 +39,7 @@ from efrm_pytorch.data import (
 )
 from efrm_pytorch.model import EFRMSyncModel
 from efrm_pytorch.protocol import (
+    LODOPretrainingBoundary,
     PretrainingBoundary,
     SourceTargetBoundary,
     TrialMixedBoundary,
@@ -78,7 +79,20 @@ def _subset(dataset: EFRMSyncPretrainDataset, selected: Iterable[int]) -> EFRMSy
 def _build_boundary(
     config: dict[str, Any],
     dataset: EFRMSyncPretrainDataset,
-) -> tuple[list[str], PretrainingBoundary | SourceTargetBoundary | TrialMixedBoundary]:
+) -> tuple[
+    list[str],
+    PretrainingBoundary
+    | SourceTargetBoundary
+    | LODOPretrainingBoundary
+    | TrialMixedBoundary,
+]:
+    lodo_manifest = config["data"].get("lodo_manifest")
+    if lodo_manifest:
+        path = Path(str(lodo_manifest))
+        if not path.is_absolute():
+            path = (METHOD_ROOT / path).resolve()
+        stage = str(config.get("formal_protocol", {}).get("lodo_stage", ""))
+        return [], LODOPretrainingBoundary(path, stage=stage)
     cohort_manifest = config["data"].get("cohort_manifest")
     if cohort_manifest:
         path = Path(str(cohort_manifest))
@@ -259,6 +273,12 @@ def main() -> None:
     config_path = Path(args.config).resolve()
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     training = config["training"]
+    formal_protocol = config.get("formal_protocol", {})
+    lodo_stage = str(formal_protocol.get("lodo_stage", "")) or None
+    if lodo_stage == "final_refit" and args.epochs is None:
+        raise ValueError(
+            "LODO final refit requires an explicit --epochs value frozen by Stage A"
+        )
     seed = int(training["seed"])
     _seed_everything(seed)
     device = torch.device(args.device)
@@ -348,7 +368,7 @@ def main() -> None:
         betas=tuple(float(value) for value in training["adam_betas"]),
         weight_decay=float(training["weight_decay"]),
     )
-    epochs = int(args.epochs or training["epochs"])
+    epochs = int(args.epochs if args.epochs is not None else training["epochs"])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, epochs))
     loss_config = config["loss"]
     loss_kwargs = {
@@ -395,6 +415,21 @@ def main() -> None:
         "split_strategy": config["data"].get(
             "split_strategy", "subject_disjoint_public_v1"
         ),
+        "protocol_id": formal_protocol.get("protocol_id"),
+        "lodo_stage": lodo_stage,
+        "excluded_target_dataset": boundary_manifest.get(
+            "excluded_target_dataset"
+        ),
+        "target_dataset_exposure": boundary_manifest.get(
+            "target_dataset_exposure"
+        ),
+        "checkpoint_selection_allowed": (
+            boundary_manifest.get("checkpoint_selection_allowed", True)
+        ),
+        "early_stopping_allowed": boundary_manifest.get(
+            "early_stopping_allowed", True
+        ),
+        "requested_epoch_count": epochs,
         "task_namespaces": list(config["data"].get("task_namespaces", ())),
         "recompute_chunk_size": args.chunk_size,
         "gradient_cache": "two_pass_exact_v1",
@@ -504,9 +539,9 @@ def main() -> None:
                 best_loss=best_loss, patience=patience,
                 boundary_sha256=boundary_manifest["boundary_sha256"],
             )
-            if improved:
+            if improved and lodo_stage != "final_refit":
                 shutil.copy2(latest, run_dir / "checkpoints/best.pt")
-            if alignment_improved:
+            if alignment_improved and lodo_stage != "final_refit":
                 best_alignment_loss = validation_epoch["clip_alignment_loss"]
                 shutil.copy2(latest, run_dir / "checkpoints/best_alignment.pt")
 
@@ -551,9 +586,22 @@ def main() -> None:
         print(json.dumps(epoch_row), flush=True)
         if args.architecture_smoke:
             break
-        if epoch + 1 >= int(training["min_epochs"]) and patience >= int(training["early_stopping_patience"]):
+        if (
+            lodo_stage != "final_refit"
+            and epoch + 1 >= int(training["min_epochs"])
+            and patience >= int(training["early_stopping_patience"])
+        ):
             break
 
+    if lodo_stage == "final_refit" and not args.architecture_smoke:
+        if not latest.is_file():
+            raise RuntimeError("LODO final refit produced no terminal checkpoint")
+        shutil.copy2(latest, run_dir / "checkpoints/terminal.pt")
+        manifest["formal_checkpoint"] = "checkpoints/terminal.pt"
+        manifest["formal_checkpoint_sha256"] = _sha256(
+            run_dir / "checkpoints/terminal.pt"
+        )
+        manifest["terminal_epoch_count"] = epochs
     manifest["status"] = "smoke_passed" if args.architecture_smoke else "completed"
     manifest["completed_at"] = datetime.now().isoformat()
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

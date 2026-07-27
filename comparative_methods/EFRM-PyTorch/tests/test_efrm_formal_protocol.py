@@ -20,7 +20,7 @@ from build_formal_protocol import (
     strict_folds,
     validate_folds,
 )
-from efrm_pytorch.protocol import SourceTargetBoundary
+from efrm_pytorch.protocol import LODOPretrainingBoundary, SourceTargetBoundary
 
 
 class FakeClassificationDataset:
@@ -149,3 +149,50 @@ def test_source_target_boundary_rejects_overlap_and_selects_source_roles(
     path.write_text(json.dumps(cohort), encoding="utf-8")
     with pytest.raises(RuntimeError, match="overlap"):
         SourceTargetBoundary(path)
+
+
+def test_lodo_boundary_excludes_target_and_refit_uses_all_source_subjects(
+    tmp_path: Path,
+) -> None:
+    manifest = {
+        "schema": "efrm_lodo_pretraining_manifest_v2",
+        "protocol_id": "efrm_lodo_full_target_fivefold_v2",
+        "target_dataset_exposure": False,
+        "excluded_target_dataset": "target",
+        "included_datasets": ["source"],
+        "datasets": {
+            "source": {
+                "all_subjects": ["train", "validation"],
+                "selection_train_subjects": ["train"],
+                "selection_validation_subjects": ["validation"],
+            }
+        },
+    }
+    path = tmp_path / "lodo.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    class FakePretrain:
+        rows = [
+            {"dataset_id": "source", "subject": "train"},
+            {"dataset_id": "source", "subject": "validation"},
+        ]
+
+        def __len__(self) -> int:
+            return len(self.rows)
+
+        def lightweight_metadata(self, index: int) -> dict[str, str]:
+            return self.rows[index]
+
+    dataset = FakePretrain()
+    selection = LODOPretrainingBoundary(path, stage="selection")
+    refit = LODOPretrainingBoundary(path, stage="final_refit")
+    assert selection.indices_for(dataset, "train") == [0]
+    assert selection.indices_for(dataset, "validation") == [1]
+    assert refit.indices_for(dataset, "train") == [0, 1]
+    assert refit.indices_for(dataset, "validation") == [1]
+    assert refit.manifest()["checkpoint_selection_allowed"] is False
+
+    manifest["target_dataset_exposure"] = True
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(PermissionError, match="exposure"):
+        LODOPretrainingBoundary(path, stage="selection")

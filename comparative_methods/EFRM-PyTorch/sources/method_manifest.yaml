@@ -35,7 +35,15 @@ active_downstream_protocol:
   downstream_seeds: [17, 42, 73]
   full_outer_refit_required: true
   direct_method_ranking_requires_shared_fold_registry: true
-  status: protocol_frozen_implementation_pending
+  status: lodo_pretraining_execution_running
+  execution:
+    started_on: 2026-07-27
+    runner: ../run_lodo_pretraining.py
+    selection_jobs: 4
+    final_refit_jobs: 4
+    target_dataset_exposure: false
+    job_matrix_sha256: 2d4f10a87025f26c64e471fdbcbc78e85054e568614e5b0cfe982e7f077ae50e
+    shared_fold_registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
 historical_downstream_protocols:
   - protocol_id: efrm_resource_bounded_dual_protocol_v1
     document: 20260725_RESOURCE_BOUNDED_DUAL_PROTOCOL_FREEZE.md
