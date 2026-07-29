@@ -1,0 +1,169 @@
+{
+  "schema": "r1p_teacher_perturbation_registry_v1",
+  "registered_at": "2026-07-28",
+  "status": "frozen_before_formal_validation_results",
+  "revision": 3,
+  "supersedes_sha256": "fc0cd61c619d34e9d7150b87a7dd12acfc428f3ebf914f7cd22220ec4bf01b40",
+  "base_bundle_name": "r1_p_development_v1",
+  "interpretation": "three finite train-only joint stress perturbations; not a comprehensive jackknife uncertainty ensemble",
+  "common_contract": {
+    "allowed_fit_subject_universe": "subject_01..subject_18",
+    "pure_apply_subjects": "subject_19..subject_23",
+    "protected_subjects": "subject_24..subject_29",
+    "protected_open": false,
+    "fit_conditions": [
+      "BL",
+      "MA"
+    ],
+    "fit_sessions": [
+      "session_01",
+      "session_03",
+      "session_05"
+    ],
+    "windows_per_retained_subject": 60,
+    "selected_fnirs_channel_count": 2,
+    "selected_eeg_channel_count": 6,
+    "shared_driver_coordinate": "adaptive_state_index_4",
+    "gauge_rule": "each perturbation fits one scalar mean/std from its own retained-subject joint-driver points and applies that exact transform to both rJ and rE",
+    "joint_eeg_only_rule": "one serialized parameter bundle; rE differs only by omission of the fNIRS observation update",
+    "validation_rule": "no selection, fitting, normalization, thresholding, or perturbation choice may use subject_19..subject_23",
+    "required_parameter_source_fields": [
+      "perturbation_id",
+      "perturbation_registry_sha256",
+      "perturbation_definition_sha256",
+      "anchor_fit_sessions",
+      "anchor_fit_condition"
+    ]
+  },
+  "perturbations": [
+    {
+      "perturbation_id": "P1_TRAIN_STRESS_DROP01_03_ANCHOR_S01",
+      "output_name": "r1_p_perturb_p1_drop01_03_anchor_s01_v1",
+      "retained_fit_subjects": [
+        "subject_04",
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_09",
+        "subject_10",
+        "subject_11",
+        "subject_12",
+        "subject_13",
+        "subject_14",
+        "subject_15",
+        "subject_16",
+        "subject_17",
+        "subject_18"
+      ],
+      "excluded_fit_subjects": [
+        "subject_01",
+        "subject_02",
+        "subject_03"
+      ],
+      "expected_fit_windows": 900,
+      "anchor_rows": {
+        "condition": "MA",
+        "sessions": [
+          "session_01"
+        ],
+        "expected_windows": 150
+      },
+      "projection_rows": "all 900 retained-subject BL+MA windows",
+      "ssm_fit_rows": "all 900 retained-subject BL+MA windows",
+      "parameter_rule": "refit EEG PCA adapter and all AdaptiveSSMFit matrices/scalars from retained rows only",
+      "gauge_rule": "refit scalar joint-driver mean/std from the 900 retained-subject joint trajectories only"
+    },
+    {
+      "perturbation_id": "P2_TRAIN_STRESS_DROP07_09_ANCHOR_S03",
+      "output_name": "r1_p_perturb_p2_drop07_09_anchor_s03_v1",
+      "retained_fit_subjects": [
+        "subject_01",
+        "subject_02",
+        "subject_03",
+        "subject_04",
+        "subject_05",
+        "subject_06",
+        "subject_10",
+        "subject_11",
+        "subject_12",
+        "subject_13",
+        "subject_14",
+        "subject_15",
+        "subject_16",
+        "subject_17",
+        "subject_18"
+      ],
+      "excluded_fit_subjects": [
+        "subject_07",
+        "subject_08",
+        "subject_09"
+      ],
+      "expected_fit_windows": 900,
+      "anchor_rows": {
+        "condition": "MA",
+        "sessions": [
+          "session_03"
+        ],
+        "expected_windows": 150
+      },
+      "projection_rows": "all 900 retained-subject BL+MA windows",
+      "ssm_fit_rows": "all 900 retained-subject BL+MA windows",
+      "parameter_rule": "refit EEG PCA adapter and all AdaptiveSSMFit matrices/scalars from retained rows only",
+      "gauge_rule": "refit scalar joint-driver mean/std from the 900 retained-subject joint trajectories only"
+    },
+    {
+      "perturbation_id": "P3_TRAIN_STRESS_DROP13_15_ANCHOR_S05",
+      "output_name": "r1_p_perturb_p3_drop13_15_anchor_s05_v1",
+      "retained_fit_subjects": [
+        "subject_01",
+        "subject_02",
+        "subject_03",
+        "subject_04",
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_09",
+        "subject_10",
+        "subject_11",
+        "subject_12",
+        "subject_16",
+        "subject_17",
+        "subject_18"
+      ],
+      "excluded_fit_subjects": [
+        "subject_13",
+        "subject_14",
+        "subject_15"
+      ],
+      "expected_fit_windows": 900,
+      "anchor_rows": {
+        "condition": "MA",
+        "sessions": [
+          "session_05"
+        ],
+        "expected_windows": 150
+      },
+      "projection_rows": "all 900 retained-subject BL+MA windows",
+      "ssm_fit_rows": "all 900 retained-subject BL+MA windows",
+      "parameter_rule": "refit EEG PCA adapter and all AdaptiveSSMFit matrices/scalars from retained rows only",
+      "gauge_rule": "refit scalar joint-driver mean/std from the 900 retained-subject joint trajectories only"
+    }
+  ],
+  "qualification_metric": {
+    "unit": "validation_subject",
+    "metrics": [
+      "Lin concordance correlation coefficient between sample-aligned 200-point rJ trajectories",
+      "identity RMSE divided by the base validation-subject rJ standard deviation"
+    ],
+    "gauge_rationale": "unlike Pearson correlation, Lin CCC and identity RMSE penalize train-gauge mean and scale disagreement",
+    "minimum_median_subject_ccc_per_perturbation": 0.7,
+    "minimum_subjects_with_ccc_at_least_0_7_per_perturbation": 4,
+    "maximum_median_subject_identity_nrmse_per_perturbation": 0.75,
+    "minimum_subjects_with_identity_nrmse_at_most_0_75_per_perturbation": 4,
+    "aggregation_rule": "each of P1, P2, and P3 must independently satisfy every median and positive-subject requirement; pooling 15 subject-perturbation values is forbidden",
+    "required_perturbation_count": 3,
+    "missing_input_policy": "not_evaluated_and_gate_fail"
+  }
+}

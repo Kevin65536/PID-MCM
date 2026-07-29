@@ -1,0 +1,175 @@
+{
+  "schema": "r1p_teacher_qualification_registry_v1",
+  "registered_at": "2026-07-28",
+  "status": "frozen_before_formal_validation_results",
+  "revision": 4,
+  "supersedes_sha256": "af6e2e519e8c12897ba0bb88943bd983612316cdd2a25ed2910db7e0c9f90f72",
+  "architecture_generation": "shared_driver_semantic_vq_v1",
+  "teacher_scope": "population_frozen",
+  "input_contract": {
+    "fit_subject_ids": [
+      "subject_01",
+      "subject_02",
+      "subject_03",
+      "subject_04",
+      "subject_05",
+      "subject_06",
+      "subject_07",
+      "subject_08",
+      "subject_09",
+      "subject_10",
+      "subject_11",
+      "subject_12",
+      "subject_13",
+      "subject_14",
+      "subject_15",
+      "subject_16",
+      "subject_17",
+      "subject_18"
+    ],
+    "pure_apply_subject_ids": [
+      "subject_19",
+      "subject_20",
+      "subject_21",
+      "subject_22",
+      "subject_23"
+    ],
+    "protected_subject_ids": [
+      "subject_24",
+      "subject_25",
+      "subject_26",
+      "subject_27",
+      "subject_28",
+      "subject_29"
+    ],
+    "expected_fit_windows": 1080,
+    "expected_pure_apply_windows": 300,
+    "protected_open": false
+  },
+  "statistical_unit": "subject",
+  "uncertainty": {
+    "method": "subject_cluster_bootstrap",
+    "confidence_level": 0.95,
+    "replicates": 2000,
+    "seed": 20260728
+  },
+  "threshold_policy": {
+    "validation_may_set_thresholds": false,
+    "threshold_sources": [
+      "subjects_01_18_grouped_cross_validation",
+      "subjects_01_18_subject_block_permutation_or_circular_shift_null",
+      "registered_directional_null_zero"
+    ],
+    "retained_training_effect_fraction": 0.25,
+    "positive_subject_floor": 4,
+    "validation_subject_count": 5,
+    "null_quantile": 0.95,
+    "null_quantile_method": "higher",
+    "null_replicates": 2000
+  },
+  "primary_gates": [
+    {
+      "gate_id": "G1_PROVENANCE_AND_SHARED_GAUGE",
+      "family": "provenance",
+      "direction": "all_exact",
+      "requirements": [
+        "validation_fit_calls == 0",
+        "validation_normalization_calls == 0",
+        "protected_array_dereference_count == 0",
+        "protected_open == false",
+        "all rows share one parameter_bundle_sha256",
+        "all rows share the train-only scalar gauge hash",
+        "the same normalization is applied to rJ and rE",
+        "train normalized rJ has absolute mean <= 1e-8 and absolute std_minus_one <= 1e-8"
+      ],
+      "threshold_generation": "exact contract; no empirical validation threshold"
+    },
+    {
+      "gate_id": "G2_PHYSICAL_RECONSTRUCTION",
+      "family": "physical_reconstruction",
+      "direction": "greater",
+      "metrics": [
+        "hbo_joint_delta_nmse_vs_frozen_session_condition_relative_time_template",
+        "hbr_joint_delta_nmse_vs_frozen_session_condition_relative_time_template"
+      ],
+      "physical_scoring_mask": {
+        "patch_duration_s": 2.0,
+        "patch_count": 10,
+        "pass_even": "set HbO and HbR observations to NaN jointly in patches 0,2,4,6,8 and score only those points",
+        "pass_odd": "set HbO and HbR observations to NaN jointly in patches 1,3,5,7,9 and score only those points",
+        "merge": "combine the masked-point predictions from the two passes to cover all 200 points exactly once",
+        "same_point_observation_assimilation_allowed": false
+      },
+      "baseline": "subjects_01_18 subject-excluded session×condition×relative-time template",
+      "threshold_generation": "for each masked-point metric max(0, 0.25 * subjects_01_18 subject-excluded-template median)",
+      "validation_rule": "subject-cluster-bootstrap lower_95_ci > frozen_threshold and at least 4/5 subjects > frozen_threshold"
+    },
+    {
+      "gate_id": "G3_JOINTNESS_AND_NONDEGENERATE_CORRECTION",
+      "family": "paired_joint_control",
+      "direction": "greater_and_bounded",
+      "metrics": [
+        "masked_hbo_joint_delta_nmse_vs_same_bundle_eeg_only",
+        "masked_hbr_joint_delta_nmse_vs_same_bundle_eeg_only",
+        "masked_point_correction_rms_over_joint_rms"
+      ],
+      "physical_scoring_mask": "identical fixed even/odd 2s patch-parity cross-fit registered for G2",
+      "threshold_generation": "jointness minima are max(0, 0.25 * subjects_01_18 median); correction lower=max(0.01, train_subject_q10/2), upper=min(2.0, 2*train_subject_q90)",
+      "validation_rule": "both jointness lower_95_ci exceed frozen minima; correction subject median lies strictly inside frozen interval; at least 4/5 subjects have nonzero finite correction"
+    },
+    {
+      "gate_id": "G4_TRAIN_ONLY_PERTURBATION_STABILITY",
+      "family": "fold_parameter_gauge_stability",
+      "direction": "greater",
+      "requirements": [
+        "at least three additional perturbation bundles",
+        "every perturbation fits subjects_01_18 only",
+        "no perturbation uses subjects_19_23 for fit, normalization, selection, or thresholding",
+        "no perturbation dereferences subjects_24_29",
+        "sample-aligned validation rJ correlations are evaluated after each bundle's own train-only scalar gauge"
+      ],
+      "threshold_generation": "registered fixed minimum median subject correlation 0.70 and minimum worst-perturbation positive-subject count 4/5",
+      "missing_input_policy": "not_evaluated_and_gate_fail"
+    },
+    {
+      "gate_id": "G5_RAW_ONLY_TARGET_OBSERVABILITY",
+      "family": "target_observability",
+      "direction": "greater",
+      "metrics": [
+        "eeg_raw_only_delta_r2_over_frozen_session_condition_relative_time_template",
+        "fnirs_raw_only_delta_r2_over_frozen_session_condition_relative_time_template"
+      ],
+      "model": "ridge_multioutput_full_window_features_to_200_point_rJ",
+      "subject_block_alignment": "within each subject, rows are canonically ordered by session, condition, and zero-based within-cell rank obtained by sorting unique raw event_index values inside that subject/session/condition cell; raw event_index values need not match across subjects; all subjects must have the same session×condition cell set, cell counts, within-cell-rank layout, and target time shape",
+      "model_selection": "ridge alpha selected by subjects_01_18 leave-one-subject-out cross-validation",
+      "threshold_generation": "max(0, subjects_01_18 subject-block target-permutation q95 of subject-equal delta_R2); every permutation repeats the complete leave-one-subject-out procedure and alpha selection across all registered alpha candidates; for each held subject, target blocks are permuted only among the other 17 subjects and every ridge is refit",
+      "validation_rule": "subject-cluster-bootstrap lower_95_ci > frozen threshold and at least 4/5 subjects > frozen threshold for both modalities"
+    },
+    {
+      "gate_id": "G6_CORRECTION_NULL_EXCLUSION",
+      "family": "phase_shuffle_smooth_nulls",
+      "direction": "greater",
+      "metrics": [
+        "heldout_parity_hbo_hbr_equal_weight_level_sse_gain_vs_eeg_only",
+        "heldout_parity_hbo_hbr_equal_weight_within_patch_first_difference_sse_gain_vs_eeg_only"
+      ],
+      "true_paired": "use the fixed even/odd 2s parity masks; update only from unmasked original fNIRS points and score original heldout points",
+      "null_generation": "for each train trial/parity, precompute the masked solver for all nine nonzero whole-patch circular shifts of the fNIRS update input; each of 2000 draws selects one common shift per subject×session×condition and aggregates the cached solver-equivalent heldout metrics",
+      "threshold_generation": "subjects_01_18 null q95 with numpy higher order-statistic method for both level and within-heldout-patch first-difference gains",
+      "validation_rule": "validation subject-equal level and within-patch first-difference gains both exceed frozen q95 and at least 4/5 subjects have positive null margin for both",
+      "interpretation": "paired heldout measurement-update consistency with phase/temporal/smooth null exclusion; not independent causal physiological evidence"
+    }
+  ],
+  "promotion_rule": {
+    "operator": "all",
+    "required_gate_ids": [
+      "G1_PROVENANCE_AND_SHARED_GAUGE",
+      "G2_PHYSICAL_RECONSTRUCTION",
+      "G3_JOINTNESS_AND_NONDEGENERATE_CORRECTION",
+      "G4_TRAIN_ONLY_PERTURBATION_STABILITY",
+      "G5_RAW_ONLY_TARGET_OBSERVABILITY",
+      "G6_CORRECTION_NULL_EXCLUSION"
+    ],
+    "failure_action": "do_not_enter_r2_p"
+  }
+}

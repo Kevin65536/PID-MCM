@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.0.0",
+  "registry_id": "R0P-RAW-LAG-BASELINE-20260728",
+  "registered_date": "2026-07-28",
+  "status": "preregistered_before_validation_measurement_read",
+  "scope": {
+    "stage": "R0/R1-P measurement-layer control",
+    "claim_ceiling": "offline_raw_association_only",
+    "not_evidence_for": [
+      "token coupling",
+      "causal neurovascular coupling",
+      "directed information flow",
+      "prospective prediction"
+    ],
+    "required_future_comparison": "Any token-coupling result must exceed this raw measurement-layer association under matched splits and null controls."
+  },
+  "data_contract": {
+    "bundle": "data/cache/shared_driver_r1_v1/r1_p_development_v1",
+    "input": "raw_view_registry",
+    "train_subjects": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18"
+    ],
+    "validation_subjects": [
+      "19",
+      "20",
+      "21",
+      "22",
+      "23"
+    ],
+    "protected_subjects_closed": [
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29"
+    ],
+    "protected_array_dereference_allowed": false,
+    "split_reporting": "train_and_validation_separately",
+    "feature_selection_rule": "No validation measurement or association may select or alter features, bands, lags, sign, aggregation, or null family."
+  },
+  "cell_and_unit_contract": {
+    "biological_unit": "subject",
+    "correlation_cell": [
+      "subject",
+      "session",
+      "condition",
+      "source_patch"
+    ],
+    "expected_trials_per_cell": 10,
+    "minimum_trials_per_cell": 8,
+    "trial_pairing": "Spearman correlation across paired trial indices within each cell",
+    "aggregation": "Fisher z within cell, then equal weight across cells within subject, then equal weight across subjects within split",
+    "missingness": "A cell-feature-lag is excluded if fewer than 8 finite paired trials remain; exclusions and effective counts are reported."
+  },
+  "feature_contract": {
+    "patch_duration_seconds": 2.0,
+    "eeg_sampling_hz": 200.0,
+    "fnirs_sampling_hz": 10.0,
+    "eeg_channels": "all six channels supplied by the frozen R1-P raw view; equal channel weights",
+    "eeg_preprocessing": {
+      "per_patch_detrend": "subtract channel patch mean",
+      "window": "periodic Hann",
+      "spectrum": "one-sided squared FFT magnitude",
+      "bandpower": "sum of spectral power at bins within inclusive band edges",
+      "log_transform": "natural log(max(bandpower, 1e-12)) per channel",
+      "channel_aggregation": "arithmetic mean of six channel log-bandpowers"
+    },
+    "eeg_bands_hz": {
+      "theta": [
+        4.0,
+        7.0
+      ],
+      "alpha": [
+        8.0,
+        13.0
+      ],
+      "beta": [
+        14.0,
+        30.0
+      ]
+    },
+    "fnirs_features": {
+      "HbO": "arithmetic mean over the 2-second patch",
+      "HbR": "arithmetic mean over the 2-second patch"
+    },
+    "fnirs_channel_contract": "R1-P raw registry channels must map unambiguously to HbO and HbR; otherwise formal analysis fails closed."
+  },
+  "lag_contract": {
+    "source": "EEG patch",
+    "target": "later fNIRS patch",
+    "lags_tokens": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "lags_seconds": [
+      2,
+      4,
+      6,
+      8,
+      10
+    ],
+    "valid_source_patches": "source patch indices for which source_index + lag < 10",
+    "same_trial_pairing": "EEG and lagged fNIRS features come from the same trial before null permutation."
+  },
+  "primary_estimand": {
+    "name": "registered_alpha_HbO_negative_association_positive_lag_auc",
+    "feature_pair": [
+      "alpha",
+      "HbO"
+    ],
+    "registered_direction": "negative Spearman association",
+    "sign_alignment": "multiply Fisher z by -1 so larger values indicate stronger registered coupling",
+    "auc_definition": "trapezoidal integral of the split-level subject-equal Fisher-z curve over lag seconds 2,4,6,8,10, divided by the 8-second integration width",
+    "inference": "one-sided permutation p-value from the same sign-aligned AUC null",
+    "alpha": 0.05
+  },
+  "diagnostic_family": {
+    "members": "all 3 EEG bands x 2 fNIRS chromophores x 5 lags",
+    "statistics": "absolute split-level subject-equal Fisher z",
+    "multiplicity": "single-step max-stat permutation FWER within each split across all 30 members",
+    "individual_lag_status": "diagnostic_not_primary",
+    "selection": "No diagnostic may replace or redefine the registered primary."
+  },
+  "null_contract": {
+    "operation": "independently permute fNIRS trial labels within each subject x session x condition cell, applying one permutation jointly to all fNIRS patches and both chromophores",
+    "preserves": [
+      "fNIRS temporal profile within trial",
+      "fNIRS marginal distributions",
+      "subject",
+      "session",
+      "condition",
+      "source-patch availability",
+      "cross-chromophore dependence"
+    ],
+    "breaks": "within-cell EEG-fNIRS trial pairing",
+    "formal_permutations": 10000,
+    "random_seed": 20260728,
+    "plus_one_p_value": true,
+    "null_storage": "compressed NPZ containing primary AUC and 30-member max-stat null distributions for train and validation separately"
+  },
+  "uncertainty_and_reporting": {
+    "subject_bootstrap_iterations": 10000,
+    "subject_bootstrap_seed": 20260729,
+    "confidence_interval": "percentile 95% over subjects",
+    "required_tables": [
+      "cell-level Fisher-z estimates",
+      "subject-level lag estimates",
+      "split-level primary and diagnostic estimates",
+      "data coverage and exclusions"
+    ],
+    "required_machine_outputs": [
+      "JSON summary",
+      "TSV tables",
+      "compressed NPZ null distributions"
+    ],
+    "required_figure_outputs": [
+      "PDF",
+      "SVG",
+      "PNG at 300 DPI"
+    ]
+  },
+  "synthetic_acceptance_tests": [
+    "known delayed alpha-HbO trial pairing produces a larger registered AUC than its permutation null",
+    "within-cell permutation preserves every fNIRS trial time course and marginal but changes pairing",
+    "max-stat adjusted p-values control the declared 30-member family and are never smaller than unadjusted member p-values",
+    "protected subject identifiers cause a fail-closed error before array dereference",
+    "validation cannot modify the frozen feature contract"
+  ]
+}

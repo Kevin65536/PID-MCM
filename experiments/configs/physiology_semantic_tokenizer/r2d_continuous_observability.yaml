@@ -1,0 +1,135 @@
+experiment:
+  name: "r2d_cj_continuous_observability_v1"
+  run_group: "physiology_semantic_tokenizer/r2_continuous_observability"
+  description: >-
+    Exploratory R2-D C-J continuous observability experiment. Independent
+    EEG and fNIRS full-window encoders predict the registered R1-D joint
+    shared-driver proxy through one modality-agnostic decoder. This run is
+    development-crossfit only and cannot promote the architecture.
+
+architecture_generation: "shared_driver_semantic_vq_v1"
+teacher_schema: "shared_driver_trajectory_sidecar_v1"
+teacher_family: "adaptive_joint_full_trajectory"
+teacher_parameter_scope: "development_crossfit"
+validity_policy: "boundary_finite_measurement_intersect_teacher_point_support_v1"
+artifact_mask_policy: "annotation_only"
+tokenizer_inputs: "measured_modality_and_boundary_finite_mask_only"
+token_temporal_scope: "bidirectional_full_window"
+evaluator_temporal_mode: "semantic_only"
+protected_open: false
+protected_fit_policy: "apply_only"
+promotion_eligible: false
+
+data:
+  loader_class: "SharedDriverWindowDataset"
+  contract: "shared_driver_measurement_view_v1"
+  cache_root: "data/cache/physiology_semantic_clean_v1"
+  dataset_ids: ["eeg_fnirs_single_trial"]
+  task_namespaces: ["eeg_fnirs_single_trial:mental_arithmetic"]
+  eeg_signal_branch: "single_trial_eeg_artifact_clean_v4"
+  reject_unknown_labels: true
+  window:
+    duration_s: 20.0
+    offset_s: -5.0
+  raw_view_registry_root: >-
+    data/cache/shared_driver_r1_v1/r1_d_development_v1/raw_view_registry
+  trajectory_sidecar_root: >-
+    data/cache/shared_driver_r1_v1/r1_d_development_v1/trajectory_targets
+  split:
+    train_subject_keys:
+      - "eeg_fnirs_single_trial|subject_01"
+      - "eeg_fnirs_single_trial|subject_02"
+      - "eeg_fnirs_single_trial|subject_03"
+      - "eeg_fnirs_single_trial|subject_04"
+      - "eeg_fnirs_single_trial|subject_05"
+      - "eeg_fnirs_single_trial|subject_06"
+      - "eeg_fnirs_single_trial|subject_07"
+      - "eeg_fnirs_single_trial|subject_08"
+      - "eeg_fnirs_single_trial|subject_09"
+      - "eeg_fnirs_single_trial|subject_10"
+      - "eeg_fnirs_single_trial|subject_11"
+      - "eeg_fnirs_single_trial|subject_12"
+      - "eeg_fnirs_single_trial|subject_13"
+      - "eeg_fnirs_single_trial|subject_14"
+      - "eeg_fnirs_single_trial|subject_15"
+      - "eeg_fnirs_single_trial|subject_16"
+      - "eeg_fnirs_single_trial|subject_17"
+      - "eeg_fnirs_single_trial|subject_18"
+    validation_subject_keys:
+      - "eeg_fnirs_single_trial|subject_19"
+      - "eeg_fnirs_single_trial|subject_20"
+      - "eeg_fnirs_single_trial|subject_21"
+      - "eeg_fnirs_single_trial|subject_22"
+      - "eeg_fnirs_single_trial|subject_23"
+    protected_subject_keys:
+      - "eeg_fnirs_single_trial|subject_24"
+      - "eeg_fnirs_single_trial|subject_25"
+      - "eeg_fnirs_single_trial|subject_26"
+      - "eeg_fnirs_single_trial|subject_27"
+      - "eeg_fnirs_single_trial|subject_28"
+      - "eeg_fnirs_single_trial|subject_29"
+    expected_train_samples: 180
+    expected_validation_samples: 50
+  num_workers: 4
+  dataloader:
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+
+model:
+  type: "shared_driver_continuous"
+  eeg_channels: 6
+  fnirs_channels: 2
+  eeg_patch_samples: 400
+  fnirs_patch_samples: 20
+  num_tokens: 10
+  latent_dim: 64
+  target_points: 20
+  encoder_depth: 2
+  encoder_num_heads: 4
+  encoder_feedforward_dim: 256
+  decoder_hidden_dim: 128
+  dropout: 0.1
+
+objective:
+  row: "C-J"
+  target: "target_shared_driver"
+  loss: "masked_point_mse"
+  modality_aggregation: "equal_weight"
+  vector_quantization: false
+  raw_reconstruction: false
+  cross_modal_loss: false
+  coupling_loss: false
+
+training:
+  seed: 20260728
+  device: "cuda:1"
+  amp: true
+  batch_size: 32
+  epochs: 80
+  learning_rate: 3.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  grad_clip_norm: 1.0
+  early_stopping_patience: 15
+  early_stopping_min_delta: 1.0e-5
+  input_normalization: "train_only_channel_zscore"
+  smoke_optimizer_steps: 2
+
+statistics:
+  phase_baseline: "train_only_condition_by_relative_time_mean"
+  subject_aggregation: "within_subject_sse_then_subject_equal_mean"
+  bootstrap_unit: "subject"
+  bootstrap_iterations: 10000
+  confidence_level: 0.95
+  bootstrap_seed: 20260729
+
+validation:
+  phase: "r2_d_development_crossfit_exploration_v1"
+  selection_metric: "validation_equal_modality_masked_point_mse"
+  primary_endpoint: "subject_equal_delta_r2_vs_condition_relative_time_phase"
+  positive_subject_rule: "delta_r2_gt_0"
+  protected_test_metrics: false
+  interpretation: >-
+    Development-crossfit feasibility only. A positive result cannot satisfy
+    R2-P and cannot authorize VQ promotion or a physiological coupling claim.

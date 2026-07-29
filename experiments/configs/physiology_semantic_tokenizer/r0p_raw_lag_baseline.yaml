@@ -1,0 +1,21 @@
+experiment:
+  name: r0p_raw_lag_baseline_v1
+  claim_ceiling: offline_raw_association_only
+  preregistry: docs/physiology_semantic_tokenizer/architecture/r0p_raw_lag_baseline_preregistry.json
+
+data:
+  r1p_bundle: data/cache/shared_driver_r1_v1/r1_p_development_v1
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+  window_duration_s: 20.0
+  window_offset_s: -5.0
+
+inference:
+  permutations: 10000
+  permutation_batch_size: 250
+  permutation_seed: 20260728
+  bootstrap_iterations: 10000
+  bootstrap_seed: 20260729
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/r0p_raw_lag_baseline

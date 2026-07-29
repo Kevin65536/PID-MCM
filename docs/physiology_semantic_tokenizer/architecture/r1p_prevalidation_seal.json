@@ -1,0 +1,202 @@
+{
+  "schema": "r1p_prevalidation_seal_v1",
+  "sealed_at": "2026-07-28",
+  "status": "sealed_mechanical_serialization_amendment_after_uninspected_validation_compute",
+  "validation_arrays_dereferenced_by_qualification_before_seal": true,
+  "validation_metric_disclosure": {
+    "computed_in_memory": true,
+    "serialized": false,
+    "inspected_by_operator": false,
+    "failure_point": "final_panel_summary_json_serialization"
+  },
+  "mechanical_amendment": {
+    "kind": "numpy_json_serialization_only",
+    "allowed_source_changes": [
+      "shared NumPy scalar/array JSON conversion used identically by qualification _json_sha256 and _write_json",
+      "mechanical-amendment seal-state validation in qualification and perturbation-builder loaders",
+      "tests and seal provenance for those two changes"
+    ],
+    "registry_changed": false,
+    "threshold_changed": false,
+    "gate_changed": false,
+    "mathematical_path_changed": false,
+    "qualification_registry_sha256": "3b9f3f606846d90038f9e62de3c7f59dd1ba7ef657536aa3502f21a230e3248a",
+    "perturbation_registry_sha256": "ad386644fedc857ae6b8793a0989af11a07688f2b61f755b0a918fcfdfa24d05"
+  },
+  "supersedes_prevalidation_seal_sha256": "c19511d6d8504f63fd0249b0764ef37504a7b8d7c7f7c41d170a7165794757f1",
+  "prior_superseded_prevalidation_seal_sha256s": [
+    "b6e04c9fee6a424bf9fa9b15da23499fa7a45d0e1377d72e4b52d120cfd1d2e5"
+  ],
+  "superseded_qualification_registry_hashes": [
+    "ac19872488fa7c2993c8177a9135379e7c9499ca8c87813971f278777c79723d",
+    "debc560e23c9da48983cedb0ba4cd72f502f34c926d2cb06c228107f7ec46f31",
+    "af6e2e519e8c12897ba0bb88943bd983612316cdd2a25ed2910db7e0c9f90f72"
+  ],
+  "superseded_perturbation_registry_hashes": [
+    "fd9e4fe5b74b21b42b8cc3d1860f514af0943575e12f20af6ed41cb415868da3",
+    "6ce310d421bc4ce3ed39466a261716e99024a9bcf59419248a23c736186e4ce2",
+    "fc0cd61c619d34e9d7150b87a7dd12acfc428f3ebf914f7cd22220ec4bf01b40"
+  ],
+  "sealed_files": [
+    {
+      "role": "qualification_registry",
+      "path": "experiments/configs/physiology_semantic_tokenizer/r1p_teacher_qualification_registry.json",
+      "sha256": "3b9f3f606846d90038f9e62de3c7f59dd1ba7ef657536aa3502f21a230e3248a"
+    },
+    {
+      "role": "perturbation_registry",
+      "path": "experiments/configs/physiology_semantic_tokenizer/r1p_teacher_perturbation_registry.json",
+      "sha256": "ad386644fedc857ae6b8793a0989af11a07688f2b61f755b0a918fcfdfa24d05"
+    },
+    {
+      "role": "qualification_evaluator",
+      "path": "experiments/scripts/qualify_r1p_population_frozen_teacher.py",
+      "sha256": "5a8c676a24e8bde860c4787da2ecb4e4d340296a88e8625b5d6f2404d11d5c8f"
+    },
+    {
+      "role": "teacher_builder",
+      "path": "experiments/scripts/build_r1p_population_frozen_teacher.py",
+      "sha256": "1ce5eba9a1ffe61abe9ba4a1262b8cb371310453edec09b7f3474a064a2d32ab"
+    },
+    {
+      "role": "teacher_config",
+      "path": "experiments/configs/physiology_semantic_tokenizer/r1p_population_frozen_teacher.yaml",
+      "sha256": "5138be2a52add880b0b0a2a704f61dc0c8bb75afb18c479c9d558c20e6638eb4"
+    },
+    {
+      "role": "adaptive_evaluator",
+      "path": "experiments/evaluate_adaptive_shared_neural_ssm.py",
+      "sha256": "dc5f3abcc4cac15124b2f3ba86d011d146675387e91023ab83af5a4716c3447e"
+    },
+    {
+      "role": "adaptive_solver",
+      "path": "src/inference/adaptive_neurovascular_ssm.py",
+      "sha256": "d7b006daa7d4c7a5786e0f3fe6c60141731da2cd577ddd6994186fb216263458"
+    },
+    {
+      "role": "qualification_tests",
+      "path": "tests/test_qualify_r1p_population_frozen_teacher.py",
+      "sha256": "1262ede34aff6f1f54896816d85ed264329b381695dce904cde03c713a8662d3"
+    },
+    {
+      "role": "builder_tests",
+      "path": "tests/test_build_r1p_population_frozen_teacher.py",
+      "sha256": "8cdbf4181877fe244a56252aa26dd46bfaffd2a5435df138f6c70473a152b46d"
+    },
+    {
+      "role": "perturbation_builder",
+      "path": "experiments/scripts/build_r1p_train_only_perturbation_bundles.py",
+      "sha256": "a3e2338c88697dd594477c4bd55bcc8e461b1204de5469c4e3067ff2408657b3"
+    },
+    {
+      "role": "perturbation_builder_tests",
+      "path": "tests/test_build_r1p_train_only_perturbation_bundles.py",
+      "sha256": "0b97a5399e7773659ee71d1eefe1e840af3a58ab01c19d3773e4f6af1676c9d2"
+    },
+    {
+      "role": "base_parameter_manifest",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_development_v1/parameter_bundle/manifest.json",
+      "sha256": "08745f567949e1f5e1964d3d7365b633fd82cd09dad1c000e1c7e1ac9951880c"
+    }
+  ],
+  "base_bundle_identity": {
+    "parameter_bundle_sha256": "9938e24d2ec4b770fe0b91f5acfe6e036eecbdffb286a5f4c0caa70965793a44",
+    "parameter_arrays_sha256": "e9e263d855f85489c00e8beee4611e7fe361273065dbecbacd4594e0ba0c8517"
+  },
+  "superseded_perturbation_bundles": [
+    {
+      "output_name": "r1_p_perturb_p1_drop01_03_anchor_s01_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v1/r1_p_perturb_p1_drop01_03_anchor_s01_v1",
+      "manifest_sha256": "67dcb07cb967da70a40bc0949b1bd74dfe0034a5369239166a6af7f0ee2af086",
+      "built_under_prevalidation_seal_sha256": "b6e04c9fee6a424bf9fa9b15da23499fa7a45d0e1377d72e4b52d120cfd1d2e5",
+      "reason": "qualification registry and G5 subject-block alignment contract revised"
+    },
+    {
+      "output_name": "r1_p_perturb_p2_drop07_09_anchor_s03_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v1/r1_p_perturb_p2_drop07_09_anchor_s03_v1",
+      "manifest_sha256": "4c4df2ade452372e34e64396c475402055dbcc58f81ba6533b26d96c13f60cea",
+      "built_under_prevalidation_seal_sha256": "b6e04c9fee6a424bf9fa9b15da23499fa7a45d0e1377d72e4b52d120cfd1d2e5",
+      "reason": "qualification registry and G5 subject-block alignment contract revised"
+    },
+    {
+      "output_name": "r1_p_perturb_p3_drop13_15_anchor_s05_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v1/r1_p_perturb_p3_drop13_15_anchor_s05_v1",
+      "manifest_sha256": "59f663f1843888e2b6f497917673666725633b1c8faf03c8ecad0169e5c1aa6b",
+      "built_under_prevalidation_seal_sha256": "b6e04c9fee6a424bf9fa9b15da23499fa7a45d0e1377d72e4b52d120cfd1d2e5",
+      "reason": "qualification registry and G5 subject-block alignment contract revised"
+    },
+    {
+      "output_name": "r1_p_perturb_p1_drop01_03_anchor_s01_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v2/r1_p_perturb_p1_drop01_03_anchor_s01_v1",
+      "manifest_sha256": "2bff1641ef65b38af8ba9e9fb97b90677560deecfa5a6df9c39294700c165969",
+      "built_under_prevalidation_seal_sha256": "c19511d6d8504f63fd0249b0764ef37504a7b8d7c7f7c41d170a7165794757f1",
+      "reason": "mechanical JSON serialization amendment requires bundles bound to the amended seal"
+    },
+    {
+      "output_name": "r1_p_perturb_p2_drop07_09_anchor_s03_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v2/r1_p_perturb_p2_drop07_09_anchor_s03_v1",
+      "manifest_sha256": "4bae775ae5100e2b5a01a65282313e1c9810479f3369bacc8e7526ef164fb711",
+      "built_under_prevalidation_seal_sha256": "c19511d6d8504f63fd0249b0764ef37504a7b8d7c7f7c41d170a7165794757f1",
+      "reason": "mechanical JSON serialization amendment requires bundles bound to the amended seal"
+    },
+    {
+      "output_name": "r1_p_perturb_p3_drop13_15_anchor_s05_v1",
+      "path": "data/cache/shared_driver_r1_v1/r1_p_teacher_perturbations_formal_v2/r1_p_perturb_p3_drop13_15_anchor_s05_v1",
+      "manifest_sha256": "f4d786e7c4f8c61034014d83a7ac055a1ce58a02485e2ce63503aaa79f06fa97",
+      "built_under_prevalidation_seal_sha256": "c19511d6d8504f63fd0249b0764ef37504a7b8d7c7f7c41d170a7165794757f1",
+      "reason": "mechanical JSON serialization amendment requires bundles bound to the amended seal"
+    }
+  ],
+  "aborted_formal_run": {
+    "occurred": true,
+    "reason": "numpy.bool_ in the completed in-memory gate payload was not accepted by final panel_summary JSON serialization",
+    "phase_at_interrupt": "final panel_summary.json write after validation pure-apply computation",
+    "failure_class": "fail_closed_mechanical_serialization_after_uninspected_validation_compute",
+    "threshold_manifest_written_in_temporary_directory": true,
+    "threshold_manifest_survived_cleanup": false,
+    "formal_output_created": false,
+    "formal_output_absent": true,
+    "validation_arrays_dereferenced": true,
+    "validation_metrics_computed_in_memory": true,
+    "validation_metrics_serialized": false,
+    "validation_metrics_inspected_by_operator": false,
+    "temporary_output_cleaned": true,
+    "partial_artifacts_survived_cleanup": false
+  },
+  "prior_aborted_train_only_runs": [
+    {
+      "reason": "G5 alignment assertion incorrectly required matching raw event_index values across subjects",
+      "phase_at_interrupt": "subjects_01_18 G5 train-only target-observability calibration",
+      "failure_class": "fail_closed_before_threshold_or_validation",
+      "threshold_manifest_finalized": false,
+      "formal_output_created": false,
+      "validation_arrays_dereferenced": false,
+      "temporary_output_cleaned": true
+    },
+    {
+      "reason": "independent review strengthened the prevalidation contract",
+      "phase_at_interrupt": "subjects_01_18 train-only calibration",
+      "threshold_manifest_finalized": false,
+      "formal_output_created": false,
+      "validation_arrays_dereferenced": false
+    }
+  ],
+  "benchmark": {
+    "machine": "current_52_physical_core_workspace_host",
+    "g5_cached_loso_target_permutation": {
+      "formal_shape": "18 subjects x 60 rows x 200 target points",
+      "alpha_count": 7,
+      "draw_count": 2000,
+      "measured_eeg_120_feature_200_draw_seconds": 11.31,
+      "estimated_two_modality_2000_draw_minutes": 3.5
+    },
+    "g6_shifted_solver_cache": {
+      "formal_solver_calls": 19440,
+      "measured_five_trial_ninety_call_seconds": 2.442,
+      "estimated_1080_trial_cache_minutes": 8.8
+    },
+    "estimated_train_only_calibration_minutes": 15,
+    "estimated_validation_pure_apply_minutes": 1
+  },
+  "formal_run_rule": "This is not a pre-compute seal: validation metrics were computed in memory once but were neither serialized nor inspected. A rerun is permitted only with the unchanged registries, thresholds, gates, mathematical path, and sealed inputs plus the declared NumPy JSON serialization amendment. Any other sealed-file change requires a new explicit amendment record."
+}

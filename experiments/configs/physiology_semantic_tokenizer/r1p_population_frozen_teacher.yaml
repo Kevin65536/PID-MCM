@@ -1,0 +1,151 @@
+experiment:
+  name: r1p_population_frozen_teacher_dev_v1
+  architecture_generation: shared_driver_semantic_vq_v1
+  teacher_scope: population_frozen
+  promotion_eligible: false
+  protected_open: false
+  description: >-
+    Fit one population teacher bundle on subjects 01-18, then apply it without
+    refitting to subjects 19-23. The registered mental-arithmetic cohort
+    contains ten BL and ten MA windows in each of sessions 01, 03, and 05.
+
+registered_development_subjects: &development_subjects
+  - subject_01
+  - subject_02
+  - subject_03
+  - subject_04
+  - subject_05
+  - subject_06
+  - subject_07
+  - subject_08
+  - subject_09
+  - subject_10
+  - subject_11
+  - subject_12
+  - subject_13
+  - subject_14
+  - subject_15
+  - subject_16
+  - subject_17
+  - subject_18
+  - subject_19
+  - subject_20
+  - subject_21
+  - subject_22
+  - subject_23
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  dataset_id: eeg_fnirs_single_trial
+  window_duration_s: 20.0
+  window_offset_s: -5.0
+  baseline_duration_s: 5.0
+  task_duration_s: 10.0
+  eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+  conditions:
+    - condition_id: single_trial_session_01_bl
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_01
+      target_label: BL
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+    - condition_id: single_trial_session_01_ma
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_01
+      target_label: MA
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+    - condition_id: single_trial_session_03_bl
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_03
+      target_label: BL
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+    - condition_id: single_trial_session_03_ma
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_03
+      target_label: MA
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+    - condition_id: single_trial_session_05_bl
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_05
+      target_label: BL
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+    - condition_id: single_trial_session_05_ma
+      dataset_id: eeg_fnirs_single_trial
+      subjects: *development_subjects
+      record_id: session_05
+      target_label: MA
+      eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+      max_trials_per_subject: 10
+  split:
+    train_subject_keys:
+      - eeg_fnirs_single_trial|subject_01
+      - eeg_fnirs_single_trial|subject_02
+      - eeg_fnirs_single_trial|subject_03
+      - eeg_fnirs_single_trial|subject_04
+      - eeg_fnirs_single_trial|subject_05
+      - eeg_fnirs_single_trial|subject_06
+      - eeg_fnirs_single_trial|subject_07
+      - eeg_fnirs_single_trial|subject_08
+      - eeg_fnirs_single_trial|subject_09
+      - eeg_fnirs_single_trial|subject_10
+      - eeg_fnirs_single_trial|subject_11
+      - eeg_fnirs_single_trial|subject_12
+      - eeg_fnirs_single_trial|subject_13
+      - eeg_fnirs_single_trial|subject_14
+      - eeg_fnirs_single_trial|subject_15
+      - eeg_fnirs_single_trial|subject_16
+      - eeg_fnirs_single_trial|subject_17
+      - eeg_fnirs_single_trial|subject_18
+    val_subject_keys:
+      - eeg_fnirs_single_trial|subject_19
+      - eeg_fnirs_single_trial|subject_20
+      - eeg_fnirs_single_trial|subject_21
+      - eeg_fnirs_single_trial|subject_22
+      - eeg_fnirs_single_trial|subject_23
+    test_subject_keys:
+      - eeg_fnirs_single_trial|subject_24
+      - eeg_fnirs_single_trial|subject_25
+      - eeg_fnirs_single_trial|subject_26
+      - eeg_fnirs_single_trial|subject_27
+      - eeg_fnirs_single_trial|subject_28
+      - eeg_fnirs_single_trial|subject_29
+  expected_registry:
+    sessions: [session_01, session_03, session_05]
+    conditions: [BL, MA]
+    windows_per_subject_session_condition: 10
+    train_windows: 1080
+    validation_windows: 300
+    development_windows: 1380
+
+analysis:
+  anchor_fit_condition_ids:
+    - single_trial_session_01_ma
+    - single_trial_session_03_ma
+    - single_trial_session_05_ma
+  parameter_fit_condition_ids:
+    - single_trial_session_01_bl
+    - single_trial_session_01_ma
+    - single_trial_session_03_bl
+    - single_trial_session_03_ma
+    - single_trial_session_05_bl
+    - single_trial_session_05_ma
+  fnirs_active_hbo_channels: 1
+  local_eeg_channels: 6
+  shared_driver_gauge: scalar_joint_train_subject_points_v1
+  ssm:
+    fs_hz: 10.0
+    prior_strength: 0.03
+    max_iterations: 60
+    q_scale_candidates: [0.5, 1.0, 2.0]
+    fnirs_noise_scale_candidates: [0.25, 0.5, 1.0, 2.0, 4.0]
+    balance_penalty: 0.25
+    max_flow_perturbation: 0.25
