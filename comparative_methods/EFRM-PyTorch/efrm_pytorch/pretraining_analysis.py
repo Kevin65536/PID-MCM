@@ -147,6 +147,32 @@ def _permutation_p_value(
     return float((1 + np.count_nonzero(null >= observed)) / (permutations + 1))
 
 
+def _positive_vs_negative_auc(
+    positive: np.ndarray,
+    negative: np.ndarray,
+) -> float:
+    """Compute the exact pairwise AUC without materializing a comparison matrix."""
+
+    positives = np.asarray(positive).reshape(-1)
+    negatives = np.sort(np.asarray(negative).reshape(-1))
+    if positives.size == 0 or negatives.size == 0:
+        return math.nan
+    below = np.searchsorted(negatives, positives, side="left")
+    at_or_below = np.searchsorted(negatives, positives, side="right")
+    wins = below + 0.5 * (at_or_below - below)
+    return float(np.mean(wins / negatives.size))
+
+
+def _plot_sample(values: np.ndarray, maximum_points: int = 200_000) -> np.ndarray:
+    """Return a deterministic bounded sample for distribution rendering only."""
+
+    array = np.asarray(values).reshape(-1)
+    if array.size <= maximum_points:
+        return array
+    stride = math.ceil(array.size / maximum_points)
+    return array[::stride]
+
+
 def analyze_alignment_evidence(path: Path) -> tuple[dict[str, Any], dict[str, np.ndarray], list[dict[str, Any]]]:
     with np.load(path, allow_pickle=False) as payload:
         if str(payload["schema"].item()) != EVIDENCE_SCHEMA:
@@ -165,10 +191,7 @@ def analyze_alignment_evidence(path: Path) -> tuple[dict[str, Any], dict[str, np
     negative_mask = ~np.eye(size, dtype=bool)
     negative = cosine[negative_mask]
     hardest = np.where(negative_mask, cosine, -np.inf).max(axis=1)
-    positive_greater = (
-        (positive[:, None] > negative[None, :]).mean()
-        + 0.5 * (positive[:, None] == negative[None, :]).mean()
-    )
+    positive_greater = _positive_vs_negative_auc(positive, negative)
     datasets = sorted({str(row.get("dataset_id", "unknown")) for row in metadata})
     subjects = sorted({
         f"{row.get('dataset_id', 'unknown')}:{row.get('subject', 'unknown')}"
@@ -547,7 +570,7 @@ def _plot_alignment_diagnostics(
 
     axis = axes[0, 1]
     violin = axis.violinplot(
-        [diagonal, negative, hard], positions=[1, 2, 3],
+        [diagonal, _plot_sample(negative), hard], positions=[1, 2, 3],
         showmeans=True, showextrema=True,
     )
     for body, color in zip(
@@ -600,8 +623,14 @@ def _plot_alignment_diagnostics(
     _panel_label(axis, "D")
     dataset_text = ", ".join(sorted({str(row.get("dataset_id")) for row in metadata}))
     subject_text = ", ".join(sorted({str(row.get("subject")) for row in metadata}))
+    evidence_scope = metrics["evidence_scope"]
+    scope_text = (
+        "full public validation"
+        if evidence_scope["representative_of_full_validation"]
+        else "one exported validation batch only"
+    )
     figure.suptitle(
-        f"EFRM CLIP evidence: one exported batch only (n={size}; {dataset_text}; {subject_text})",
+        f"EFRM CLIP evidence: {scope_text} (n={size}; {dataset_text}; {subject_text})",
         fontsize=12,
     )
     _save_figure(figure, output)
@@ -644,7 +673,7 @@ def _alignment_interpretation(
     training: Mapping[str, Any],
     alignment: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Grade an alignment warning without overgeneralizing one saved batch."""
+    """Grade alignment evidence without overgeneralizing its validation scope."""
 
     clip_change = float(
         training["first_to_last_relative_change"]["validation"]["clip_alignment_loss"]
@@ -661,6 +690,17 @@ def _alignment_interpretation(
     )
     clip_plateau = bool(abs(clip_change) < 0.01)
     warning = bool(clip_plateau and retrieval_at_chance and no_pair_separation)
+    alignment_above_chance = bool(
+        alignment["eeg_to_fnirs"]["top1"] > chance["top1"]
+        or alignment["fnirs_to_eeg"]["top1"] > chance["top1"]
+    )
+    full_validation_claim = bool(
+        alignment["evidence_scope"]["representative_of_full_validation"]
+        and alignment["identity_pair_permutation_p_one_sided"] < 0.05
+        and alignment["positive_minus_negative_cosine"] > 0
+        and alignment["eeg_to_fnirs"]["mrr"] > chance["mrr"]
+        and alignment["fnirs_to_eeg"]["mrr"] > chance["mrr"]
+    )
 
     pair_count = int(alignment["pair_count"])
     multiplier = float(alignment["logit_multiplier"])
@@ -679,6 +719,16 @@ def _alignment_interpretation(
             "saved_batch_no_positive_pair_separation": no_pair_separation,
         },
         "dataset_level_alignment_impossibility_claim_supported": False,
+        "reconstruction_learning_observed": bool(
+            training["first_to_last_relative_change"]["validation"][
+                "eeg_reconstruction_loss"
+            ] < 0
+            and training["first_to_last_relative_change"]["validation"][
+                "fnirs_reconstruction_loss"
+            ] < 0
+        ),
+        "saved_batch_alignment_above_chance": alignment_above_chance,
+        "full_validation_alignment_claim_supported": full_validation_claim,
         "source_scale_ce_geometry": {
             "pair_count": pair_count,
             "fixed_logit_multiplier": multiplier,
@@ -701,6 +751,8 @@ def _markdown_report(
     evidence_scope = alignment["evidence_scope"]
     interpretation = _alignment_interpretation(training, alignment)
     scale_geometry = interpretation["source_scale_ce_geometry"]
+    full_validation_claim = interpretation["full_validation_alignment_claim_supported"]
+    alignment_above_chance = interpretation["saved_batch_alignment_above_chance"]
     partial = audit["partial_epoch_step_counts"]
     partial_text = (
         ", ".join(
@@ -720,16 +772,30 @@ def _markdown_report(
             "epoch, while the separately retained best checkpoint minimizes the public "
             "validation total objective."
         )
-        recommendation = (
-            "Record this as a completed source-faithful pretraining run whose public-development "
-            "alignment branch failed to generalize. Retain the best checkpoint for public "
-            "downstream diagnostics, but do not describe it as a validated EEG–fNIRS aligned "
-            "representation and do not open protected-test evaluation on the basis of the current "
-            "alignment evidence. First extend retrieval capture to a deterministic, "
-            "dataset/subject-stratified public-validation set. A learned or conventional divisive "
-            "temperature must be trained from scratch as a separately named diagnostic ablation; "
-            "the faithful and ablation results must not be conflated."
-        )
+        if full_validation_claim:
+            recommendation = (
+                "Record this as a completed Stage-A run with strong reconstruction learning and "
+                "statistically detectable bidirectional alignment on the complete public "
+                "validation export. Use the selected best epoch for the frozen protocol's Stage-B "
+                "refit. The low effective rank and negative hardest-negative margin still preclude "
+                "describing the representation as robust instance-level EEG–fNIRS retrieval."
+            )
+        elif alignment_above_chance:
+            recommendation = (
+                "Record this as a completed Stage-A run with strong reconstruction learning but "
+                "only partial or directionally inconsistent alignment on the complete public "
+                "validation export. Preserve the checkpoint and continue the frozen protocol with "
+                "this limitation flagged; do not describe it as a validated bidirectionally "
+                "aligned representation."
+            )
+        else:
+            recommendation = (
+                "Record this as a completed source-faithful pretraining run whose public-validation "
+                "alignment branch failed to generalize. Retain the best checkpoint for public "
+                "downstream diagnostics, but do not describe it as a validated EEG–fNIRS aligned "
+                "representation. A learned or conventional divisive temperature must be trained "
+                "from scratch as a separately named diagnostic ablation."
+            )
     else:
         integrity_summary = (
             f"There are {audit['completed_epoch_count']} complete epochs; partial work: "
@@ -758,7 +824,23 @@ def _markdown_report(
         and eeg_geometry["first_axis_energy_fraction"] > 0.95
         and fnirs_geometry["first_axis_energy_fraction"] > 0.95
     )
-    if rank_one_bipolar:
+    if rank_one_bipolar and full_validation_claim:
+        geometry_summary = (
+            "Both centered embedding clouds are effectively rank one, with more than 95% of "
+            "their variance on the first axis. The full-validation mean pair separation and "
+            "bidirectional MRR are above chance, but the negative hardest-negative margin shows "
+            "that exact instance retrieval remains weak. The alignment signal is detectable, "
+            "not robust or geometrically diverse."
+        )
+    elif rank_one_bipolar and alignment_above_chance:
+        geometry_summary = (
+            "Both centered embedding clouds are effectively rank one, with more than 95% of "
+            "their variance on the first axis. Detectable mean pair separation coexists with "
+            "directionally inconsistent retrieval and a negative hardest-negative margin. This "
+            "is partial alignment in a severely compressed geometry, not robust instance-level "
+            "cross-modal matching."
+        )
+    elif rank_one_bipolar:
         geometry_summary = (
             "Both centered embedding clouds are effectively rank one, with more than 95% of "
             "their variance on the first axis. Because the off-diagonal cosine means are not "
@@ -788,17 +870,44 @@ def _markdown_report(
         f"{_percent(changes['loss'])}; EEG reconstruction by "
         f"{_percent(changes['eeg_reconstruction_loss'])}; fNIRS reconstruction by "
         f"{_percent(changes['fnirs_reconstruction_loss'])}.",
-        f"3. **Cross-modal alignment did not emerge in the saved evidence:** validation CLIP "
-        f"loss changed by {_percent(changes['clip_alignment_loss'])}; EEG→fNIRS and "
-        f"fNIRS→EEG Top-1 are {alignment['eeg_to_fnirs']['top1']:.4f} and "
-        f"{alignment['fnirs_to_eeg']['top1']:.4f}, versus chance {chance['top1']:.4f}. "
-        f"Positive-minus-negative cosine is {alignment['positive_minus_negative_cosine']:.6g}.",
-        "4. **Evidence limitation:** the trainer exported only the final validation batch, not "
-        "the full validation set. Therefore retrieval and embedding-collapse findings are "
-        "strong diagnostics for that batch, but not dataset-wide performance estimates.",
-        f"5. **Failure-warning grade:** `{interpretation['alignment_warning_level']}`. This is "
-        "a warning that the source-faithful alignment branch has not activated, not evidence "
-        "that synchronized EEG-fNIRS contains no alignable physiological relationship.",
+        (
+            f"3. **Cross-modal alignment is statistically detectable but weak:** validation "
+            f"CLIP loss changed by {_percent(changes['clip_alignment_loss'])}; both retrieval "
+            f"directions have MRR above chance, positive-vs-negative AUC is "
+            f"{alignment['positive_vs_all_negative_auc']:.4f}, and the hardest-negative margin "
+            f"remains {alignment['positive_minus_hardest_negative_mean']:.4f}."
+            if full_validation_claim
+            else
+            f"3. **Cross-modal alignment is partial or directionally inconsistent:** validation "
+            f"CLIP loss changed by {_percent(changes['clip_alignment_loss'])}; EEG→fNIRS and "
+            f"fNIRS→EEG MRR are {alignment['eeg_to_fnirs']['mrr']:.4f} and "
+            f"{alignment['fnirs_to_eeg']['mrr']:.4f}, versus chance {chance['mrr']:.4f}. "
+            f"Positive-vs-negative AUC is {alignment['positive_vs_all_negative_auc']:.4f}."
+            if alignment_above_chance
+            else
+            f"3. **Cross-modal alignment did not emerge in the saved evidence:** validation "
+            f"CLIP loss changed by {_percent(changes['clip_alignment_loss'])}; EEG→fNIRS and "
+            f"fNIRS→EEG Top-1 are {alignment['eeg_to_fnirs']['top1']:.4f} and "
+            f"{alignment['fnirs_to_eeg']['top1']:.4f}, versus chance {chance['top1']:.4f}."
+        ),
+        (
+            "4. **Evidence scope:** retrieval and embedding diagnostics cover the complete "
+            "public validation export."
+            if evidence_scope["representative_of_full_validation"]
+            else
+            "4. **Evidence limitation:** the trainer exported only the final validation batch, "
+            "not the full validation set. Therefore retrieval and embedding-collapse findings "
+            "are strong diagnostics for that batch, but not dataset-wide performance estimates."
+        ),
+        f"5. **Failure-warning grade:** `{interpretation['alignment_warning_level']}`. "
+        + (
+            "The strict alignment-failure rule was not met; this does not by itself establish "
+            "a robust or transferable representation."
+            if not interpretation["alignment_failure_warning"]
+            else
+            "The source-faithful alignment branch has not activated; this is not evidence that "
+            "synchronized EEG-fNIRS contains no alignable physiological relationship."
+        ),
         "",
         "## Run integrity",
         "",
@@ -869,8 +978,15 @@ def _markdown_report(
         "",
         f"Evidence scope: {alignment['pair_count']} pairs from "
         f"{', '.join(evidence_scope['dataset_ids'])}; subject keys "
-        f"{', '.join(evidence_scope['subject_ids'])}. This is one exported batch and cannot "
-        "support cross-dataset or subject-level generalization claims.",
+        f"{', '.join(evidence_scope['subject_ids'])}. "
+        + (
+            "This is the complete public-validation export; it supports diagnostics for the "
+            "listed public-validation datasets and subjects, but not protected-test claims."
+            if evidence_scope["representative_of_full_validation"]
+            else
+            "This is one exported batch and cannot support cross-dataset or subject-level "
+            "generalization claims."
+        ),
         "",
         "### Embedding geometry",
         "",
@@ -950,27 +1066,6 @@ def analyze_pretraining_run(
     )
     alignment, arrays, metadata = analyze_alignment_evidence(evidence_path)
     interpretation = _alignment_interpretation(training, alignment)
-    interpretation.update({
-        "reconstruction_learning_observed": bool(
-            training["first_to_last_relative_change"]["validation"][
-                "eeg_reconstruction_loss"
-            ] < 0
-            and training["first_to_last_relative_change"]["validation"][
-                "fnirs_reconstruction_loss"
-            ] < 0
-        ),
-        "saved_batch_alignment_above_chance": bool(
-            alignment["eeg_to_fnirs"]["top1"] > alignment["chance"]["top1"]
-            or alignment["fnirs_to_eeg"]["top1"] > alignment["chance"]["top1"]
-        ),
-        "full_validation_alignment_claim_supported": bool(
-            alignment["evidence_scope"]["representative_of_full_validation"]
-            and alignment["identity_pair_permutation_p_one_sided"] < 0.05
-            and alignment["positive_minus_negative_cosine"] > 0
-            and alignment["eeg_to_fnirs"]["mrr"] > alignment["chance"]["mrr"]
-            and alignment["fnirs_to_eeg"]["mrr"] > alignment["chance"]["mrr"]
-        ),
-    })
     result = {
         "schema": ANALYSIS_SCHEMA,
         "run_id": manifest.get("run_id", run.name),

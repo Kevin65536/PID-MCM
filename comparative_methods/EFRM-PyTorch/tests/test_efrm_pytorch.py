@@ -514,17 +514,29 @@ def test_pretraining_analysis_audits_logs_and_renders_public_report(tmp_path: Pa
         fnirs_embeddings=np.eye(4, dtype=np.float32),
         metadata=metadata,
     )
+    export_alignment_evidence(
+        run / "figure_data",
+        eeg_embeddings=np.eye(4, dtype=np.float32),
+        fnirs_embeddings=np.eye(4, dtype=np.float32),
+        metadata=metadata,
+        filename="full_validation_clip_alignment_evidence.npz",
+    )
 
     result = analyze_pretraining_run(run)
     assert result["audit"]["run_state"] == "completed"
     assert result["audit"]["protected_test_opened"] is False
     assert result["alignment"]["eeg_to_fnirs"]["top1"] == 1.0
+    assert result["alignment"]["positive_vs_all_negative_auc"] == 1.0
     assert result["interpretation"]["alignment_failure_warning"] is False
+    assert result["interpretation"]["full_validation_alignment_claim_supported"] is True
     assert (
         result["interpretation"]["dataset_level_alignment_impossibility_claim_supported"]
         is False
     )
     assert (run / "analysis/REPORT.md").is_file()
+    assert "statistically detectable but weak" in (
+        run / "analysis/REPORT.md"
+    ).read_text(encoding="utf-8")
     assert (run / "analysis/figures/training_overview.svg").is_file()
     assert (run / "analysis/tables/epoch_metrics.csv").is_file()
 
