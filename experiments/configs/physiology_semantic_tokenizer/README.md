@@ -1,77 +1,48 @@
 # Physiology-semantic tokenizer configurations
 
-_Active target namespace; E2 development completed, protected test closed_
+This directory contains executable experiment contracts. Generated variants,
+local tuning files, run outputs and abandoned preregistries are intentionally
+excluded from Git.
 
----
+## Current boundary
 
-> **2026-07-25 generation boundary:** every config listed below is an E0–E2
-> historical/current-runtime config. The Shared-Driver Semantic VQ plan will use
-> explicit `r0_...`–`r7_...` names (with separate `r6a_...`/`r6b_...` temporal
-> scopes) after its parser and tests exist. No existing
-> YAML is an implicit template for the new semantic estimand.
+The E0–E2 generation is historical. Its tracked YAML files remain available
+for exact replay, but new work must not infer an R-series contract from them.
+The current R-series conclusion is `do_not_enter_r2_p`: no VQ or token
+co-occurrence experiment is authorized.
 
-## 📋 Contract
+The versioned R-series surface is deliberately limited to:
 
-New configuration files are added here only when their parser, shape assertions, dry-run behavior, and output namespace have tests. Every configuration must resolve its output below:
+| File | Purpose | Status |
+| --- | --- | --- |
+| `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | Completed; primary result negative |
+| `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | Completed; structural audit passed |
+| `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | Formal-v3 did not qualify |
+| `r1p_teacher_perturbation_registry.json` | Three finite train-only G4 stress bundles | Completed |
+| `r2d_continuous_observability.yaml` | One-seed development continuous observability | Completed; bilateral endpoint failed |
+
+Two matching evidence contracts live under
+`docs/physiology_semantic_tokenizer/architecture/`:
+`r0p_raw_lag_baseline_preregistry.json` and
+`r1p_prevalidation_seal.json`. They are required to replay the corresponding
+formal scripts and must not be edited retrospectively.
+
+## Execution contract
+
+Every new versioned config must have a parser test, shape and split assertions,
+a dry-run or synthetic execution path, and an output namespace below:
 
 ```text
 experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/
 ```
 
-Earlier `source_observation`, `downstream`, `phase0`, and `phase0plus` families are isolated under [`../archive/pre_physiology_semantic_20260701/`](../archive/pre_physiology_semantic_20260701/README.md) and are not config fallbacks or templates for the redesign.
+Subjects 01–18 are the development-fit cohort, subjects 19–23 are
+development pure-apply, and subjects 24–29 remain protected. A config flag
+cannot relax this boundary. Teacher-supervised runs also require exact
+registry and seal identities; teacher-free runs must set all teacher-derived
+loss weights to zero.
 
-## Available configuration
+The consolidated methods, results, interpretation and stop decision are in
+[`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-| Config | Scope | Gate status |
-| --- | --- | --- |
-| [`p1_e0_contract_smoke.yaml`](p1_e0_contract_smoke.yaml) | One real anchor/event for mutually exclusive train/validation/test subjects | P1 smoke passed; G0 not evaluated |
-| [`p2_p5_software_smoke.yaml`](p2_p5_software_smoke.yaml) | Loader-to-export correctness with fixed target dimensions | Passed; optimizer blocked until E0 |
-| [`e0_teacher_validity_pilot.yaml`](e0_teacher_validity_pilot.yaml) | Subject-held-out posterior-predictive teacher validation | Validation blocked; protected test unopened |
-| [`e0_teacher_validity_v2.yaml`](e0_teacher_validity_v2.yaml) | Four-dataset measurement audit, layered target/coupling validation, and replayable visual review | Validation blocked on physical observation and posterior calibration; protected test unopened |
-| [`shared_state_reconstruction_bound.yaml`](shared_state_reconstruction_bound.yaml) | Croce-independent capacity curves for shared-only and modality-private reconstruction | Diagnostic only; protected test unopened |
-| [`tokenizer_training_pilot.yaml`](tokenizer_training_pilot.yaml) | Full physical-state-supervised training protocol | Blocked by E0 decision artifact |
-| [`tokenizer_optimizer_smoke.yaml`](tokenizer_optimizer_smoke.yaml) | Minimal teacher-supervised optimizer guard check | Correctly rejects blocked E0 |
-| [`tokenizer_reconstruction_baseline_pilot.yaml`](tokenizer_reconstruction_baseline_pilot.yaml) | Teacher-free reconstruction-plus-VQ baseline | CUDA smoke and resume passed |
-| [`e2_semantic_objective_suite.yaml`](e2_semantic_objective_suite.yaml) | Matched T0/T1/T2 development suite using the E1-selected quantizer | 9/9 runs complete; no semantic row admitted, retain T0 |
-
-Run the two mandatory early stages with:
-
-```bash
-.venv/bin/python experiments/scripts/validate_physiology_semantic_contract.py --mode dry-run
-.venv/bin/python experiments/scripts/validate_physiology_semantic_contract.py --mode smoke
-```
-
-The smoke config validates the real solver-cache-loader chain, tensor shapes, posterior variance, causal masks, split isolation, and additive raw-space normalization. It does not measure the E0 posterior-predictive endpoint and cannot promote G0.
-
-Run the migration software stages with:
-
-```bash
-.venv/bin/python experiments/train_physiology_semantic_tokenizer.py --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml --dry-run
-.venv/bin/python experiments/train_physiology_semantic_tokenizer.py --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml --smoke
-```
-
-Teacher-supervised runs require a concrete passed E0 decision artifact whose split, contract, cache roots, protocol, registry, and calibration hashes match the run. A boolean flag cannot bypass this check. Teacher-free runs must set every teacher-derived loss weight to zero; they may optimize for quantizer and reconstruction characterization without claiming E0 success.
-
-The E2 implementation, v4 revalidation, completed suite, and decision are documented
-in [`20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260722_E2_IMPLEMENTATION_AND_EXPERIMENT_PLAN.md).
-
-Run the E0-v2 validation and regenerate its visual package with:
-
-```bash
-.venv/bin/python experiments/evaluate_physical_teacher_e0_v2.py \
-  --config experiments/configs/physiology_semantic_tokenizer/e0_teacher_validity_v2.yaml
-.venv/bin/python experiments/scripts/visualize_e0_v2_audit.py --run-dir <E0-v2-run-dir>
-```
-
-Visual review is registered only through `finalize_e0_v2_visual_review.py`, which verifies figure hashes and cannot open the protected test by itself.
-
-Run the non-gate shared-state bound diagnostic with:
-
-```bash
-.venv/bin/python experiments/evaluate_shared_state_reconstruction_bound.py \
-  --config experiments/configs/physiology_semantic_tokenizer/shared_state_reconstruction_bound.yaml
-```
-
-Its validation-oracle PCA is a lower bound only inside the declared rank-limited linear model class. Subject-held-out PCA/CCA results are achievable errors, not universal biological noise floors.
-
-_Last updated: 2026-07-25_
+_Last updated: 2026-07-29_
