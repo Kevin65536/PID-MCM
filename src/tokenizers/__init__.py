@@ -23,6 +23,12 @@ from .labram_vqnsp import (
 )
 from .ema_vector_quantizer import EMAVectorQuantizer, QuantizerOutput
 from .physiology_semantic_tokenizer import PhysiologySemanticTokenizer
+from .shared_driver_semantic_vq import (
+    FullWindowModalityEncoder,
+    SharedDriverContinuousModel,
+    SharedDriverTrajectoryDecoder,
+    TemporalPatchStem,
+)
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -65,6 +71,10 @@ __all__ = [
     'EMAVectorQuantizer',
     'QuantizerOutput',
     'PhysiologySemanticTokenizer',
+    'FullWindowModalityEncoder',
+    'SharedDriverContinuousModel',
+    'SharedDriverTrajectoryDecoder',
+    'TemporalPatchStem',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',

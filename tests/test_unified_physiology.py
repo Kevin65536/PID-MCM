@@ -469,6 +469,7 @@ def test_v4_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
     np.savez_compressed(
         path,
         schema=np.asarray("single_trial_eeg_artifact_cache_v4"),
+        signal_branch=np.asarray("single_trial_eeg_artifact_clean_v4"),
         join_key=np.asarray("eeg_fnirs_single_trial|subject_01|session_00"),
         source_path=np.asarray("cnt.mat"),
         source_size_bytes=np.asarray(source.stat().st_size, dtype=np.int64),
@@ -488,13 +489,23 @@ def test_v4_artifact_cache_loads_only_when_source_stat_and_join_key_match(tmp_pa
             Path(clean_single_trial_eeg.__code__.co_filename).read_bytes()
         ).hexdigest(),
     }
-    (cache_root / "cache_manifest.json").write_text(json.dumps({
-        "schema": "single_trial_eeg_artifact_cache_v4",
-        "signal_branch": "single_trial_eeg_artifact_clean_v4",
-        "cleaning_config": EEGArtifactCleaningConfig().to_dict(),
-        "code_sha256": code_sha256,
-        "records": [{"join_key": "eeg_fnirs_single_trial|subject_01|session_00"}],
-    }))
+    (cache_root / "cache_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "single_trial_eeg_artifact_cache_v4",
+                "signal_branch": "single_trial_eeg_artifact_clean_v4",
+                "cleaning_config": EEGArtifactCleaningConfig().to_dict(),
+                "code_sha256": code_sha256,
+                "records": [
+                    {
+                        "join_key": "eeg_fnirs_single_trial|subject_01|session_00",
+                        "cache_path": str(path),
+                        "source_path": "cnt.mat",
+                    }
+                ],
+            }
+        )
+    )
     dataset = object.__new__(UnifiedPhysiologyWindowDataset)
     dataset.project_root = tmp_path
     dataset.eeg_artifact_cache_root = cache_root

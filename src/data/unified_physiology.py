@@ -13,6 +13,8 @@ not claim that volts and chromophore concentration are physically identical.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import csv
 from dataclasses import asdict, dataclass, replace
 from fractions import Fraction
@@ -76,6 +78,27 @@ FORBIDDEN_TASK_NAMESPACES: frozenset[str] = frozenset()
 FORBIDDEN_TASK_POLICY = "no_hard_exclusions_dsr_restored_v2"
 
 VISUAL_CONDITION_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
+_REQUIRE_SINGLE_TRIAL_EEG_ARTIFACT_CACHE: ContextVar[bool] = ContextVar(
+    "require_single_trial_eeg_artifact_cache",
+    default=False,
+)
+
+
+@contextmanager
+def require_single_trial_eeg_artifact_cache() -> Iterable[None]:
+    """Make nested unified datasets fail closed on artifact-cache fallback."""
+
+    token = _REQUIRE_SINGLE_TRIAL_EEG_ARTIFACT_CACHE.set(True)
+    try:
+        yield
+    finally:
+        _REQUIRE_SINGLE_TRIAL_EEG_ARTIFACT_CACHE.reset(token)
+
+
+def single_trial_eeg_artifact_cache_required() -> bool:
+    """Report the task-local strict-cache requirement for audit and tests."""
+
+    return bool(_REQUIRE_SINGLE_TRIAL_EEG_ARTIFACT_CACHE.get())
 
 
 def simultaneous_eeg_eog_cleaning_config(
@@ -834,6 +857,7 @@ class UnifiedPhysiologyWindowDataset:
         eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
         eeg_artifact_config: EEGArtifactCleaningConfig | None = None,
         eeg_artifact_cache_root: str | Path | None = None,
+        require_eeg_artifact_cache: bool = False,
         simultaneous_eeg_cache_root: str | Path | None = None,
         require_paired_timestamps: bool = True,
         include_event_types: set[str] | None = None,
@@ -856,6 +880,18 @@ class UnifiedPhysiologyWindowDataset:
             )
         self.eeg_signal_branch = eeg_signal_branch
         self.eeg_artifact_config = eeg_artifact_config
+        self.require_eeg_artifact_cache = bool(
+            require_eeg_artifact_cache
+            or _REQUIRE_SINGLE_TRIAL_EEG_ARTIFACT_CACHE.get()
+        )
+        if self.require_eeg_artifact_cache and eeg_signal_branch not in {
+            SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+            SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
+        }:
+            raise ValueError(
+                "require_eeg_artifact_cache requires a single-trial "
+                "artifact-clean EEG branch"
+            )
         self.eeg_artifact_cache_root = (
             Path(eeg_artifact_cache_root)
             if eeg_artifact_cache_root is not None
@@ -866,6 +902,8 @@ class UnifiedPhysiologyWindowDataset:
             )
         )
         self._artifact_cache_manifest: dict[str, Any] | None = None
+        self._eeg_artifact_cache_record_keys: set[str] = set()
+        self._eeg_native_fallback_record_keys: set[str] = set()
         self.simultaneous_eeg_cache_root = (
             Path(simultaneous_eeg_cache_root)
             if simultaneous_eeg_cache_root is not None
@@ -926,6 +964,7 @@ class UnifiedPhysiologyWindowDataset:
         cached = self._record_cache.get(record.join_key)
         if cached is not None:
             return cached
+        self._assert_required_single_trial_artifact_cache(record)
         arrays = self.index.load_record_arrays(record)
         if "homer2_aligned_fnirs" not in arrays:
             raise KeyError(f"missing homer2_aligned_fnirs: {record.npz_path}")
@@ -951,7 +990,23 @@ class UnifiedPhysiologyWindowDataset:
             cached_eeg = self._load_cached_simultaneous_eeg(record, eeg_branch)
         if cached_eeg is not None:
             eeg, eeg_names, eeg_state, eeg_quality = cached_eeg
+            if record.dataset_id == "eeg_fnirs_single_trial":
+                self._eeg_artifact_cache_record_keys.add(record.join_key)
         else:
+            if (
+                self.require_eeg_artifact_cache
+                and record.dataset_id == "eeg_fnirs_single_trial"
+                and eeg_branch
+                in {
+                    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V3,
+                    SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4,
+                }
+            ):
+                raise RuntimeError(
+                    "Required EEG artifact cache was not used for "
+                    f"{record.join_key}; native EEG fallback is forbidden"
+                )
+            self._eeg_native_fallback_record_keys.add(record.join_key)
             eeg_native = load_native_eeg_record(self.project_root, record)
             eeg_names = eeg_native.channel_names
             eeg_geometry_for_cleaning = self.geometry_index.for_channels(
@@ -1013,6 +1068,14 @@ class UnifiedPhysiologyWindowDataset:
         if not path.exists():
             return None
         manifest = self._validated_artifact_cache_manifest()
+        if (
+            manifest.get("schema") != cache_schema
+            or manifest.get("signal_branch") != eeg_branch
+        ):
+            raise RuntimeError(
+                "EEG artifact cache manifest schema/branch pair differs "
+                f"from requested branch {eeg_branch!r}"
+            )
         expected_config = replace(
             self.eeg_artifact_config or EEGArtifactCleaningConfig(),
             schema=eeg_branch,
@@ -1034,12 +1097,30 @@ class UnifiedPhysiologyWindowDataset:
         )
         if manifest_record is None:
             raise RuntimeError(f"EEG artifact cache manifest has no record for {record.join_key}")
+        manifest_cache_path = Path(str(manifest_record.get("cache_path", "")))
+        if not manifest_cache_path.is_absolute():
+            manifest_cache_path = self.project_root / manifest_cache_path
+        if manifest_cache_path.resolve() != path.resolve():
+            raise RuntimeError(
+                "EEG artifact cache manifest path differs from loader path "
+                f"for {record.join_key}"
+            )
         with np.load(path, allow_pickle=False) as payload:
             schema = str(np.asarray(payload["schema"]).item())
+            signal_branch = str(
+                np.asarray(payload["signal_branch"]).item()
+            )
             join_key = str(np.asarray(payload["join_key"]).item())
-            if schema != cache_schema or join_key != record.join_key:
+            if (
+                schema != cache_schema
+                or signal_branch != eeg_branch
+                or join_key != record.join_key
+            ):
                 raise RuntimeError(
-                    f"stale/incompatible EEG artifact cache {path}: schema={schema!r}, join_key={join_key!r}"
+                    "stale/incompatible EEG artifact cache "
+                    f"{path}: schema={schema!r}, "
+                    f"signal_branch={signal_branch!r}, "
+                    f"join_key={join_key!r}"
                 )
             source_path = self.project_root / str(np.asarray(payload["source_path"]).item())
             source_stat = source_path.stat()
@@ -1067,6 +1148,82 @@ class UnifiedPhysiologyWindowDataset:
                     "artifact_mask": np.zeros_like(stored_artifact_mask),
                     "bad_channel_mask": np.asarray(payload["bad_channel_mask"], dtype=bool),
                 },
+            )
+
+    def _assert_required_single_trial_artifact_cache(
+        self,
+        record: CleanCacheRecord,
+    ) -> None:
+        """Fail before fNIRS dereference if strict artifact-cache use cannot hold."""
+
+        if (
+            not self.require_eeg_artifact_cache
+            or record.dataset_id != "eeg_fnirs_single_trial"
+        ):
+            return
+        eeg_branch = self.eeg_signal_branch
+        cache_schema = (
+            "single_trial_eeg_artifact_cache_v4"
+            if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+            else "single_trial_eeg_artifact_cache_v3"
+        )
+        path = (
+            self.eeg_artifact_cache_root
+            / record.canonical_subject_id
+            / f"{record.base_record_id}.npz"
+        )
+        if not path.exists():
+            raise RuntimeError(
+                f"Required EEG artifact cache file is missing: {path}"
+            )
+        manifest = self._validated_artifact_cache_manifest()
+        if (
+            manifest.get("schema") != cache_schema
+            or manifest.get("signal_branch") != eeg_branch
+        ):
+            raise RuntimeError(
+                "Required EEG artifact cache manifest does not match the "
+                "exact requested schema/branch pair"
+            )
+        expected_config = replace(
+            self.eeg_artifact_config or EEGArtifactCleaningConfig(),
+            schema=eeg_branch,
+            line_noise_frequency_hz=(
+                50.0
+                if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+                else None
+            ),
+            bad_channel_action=(
+                "disabled_for_cross_dataset_uniformity"
+                if eeg_branch == SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA_V4
+                else "detect_and_interpolate"
+            ),
+            muscle_action="mask_gated_high_frequency_attenuation_v1",
+        ).to_dict()
+        if manifest.get("cleaning_config") != expected_config:
+            raise RuntimeError(
+                "Required EEG artifact cache cleaning config mismatch"
+            )
+        manifest_record = next(
+            (
+                item
+                for item in manifest.get("records", [])
+                if item.get("join_key") == record.join_key
+            ),
+            None,
+        )
+        if manifest_record is None:
+            raise RuntimeError(
+                "Required EEG artifact cache manifest has no record for "
+                f"{record.join_key}"
+            )
+        manifest_cache_path = Path(str(manifest_record.get("cache_path", "")))
+        if not manifest_cache_path.is_absolute():
+            manifest_cache_path = self.project_root / manifest_cache_path
+        if manifest_cache_path.resolve() != path.resolve():
+            raise RuntimeError(
+                "Required EEG artifact cache manifest path differs from "
+                f"loader path for {record.join_key}"
             )
 
     def _validated_artifact_cache_manifest(self) -> dict[str, Any]:
@@ -1277,6 +1434,19 @@ class UnifiedPhysiologyWindowDataset:
             "excluded_alignment_record_count": len(self.excluded_alignment_records),
             "excluded_alignment_records": dict(self.excluded_alignment_records),
             "eeg_signal_branch": self.eeg_signal_branch,
+            "require_eeg_artifact_cache": self.require_eeg_artifact_cache,
+            "eeg_artifact_cache_record_count": len(
+                self._eeg_artifact_cache_record_keys
+            ),
+            "eeg_artifact_cache_record_keys": sorted(
+                self._eeg_artifact_cache_record_keys
+            ),
+            "eeg_native_fallback_record_count": len(
+                self._eeg_native_fallback_record_keys
+            ),
+            "eeg_native_fallback_record_keys": sorted(
+                self._eeg_native_fallback_record_keys
+            ),
             "eeg_artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
             "preprocessing": CANONICAL_PREPROCESSING.to_dict(),
             "fnirs_components": list(CANONICAL_FNIRS_COMPONENTS),
