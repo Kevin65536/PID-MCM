@@ -1,71 +1,53 @@
-# Documentation authority and archive map
+# Documentation map
 
-_Active design entrypoint and historical-document boundary, 2026-07-25_
+_Single authority index; updated 2026-07-30_
 
----
+## Active documents
 
-## 📋 Read this first
-
-New tokenizer work is governed by [`physiology_semantic_tokenizer/`](physiology_semantic_tokenizer/README.md).
-E0–E2 are a closed historical experiment generation; the proposed SD-SVQ
-architecture uses the new R0–R7 program. Historical source/observation and E2
-documents remain available for reproduction but are not implementation
-instructions for the new generation.
-
-| Question | Active authority |
+| Question | Authority |
 | --- | --- |
-| Why redesign? | [`01_LEGACY_DESIGN_POSTMORTEM.md`](physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md) |
-| What should be built? | [`02_TARGET_ARCHITECTURE.md`](physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md) |
-| Why should it work? | [`03_THEORETICAL_FOUNDATIONS.md`](physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) |
-| What did the long exploration teach us? | [`12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md`](physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md) |
-| How should it be implemented and tested? | [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) |
-| Which experiments are allowed? | [`05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) |
-| What has run and what remains planned? | [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
-| Which comparison metrics are paper-ready? | [`13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md`](physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md) |
-| How did the four development tracks evolve and affect each other? | [`PROJECT_EVOLUTION_MAP.md`](PROJECT_EVOLUTION_MAP.md) |
-| Where should outputs be saved? | [`STORAGE_LAYOUT.md`](STORAGE_LAYOUT.md) |
-| Which source packages are active? | [`../src/README.md`](../src/README.md) |
+| What is the complete experiment schedule and current state? | [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md) |
+| What scientific conclusion is currently authorized? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) |
+| What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
+| What are the dataset-native facts and original sources? | [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) |
+| What code/runtime exists today? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| What happened in E0–E2 and R0–R2? | [`physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
+| What is the full R-series evidence? | [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) |
+| What is the comparison contract? | [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md) |
+| Which comparisons are running or complete? | [`comparisons/STATUS.md`](comparisons/STATUS.md) |
+| Which values can enter a final table? | [`comparisons/METRIC_ACCEPTANCE.md`](comparisons/METRIC_ACCEPTANCE.md) |
+| What did the current Token Atlas show? | [`analysis/TOKEN_PHYSIOLOGY_ATLAS.md`](analysis/TOKEN_PHYSIOLOGY_ATLAS.md) |
+| Where are retained result artifacts? | [`../experiments/RESULTS_INDEX.md`](../experiments/RESULTS_INDEX.md) |
 
-## 🗂️ Document lifecycle
+## Frozen and historical evidence
 
-```mermaid
-flowchart LR
-    accTitle: Documentation authority lifecycle
-    accDescr: New work reads the active physiology semantic contract, while prior source observation analysis remains isolated in a dated archive and can only be used as historical evidence.
+[`physiology_semantic_tokenizer/README.md`](physiology_semantic_tokenizer/README.md)
+indexes the 2026-07-25 SD-SVQ proposal, its preregistration, machine seals, and
+dated E0/E1/E2/R reports. Those documents preserve the generation that was
+actually tested; they are not active instructions to proceed past a failed
+gate.
 
-    active_contract["📚 Active design contract"] --> implementation["🔧 New implementation"]
-    implementation --> active_log["📝 Active experiment log"]
-    historical_analysis["🗂️ Dated historical archive"] -.->|Evidence only| active_contract
-    literature["📚 Literature and surveys"] -.->|Background only| active_contract
+Other evidence layers:
 
-    classDef active fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-    classDef archive fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-    classDef evidence fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+- [`architecture_changelog/`](architecture_changelog/INDEX.md): architecture
+  and data-contract decisions;
+- [`project_changelog/`](project_changelog/INDEX.md): repository and
+  operational changes;
+- `physiology_semantic_tokenizer/analysis/`: dated result reports;
+- `reliable_survey/`, `references/`, and `notes/`: literature/background, not
+  implementation authority;
+- ignored manuscript/report/PDF trees: communication or reference assets.
 
-    class active_contract,implementation,active_log active
-    class historical_analysis archive
-    class literature evidence
-```
+## Lifecycle rules
 
-## 📚 Supporting documentation
-
-| Path | Role | Authority |
-| --- | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Current E2 runtime plus explicitly separate planned after-state | Current software truth |
-| [`architecture_changelog/`](architecture_changelog/INDEX.md) | Model structure and scientific data-contract decisions | Architecture record |
-| [`project_changelog/`](project_changelog/INDEX.md) | Repository, storage, archive, and operational changes | Project operations record |
-| [`reliable_survey/`](reliable_survey/) | Literature and external-method research | Background evidence |
-| [`report/`](report/) | Presentations and milestone reports | Communication artifacts |
-| [`paper/`](paper/) | Manuscript workspace | Paper-specific claims |
-| [`archive/pre_physiology_semantic_20260701/`](archive/pre_physiology_semantic_20260701/README.md) | Superseded plans, theory, scorecards, and workflow reconstruction | Explicit historical archive |
-
-## 🛡️ Isolation rules
-
-- Do not import a loss, gate, tensor contract, or output path from the archive into new code without recording a new design decision.
-- Do not append new results to an archived experiment log.
-- Do not treat `docs/reliable_survey/` as implementation authority.
-- Keep target claims marked planned until their code-correctness and scientific-validity gates pass.
-- Update this index whenever a document changes authority class.
-- Treat `src.compatibility`, dated script/config archives, and archived tests as explicit historical dependencies only.
-
-_Last updated: 2026-07-25_
+- Current contracts and current status live only in the active documents
+  above.
+- Preregistrations, seals, manifests, and dated result reports remain
+  immutable; issue a new correction record instead of silently rewriting
+  them.
+- A successful software test does not override a failed scientific gate.
+- A completed earlier protected evaluation does not unlock a new protocol.
+- Update `EXPERIMENT_PLAN.md` and its source-data snapshot whenever an
+  experiment changes state.
+- Archived code, configs, tests, and results require an explicit path and do
+  not participate in default discovery.

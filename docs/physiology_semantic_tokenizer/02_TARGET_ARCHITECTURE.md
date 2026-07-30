@@ -281,7 +281,7 @@ R6A/R6B 都只是 development frozen evaluation；primary protocol 在 `01–18`
 
 ## 🔗 相关文档
 
-- [架构回归与理论启示](12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md)
+- [当前方法依据与结论边界](../METHOD_RATIONALE.md)
 - [实现与验证计划](04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [R 系列实验设计](05_EXPERIMENT_DESIGN.md)
 - [代码迁移计划](07_CODE_MIGRATION_PLAN.md)

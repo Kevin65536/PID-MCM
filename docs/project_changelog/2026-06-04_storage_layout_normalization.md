@@ -4,7 +4,7 @@ _Project operations record; not a model architecture change._
 
 > **Date**: 2026-06-04 | **Phase**: Phase 2C | **Git**: `dd51f57..HEAD`
 > **Status**: Merged
-> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [STORAGE_LAYOUT.md](../STORAGE_LAYOUT.md)
+> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [current contributor and storage rules](../../CONTRIBUTING.md)
 
 ## Motivation
 
@@ -41,7 +41,7 @@ flowchart TB
 | `src/utils/logger.py` | Modified | Added optional `experiment.run_group` and recursive non-archive run discovery for comparison CSV generation |
 | `src/utils/run_metrics_comparison.py` | Modified | Default run discovery now finds nested run dirs containing `metrics.json` and skips archive by default |
 | `experiments/configs/source_observation/croce_local/highwl_base.yaml` | Modified | Uses canonical highWL cache symlinks and `source_observation/croce_local/highwl_v1` run group |
-| `docs/STORAGE_LAYOUT.md` | Added | Documents canonical active paths, archive roots, and discovery rules |
+| former `docs/STORAGE_LAYOUT.md` | Added at the time; later consolidated into `CONTRIBUTING.md` | Documents canonical active paths, archive roots, and discovery rules |
 | `.gitignore` | Modified | Ignores `croce_validation/archive/` generated artifacts |
 
 ## Data Flow Changes
@@ -65,7 +65,7 @@ data:
 
 ## Linked Artifacts
 
-- **Storage layout**: `docs/STORAGE_LAYOUT.md`
+- **Current storage rules**: `CONTRIBUTING.md`
 - **Current live run**: `experiments/runs/s2_croce_local_highwl_base_20260604_153549/`
 - **Future run namespace**: `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`
 - **Retired Phase2/2A archive**: `experiments/runs/archive/pre_croce_local_highwl_20260604/`

@@ -1,8 +1,8 @@
 # 数据集说明文档
 
-跨数据集进入模型前的可执行单位、基线、漂移和尺度规范见
-[`FNIRS_MEASUREMENT_STANDARDIZATION.md`](FNIRS_MEASUREMENT_STANDARDIZATION.md)。
-该规范保留各数据集的原始测量语义，不把电压、吸光度和浓度伪装成同一物理单位。
+跨数据集进入模型前的可执行单位、基线、漂移、尺度、mask 与 split 规范见
+[`DATA_CONTRACT.md`](DATA_CONTRACT.md)。该合同保留各数据集的原始测量语义，
+不把电压、吸光度和浓度伪装成同一物理单位。
 
 > **重要提示**：使用任何数据集前，请务必先阅读本文档以及对应数据集目录中的原始说明文件。
 

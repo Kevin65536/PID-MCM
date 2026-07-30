@@ -63,8 +63,8 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 ### Configuration
 
-- Locked baseline: [gate1_baseline_locked_bs128.yaml](../../../../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
-- Best config alias: [gate1_best_current.yaml](../../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml)
+- Locked baseline: [gate1_baseline_locked_bs128.yaml](../../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_baseline_locked_bs128.yaml)
+- Best config alias: [gate1_best_current.yaml](../../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml)
 - Best long-warmup run: [archived best run](../../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718)
 - Reference long run: [archived reference run](../../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538)
 - Archive log: [Phase 1 Gate1 stabilization](../../../archive/logs/PHASE1_GATE1_STABILIZATION_20260511.md)
@@ -86,7 +86,7 @@ Close the Phase 1 Gate1 tuning loop, mark the best no-phase baseline, and archiv
 
 ### Conclusion
 
-Phase 1 now has a formal best baseline and a formal archive bundle. Historical reproduction starts from [gate1_best_current.yaml](../../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml); new target-architecture work does not inherit this config.
+Phase 1 now has a formal best baseline and a formal archive bundle. Historical reproduction starts from [gate1_best_current.yaml](../../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml); new target-architecture work does not inherit this config.
 
 ---
 
@@ -98,8 +98,8 @@ Complete the Croce 2017 physical model source target implementation, integrate c
 
 ### Configuration
 
-- Mainline: `SourceObservationLaBraMVQNSP` in [factorized_labram_vqnsp.py](../../../../src/tokenizers/factorized_labram_vqnsp.py)
-- Losses: lag_focus_loss + joint_smoothness_loss in [multimodal_tokenizer.py](../../../../src/losses/multimodal_tokenizer.py)
+- Mainline: `SourceObservationLaBraMVQNSP` in [source_observation_tokenizer.py](../../../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py)
+- Losses: lag_focus_loss + joint_smoothness_loss in [multimodal_tokenizer_losses.py](../../../../src/compatibility/pre_physiology_semantic_20260701/multimodal_tokenizer_losses.py)
 - SMC validation: [neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py)
 - Spatial priors: [channel_adjacency.py](../../../../src/data/channel_adjacency.py)
 - Architecture changelog: [Croce 2017 physical model targets](../../../architecture_changelog/2026-05-13_phase2b_croce2017_physical_model_targets.md)
@@ -136,7 +136,7 @@ Start the next tokenizer training phase from generated Croce source/observation 
   - `croce_validation/cache/croce_local/highwl_v1/simultaneous_cognitive`
 - Future run namespace: `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`
 - Current live run, launched before namespace normalization: `experiments/runs/s2_croce_local_highwl_base_20260604_153549/`
-- Storage layout: [docs/STORAGE_LAYOUT.md](../../../STORAGE_LAYOUT.md)
+- Current storage rules: [CONTRIBUTING.md](../../../../CONTRIBUTING.md)
 
 ### Key Decisions
 

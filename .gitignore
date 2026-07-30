@@ -19,8 +19,10 @@ experiments/comparison_reports
 
 reference_repository
 
-# pycache
-__pycache__
+# Python/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 # virtual environment
 .env

@@ -78,7 +78,7 @@ data:
 ## Linked Artifacts
 
 - Historical 8-second quality report: `experiments/runs/physiology_semantic_tokenizer/data_quality_audit/final_four_dataset_check_20260710/`
-- Single-Trial remediation plan: `docs/physiology_semantic_tokenizer/10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md`
+- Current Single-Trial branch and mask decision: [`DATA_CONTRACT.md`](../DATA_CONTRACT.md)
 - Related record: `2026-07-03_e0_v2_teacher_information_contract.md`
 
 ## Gate Impact

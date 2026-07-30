@@ -33,12 +33,12 @@
 
 当前主实现面落在以下文件上：
 
-- [src/tokenizers/factorized_labram_vqnsp.py](../../../../src/tokenizers/factorized_labram_vqnsp.py) — 主 tokenizer：`SourceObservationLaBraMVQNSP`
-- [src/losses/multimodal_tokenizer.py](../../../../src/losses/multimodal_tokenizer.py) — coupling 结构先验（lag_focus + joint_smoothness）与分支正交损失
+- [source_observation_tokenizer.py](../../../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py) — 兼容 tokenizer：`SourceObservationLaBraMVQNSP`
+- [multimodal_tokenizer_losses.py](../../../../src/compatibility/pre_physiology_semantic_20260701/multimodal_tokenizer_losses.py) — coupling 结构先验（lag_focus + joint_smoothness）与分支正交损失
 - [src/inference/neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py) — Croce 2017 SMC 滤波器模块
 - [src/data/channel_adjacency.py](../../../../src/data/channel_adjacency.py) — 导联邻接与空间加权 source target
-- [src/visualization/source_observation_analysis.py](../../../../src/visualization/source_observation_analysis.py) — source/observation 对齐分析与 Gate scorecard
-- [src/visualization/tokenizer_analysis_suite.py](../../../../src/visualization/tokenizer_analysis_suite.py) — 标准化分析入口
+- [source_observation_analysis.py](../../../../src/compatibility/pre_physiology_semantic_20260701/visualization/source_observation_analysis.py) — source/observation 对齐分析与 Gate scorecard
+- [tokenizer_analysis_suite.py](../../../../src/compatibility/pre_physiology_semantic_20260701/visualization/tokenizer_analysis_suite.py) — 标准化分析入口
 
 ### 2.2 Architecture decisions made and executed
 

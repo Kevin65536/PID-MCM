@@ -153,9 +153,9 @@ No code rollback is required for this planned record. If physical-teacher valida
 
 ## 🔗 Linked artifacts
 
-- [`Legacy design postmortem`](../physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md)
+- [`Consolidated method rationale`](../METHOD_RATIONALE.md)
 - [`Target architecture`](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
-- [`Theoretical foundations`](../physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md)
+- [`Consolidated method rationale`](../METHOD_RATIONALE.md)
 - [`Implementation and validation plan`](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [`Redesigned experiment program`](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)
 

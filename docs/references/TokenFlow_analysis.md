@@ -63,7 +63,9 @@ TokenFlow 没有选择“一个 codebook 统一语义和像素”，而是选择
 - dual decoders；
 - 联合量化目标。
 
-这与我们在 [docs/experiement_reports/Shared_private_factorization_design.md](../experiement_reports/Shared_private_factorization_design.md) 中提出的 shared/private factorization 非常接近。两者共同说明：
+这与当前
+[方法依据与历史 shared/private 反思](../METHOD_RATIONALE.md)
+非常接近。两者共同说明：
 
 > “统一”更合理的含义，是建立可计算的对应结构，而不是把所有表示责任压缩进同一个离散空间。
 
@@ -124,7 +126,10 @@ TokenFlow 的主要证据包括：
 
 这些证据足以证明它对视觉任务有效，但不足以证明“token 本身已经具备稳定语义边界”。
 
-对我们的问题，这一点更关键，因为生理 token 是否成立，不能只靠下游 accuracy 和 reconstruction 曲线判断。这也是 [docs/SEMANTIC_TOKEN_SCORECARD.md](../SEMANTIC_TOKEN_SCORECARD.md) 仍然必要的原因。
+对我们的问题，这一点更关键，因为生理 token 是否成立，不能只靠下游
+accuracy 和 reconstruction 曲线判断。这也是
+[历史 Semantic Token Scorecard](../archive/pre_physiology_semantic_20260701/source_observation/SEMANTIC_TOKEN_SCORECARD.md)
+仍然有参考价值的原因。
 
 ## 4. 对当前主线的直接影响
 
@@ -138,8 +143,8 @@ TokenFlow 给出的最强支持不是 overlap，而是：
 
 因此，它支持继续坚持：
 
-- [docs/archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md](../archive/plans/NEXT_STAGE_ALIGNMENT_PLAN.md)
-- [src/tokenizers/codebook_focus_factorized_labram_vqnsp.py](../../src/tokenizers/codebook_focus_factorized_labram_vqnsp.py)
+- [当前方法依据与结论边界](../METHOD_RATIONALE.md)
+- [归档 source/observation tokenizer](../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py)
 
 而不是回到 shared-codebook overlap-first 路线。
 
@@ -163,7 +168,7 @@ TokenFlow 最值得借鉴的，不是“共享一个 codebook”，而是：
 - 用 index 级机制维持相关性；
 - 让统一发生在映射层，而不是发生在表示责任塌缩上。
 
-这与 [docs/experiement_reports/Shared_private_factorization_design.md](../experiement_reports/Shared_private_factorization_design.md) 中提到的
+这与 [当前方法依据中的历史结构反思](../METHOD_RATIONALE.md) 中提到的
 
 - shared quantizer，或
 - a pair of lightly tied quantizers
@@ -182,8 +187,7 @@ TokenFlow 最值得借鉴的，不是“共享一个 codebook”，而是：
 
 当前代码实现中：
 
-- [src/tokenizers/shared_labram_vqnsp.py](../../src/tokenizers/shared_labram_vqnsp.py)
-- [archived source/observation tokenizer](../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py)
+- [归档 source/observation tokenizer](../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py)
 
 仍要求 EEG 和 fNIRS 在每个窗口内产出相同 token 数。
 
@@ -229,7 +233,9 @@ TokenFlow 的成功提醒我们：
 1. 不再让 EEG shared 与 fNIRS shared 进入完全相同的 quantizer；
 2. 改为两套 lightly tied shared codebooks；
 3. 用 lag-aware mapping 或 transition coupling 建立 shared state correspondence；
-4. 仍然用 [docs/SEMANTIC_TOKEN_SCORECARD.md](../SEMANTIC_TOKEN_SCORECARD.md) 做评估，而不是只看 overlap。
+4. 仍然用
+   [历史 Semantic Token Scorecard](../archive/pre_physiology_semantic_20260701/source_observation/SEMANTIC_TOKEN_SCORECARD.md)
+   做评估，而不是只看 overlap。
 
 ### 当前不该做的
 

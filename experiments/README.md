@@ -1,40 +1,49 @@
 # Experiment workspace
 
-_Operational entrypoint for active configs, scripts, runs, and historical artifacts_
+_Configs, executable workflows, active evidence, and explicit archives_
 
----
-
-## 📋 Active namespace
-
-The only active result namespace for new tokenizer work is:
-
-```text
-experiments/runs/physiology_semantic_tokenizer/
-```
-
-The E2-compatible physiology-semantic runtime is implemented. The proposed
-Shared-Driver Semantic VQ generation is not yet implemented and must use a new
-R-series config namespace; it may not silently change the semantics of E2
-configs. Source/observation scripts remain compatibility baselines and must
-write reruns to an explicitly named archive or compatibility root.
-
-## 🗂️ Directory roles
+## Directory roles
 
 | Path | Role |
 | --- | --- |
-| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | Active target-architecture configurations |
-| `scripts/` | Executable training and analysis entrypoints |
-| [`runs/`](runs/README.md) | Active generated outputs only |
-| [`archive/pre_physiology_semantic_20260701/`](archive/pre_physiology_semantic_20260701/README.md) | Pre-redesign runs and reports |
-| `configs/archive/` | Retired configuration snapshots |
-| `scripts/archive/` | Retired executable workflows |
+| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | versioned E0–E2, R-series, and analysis contracts |
+| `scripts/` | training, qualification, evaluation, analysis, and figure entrypoints |
+| [`runs/`](runs/README.md) | active-design generated evidence |
+| [`archive/`](archive/) | historical generated evidence; never default-discovered |
+| `configs/archive/`, `scripts/archive/` | explicit compatibility surfaces |
+| [`RESULTS_INDEX.md`](RESULTS_INDEX.md) | retained-result map and pruning record |
 
-## 🛡️ Rules
+Comparison methods own their code, configs, runs, and caches below
+`comparative_methods/<method>/`. Croce validation owns
+`croce_validation/`. Do not create a second generic results root.
 
-- Never write new outputs directly below `experiments/runs/`.
-- Every target run uses a suite directory and an immutable run directory.
-- Historical reruns must not reuse the active suite names.
-- Analysis defaults must not recurse through `experiments/archive/`.
-- Run outputs remain ignored by Git; only storage policy, manifests, and selected lightweight summaries are tracked intentionally.
+## Current authorization
 
-_Last updated: 2026-07-25_
+The E2-compatible launcher remains runnable, but the main method is stopped at
+`do_not_enter_r2_p`. The presence of R-series scripts/configs is evidence of
+completed diagnostics, not authorization for R2-P or a new VQ run.
+
+At the 2026-07-30 cleanup snapshot, EFRM LODO v2 is live. Its entire
+`comparative_methods/EFRM-PyTorch/runs/` tree, method caches, and the clean
+physiology cache it consumes are excluded from cleanup.
+
+## Run contract
+
+New physiology-semantic output uses:
+
+```text
+experiments/runs/physiology_semantic_tokenizer/<suite>/<immutable-run>/
+```
+
+A result is auditable only when its resolved config, manifest, split/cache/code
+identity, completion status, primary endpoint, summary/table, and necessary
+prediction or figure source data are present. Suite summaries do not override
+run records.
+
+Generated payloads remain ignored by Git. Lightweight manifests, decision
+summaries, and evidence indexes may be force-tracked intentionally. Historical
+analysis always names an exact archive path; active tools never recurse through
+archives.
+
+Launch and evidence conventions are in [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+The full schedule is [`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md).

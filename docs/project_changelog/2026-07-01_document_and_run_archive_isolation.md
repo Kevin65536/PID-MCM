@@ -4,7 +4,7 @@ _Project operations record; not a model architecture change._
 
 _Date: 2026-07-01 · Phase: Phase 3 preparation · Git: `b81c31b..HEAD` · Status: Merged_
 
-_Links: [documentation index](../README.md) · [storage layout](../STORAGE_LAYOUT.md) · [target experiment program](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)_
+_Links: [documentation index](../README.md) · [current contributor and storage rules](../../CONTRIBUTING.md) · [target experiment program](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)_
 
 ---
 
@@ -63,7 +63,7 @@ flowchart LR
 | `experiments/archive/pre_physiology_semantic_20260701/` | Added/moved | Stores 14 old run families and two comparison reports |
 | `archive_manifest.tsv` | Added | Maps original and current paths with byte/file counts |
 | `README.md` and `CLAUDE.md` | Rewritten | Point new work to the target contract |
-| `docs/STORAGE_LAYOUT.md` | Rewritten | Defines suite/run schema, cache versioning, and discovery exclusions |
+| former `docs/STORAGE_LAYOUT.md` | Rewritten at the time; later consolidated into `CONTRIBUTING.md` | Defines suite/run schema, cache versioning, and discovery exclusions |
 
 ## 📥 Data-flow changes
 

@@ -17,7 +17,7 @@ _Historical analysis of the diagnostics that preceded sign calibration, 2026-07-
 > is integrated with the unified loader, downstream target contract, shared
 > subject splits, regression metrics, or active artifact schema. The earlier
 > “one training run” and “low implementation impact” estimates are superseded by
-> [`11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md`](../11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md).
+> [`comparisons/PROTOCOL.md`](../../comparisons/PROTOCOL.md).
 > Both methods remain candidates; availability of source code does not admit
 > either as an E0 control or downstream SOTA baseline.
 
@@ -38,7 +38,9 @@ alongside the project's own diagnostic evidence.
 
 ## 1. What the E0 gate actually requires
 
-E0 is not "the teacher must perfectly reconstruct fNIRS." The [E0-v2 protocol](../05_EXPERIMENT_DESIGN.md#e0--cache-and-teacher-validity) evaluates six independent layers:
+E0 is not "the teacher must perfectly reconstruct fNIRS." The
+[E0-v2 information contract](../../architecture_changelog/2026-07-03_e0_v2_teacher_information_contract.md)
+evaluates six independent layers:
 
 | Layer | Meaning | E0-v2 result |
 |---|---|---|
@@ -366,11 +368,11 @@ Week 5:   E0-v3 formal validation
 
 Key project documents:
 - [Target Architecture](../02_TARGET_ARCHITECTURE.md)
-- [Theoretical Foundations](../03_THEORETICAL_FOUNDATIONS.md)
+- [Consolidated method rationale](../../METHOD_RATIONALE.md)
 - [Implementation Validation Plan](../04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [Experiment Design](../05_EXPERIMENT_DESIGN.md)
 - [Experiment Log](../06_EXPERIMENT_LOG.md)
-- [Legacy Design Postmortem](../01_LEGACY_DESIGN_POSTMORTEM.md)
+- [Consolidated method rationale](../../METHOD_RATIONALE.md)
 
 Diagnostic archives:
 - [Shared-State Reconstruction Bound](../archive/diagnostics/09_SHARED_STATE_RECONSTRUCTION_BOUND.md)

@@ -25,7 +25,7 @@ which the head is reinitialized and refitted on the complete outer-training
 partition before protected evaluation.
 
 Final paper-table numbers additionally follow the lightweight
-[final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+[final-number acceptance rules](../../docs/comparisons/METRIC_ACCEPTANCE.md)
 and [machine-readable targets](../comparison_metric_targets_v1.yaml). They
 judge only the resulting value and do not rewrite the frozen LODO training
 estimand. Linear probing remains a representation track; full fine-tuning is a

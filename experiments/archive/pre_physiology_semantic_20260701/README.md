@@ -37,7 +37,7 @@ Archive analysis requires an explicit archive path. Active discovery and compari
 
 - [Active result root](../../runs/README.md)
 - [New suite schema](../../runs/physiology_semantic_tokenizer/README.md)
-- [Storage policy](../../../docs/STORAGE_LAYOUT.md)
-- [Legacy design postmortem](../../../docs/physiology_semantic_tokenizer/01_LEGACY_DESIGN_POSTMORTEM.md)
+- [Current contributor and storage rules](../../../CONTRIBUTING.md)
+- [Consolidated method rationale](../../../docs/METHOD_RATIONALE.md)
 
 _Archived: 2026-07-01_

@@ -1,60 +1,49 @@
 # Source-code authority map
 
-_Active, reusable, and compatibility boundaries as of 2026-07-25_
+_Reusable and compatibility boundaries, updated 2026-07-30_
 
----
+New code may depend on reusable packages but must not import the dated
+compatibility namespace. Historical tools opt into compatibility explicitly.
 
-## 📋 Dependency rule
-
-New physiology-semantic code may depend on reusable packages, but it must not import the dated compatibility namespace. Historical tools opt in to compatibility explicitly.
-
-```mermaid
-flowchart LR
-    accTitle: Source dependency boundary
-    accDescr: The active physiology semantic implementation uses reusable data, inference, tokenizer primitives, losses, metrics, and utilities; only archived scripts may import the dated compatibility package.
-
-    active["🔧 Active physiology-semantic implementation"] --> reusable["🧱 Reusable primitives"]
-    archived["🗂️ Archived experiment scripts"] --> compatibility["📦 Dated compatibility package"]
-    compatibility --> reusable
-    active -.->|forbidden import| compatibility
-
-    classDef active fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
-    classDef reusable fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
-    classDef archive fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-    class active active
-    class reusable reusable
-    class archived,compatibility archive
-```
-
-## 🧱 Reusable packages
-
-| Path | Role in the redesign |
+| Package | Active responsibility |
 | --- | --- |
-| `data/` | Dataset registry, loaders, preprocessing, channel adjacency, and Croce cache adapter |
-| `inference/` | Neurovascular state-space inference reused by the physical teacher |
-| `tokenizers/` | Base interfaces, corrected EMA VQ, and independent physiology-semantic tokenizer branches |
-| `teachers/` | Current stop-gradient patch teacher; planned full-trajectory sidecar must be added as a new schema |
-| `losses/` | Current reconstruction/routed losses; planned shared-driver trajectory objective is not yet implemented |
-| `metrics/` | Reconstruction and codebook-health metrics |
-| `foundation/` | Existing whole-brain consumers; a foundation model is not required by the new minimal architecture |
-| `utils/` | Logging, checkpoint, launch, and I/O infrastructure |
-| `visualization/` | Generic tokenizer, classifier, TensorBoard, and gradient utilities |
+| `data/` | registry, unified loaders, preprocessing, alignment, masks, geometry, caches, E0–E2 and R-series joins |
+| `inference/` | neurovascular SSM inference and the sealed R1-P teacher |
+| `tokenizers/` | tokenizer interfaces, corrected EMA VQ, E2 runtime, R2 diagnostic model |
+| `analysis/` | E2 evaluation and Token Physiology Atlas |
+| `losses/` | physiology-semantic reconstruction/routed objectives plus historical reusable losses |
+| `metrics/` | reconstruction, codebook-health, and compatibility metrics |
+| `foundation/` | downstream token consumer interface; not required by the stopped mainline |
+| `visualization/` | Atlas figures and older reusable dashboards |
+| `utils/` | I/O, run comparison, logging/launch compatibility utilities |
+| `compatibility/pre_physiology_semantic_20260701/` | dated source/observation checkpoint and replay surface |
 
-`src/tokenizers` no longer registers `source_observation_labram_vqnsp` or `factorized_labram_vqnsp` by default.
+Current primary files:
 
-## 📦 Compatibility package
+- `data/registry.py`, `factory.py`, `unified_physiology.py`;
+- `data/physiology_semantic_local.py`,
+  `physiology_semantic_targets.py`;
+- `data/shared_driver_targets.py`, `shared_driver_dataset.py`;
+- `tokenizers/ema_vector_quantizer.py`,
+  `physiology_semantic_tokenizer.py`,
+  `shared_driver_semantic_vq.py`;
+- `inference/adaptive_neurovascular_ssm.py`;
+- `analysis/physiological_patch_features.py`,
+  `token_physiology.py`, `token_information_ledger.py`,
+  `token_sequence.py`, `token_physiology_atlas.py`.
 
-[`compatibility/pre_physiology_semantic_20260701/`](compatibility/pre_physiology_semantic_20260701/README.md) contains the old source/observation model, coupling losses, cross-modal fusion, ELP prototype, and contract-specific visualizations. It exists for checkpoint interpretation and historical reproduction only.
+The target/loader and raw-view/teacher modules remain separate to enforce
+identity and leakage boundaries; they are not duplication to merge away.
+Several general tokenizer, metric, loss, and visualization modules exist only
+for historical configs/checkpoints. They remain in place until checkpoint
+serialization compatibility is audited.
 
-## 🧪 Implementation placement
+The R1-P prevalidation seal fixes exact source, script, config, registry, and
+test paths/hashes. Ordinary cleanup must not move or edit them. Likewise,
+experiment source-snapshot tests rely on several current paths. See
+[`../tests/README.md`](../tests/README.md) before reorganizing packages.
 
-The current active runtime includes the strict measured-data loader, corrected
-EMA quantizer, physical teacher adapter, independent modality tokenizer, gated
-trainer, and exporter/consumers. The proposed SD-SVQ generation requires a
-full-trajectory sidecar, modality-only full-window encoder, shared driver
-decoder, R6A offline evaluator, and optional strict-cutoff R6B evaluator. These
-must be introduced behind new interfaces and only promoted after R2-P/R3-P. Do not rename compatibility classes
-into the active namespace or use archived registry aliases as target config
-types.
-
-_Last updated: 2026-07-25_
+Executable workflows belong under `experiments/` or the comparison package
+that owns them, not under `src/`. Current scientific status is documented in
+[`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md); implemented code
+does not imply an authorized experiment.

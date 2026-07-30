@@ -11,7 +11,7 @@ is a project-adapted comparative method, not a claim of source-level numerical
 equivalence.
 
 Final paper-table numbers are judged by the lightweight
-[final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+[final-number acceptance rules](../../docs/comparisons/METRIC_ACCEPTANCE.md)
 and [machine-readable targets](../comparison_metric_targets_v1.yaml). These
 rules assess only the resulting number; they do not replace this method's
 training protocol. Source-aligned MI/MA/WG and the shared benchmark remain

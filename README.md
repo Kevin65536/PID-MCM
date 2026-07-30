@@ -1,112 +1,73 @@
 # EEG–fNIRS physiology-semantic tokenization
 
-_Repository status and contributor entrypoint, 2026-07-25_
+_Project entrypoint; status snapshot 2026-07-30_
 
----
+The main tokenizer line is **stopped at its scientific gate**. E0–E2 are
+complete; the R-series prerequisite tests did not qualify the shared-driver
+target. `promotion_eligible=false`, `next_action=do_not_enter_r2_p`, and
+subjects 24–29 remain closed. R2-P, R3–R7, and a new SD-SVQ/VQ generation are
+not authorized.
 
-## 📋 Current status
+Comparison work continues independently. STA-Net's formal five-fold benchmark
+is complete. EFRM LODO v2 is running its fourth Stage-A target-excluded
+selection job; its protected evaluation remains closed. UMAP still needs a new
+formal rerun.
 
-The E2-compatible physiology-semantic runtime is implemented and its fixed
-`K=128` quantizers pass the registered software-health gate. E2 found no
-semantic-endpoint gain from the weak multi-entry physical-teacher objectives.
-The next, still planned, architecture is Shared-Driver Semantic VQ: raw-only
-modality-specific full-window encoders, independent `K=128,D=64` codebooks, and
-full joint-driver-proxy trajectory reconstruction as the primary semantic
-objective. Frozen bidirectional tokens first support offline delayed-association
-tests; future raw-fNIRS prediction requires a separate strict-cutoff evaluation.
+Start with the [full experiment plan](docs/EXPERIMENT_PLAN.md) and
+[documentation map](docs/README.md).
 
-Start with the [documentation authority map](docs/README.md). Do not use archived source/observation plans as implementation instructions.
-
-## 🧭 Authority map
+## Main entrypoints
 
 | Need | Document |
 | --- | --- |
-| Design entrypoint | [Physiology-semantic archive](docs/physiology_semantic_tokenizer/README.md) |
-| Target architecture and tensors | [Target architecture](docs/physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md) |
-| Theory and claim limits | [Theoretical foundations](docs/physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) |
-| Architecture-return synthesis | [Method lessons](docs/physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md) |
-| Implementation and correctness plan | [Implementation and validation](docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) |
-| Experiment suites | [Experiment design](docs/physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md) |
-| New-design results | [Active experiment log](docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
-| Output paths | [Storage layout](docs/STORAGE_LAYOUT.md) |
-| Runnable frozen implementation | [Current code architecture](docs/ARCHITECTURE.md) |
+| What is complete, running, next, or blocked? | [Experiment plan](docs/EXPERIMENT_PLAN.md) |
+| What does the evidence permit us to claim? | [Method rationale](docs/METHOD_RATIONALE.md) |
+| What data/mask/split contract is active? | [Data contract](docs/DATA_CONTRACT.md) |
+| What code is currently runnable? | [Architecture](docs/ARCHITECTURE.md) |
+| What results were retained? | [Results index](experiments/RESULTS_INDEX.md) |
+| How are comparisons run and admitted? | [Comparison protocol](docs/comparisons/PROTOCOL.md) |
+| How should a frozen tokenizer be analyzed? | [Token Physiology Atlas](docs/analysis/TOKEN_PHYSIOLOGY_ATLAS.md) |
+| How should code and experiments be changed? | [Contributor guide](CONTRIBUTING.md) |
 
-## 🏗️ Repository structure
+## Repository layout
 
 ```text
-src/                                  # Reusable model, data, loss, and analysis code
-experiments/
-├── configs/
-│   ├── physiology_semantic_tokenizer/ # Active E0–E2 configs; R-series namespace planned
-│   └── ...                            # Frozen compatibility configs
-├── scripts/                           # Executable entrypoints
-├── runs/
-│   └── physiology_semantic_tokenizer/ # Only active generated-result namespace
-└── archive/
-    └── pre_physiology_semantic_20260701/ # All runs present before design freeze
-docs/
-├── README.md                          # Documentation authority map
-├── physiology_semantic_tokenizer/     # Active design, plan, experiments, log
-├── ARCHITECTURE.md                    # Runnable frozen implementation truth
-├── STORAGE_LAYOUT.md                  # Active/archive storage contract
-└── archive/pre_physiology_semantic_20260701/ # Superseded plans and analyses
-croce_validation/                      # Physical-model validation and caches
-tests/                                 # Unit and integration tests
+src/                    reusable data, inference, tokenizer, and analysis code
+tests/                  active contract, scientific-gate, and regression tests
+experiments/            configs, executable workflows, active runs, archives
+comparative_methods/    isolated STA-Net, EFRM, and UMAP implementations
+croce_validation/       physical-model validation and expensive legacy cache
+docs/                   active contracts, status, evidence, history, literature
+data/                   immutable measured data and derived caches
 ```
 
-## 🚀 Environment
+Generated payloads are ignored by Git. Active tools do not recursively search
+archives, and comparison packages write only to their own run roots.
 
-Use the repository virtual environment:
+## Environment and checks
+
+Use the repository environment; system Python is not assumed to be complete.
 
 ```bash
 source .venv/bin/activate
-python -m pytest tests/ -v
+python -m pytest --collect-only -q
 ```
 
-The active launcher supports the implemented physiology-semantic runtime:
+The existing physiology-semantic launcher can replay the E0–E2-compatible
+runtime:
 
 ```bash
 bash experiments/scripts/launch_training_nohup.sh \
-  --task physiology-semantic-tokenizer
+  --task physiology-semantic-tokenizer \
+  --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml \
+  --dry-run
 ```
 
-The proposed Shared-Driver VQ generation must use new `r0_...`–`r7_...`
-configs and may not silently reuse E2 semantics. Source/observation entrypoints
-remain isolated under the
-[dated script archive](experiments/scripts/archive/pre_physiology_semantic_20260701/README.md).
+That command is not permission to start R2-P or a new VQ generation. Follow the
+frozen experiment gate and do not touch paths or hashes protected by the R1-P
+prevalidation seal.
 
-## 📦 Result policy
-
-New outputs must use:
-
-```text
-experiments/runs/physiology_semantic_tokenizer/<suite>/<timestamp>_<name>/
-```
-
-The directory `experiments/runs/` contains no pre-redesign results. Historical runs are indexed in [the dated experiment archive](experiments/archive/pre_physiology_semantic_20260701/README.md). Analysis tools must receive an explicit archive path when reproducing historical evidence.
-
-## 🧪 Implementation order
-
-The required order is:
-
-1. freeze E2 evidence and the new sample/mask contract;
-2. build full-trajectory R1-D and population-frozen R1-P teacher sidecars, then
-   revalidate the R1-P teacher panel;
-3. test continuous EEG-only and fNIRS-only observability;
-4. only then train independent fixed-K128 semantic quantizers;
-5. export IDs, posteriors, embeddings, continuous latents, and driver signatures;
-6. after R5, choose R6A offline association and/or the independent R6B
-   completed-window cutoff test; reserve independent confirmation for R7.
-
-Each module must pass code-correctness and scientific-validity gates before the next expensive experiment begins.
-
-## 🗂️ Historical evidence
-
-Historical material is retained, not deleted:
-
-- [Superseded theory and plans](docs/archive/pre_physiology_semantic_20260701/README.md)
-- [Pre-redesign runs and comparison reports](experiments/archive/pre_physiology_semantic_20260701/README.md)
-- [Architecture changelog](docs/architecture_changelog/INDEX.md)
-- [Project operations changelog](docs/project_changelog/INDEX.md)
-
-_Last updated: 2026-07-25_
+Historical negative and failed results are evidence, not clutter. Large
+rebuildable arrays/checkpoints may be pruned only according to
+[`experiments/RESULTS_INDEX.md`](experiments/RESULTS_INDEX.md), and no directory
+used by a live process may be cleaned.

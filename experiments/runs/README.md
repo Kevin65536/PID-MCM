@@ -1,25 +1,23 @@
-# Active experiment results
+# Active-design generated results
 
-_Generated-output root reserved for the physiology-semantic tokenizer program_
-
----
-
-## 📋 Active root
-
-Only one project namespace is allowed here:
+This root contains current-design physiology-semantic evidence:
 
 ```text
-experiments/runs/
-└── physiology_semantic_tokenizer/
+experiments/runs/physiology_semantic_tokenizer/
 ```
 
-All pre-2026-07-01 experiment families are stored outside this tree under `experiments/archive/pre_physiology_semantic_20260701/runs/`.
+It includes valid completed, negative, failed, and aborted runs. “Active
+design” does not mean scientifically promoted.
 
-## 🛡️ Reader contract
+Reader rules:
 
-- A directory below this root represents current-design evidence, not historical comparison data.
-- Smoke and formal results remain separated by manifest status.
-- A suite-level summary never overrides a run-level result.
-- Empty planned suites are documented in the active namespace README and are not created as fake result directories.
+- inspect the individual run manifest/status before a suite summary;
+- distinguish smoke, development, formal, and protected evidence;
+- never infer authorization from a directory name;
+- never recursively mix this root with `experiments/archive/`;
+- retain lightweight conclusions and provenance even when rebuildable payloads
+  are pruned;
+- use [`../RESULTS_INDEX.md`](../RESULTS_INDEX.md) for the retained evidence
+  surface.
 
-_Last updated: 2026-07-01_
+Comparison-method runs are intentionally outside this tree.

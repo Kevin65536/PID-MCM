@@ -236,6 +236,6 @@ EFRM 的优势是简单、可扩展到通用连续表示和下游 few-shot；其
 - 最终 alignment evidence：`comparative_methods/EFRM-PyTorch/runs/pretraining/20260722_efrm_sync_dev_v5/figure_data/clip_alignment_evidence.npz`
 - EFRM 配置与 manifest：`comparative_methods/EFRM-PyTorch/runs/pretraining/20260722_efrm_sync_dev_v5/resolved_config.yaml`、`manifest.json`
 - EFRM 论文：`docs/paper_pdf/Jung和An - 2025 - EFRM A Multimodal EEG–fNIRS Representation-learning Model for few-shot brain-signal classification.pdf`
-- 本项目理论与对齐定义：`docs/physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md`
+- 本项目方法依据与对齐定义：`docs/METHOD_RATIONALE.md`
 - 本项目 E7–E9 方案：`docs/physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md`
 - 当前 E2 决策：`experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md`

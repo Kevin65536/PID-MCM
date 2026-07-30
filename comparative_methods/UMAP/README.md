@@ -3,7 +3,7 @@
 > **Historical-result boundary.** The 2026-03 UMAP best-test scores followed
 > repeated test inspection, so they are diagnostic history rather than valid
 > final comparison numbers. A new table value must satisfy the lightweight
-> [final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md).
+> [final-number acceptance rules](../../docs/comparisons/METRIC_ACCEPTANCE.md).
 
 ## Overview
 

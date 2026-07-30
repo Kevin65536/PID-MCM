@@ -626,7 +626,8 @@ final_four_dataset_check_v3_default_20260714
 
 Single-Trial EEG 的污染处理不是通过把 PSD 异常“标准化掉”来解决。分阶段修复、
 对照分支、adaptive QC 和准入条件见
-[`10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md`](10_SINGLE_TRIAL_EEG_ARTIFACT_REMEDIATION_PLAN.md)。
+当前 Single-Trial 分支和 mask 决策已合并到
+[`DATA_CONTRACT.md`](../DATA_CONTRACT.md)。
 当前 `single_trial_eeg_artifact_clean_v3` 已完成 29 subjects / 174 task records
 审计，并以 28 subjects 的 EMG、咬牙、张口受控记录完成循环移位 sham/null 验证。
 registry 默认已切换到 v3；raw 与 v2 仍保留用于诊断和消融。发布页没有给出动作

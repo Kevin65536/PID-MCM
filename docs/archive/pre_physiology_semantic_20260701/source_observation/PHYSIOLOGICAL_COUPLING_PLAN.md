@@ -2,8 +2,8 @@
 
 > Created: 2026-04-30 | Last revised: 2026-06-04
 > Status: Historical mechanism document for the current Croce local highWL-only source/observation runtime
-> Superseded for the approved redesign by: [theoretical foundations](../../../physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md) and [target architecture](../../../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
-> Reference implementation surface: [factorized_labram_vqnsp.py](../../../../src/tokenizers/factorized_labram_vqnsp.py), [neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py)
+> Superseded for the approved redesign by: [consolidated method rationale](../../../METHOD_RATIONALE.md) and [target architecture](../../../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Reference implementation surface: [source_observation_tokenizer.py](../../../../src/compatibility/pre_physiology_semantic_20260701/source_observation_tokenizer.py), [neurovascular_smc.py](../../../../src/inference/neurovascular_smc.py)
 
 ---
 

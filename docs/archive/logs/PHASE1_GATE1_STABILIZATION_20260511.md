@@ -13,8 +13,8 @@ This archive was first recorded while preserving original run paths. During the 
 
 | Artifact | Path | Notes |
 |----------|------|-------|
-| Best config alias | [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml) | Alias to the 320-epoch slow-warmup no-phase baseline |
-| Locked baseline | [experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml](../../../experiments/configs/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Phase 1 Gate1 baseline |
+| Best config alias | [gate1_best_current.yaml](../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml) | Alias to the 320-epoch slow-warmup no-phase baseline |
+| Locked baseline | [gate1_baseline_locked_bs128.yaml](../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_baseline_locked_bs128.yaml) | Clean reusable Phase 1 Gate1 baseline |
 | Best run | [Archived best run](../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_longwarmup_bs128_20260511_175718) | Gate1 pass, best epoch 278, best val_loss 1.6395270029703777 |
 | Reference run | [Archived reference run](../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/s2_phase1_gate1_health_uniform32_stable_sourceonly_balance_provq_nophase_long_bs128_20260511_174538) | First long no-phase run that restored Gate1 pass |
 | Run archive manifest | [Phase 1 archive manifest](../../../experiments/archive/source_observation_phase1_gate1_stabilization_20260511/manifest.json) | Formal bundle of all Phase 1 Gate1 attempts |
@@ -30,4 +30,4 @@ This archive was first recorded while preserving original run paths. During the 
 
 ## Handoff Rule
 
-Phase 2 work should start from [experiments/configs/source_observation/phase1/gate1_best_current.yaml](../../../experiments/configs/source_observation/phase1/gate1_best_current.yaml), keeping Gate1 stable while introducing source semantics through the HRF target path.
+Historical Phase 2 reproduction starts from [gate1_best_current.yaml](../../../experiments/configs/archive/pre_physiology_semantic_20260701/source_observation/phase1/gate1_best_current.yaml), keeping Gate1 stable while introducing source semantics through the HRF target path.

@@ -10,7 +10,7 @@ The current dataset does **not** support the strong requirement that one low-dim
 
 This result does not rescue E0-v2 and does not justify opening the protected test. It changes the requirement that should be imposed on the next physical-teacher candidate.
 
-![Bound-derived architecture modification plan](figures/plans/shared_state_reconstruction_bound_plan.svg)
+![Bound-derived architecture modification plan](../../figures/plans/shared_state_reconstruction_bound_plan.svg)
 
 ## What “lower bound” means here
 
@@ -103,10 +103,10 @@ where $H$ is a delayed hemodynamic transition and $A_{d,s}^m$ is an auditable me
 
 ## Artifacts and reproducibility
 
-- Formal diagnostic run: [`20260706_105937_shared_state_reconstruction_bound_v1`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/)
-- Configuration: [`shared_state_reconstruction_bound.yaml`](../../experiments/configs/physiology_semantic_tokenizer/shared_state_reconstruction_bound.yaml)
-- Analysis implementation: [`evaluate_shared_state_reconstruction_bound.py`](../../experiments/evaluate_shared_state_reconstruction_bound.py)
-- Complete metrics: [`metrics.csv`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/metrics.csv)
-- Capacity figures: [`waveform`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/figures/capacity_curve_waveform.svg), [`descriptor`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/figures/capacity_curve_descriptor.svg)
+- Formal diagnostic run: [`20260706_105937_shared_state_reconstruction_bound_v1`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/)
+- Configuration: [`shared_state_reconstruction_bound.yaml`](../../../../experiments/configs/physiology_semantic_tokenizer/shared_state_reconstruction_bound.yaml)
+- Analysis implementation: [`evaluate_shared_state_reconstruction_bound.py`](../../../../experiments/evaluate_shared_state_reconstruction_bound.py)
+- Complete metrics: [`metrics.csv`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/metrics.csv)
+- Capacity figures: [`waveform`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/figures/capacity_curve_waveform.svg), [`descriptor`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_105937_shared_state_reconstruction_bound_v1/figures/capacity_curve_descriptor.svg)
 
 **Status:** supports revising the teacher and observation architecture; does not support passing E0, starting physical-state-supervised tokenizer training, or opening protected subjects.

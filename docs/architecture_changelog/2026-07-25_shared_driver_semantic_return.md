@@ -92,9 +92,9 @@ allowed.
 ## 📦 Affected authority
 
 - `docs/physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md`
-- `docs/physiology_semantic_tokenizer/03_THEORETICAL_FOUNDATIONS.md`
+- `docs/METHOD_RATIONALE.md`
 - `docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md`
 - `docs/physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md`
 - `docs/physiology_semantic_tokenizer/07_CODE_MIGRATION_PLAN.md`
-- `docs/physiology_semantic_tokenizer/12_ARCHITECTURE_RETURN_AND_METHOD_LESSONS.md`
+- `docs/METHOD_RATIONALE.md`
 - `docs/physiology_semantic_tokenizer/architecture/shared_driver_semantic_return_plan.json`

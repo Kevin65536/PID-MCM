@@ -10,7 +10,7 @@ At a preregistered five-second EEG-leading lag, the tested three-dimensional sha
 
 A joint teacher that can see both modalities obtained a small optimistic compression ceiling. The balanced fraction was limited by the fNIRS side: `0.62%–3.97%` of innovation and `0.56%–3.21%` of total standardized feature variance. This joint-input ceiling is not evidence that either independent tokenizer can recover the state.
 
-![Shared-information summary](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/figures/shared_information_summary.svg)
+![Shared-information summary](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/figures/shared_information_summary.svg)
 
 ## Estimand
 
@@ -54,7 +54,7 @@ Each dataset used two reciprocal folds: one subject fitted every model and the o
 
 The unclipped directional cross-inference medians ranged from `−0.15%` to `−0.51%`. Fifteen of sixteen within-held-out-subject trial/video bootstrap intervals were wholly below zero; the remaining upper endpoint was `+0.059%`. Validation canonical correlations remained small and no dataset showed a reciprocal positive lag profile.
 
-![Lag profiles](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/figures/lag_profiles.svg)
+![Lag profiles](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/figures/lag_profiles.svg)
 
 ## Interpretation
 
@@ -71,11 +71,11 @@ With only two subjects per dataset, these are diagnostic cross-subject failures,
 
 ## Artifacts
 
-- Formal run: [`20260706_173530_cross_dataset_shared_neural_state_v1`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/)
-- Configuration: [`cross_dataset_shared_neural_state.yaml`](../../experiments/configs/physiology_semantic_tokenizer/cross_dataset_shared_neural_state.yaml)
-- Implementation: [`evaluate_cross_dataset_shared_neural_state.py`](../../experiments/evaluate_cross_dataset_shared_neural_state.py)
-- Full lag metrics: [`lag_metrics.csv`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/lag_metrics.csv)
-- Alignment nulls: [`alignment_null_metrics.csv`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/alignment_null_metrics.csv)
-- Dataset inventory: [`dataset_inventory.csv`](../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/dataset_inventory.csv)
+- Formal run: [`20260706_173530_cross_dataset_shared_neural_state_v1`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/)
+- Configuration: [`cross_dataset_shared_neural_state.yaml`](../../../../experiments/configs/physiology_semantic_tokenizer/cross_dataset_shared_neural_state.yaml)
+- Implementation: [`evaluate_cross_dataset_shared_neural_state.py`](../../../../experiments/evaluate_cross_dataset_shared_neural_state.py)
+- Full lag metrics: [`lag_metrics.csv`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/lag_metrics.csv)
+- Alignment nulls: [`alignment_null_metrics.csv`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/alignment_null_metrics.csv)
+- Dataset inventory: [`dataset_inventory.csv`](../../../../experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260706_173530_cross_dataset_shared_neural_state_v1/dataset_inventory.csv)
 
 **Status:** diagnostic complete; cross-inferable shared information not detected; E0 remains blocked.

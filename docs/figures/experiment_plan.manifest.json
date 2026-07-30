@@ -1,0 +1,49 @@
+{
+  "accessibility": {
+    "status_redundancy": "color + symbol + border/hatch",
+    "svg_description": true,
+    "svg_role": "img",
+    "svg_title": true
+  },
+  "authoritative_sources": [
+    "docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md",
+    "docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md",
+    "experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md",
+    "experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/summary.json",
+    "experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/stability.json",
+    "comparative_methods/comparison_metric_targets_v1.yaml",
+    "comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json",
+    "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json",
+    "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md",
+    "comparative_methods/UMAP/EXPERIMENT_SUMMARY.md",
+    "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md"
+  ],
+  "created_from": "docs/figures/experiment_plan_status.json",
+  "outputs": {
+    "docs/figures/experiment_plan.alt.txt": {
+      "bytes": 904,
+      "format": "plain_text_alt",
+      "sha256": "573812d661d829f9cc8572f3c8d56c6729400bdd798e9d975c4d5089860b4095"
+    },
+    "docs/figures/experiment_plan.png": {
+      "bytes": 1103007,
+      "dpi": 300,
+      "format": "png",
+      "sha256": "f99ecbf61a4151386bd8f761896d7a404589a7a403e0f73ab8303aaf92215b4a"
+    },
+    "docs/figures/experiment_plan.svg": {
+      "bytes": 152094,
+      "format": "svg",
+      "sha256": "69493b13d4227dff323f430e5cd6322123ca6d473eb309181f3d29bd78820e26"
+    }
+  },
+  "schema": "experiment_plan_figure_manifest_v1",
+  "snapshot_at": "2026-07-30T23:00:47+08:00",
+  "software": {
+    "font": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "matplotlib": "3.10.8",
+    "platform": "Linux-6.8.0-45-generic-x86_64-with-glibc2.35",
+    "python": "3.12.4"
+  },
+  "source_sha256": "9c88a9ffc7595801f6f6b3c9202a921d7e1e0776cab8493fd9872db7d5bce40f"
+}
