@@ -20,6 +20,7 @@ The versioned R-series surface is deliberately limited to:
 | `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | Formal-v3 did not qualify |
 | `r1p_teacher_perturbation_registry.json` | Three finite train-only G4 stress bundles | Completed |
 | `r2d_continuous_observability.yaml` | One-seed development continuous observability | Completed; bilateral endpoint failed |
+| `token_physiology_atlas.yaml` | Versioned descriptive analysis contract for an already trained tokenizer | Development-only; does not authorize a new VQ or coupling experiment |
 
 Two matching evidence contracts live under
 `docs/physiology_semantic_tokenizer/architecture/`:

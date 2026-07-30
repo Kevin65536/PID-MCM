@@ -1,5 +1,5 @@
 """
-Visualization tools for tokenizer training experiments.
+Legacy visualization tools for tokenizer training experiments.
 
 Generates and saves:
 1. Training curves (loss, perplexity, utilization)
@@ -7,6 +7,13 @@ Generates and saves:
 3. Spectral comparison (PSD)
 4. Codebook usage histogram
 5. Token embedding visualization (t-SNE/PCA)
+
+This module is retained for historical training dashboards and exact replay.
+New Token Physiology Atlas figures should use
+``src.visualization.token_physiology_plots``. That module provides explicit
+missing/support encodings, zero-centred physiological heatmaps, atomic
+multi-format export, provenance manifests and alt text. No runtime deprecation
+warning is emitted so archived scripts remain unaffected.
 """
 
 import numpy as np
@@ -33,7 +40,11 @@ except ImportError:
 
 class TokenizerVisualizer:
     """
-    Visualization toolkit for tokenizer experiments.
+    Legacy visualization toolkit for tokenizer training diagnostics.
+
+    This class does not implement the Atlas subject-equal statistical or
+    provenance contract. Use the functions in ``token_physiology_plots`` for
+    new token-phenotype figures.
     
     Usage:
         visualizer = TokenizerVisualizer(run_dir)

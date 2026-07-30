@@ -1,4 +1,12 @@
-"""Statistics used by the coupling identifiability experiment suite."""
+"""Statistics used by the historical coupling-identifiability experiment suite.
+
+This module remains stable for exact replay of existing artifacts. New
+physiology-token analyses should use ``physiological_patch_features`` for
+versioned, mask-aware patch descriptors, ``token_physiology`` for
+subject-balanced profiles, and ``token_sequence`` for boundary-aware sequence
+and circular-shift-null analyses. No runtime deprecation warning is emitted so
+historical scripts remain unaffected.
+"""
 
 from __future__ import annotations
 
@@ -162,7 +170,13 @@ def subject_block_bootstrap_gain(
 
 
 def patch_features(signal: np.ndarray, *, sample_rate_hz: float, patch_size: int, eeg: bool) -> np.ndarray:
-    """Extract fixed physiological patch descriptors from [B,C,T] signals."""
+    """Extract legacy fixed patch descriptors from ``[B,C,T]`` signals.
+
+    This unversioned flattened representation is retained for historical
+    coupling-suite replay. New code should call
+    :func:`src.analysis.extract_eeg_patch_features` or
+    :func:`src.analysis.extract_fnirs_patch_features`.
+    """
     values = np.asarray(signal, dtype=np.float32)
     if values.ndim != 3 or values.shape[-1] % patch_size:
         raise ValueError("signal must have shape [B,C,T] with T divisible by patch_size")
@@ -195,7 +209,11 @@ def patch_features_torch(
     patch_size: int,
     eeg: bool,
 ) -> torch.Tensor:
-    """GPU-friendly equivalent of :func:`patch_features` for [B,C,T] tensors."""
+    """Legacy GPU equivalent of :func:`patch_features` for ``[B,C,T]``.
+
+    New Atlas analyses use the versioned NumPy extractor and its explicit
+    feature, mask, channel-identity and unit manifests.
+    """
     if signal.ndim != 3 or signal.shape[-1] % patch_size:
         raise ValueError("signal must have shape [B,C,T] with T divisible by patch_size")
     values = signal.float()

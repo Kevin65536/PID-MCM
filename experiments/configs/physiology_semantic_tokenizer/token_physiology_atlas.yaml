@@ -1,0 +1,101 @@
+schema_version: "physiology_token_atlas_config_v1"
+
+analysis:
+  name: "token_physiology_atlas"
+  # Development splits are the default analysis boundary. Opening the protected
+  # test split requires a separate, explicit CLI authorization.
+  splits: ["train", "val"]
+  allow_test: false
+  seed: 20260730
+
+input:
+  unit: "canonical_robust_sd"
+  sample_rate_hz:
+    eeg: 200.0
+    fnirs: 10.0
+  expected_patch_duration_s: 2.0
+
+features:
+  schema_version: "physiological_patch_features.v1"
+  minimum_valid_fraction: 1.0
+  eeg:
+    psd_window: "hann_symmetric"
+    psd_detrend: "constant"
+    reference_band_hz: [1.0, 45.0]
+    bands_hz:
+      delta: [1.0, 4.0]
+      theta: [4.0, 8.0]
+      alpha: [8.0, 13.0]
+      beta: [13.0, 30.0]
+      low_gamma: [30.0, 45.0]
+    absolute_band_power: true
+    relative_band_power: true
+  fnirs:
+    local_morphology: true
+    # Two-second fNIRS patches do not resolve slow hemodynamic bands.
+    band_power: false
+
+profiles:
+  hard_assignments: true
+  soft_assignments: true
+  statistical_unit: "subject"
+  subject_weighting: "equal"
+  min_count: 30
+  min_subjects: 5
+  rare_count: 30
+  bootstrap:
+    iterations: 1000
+    confidence: 0.95
+    unit: "subject"
+
+associations:
+  # Populate only with preregistered operational categorical state arrays that
+  # are actually present in the export. Labels/tasks remain metadata by default.
+  state_fields: []
+  report_directions:
+    - "P(category|token)"
+    - "P(token|category)"
+  report_lift: true
+  report_normalized_mutual_information: true
+  max_state_categories: 64
+  max_metadata_categories: 64
+
+sequence:
+  within_window_only: true
+  lags: [-2, -1, 0, 1, 2]
+  patch_duration_s: 2.0
+  "null":
+    policy: "within-window whole-sequence circular shift"
+    permutations: 200
+
+stability:
+  support_gated_matching: true
+  profile_type: "hard"
+  min_feature_overlap: 2
+
+figures:
+  formats: ["png", "pdf", "svg"]
+  dpi: 180
+  top_tokens: 24
+  write_manifest: true
+  write_alt_text: true
+  overwrite: false
+
+cache:
+  measurement_features:
+    enabled: true
+    checkpoint_independent: true
+  checkpoint_assignments:
+    enabled: true
+    checkpoint_independent: false
+  store_raw_patches: false
+
+automation:
+  default_tier: "core"
+  # Core tables and compact figures are suitable after every completed
+  # tokenizer training run.
+  core_after_training: true
+  bootstrap_mode: "asynchronous"
+  coupling_null_mode: "on_demand"
+  information_ledger_mode: "statistical"
+  full_vector_export_mode: "on_demand"
