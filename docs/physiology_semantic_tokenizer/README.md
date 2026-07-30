@@ -31,6 +31,7 @@ E2 已完整展示旧架构的主要失败模式：固定 `K=128` 量化器本�
 | E0–E2 到底运行了什么？ | [实验日志](06_EXPERIMENT_LOG.md) |
 | 图的 current/plan 状态如何区分？ | [架构视觉化规范](08_ARCHITECTURE_VISUALIZATION.md) |
 | 对比方法如何进入正式比较？ | [比较方法工作流](11_COMPARATIVE_METHOD_EXPERIMENT_WORKFLOW.md) |
+| 对比方法什么指标才可进入论文主表？ | [最终性能数字准入规则](13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md) 与 [机器可读目标](../../comparative_methods/comparison_metric_targets_v1.yaml) |
 | 四条研究支路如何相互影响？ | [项目演进图](../PROJECT_EVOLUTION_MAP.md) |
 
 dated `analysis/` 与旧 overlay 保留其当时语义。后来的 corrigendum 可以纠正口径，但不得改写原 run、配置或数值。

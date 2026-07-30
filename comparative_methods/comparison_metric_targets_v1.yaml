@@ -1,0 +1,338 @@
+schema: comparative_method_final_number_targets_v1
+updated_on: "2026-07-30"
+
+scope:
+  controls: final_numeric_cell_admission_to_paper_tables
+  unit: method_x_task_x_track_x_metric
+  does_not_control:
+    - training_procedure
+    - hyperparameter_search_procedure
+    - data_split_governance
+    - protected_test_management
+    - artifact_hashing
+    - code_or_log_publication
+    - compute_disclosure
+  internal_acceptance_record_only: true
+
+cell_fields:
+  required:
+    - method
+    - task
+    - track
+    - metric
+    - direction
+    - value
+    - aggregation
+    - B0
+    - minimum_admissible
+    - preferred_target
+    - target_basis
+    - source_comparability
+    - relation_status
+    - decision
+  optional_when_available:
+    - uncertainty
+    - repeat_fold_or_subject_summary_values
+    - plausibility_limit
+    - source_value
+    - source_B0
+    - failure_code
+    - table_note
+  public_disclosure_required: false
+
+validity_gate:
+  expected_support_source: existing_method_or_table_result_definition
+  this_contract_adds_seed_or_fold_count: false
+  requires:
+    - finite_value_inside_metric_range
+    - same_task_split_modality_label_budget_metric_and_aggregation_as_table_track
+    - complete_expected_subject_fold_and_seed_support
+    - aggregation_over_all_valid_units_not_best_seed_fold_subject_or_checkpoint
+    - point_and_uncertainty_use_same_statistical_unit
+  method_caused_missing_support: INVALID_VALUE
+  taskwise_best_of_incompatible_variants: prohibited
+  default_display_precision:
+    percentage_points: 2
+    zero_to_one_metrics: 4
+
+baseline_gate:
+  higher_is_better_delta: value_minus_B0
+  lower_is_better_delta: B0_minus_value
+  accept_requires_delta_strictly_positive: true
+  repeat_fold_or_subject_values_are_stability_note_not_extra_hard_gate: true
+  extra_bootstrap_or_permutation_required_for_admission: false
+  metric_B0:
+    accuracy:
+      primary: train_fold_majority_on_same_evaluation_support
+      companion: one_over_K
+    balanced_accuracy: one_over_K
+    macro_f1: stronger_of_majority_and_train_prior_random_expected_macro_f1
+    cohen_kappa: 0.0
+    ccc: 0.0
+    pearson: 0.0
+    spearman: 0.0
+    r2:
+      reference: 0.0
+      additionally_check: actual_heldout_r2_of_train_mean_predictor
+    mae: actual_heldout_error_of_train_target_mean_predictor
+    rmse: actual_heldout_error_of_train_target_mean_predictor
+
+result_reasonableness_gate:
+  interpretation: credible_high_level_inside_available_resources_not_theoretical_ceiling
+  deterministic_fallback_F:
+    any_higher_is_better_metric: "min(legal_max, B0 + 0.02)"
+    mae_or_rmse_lower_is_better: "0.98 * B0"
+  targets_from_H:
+    minimum_T80_higher_is_better: "B0 + 0.80 * (H - B0)"
+    minimum_T80_lower_is_better: "B0 - 0.80 * (B0 - H)"
+    preferred_T90_higher_is_better: "B0 + 0.90 * (H - B0)"
+    preferred_T90_lower_is_better: "B0 - 0.90 * (B0 - H)"
+    requires_H_better_than_B0: true
+    H_definition: strongest_valid_known_candidate_in_same_method_task_track_metric_cell_with_compatible_dataset_support_split_modality_label_budget_aggregation_and_resource_scale
+    weaker_H_may_be_selected_to_lower_target: false
+    incompatible_variant_may_supply_H_per_task: false
+  when_H_exists:
+    minimum_admissible: stricter_direction_aware_of_F_and_T80
+    preferred_target: stricter_direction_aware_of_minimum_admissible_and_T90
+  combine_applicable_source_and_H_targets:
+    minimum_admissible: stricter_direction_aware_threshold
+    preferred_target: stricter_direction_aware_threshold
+  if_no_valid_H_and_no_applicable_source_target:
+    minimum_admissible_equals_F: true
+    preferred_target_equals_minimum_admissible: true
+    highest_decision: TABLE_READY_WITH_NOTE
+  optional_implausibly_good_result_check:
+    trigger: result_beyond_legal_metric_range_comparable_paper_or_credible_compatible_result
+    action: INVALID_VALUE_until_metric_scale_aggregation_and_leakage_are_checked
+  output_anomalies_that_block_normal_table_value:
+    - nonfinite_or_out_of_range_value
+    - incomplete_expected_support
+    - constant_prediction_or_complete_class_collapse_without_explanation
+  claim_boundaries:
+    linear_probe: frozen_representation_quality_only
+    full_finetune: may_support_end_to_end_resource_bounded_level
+
+source_comparison_gate:
+  comparable_requires:
+    - comparable_dataset_and_task
+    - comparable_split
+    - comparable_metric
+    - comparable_modality
+    - comparable_label_budget
+    - comparable_aggregation
+    - comparable_resource_regime
+  above_baseline_recovery:
+    higher_is_better: "(project_value - project_B0) / (paper_value - paper_B0)"
+    lower_is_better: "(project_B0 - project_value) / (paper_B0 - paper_value)"
+    default_targets_for_highly_comparable_cells:
+      TABLE_READY_minimum: 0.90
+      TABLE_READY_WITH_NOTE_minimum: 0.80
+    values_are_project_defaults_not_universal_reproduction_claims: true
+    denominator_guard:
+      paper_gain_must_be_positive: true
+      paper_gain_must_exceed_metric_practical_tolerance: true
+      otherwise: not_applicable
+  incomparable_action:
+    source_comparability: not_applicable
+    use_shared_minimum_admissible_preferred_target_and_baseline_gate: true
+
+relation_gate:
+  applies_only_if:
+    - tasks_or_modalities_are_comparable
+    - paper_relation_is_clear_beyond_reported_uncertainty_or_practical_tie
+  allowed_status:
+    - consistent
+    - tie
+    - not_testable
+    - explained_inversion
+    - unexplained_inversion
+    - not_applicable
+  tie_is_not_inversion: true
+  not_applicable_or_not_testable_does_not_lower_numeric_decision: true
+  missing_paired_uncertainty_does_not_disable_clear_mean_order_beyond_practical_tie: true
+  acceptable_inversion_reasons:
+    - changed_data_or_task_definition
+    - changed_modality_label_budget_split_or_aggregation
+    - theory_supported_domain_shift
+    - confirmed_failure_mode
+
+practical_tolerance_defaults:
+  higher_is_better_native_metric_units: 0.02
+  mae_or_rmse: "0.02 * abs(B0)"
+  interpretation:
+    accuracy_fraction: two_percentage_points
+    ccc: 0.02
+  override_only_with_preexisting_task_convention: true
+  never_adjust_after_observing_candidate_value: true
+
+integrity_rules:
+  prohibited:
+    - clip_value_to_chance
+    - replace_with_paper_value
+    - invent_or_manually_raise_value
+    - choose_best_seed_fold_subject_or_test_checkpoint
+    - choose_different_incompatible_variant_per_task
+    - hide_only_unfavorable_cells
+  valid_low_value_must_be_retained_in_internal_results: true
+
+decision_precedence:
+  mutually_exclusive: true
+  order:
+    - INVALID_VALUE
+    - FAILURE_RESULT
+    - TABLE_READY
+    - TABLE_READY_WITH_NOTE
+    - REJECTED_VALUE
+
+decision_rules:
+  INVALID_VALUE:
+    triggers:
+      - invalid_metric_or_range
+      - wrong_or_incomparable_aggregation
+      - incomplete_method_caused_support
+      - nonfinite_value
+      - suspected_leakage_or_unverified_implausibly_high_value
+    table_action: no_numeric_table_value_until_calculation_is_corrected
+  FAILURE_RESULT:
+    requires:
+      - numeric_result_is_valid
+      - at_least_one_normal_result_gate_fails
+      - confirmed_data_method_or_domain_failure_explains_that_gate_failure
+    table_action: retain_real_value_in_failure_row_or_with_explicit_note_not_as_normal_ceiling
+  TABLE_READY:
+    requires:
+      - validity_gate_pass
+      - baseline_delta_positive
+      - compatible_H_or_applicable_source_target_exists
+      - direction_aware_value_meets_preferred_target
+      - no_blocking_output_anomaly
+      - applicable_source_and_relation_targets_pass
+    table_action: main_table_numeric
+  TABLE_READY_WITH_NOTE:
+    requires:
+      - validity_gate_pass
+      - baseline_delta_positive
+      - direction_aware_value_meets_minimum_admissible
+      - no_blocking_output_anomaly
+      - no_strong_unexplained_relation_inversion
+      - all_applicable_minimum_source_and_relation_gates_pass
+      - TABLE_READY_does_not_apply
+      - at_least_one_explicit_note_trigger_applies
+    examples:
+      - preferred_target_not_met_but_minimum_admissible_met
+      - source_recovery_between_0p80_and_0p90
+      - no_compatible_H_available
+      - small_explained_domain_shift
+    table_action: main_table_numeric_with_short_note
+  REJECTED_VALUE:
+    requires:
+      - numeric_result_is_valid
+      - at_least_one_normal_result_gate_fails
+      - no_confirmed_failure_mode_explains_that_gate_failure
+    table_action: no_normal_main_table_numeric_value
+    if_core_comparator: retain_diagnostic_value_and_reason_outside_normal_ranked_cells
+
+task_aliases:
+  word_generation: wg
+
+task_defaults:
+  motor_imagery:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  mental_arithmetic:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  wg:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  nback:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  dsr:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  visual:
+    type: classification
+    primary_metric: macro_f1
+    B0: derive_from_same_support
+  refed_regression:
+    type: regression
+    primary_metric: ccc
+    B0: 0.0
+    error_baseline: train_target_mean_predictor
+
+current_method_targets:
+  sta_net:
+    source_track:
+      metric: accuracy
+      paper_B0: 0.50
+      tabulated_targets_require_project_B0: 0.50
+      if_project_B0_differs: recompute_with_source_recovery_formula
+      paper_values:
+        motor_imagery: 0.6965
+        mental_arithmetic: 0.8514
+        word_generation: 0.7903
+      default_80_percent_recovery_targets:
+        motor_imagery: 0.65720
+        mental_arithmetic: 0.78112
+        word_generation: 0.73224
+      default_90_percent_recovery_targets:
+        motor_imagery: 0.67685
+        mental_arithmetic: 0.81626
+        word_generation: 0.76127
+      descriptive_relation: mental_arithmetic_above_word_generation_above_motor_imagery
+      applies_to_shared_cross_subject_track: false
+    shared_track:
+      preferred_target_reference: strongest_credible_20260727_same_metric_aggregate_when_aggregation_is_compatible
+      preferred_target_rule: recover_90_percent_of_reference_above_baseline_gain
+      historical_strict_reference_H:
+        motor_imagery_macro_f1: 0.5640074863
+        mental_arithmetic_macro_f1: 0.6283926126
+        wg_macro_f1: 0.6211067584
+        nback_macro_f1: 0.3751816951
+        dsr_macro_f1: 0.6068919194
+        visual_macro_f1: 0.2501337678
+        refed_ccc: 0.0807234547
+  efrm:
+    project_tasks_are_directly_comparable_to_paper_rows: false
+    project_mi_wg_relation_target: not_applicable
+    separate_tracks:
+      - frozen_backbone_linear_probe
+      - full_finetune
+      - target_excluded_pretraining
+      - target_seen_pretraining
+    v2_direct_ranking_requires:
+      - identical_subjects
+      - identical_folds
+      - identical_seeds
+      - identical_metric
+      - identical_aggregation
+      - identical_modality
+      - identical_transfer_setting
+    v1_context_only:
+      hard_minimum_for_v2: false
+      eligible_as_H_without_separate_compatibility_proof: false
+      v2_default_without_compatible_H: use_global_metric_specific_fallback
+      historical_v1_strict_values:
+        motor_imagery_macro_f1: 0.470710
+        mental_arithmetic_macro_f1: 0.552085
+        wg_macro_f1: 0.533795
+        nback_macro_f1: 0.328917
+        dsr_macro_f1: 0.497745
+        visual_macro_f1: 0.209756
+        refed_ccc: 0.047845
+  umap:
+    paper_domain: eeg_plus_eye_tracking_emotion_classification_on_SEED_IV_V_VII
+    project_absolute_paper_target: not_applicable
+    descriptive_paper_relation: paired_above_eeg_only_above_eye_only
+    project_mi_wg_relation_target: not_applicable
+    historical_repeated_best_test_values_admitted: false
+    project_target:
+      minimum_admissible: use_global_metric_specific_fallback
+      preferred_target: equal_minimum_admissible_until_strongest_compatible_valid_H_exists
+      highest_decision_without_H_or_applicable_source_target: TABLE_READY_WITH_NOTE

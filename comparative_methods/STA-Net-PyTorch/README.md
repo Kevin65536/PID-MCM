@@ -10,6 +10,13 @@ The untouched upstream checkout remains in `../STA-Net/`. The reimplementation
 is a project-adapted comparative method, not a claim of source-level numerical
 equivalence.
 
+Final paper-table numbers are judged by the lightweight
+[final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+and [machine-readable targets](../comparison_metric_targets_v1.yaml). These
+rules assess only the resulting number; they do not replace this method's
+training protocol. Source-aligned MI/MA/WG and the shared benchmark remain
+separate result tracks.
+
 ## Layout
 
 - `sta_net_pytorch/`: model and unified-loader adapter
@@ -138,8 +145,11 @@ task configurations are frozen:
 This protocol permits training and test samples from the same subject while
 keeping session, record, video, or semantic-trial dependency groups disjoint.
 It trains all registered subject/fold pairs, evaluates each protected group
-once, and writes fold-level, subject-level, source-aligned MI/MA/WG, and shared
-within-subject summaries under `runs/within_subject/<run-id>/aggregate/`.
+once, and writes fold-level, subject-level, paper-metric MI/MA/WG companion,
+and shared within-subject summaries under
+`runs/within_subject/<run-id>/aggregate/`. The MI/MA/WG companion uses paper
+metric names for contextual comparison; its split/estimand is not matched to
+the source paper and it is not a source-aligned reproduction.
 Pooled-window metrics remain diagnostics and do not replace the subject-level
 primary endpoints.
 

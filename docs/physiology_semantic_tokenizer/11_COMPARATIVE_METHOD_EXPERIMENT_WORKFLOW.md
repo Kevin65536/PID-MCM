@@ -1,6 +1,7 @@
 # Comparative-method experiment workflow
 
-_Four-dataset downstream benchmark contract and readiness audit, updated 2026-07-22_
+_Four-dataset downstream benchmark contract and readiness audit, updated
+2026-07-22; final-number addendum added 2026-07-30_
 
 ---
 
@@ -9,6 +10,10 @@ _Four-dataset downstream benchmark contract and readiness audit, updated 2026-07
 The comparison program is approved to enter **implementation smoke**, but it is not ready for formal performance training. The measured-data entrance, restored DSR Go/No-go contract, and Simultaneous EOG-clean branch are available through `UnifiedPhysiologyWindowDataset`; REFED sequence regression uses its contract-preserving subclass `REFEDContinuousSequenceDataset`. A task-configurable PyTorch STA-Net reimplementation and unified-loader adapter pass correctness smoke on all seven task tracks. EFRM now has an isolated synchronized-data implementation, public-split pretraining boundary, seven-task transfer contract, CLIP-pair evidence exporter, and real-data CPU smoke; full ViT-base smoke, source-protocol reproduction, frozen performance protocols, and protected evaluation remain incomplete.
 
 This document fixes the workflow while leaving the final comparison-method set open. STA-Net and EFRM are admitted as **implemented comparison candidates** for source-fidelity and shared-protocol development; neither has entered protected performance evaluation. The project explicitly permits task-specific classification and regression heads when the variant name and deviation manifest are preserved. The labels “traditional-model SOTA” and “foundation-model SOTA” remain literature-positioning hypotheses until the method review records the exact paper scope, evaluation regime, code revision, license, and relevance to each task. They are not project conclusions.
+
+Final table values additionally follow the result-only
+[final-number acceptance rules](13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+and [machine-readable targets](../../comparative_methods/comparison_metric_targets_v1.yaml).
 
 ### Audit verdict
 
@@ -379,6 +384,13 @@ Accuracy and Cohen's Kappa are mandatory outputs for every discrete STA-Net eval
 
 Each suite has exactly one declared primary endpoint as specified above. Primary endpoints are aggregated over held-out subjects or protected within-subject dependency groups, with subject-level bootstrap uncertainty where applicable. Class imbalance handling, checkpoint selection, and metric calibration are fixed from training/validation data. No universal numerical pass threshold is imposed.
 
+Before a result is filled into the paper table, apply the lightweight
+[final-number acceptance rules](13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md).
+They check only the resulting number: validity and comparability, improvement
+over the correct simple baseline, a per-cell reasonable target band, and any
+applicable source-paper value or task relation. They do not impose a new
+training, disclosure, hashing, or protected-test process.
+
 For the overall summary, report every dataset/task separately. A cross-task summary may use paired ranks or normalized effect sizes as secondary evidence; it cannot average macro F1 and concordance correlation into one score.
 
 **Gate C5:** `decision_protocol.yaml`, `metric_registry.json`, and `evidence_calibration.json` enumerate and freeze both result families, the source-paper Accuracy/Kappa outputs, aggregation units, and uncertainty procedures before either protected evaluation is opened.
@@ -390,6 +402,11 @@ Formal runs execute both the subject-independent and within-subject task–split
 The two evaluation families are never merged into one headline number. Reports contain separate tables for source-aligned STA-Net reproduction, shared within-subject comparison, and shared cross-subject comparison. The within-subject table reports the per-subject rows behind every aggregate so that a large number of windows cannot masquerade as a large subject denominator.
 
 The complete protected evaluation for each family is opened once per frozen protocol version: outer-subject folds for the cross-subject family and protected dependency-group folds for the within-subject family. Failed or incomplete methods remain visible; they are not dropped after inspecting project-model results. Revisions require a new protocol version and fresh protected evidence.
+
+The final table accepts `TABLE_READY` and `TABLE_READY_WITH_NOTE` values.
+Other results are marked `REJECTED_VALUE`, `FAILURE_RESULT`, or
+`INVALID_VALUE`; this result-only rule does not prescribe any additional run.
+No result is clipped to chance or replaced with the paper value.
 
 **Gate C6:** every table cell resolves to an immutable run manifest, prediction file, subject-level metric table, environment, checkpoint hash, and completion status.
 
@@ -485,6 +502,8 @@ The full-loader audit adds three prerequisites ahead of method tensor export: re
 - [Experiment log](06_EXPERIMENT_LOG.md)
 - [Implementation and validation plan](04_IMPLEMENTATION_VALIDATION_PLAN.md)
 - [Data normalization and unified cache audit](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md)
+- [Final performance-number targets](13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+- [Machine-readable final-number targets](../../comparative_methods/comparison_metric_targets_v1.yaml)
 - [Dataset descriptions](../DATASETS_DESCRIPTION.md)
 
 ## 📚 References
@@ -497,4 +516,4 @@ The full-loader audit adds three prerequisites ahead of method tensor export: re
 
 [^4]: Jung, E., & An, J. “EFRM official implementation.” GitHub. https://github.com/EuijinMisp/EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
 
-_Last updated: 2026-07-22_
+_Readiness audit last updated: 2026-07-22; final-number addendum: 2026-07-30_

@@ -1,5 +1,10 @@
 # UMAP Comparative Method — EEG + fNIRS Multimodal Fusion
 
+> **Historical-result boundary.** The 2026-03 UMAP best-test scores followed
+> repeated test inspection, so they are diagnostic history rather than valid
+> final comparison numbers. A new table value must satisfy the lightweight
+> [final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md).
+
 ## Overview
 
 **UMAP** (Unified Multi-task Pre-training) adapts BLIP-2's Q-Former architecture
@@ -8,6 +13,13 @@ to align and fuse two modalities, then supports finetuning with missing modaliti
 
 **Paper**: *Multimodal Emotion Recognition with Missing Modality via A Unified
 Multi-task Pre-training Framework*
+
+The paper evaluates EEG + eye-tracking emotion classification on
+SEED-IV/V/VII with Accuracy and weighted F1. This project replaces eye
+tracking with fNIRS and changes the downstream task family, so the paper's
+absolute values are `not_applicable` to project MI/WG and other tasks. The
+paper-domain relation `paired > EEG-only > eye-only` is a descriptive
+original-domain prior only; it is not a constraint on project task ordering.
 
 ## Directory Structure
 

@@ -24,6 +24,13 @@ target dataset. Inner validation selects the downstream training epoch, after
 which the head is reinitialized and refitted on the complete outer-training
 partition before protected evaluation.
 
+Final paper-table numbers additionally follow the lightweight
+[final-number acceptance rules](../../docs/physiology_semantic_tokenizer/13_COMPARATIVE_METHOD_FINAL_METRIC_ACCEPTANCE.md)
+and [machine-readable targets](../comparison_metric_targets_v1.yaml). They
+judge only the resulting value and do not rewrite the frozen LODO training
+estimand. Linear probing remains a representation track; full fine-tuning is a
+separate end-to-end track.
+
 The completed source/target dual-protocol v1 remains historical development
 evidence. It is not the protocol for future EFRM-versus-mainline ranking and
 its checkpoint must not be reused in v2.
@@ -127,17 +134,14 @@ not the primary EFRM run.
 
 ### Alignment failure-warning assessment
 
-The first interrupted development run provides a **serious but scope-limited
-warning** that the source-faithful alignment branch has not activated by epoch
-8. This grade does not come from the flat CLIP scalar alone:
-
-- train and validation CLIP losses remain at their exact random-logit
-  baselines while both reconstruction losses improve substantially;
-- both retrieval directions are at chance, positive-vs-negative AUC is
-  `0.4990`, the mean positive-minus-negative cosine is approximately zero, and
-  the mean positive-minus-hardest-negative margin is negative;
-- validation embeddings are strongly angularly concentrated, especially the
-  fNIRS embedding with centered effective rank `3.38` in 768 dimensions.
+The epoch-8 interruption was the first **serious but scope-limited warning**;
+it is not the current state. The unchanged public-development run subsequently
+completed 84 epochs with best checkpoint epoch 69. Re-evaluation of best and
+latest checkpoints still found chance top-1 retrieval in both directions,
+positive-vs-negative AUC below `0.5`, negative positive-pair margins, and
+near-one-dimensional validation embeddings. Aggregated validation CLIP
+evidence likewise did not improve, so the warning is now a completed
+public-development finding rather than a planned epoch-20 decision.
 
 The fixed source multiplier makes scalar CLIP loss intrinsically insensitive.
 For 32 pairs, all logits are bounded to `[-0.1, 0.1]`: random CE is
@@ -146,24 +150,14 @@ positive cosine at `+1` and every negative at `-1` is about `3.2726`.
 Retrieval, positive/negative separation, permutation evidence, and embedding
 geometry therefore carry more diagnostic weight than the raw loss curve.
 
-This evidence does **not** establish that the synchronized datasets contain no
-EEG-fNIRS relationship. The run stopped before the prespecified minimum 20
-epochs, and the saved retrieval evidence represents one validation batch from
-one subject and dataset. More importantly, EFRM supervises exact
-same-window-instance identity. Slow, delayed, task-shared physiological
-coupling can exist without making one fNIRS window uniquely retrievable among
-nearby or physiologically similar negatives.
-
-The faithful run is therefore resumed unchanged to an epoch-20 decision gate.
-At that gate, deterministic dataset/subject-stratified public-validation
-evidence must be considered. If bidirectional retrieval remains at chance,
-positive-vs-negative AUC remains near `0.5`, and positive margins remain
-non-positive, the result is recorded as
-`source_faithful_alignment_failed_on_sync_track`. It is a finding about the
-EFRM objective under this data regime, not evidence against physiological
-coupling. A learned or conventional divisive-temperature experiment starts
-from scratch under a separate ablation name; it is never substituted for the
-source-faithful baseline.
+This result is recorded as a failure of source-faithful exact-window alignment
+on the synchronized public-development track. It does **not** establish that
+the datasets contain no EEG-fNIRS relationship: slow, delayed, task-shared
+coupling need not make one fNIRS window uniquely retrievable among nearby or
+physiologically similar negatives. A learned/divisive-temperature experiment
+must start from scratch under a separate ablation name and may never replace
+the source-faithful baseline. Full evidence and numerical boundaries are in
+[the completed alignment analysis](../../docs/physiology_semantic_tokenizer/analysis/20260724_EFRM_RETRAINING_AND_ALIGNMENT_COMPARISON.md).
 
 ## Leakage boundary and evaluation matrix
 
