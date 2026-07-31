@@ -1,0 +1,56 @@
+{
+  "auditor_path": "comparative_methods/BIOT/audit_public_run_v2.py",
+  "auditor_sha256": "4f40e0ae8fac5a637b8fd792e4f145064eafadb5d100507781b394fdb712647b",
+  "created_at": "2026-07-31T13:31:48.575743+00:00",
+  "protected_test_opened": false,
+  "run_reports": [
+    {
+      "feature_cache_sha256": "7bfec4dde7f84bbb1aae677a538b3e61e9512311c459760afc84e2fe6c6325c7",
+      "manifest_sha256": "bc05d7da82038bd70893135a92cf4174a82b24a58e762b6de06e0fcdb84c5b22",
+      "mode": "smoke_only",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "31f6dee2b4543cc25faa7891a25ad9c8bad2879f63f5928b64274c35cdca24ca",
+      "run_dir": "comparative_methods/BIOT/runs/public_development_v2/20260731_mi_outer0_seed17_smoke_v2",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 1,
+        "candidate_index": 0,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "selection_train_sample_count": 8,
+      "selection_validation_sample_count": 8,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "motor_imagery",
+      "validation_macro_f1": 0.75
+    },
+    {
+      "feature_cache_sha256": "7bfec4dde7f84bbb1aae677a538b3e61e9512311c459760afc84e2fe6c6325c7",
+      "manifest_sha256": "1b49954083591f044ba19c3d7f5f2127ee3d36ad6351bed5b11bab2cbc06ae1f",
+      "mode": "public_selection_and_refit",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "bae18e603660566e9ad67c183072baf456373ac3d5d67765fef788ff72e72b48",
+      "run_dir": "comparative_methods/BIOT/runs/public_development_v2/20260731_mi_outer0_seed17_public_pilot_v2",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 23,
+        "candidate_index": 2,
+        "learning_rate": 0.0003,
+        "weight_decay": 0.0
+      },
+      "selection_train_sample_count": 900,
+      "selection_validation_sample_count": 480,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "motor_imagery",
+      "validation_macro_f1": 0.541583264649319
+    }
+  ],
+  "runner_config_path": "comparative_methods/BIOT/configs/public_development_v2.yaml",
+  "runner_config_sha256": "94fb3b41d65e0b871e097fb1f1a8a261884aac759d6b6ad7cd9760d16ce51af8",
+  "schema": "biot_public_development_audit_v2",
+  "status": "pass"
+}
