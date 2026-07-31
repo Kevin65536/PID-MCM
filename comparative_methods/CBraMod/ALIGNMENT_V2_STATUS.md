@@ -52,7 +52,23 @@ It can be regenerated, without protected reads, using:
 PYTHONPATH=. .venv/bin/python comparative_methods/CBraMod/audit_alignment_v2.py
 ```
 
-The next serial step is a separately reviewed CBraMod-only public-development
-runner and candidate job matrix. That step may begin only after its code review
-and explicit public launch authorization; it may not authorize protected
-evaluation or start REVE concurrently.
+## Public-development implementation
+
+The CBraMod-only runner now performs fold-specific public feature extraction,
+outer-train-only feature standardization and hyperparameter selection, then a
+train-plus-public-validation refit with a separately fitted refit
+standardizer. It retains public validation predictions, failure state, a
+hash-complete feature-cache identity, and a `weights_only=True` reloadable
+refit checkpoint. A cache cannot contain samples outside one fold's public
+train/validation membership.
+
+Both a connectivity smoke and a full MI/outer0/seed17 pilot pass independent
+artifact auditing. They share the same retained fold-specific feature cache;
+their validation scores remain development-only and are not table-admissible.
+The retained 90-job candidate matrix is strictly serial
+(`max_concurrent_jobs=1`), permits no automatic retry, and is explicitly not
+self-authorizing.
+
+The next serial step is review of the controller followed by a separate public
+launch authorization. Neither the candidate matrix nor its pilot authorizes
+protected evaluation or concurrent REVE work.

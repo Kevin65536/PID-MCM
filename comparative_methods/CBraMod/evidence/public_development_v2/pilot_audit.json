@@ -1,0 +1,56 @@
+{
+  "auditor_path": "comparative_methods/CBraMod/audit_public_run_v2.py",
+  "auditor_sha256": "c6edd7a6a703e5047bdee552b445dbdb11d02af6a97992f3fc5c5731f70b1ac8",
+  "created_at": "2026-07-31T14:39:48.629831+00:00",
+  "protected_test_opened": false,
+  "run_reports": [
+    {
+      "feature_cache_sha256": "7f92bf4751619ef25d2105816a137fa636b3b349d76e4c24f73350e7e0762af0",
+      "manifest_sha256": "13fd490ee4785b28fb464cc2d0689f58a5897af3074d4dc7b740990d93912625",
+      "mode": "smoke_only",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "d8aeecacdcbef824400365c49d8018e4bbd59700eefdd0e046b4808cdc750e29",
+      "run_dir": "comparative_methods/CBraMod/runs/public_development_v2/pilot_mi_outer0_seed17",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 1,
+        "candidate_index": 0,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "selection_train_sample_count": 8,
+      "selection_validation_sample_count": 8,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "motor_imagery",
+      "validation_macro_f1": 0.3333333333333333
+    },
+    {
+      "feature_cache_sha256": "7f92bf4751619ef25d2105816a137fa636b3b349d76e4c24f73350e7e0762af0",
+      "manifest_sha256": "1609d1461a0018fc67f7b7f6fe05c1a07cd4df176171205ca81a0a5e9c41c050",
+      "mode": "public_selection_and_refit",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "e689bb64a9c1c149118ce8f4a8f7004c0c38a59dc39357587fcce84ab7565625",
+      "run_dir": "comparative_methods/CBraMod/runs/public_development_v2/pilot_full_mi_outer0_seed17",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 39,
+        "candidate_index": 0,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "selection_train_sample_count": 900,
+      "selection_validation_sample_count": 480,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "motor_imagery",
+      "validation_macro_f1": 0.5438058035714286
+    }
+  ],
+  "runner_config_path": "comparative_methods/CBraMod/configs/public_development_v2.yaml",
+  "runner_config_sha256": "fcea43c89136363f0da250d86910d95db9b27582b6801b4693b77d5710b473bb",
+  "schema": "cbramod_public_development_audit_v2",
+  "status": "pass"
+}

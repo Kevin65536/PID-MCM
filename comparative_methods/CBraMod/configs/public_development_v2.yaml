@@ -1,0 +1,61 @@
+schema: cbramod_public_development_v2
+protocol_id: cbramod_public_development_v2
+method_id: cbramod
+track: single_modal_eeg_official_pretrained_linear_probe
+mode: public_development_only
+protected_test_default: locked
+
+alignment:
+  config: comparative_methods/CBraMod/configs/alignment_v2.yaml
+  config_sha256: 25dd2c9535f93a7aa070955bc65a1e03761152f3ab091342d172001aa4f0b753
+  evidence_summary: comparative_methods/CBraMod/evidence/alignment_v2/summary.json
+  evidence_summary_sha256: 05a45da7acf1bf6394a01bc3d4df112ebdd1694a4fd22eadc8b774f78d05bdce
+  required_status: implementation_review_complete_A0_A7_pass_A8_pending
+
+job_matrix:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  outer_folds: [0, 1, 2, 3, 4]
+  seeds: [17, 42, 73]
+  expected_public_jobs: 90
+  refed_regression: unsupported_CBRAMOD_NO_PARTIAL_TIME_MASK_CONTRACT
+
+selection:
+  metric: macro_f1
+  mode: max
+  learning_rates: [0.001, 0.0003]
+  weight_decays: [0.0, 0.01]
+  epoch_cap: 40
+  batch_size: 128
+  class_weighting: inverse_frequency
+  feature_standardization: outer_train_coordinate_zscore
+  feature_standardization_epsilon: 1.0e-6
+  tie_break: lower_candidate_index
+
+refit:
+  membership: outer_train_plus_public_validation
+  epochs: selected_best_epoch
+  hyperparameters: selected_public_validation_candidate
+  feature_standardization: refit_membership_coordinate_zscore
+  protected_evaluation: forbidden_until_separate_unlock
+
+smoke:
+  train_samples_per_class: 4
+  validation_samples_per_class: 4
+  epoch_cap: 2
+  learning_rates: [0.001]
+  weight_decays: [0.0]
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  oom_batch_size_fallback: forbidden_before_A8_freeze
+  completed_run_overwrite: forbidden
+
+resources:
+  device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  minimum_free_gpu_gib: 6
+  gpu_lock_path: /tmp/pid_mcm_cbramod_public_gpu1.lock
+  feature_cache_root: comparative_methods/CBraMod/runs/feature_cache_v2
+  run_root: comparative_methods/CBraMod/runs/public_development_v2
