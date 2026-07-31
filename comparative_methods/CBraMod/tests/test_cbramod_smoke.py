@@ -29,7 +29,9 @@ def test_official_checkpoint_is_hash_verified_and_strictly_loadable() -> None:
     encoder, metadata = load_verified_cbramod_encoder()
     assert metadata.patch_samples == 200
     assert metadata.embedding_dim == 200
+    assert metadata.representation_layer == "encoder_latent_before_pretraining_proj_out"
     assert len(metadata.sha256) == 64
+    assert isinstance(encoder.proj_out, torch.nn.Identity)
     assert not any(parameter.requires_grad for parameter in encoder.parameters())
     assert encoder.training is False
 
@@ -61,6 +63,14 @@ def test_adapter_rejects_wrong_rate_nonpatch_window_and_missing_support() -> Non
         )
 
 
+def test_adapter_rejects_pretraining_reconstruction_projection() -> None:
+    _require_local_assets()
+    encoder, _ = load_verified_cbramod_encoder()
+    encoder.proj_out = torch.nn.Linear(200, 200)
+    with pytest.raises(ValueError, match="proj_out=Identity"):
+        CBraModFrozenEncoder(encoder)
+
+
 def test_gpu_frozen_probe_forward_backward_optimizer_and_reload() -> None:
     _require_local_assets()
     if not torch.cuda.is_available():
@@ -76,6 +86,15 @@ def test_gpu_frozen_probe_forward_backward_optimizer_and_reload() -> None:
     names = tuple(f"EEG{index:02d}" for index in range(18))
     optimizer = torch.optim.AdamW(probe.head.parameters(), lr=1e-3)
     initial_head = probe.head.weight.detach().clone()
+    with torch.no_grad():
+        latent_tokens = encoder(eeg.reshape(2, 18, 2, 200))
+        expected_embedding = latent_tokens.mean(dim=(1, 2))
+        actual_embedding = probe.frozen_encoder(
+            eeg,
+            sampling_rate_hz=200.0,
+            channel_names=names,
+        )
+    torch.testing.assert_close(actual_embedding, expected_embedding)
     logits = probe(eeg, sampling_rate_hz=200.0, channel_names=names)
     loss = F.cross_entropy(logits, target)
     assert logits.shape == (2, 4)

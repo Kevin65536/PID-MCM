@@ -1,4 +1,4 @@
-"""Audited CBraMod checkpoint loading and provisional frozen-probe wrappers."""
+"""Audited CBraMod checkpoint loading and source-faithful probe wrappers."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ class CBraModCheckpointMetadata:
     source_revision: str
     patch_samples: int
     embedding_dim: int
+    representation_layer: str
 
 
 def _sha256(path: Path) -> str:
@@ -124,6 +125,11 @@ def load_verified_cbramod_encoder(
         nhead=8,
     )
     encoder.load_state_dict(state, strict=True)
+    # The official quick example and every released downstream wrapper remove
+    # the pretraining reconstruction projection *after* strict checkpoint
+    # loading. Downstream features are the encoder latent tokens, not the
+    # reconstruction values produced by proj_out.
+    encoder.proj_out = nn.Identity()
     encoder.requires_grad_(False)
     encoder.eval()
     encoder.to(device)
@@ -135,12 +141,13 @@ def load_verified_cbramod_encoder(
         source_revision=str(artifact["source_revision"]),
         patch_samples=200,
         embedding_dim=200,
+        representation_layer="encoder_latent_before_pretraining_proj_out",
     )
     return encoder, metadata
 
 
 class CBraModFrozenEncoder(nn.Module):
-    """200 Hz EEG adapter with explicitly provisional mean token pooling."""
+    """200 Hz EEG adapter using the official latent-token average-pooling route."""
 
     def __init__(
         self,
@@ -148,11 +155,15 @@ class CBraModFrozenEncoder(nn.Module):
         *,
         sampling_rate_hz: float = 200.0,
         patch_samples: int = 200,
-        token_pooling: str = "mean",
+        token_pooling: str = "official_avgpooling_patch_reps",
     ) -> None:
         super().__init__()
-        if token_pooling != "mean":
-            raise ValueError("only the provisional mean token pooling is implemented")
+        if token_pooling != "official_avgpooling_patch_reps":
+            raise ValueError("only official_avgpooling_patch_reps is implemented")
+        if not isinstance(getattr(encoder, "proj_out", None), nn.Identity):
+            raise ValueError(
+                "CBraMod downstream encoder must expose latent tokens with proj_out=Identity"
+            )
         self.encoder = encoder
         self.sampling_rate_hz = float(sampling_rate_hz)
         self.patch_samples = int(patch_samples)
@@ -203,6 +214,11 @@ class CBraModFrozenEncoder(nn.Module):
         self.encoder.eval()
         with torch.no_grad():
             tokens = self.encoder(patches)
+            expected_tokens = (batch, channels, samples // self.patch_samples, 200)
+            if tokens.shape != expected_tokens or not bool(torch.isfinite(tokens).all()):
+                raise RuntimeError(
+                    f"CBraMod encoder returned invalid latent tokens {tuple(tokens.shape)}"
+                )
             embedding = tokens.mean(dim=(1, 2))
         if embedding.shape != (batch, 200) or not bool(torch.isfinite(embedding).all()):
             raise RuntimeError(
