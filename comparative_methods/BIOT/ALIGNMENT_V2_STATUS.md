@@ -44,5 +44,7 @@ Both the connectivity smoke and the full MI/outer0/seed17 public pilot pass;
 their validation scores remain development-only and are not table-admissible.
 The candidate 90-job matrix is serial (`max_concurrent_jobs=1`), has zero
 automatic retries, retains failures, and is explicitly not self-authorizing.
-Therefore A8 and the BIOT delivery queue remain open pending matrix review and
-execution; no protected command is present.
+The separate reviewed launch manifest authorizes only this public matrix and
+keeps protected evaluation and CBraMod work unauthorized. A8 and the BIOT
+delivery queue therefore remain open during matrix execution; no protected
+command is present.
