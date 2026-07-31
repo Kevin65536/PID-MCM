@@ -63,6 +63,14 @@ def load_launch(path: str | Path) -> tuple[dict[str, Any], Path, dict[str, Any],
         raise ValueError("BIOT matrix controller requires max_concurrent_jobs=1")
     if int(launch["execution"]["automatic_retry_count"]) != 0:
         raise ValueError("BIOT matrix controller does not admit automatic retries")
+    pilot_path = resolve_repo_path(launch["pilot_evidence"]["path"])
+    if sha256_file(pilot_path) != str(launch["pilot_evidence"]["sha256"]):
+        raise RuntimeError("BIOT public pilot evidence fingerprint drifted")
+    pilot = load_mapping(pilot_path)
+    if pilot.get("status") != launch["pilot_evidence"]["required_status"]:
+        raise RuntimeError("BIOT public pilot does not have the required reviewed status")
+    if pilot.get("protected_test_opened") is not False:
+        raise PermissionError("BIOT public pilot reports protected access")
     worker_path = resolve_repo_path(launch["controller"]["path"])
     if worker_path != Path(__file__).resolve():
         raise RuntimeError("launch manifest names a different BIOT controller")
@@ -76,6 +84,8 @@ def load_launch(path: str | Path) -> tuple[dict[str, Any], Path, dict[str, Any],
         raise ValueError("launch references an unexpected job matrix")
     if matrix.get("matrix_identity_sha256") != launch["matrix"]["identity_sha256"]:
         raise RuntimeError("launch matrix identity differs from the retained candidate")
+    if int(launch["matrix"]["expected_job_count"]) != int(matrix.get("job_count", -1)):
+        raise RuntimeError("launch expected job count differs from the retained matrix")
     if int(matrix.get("job_count", -1)) != 90:
         raise ValueError("BIOT launch requires exactly 90 public jobs")
     if int(matrix.get("max_concurrent_jobs", -1)) != 1:
@@ -90,6 +100,12 @@ def load_launch(path: str | Path) -> tuple[dict[str, Any], Path, dict[str, Any],
         raise RuntimeError("launch runner identity differs from the retained matrix")
     if matrix.get("runner_config_sha256") != launch["runner"]["config_sha256"]:
         raise RuntimeError("launch config identity differs from the retained matrix")
+    runner_path = resolve_repo_path(launch["runner"]["path"])
+    config_path = resolve_repo_path(launch["runner"]["config"])
+    if sha256_file(runner_path) != str(launch["runner"]["sha256"]):
+        raise RuntimeError("BIOT runner source fingerprint drifted")
+    if sha256_file(config_path) != str(launch["runner"]["config_sha256"]):
+        raise RuntimeError("BIOT runner config fingerprint drifted")
     return launch, launch_path, matrix, matrix_path
 
 
