@@ -9,9 +9,9 @@ subjects 24–29 remain closed. R2-P, R3–R7, and a new SD-SVQ/VQ generation ar
 not authorized.
 
 Comparison work continues independently. STA-Net's formal five-fold benchmark
-is complete. EFRM LODO v2 is running its fourth Stage-A target-excluded
-selection job; its protected evaluation remains closed. UMAP still needs a new
-formal rerun.
+is complete, EFRM LODO v2 remains under its own protected boundary, and the
+fixed BIOT/CBraMod/REVE/NormWear/BrainFusion source-and-weight inventory is
+prepared without authorizing new formal runs.
 
 Start with the [full experiment plan](docs/EXPERIMENT_PLAN.md) and
 [documentation map](docs/README.md).
@@ -26,6 +26,7 @@ Start with the [full experiment plan](docs/EXPERIMENT_PLAN.md) and
 | What code is currently runnable? | [Architecture](docs/ARCHITECTURE.md) |
 | What results were retained? | [Results index](experiments/RESULTS_INDEX.md) |
 | How are comparisons run and admitted? | [Comparison protocol](docs/comparisons/PROTOCOL.md) |
+| Which comparison sources and weights are prepared? | [Comparison asset status](comparative_methods/ASSET_STATUS.md) |
 | How should a frozen tokenizer be analyzed? | [Token Physiology Atlas](docs/analysis/TOKEN_PHYSIOLOGY_ATLAS.md) |
 | How should code and experiments be changed? | [Contributor guide](CONTRIBUTING.md) |
 
@@ -35,7 +36,7 @@ Start with the [full experiment plan](docs/EXPERIMENT_PLAN.md) and
 src/                    reusable data, inference, tokenizer, and analysis code
 tests/                  active contract, scientific-gate, and regression tests
 experiments/            configs, executable workflows, active runs, archives
-comparative_methods/    isolated STA-Net, EFRM, and UMAP implementations
+comparative_methods/    isolated comparison implementations and B0 assets
 croce_validation/       physical-model validation and expensive legacy cache
 docs/                   active contracts, status, evidence, history, literature
 data/                   immutable measured data and derived caches

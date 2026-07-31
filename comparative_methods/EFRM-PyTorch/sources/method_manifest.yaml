@@ -17,6 +17,12 @@ target_corpus_overlap:
   simultaneous_eeg_nirs: excluded_when_target_under_lodo_v2
   visual_cognitive_motivation: excluded_when_target_under_lodo_v2
   refed: excluded_when_target_under_lodo_v2
+gate_status:
+  B0_source_fixed: pass_with_no_redistribution
+  B1_input_contract: pass_existing_adapter
+  B2_software_smoke: pass_existing_tests
+  B3_source_fidelity: independent_pytorch_adaptation_documented
+  B4_protocol_freeze: pass_existing_formal_protocol
 declared_deviations:
   - all pretraining inputs are synchronized paired EEG-fNIRS
   - EEG and fNIRS sampling rates are 200 Hz and 10 Hz

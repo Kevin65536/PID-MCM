@@ -88,12 +88,29 @@ primary representation track; full fine-tuning is a separately named,
 resource-contingent track. The source-code contrastive multiplier and all
 deviations from the upstream data regime remain explicit.
 
-### UMAP
+### EEG foundation models
 
-UMAP remains a diagnostic comparison surface. Its repeatedly viewed historical
-test results are not admitted as formal benchmark values. A formal rerun must
-start from a new frozen cross-subject split/seed contract and may not select
-settings using the historical test.
+BIOT, CBraMod, and REVE form the EEG-only official-pretrained frozen-probe
+track. They consume the same measured EEG support and shared fold registry;
+they never consume fNIRS or derived teacher features. BIOT checkpoint/channel
+selection, CBraMod patching/pooling, and REVE coordinate provenance must freeze
+before public development. REVE's Single-Trial result is reported separately
+because its declared pretraining corpus contains `Shin2017A`.
+
+### New multimodal adaptations
+
+NormWear is reported only as `normwear_eeg_fnirs_adapted`; its upstream
+pretraining did not include fNIRS. BrainFusion NVC-CSP Stacking is reported as
+an independent reimplementation because the public source does not expose the
+complete paper-case CSP/stacking execution. In both methods, every learned
+adapter, transform, NVC/CSP component, target scaler, and estimator is fitted
+inside the allowed outer-training support.
+
+### Retired UMAP diagnostic
+
+UMAP is not in the fixed active comparison queue and receives no new formal
+run. Its repeatedly viewed historical test results remain Git-history context
+only and are not admitted as formal benchmark values.
 
 ## Minimum retained artifact
 

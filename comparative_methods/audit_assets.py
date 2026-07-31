@@ -141,6 +141,37 @@ def main() -> int:
                     continue
             observations.append(f"OK asset {expected_method_id}/{label}: {actual_size} B")
 
+            for trusted_file in artifact.get("trusted_code_files", []):
+                trusted_path = method_root / str(trusted_file.get("local_path", ""))
+                trusted_label = trusted_path.name or "<unnamed>"
+                if not trusted_path.is_file():
+                    failures.append(f"{trusted_path}: expected trusted code file is missing")
+                    continue
+                expected_trusted_size = trusted_file.get("size_bytes")
+                actual_trusted_size = trusted_path.stat().st_size
+                if (
+                    expected_trusted_size is not None
+                    and actual_trusted_size != int(expected_trusted_size)
+                ):
+                    failures.append(
+                        f"{trusted_path}: size {actual_trusted_size}, "
+                        f"expected {expected_trusted_size}"
+                    )
+                    continue
+                expected_trusted_hash = trusted_file.get("sha256")
+                if expected_trusted_hash:
+                    actual_trusted_hash = _sha256(trusted_path)
+                    if actual_trusted_hash != expected_trusted_hash:
+                        failures.append(
+                            f"{trusted_path}: sha256 {actual_trusted_hash}, "
+                            f"expected {expected_trusted_hash}"
+                        )
+                        continue
+                observations.append(
+                    f"OK trusted code {expected_method_id}/{label}/{trusted_label}: "
+                    f"{actual_trusted_size} B"
+                )
+
     for observation in observations:
         print(observation)
     if failures:

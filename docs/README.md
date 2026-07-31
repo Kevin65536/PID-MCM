@@ -15,6 +15,7 @@ _Single authority index; updated 2026-07-30_
 | What is the full R-series evidence? | [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) |
 | What is the comparison contract? | [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md) |
 | Which comparisons are running or complete? | [`comparisons/STATUS.md`](comparisons/STATUS.md) |
+| Which method sources and weights are prepared? | [`../comparative_methods/ASSET_STATUS.md`](../comparative_methods/ASSET_STATUS.md) |
 | Which values can enter a final table? | [`comparisons/METRIC_ACCEPTANCE.md`](comparisons/METRIC_ACCEPTANCE.md) |
 | What did the current Token Atlas show? | [`analysis/TOKEN_PHYSIOLOGY_ATLAS.md`](analysis/TOKEN_PHYSIOLOGY_ATLAS.md) |
 | Where are retained result artifacts? | [`../experiments/RESULTS_INDEX.md`](../experiments/RESULTS_INDEX.md) |

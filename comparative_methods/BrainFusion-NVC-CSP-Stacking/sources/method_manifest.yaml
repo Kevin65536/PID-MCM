@@ -28,6 +28,9 @@ target_corpus_overlap:
   refed: not_applicable_no_pretraining
 source_fidelity:
   nvc_implementation_public: true
+  nvc_source_path: upstream/src/BrainFusion/pipeLine/coupling_analysis.py
+  nvc_source_size_bytes: 11140
+  nvc_source_sha256: 4a406a9d3f3f2752cede4ddf29bffe296ac906d7fb3af65c8fd01a67404c459d
   csp_case_execution_public: false
   stacking_case_execution_public: false
   finding: >-
@@ -50,4 +53,14 @@ gate_status:
   B2_software_smoke: pending
   B3_source_fidelity: pending_reimplementation
   B4_protocol_freeze: pending
-
+component_smoke:
+  gpu_nvc:
+    test: tests/test_gpu_nvc.py
+    status: pass_cpu_reference_equivalence
+    backend: torch_cuda
+    covered_upstream_branch: avg_raw
+    pending_before_B2:
+      - gpu_csp
+      - gpu_base_estimators
+      - gpu_stacking_meta_estimator
+      - fold_local_pipeline_reload

@@ -1,23 +1,33 @@
 # Comparison experiment status
 
-_Snapshot: 2026-07-30; live EFRM state must be read from its status file_
+_Snapshot: 2026-07-31; live EFRM state must be read from its status file_
 
 ## Current decision surface
 
 | Method / track | State | Evidence and next action |
 | --- | --- | --- |
 | STA-Net strict five-fold | **Complete** | 70/70 fold trainings completed under the frozen convergence rule. Retain the aggregate and current formal checkpoints. |
-| EFRM LODO v2 Stage A | **Running** | 3/4 target-excluded selection jobs completed at status update `2026-07-30T00:33:59Z`; Visual selection is running. |
-| EFRM LODO v2 Stage B | **Next** | 0/4 full non-target refits completed. Starts only after all Stage-A selections freeze their selected epochs. |
+| EFRM LODO v2 Stage A | **Complete** | 4/4 target-excluded selection jobs completed and selected epochs were frozen. |
+| EFRM LODO v2 Stage B | **Running** | 0/4 full non-target refits completed in the latest status manifest; the Single-Trial-excluded refit is currently running on GPU0. |
 | EFRM v2 downstream matrix | **Queued** | After Stage B: feature cache, strict `7 tasks × 5 folds × 3 seeds` linear probes, gates, one-time protected evaluation, aggregate, then separately labeled sample-random results. |
 | EFRM v2 full fine-tuning | **Conditional** | Resource-contingent secondary track; cannot replace the frozen linear-probe matrix. |
-| UMAP protocol / formal rerun | **Protocol next; run conditional** | Freeze a new cross-subject multi-seed protocol before authorizing data access. Historical best test accuracy `55.83%`, macro-F1 `0.558` is diagnostic after repeated test viewing. |
-| Cross-method final table | **Blocked on comparable formal values** | Run the metric-acceptance audit only after EFRM v2 and any admitted UMAP rerun complete. |
+| BIOT / CBraMod | **B0/B2 complete** | Official weights strict-load with `weights_only=True`; GPU frozen-probe forward/backward, optimizer, and reload smoke pass. Next: shared EEG support and B3 fidelity before B4. |
+| REVE | **B0/B2 complete** | Base encoder, executable snapshot code, and position bank are hash-verified; coordinate-aware GPU frozen-probe smoke passes. Next: dataset coordinate coverage and B3 fidelity. |
+| BrainFusion NVC-CSP Stacking | **B0 complete; B2 partial** | GPU `avg_raw` NVC matches the pinned public CPU formula at `1e-12` tolerance. GPU CSP/stacking and fold-local reload remain required for full B2. |
+| NormWear EEG-fNIRS adapted | **B0 complete** | Backbone and optional MSiTF assets are pinned. Next: EEG/HbO/HbR input contract and adapted source-fidelity checks. |
+| UMAP | **Retired from active queue** | No formal rerun is planned; prior repeatedly viewed test results remain historical Git context only. |
+| Cross-method final table | **Blocked on B1-B6** | Complete the new-method gates and EFRM v2 before running cell-level metric acceptance. |
 
 EFRM v2 protected data remain closed:
 `protected_test_opened=false`, `target_dataset_exposure=false`. Its live source
 of truth is
 [`status.json`](../../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json).
+
+The new methods' B0 state is reproducibly checked by
+[`audit_assets.py`](../../comparative_methods/audit_assets.py). B0 does not
+authorize adapters, formal training, or protected evaluation. Their executable
+batch order and unlock prerequisites are defined in
+[`EXPERIMENT_PLAN.md`](../../comparative_methods/EXPERIMENT_PLAN.md).
 
 ## Completed STA-Net reference
 

@@ -44,7 +44,18 @@ input_boundary:
 gate_status:
   B0_source_fixed: pass
   B1_input_contract: pending
-  B2_software_smoke: pending
+  B2_software_smoke: pass_gpu_frozen_probe_checkpoint_reload
   B3_source_fidelity: pending
   B4_protocol_freeze: pending
-
+software_smoke:
+  test: tests/test_cbramod_smoke.py
+  checkpoint_loading: weights_only_true_hash_verified_strict_state_dict
+  device: cuda
+  provisional_token_pooling: mean
+  passed_checks:
+    - finite_forward
+    - finite_linear_head_backward
+    - optimizer_step
+    - frozen_encoder_no_gradients
+    - strict_checkpoint_reload
+  limitations: token_pooling_and_shared_eeg_support_not_yet_frozen

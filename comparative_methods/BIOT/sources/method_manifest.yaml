@@ -60,7 +60,18 @@ input_boundary:
 gate_status:
   B0_source_fixed: pass
   B1_input_contract: pending
-  B2_software_smoke: pending
+  B2_software_smoke: pass_gpu_frozen_probe_checkpoint_reload
   B3_source_fidelity: pending
   B4_protocol_freeze: pending
-
+software_smoke:
+  test: tests/test_biot_smoke.py
+  checkpoint_loading: weights_only_true_hash_verified_strict_state_dict
+  checkpoint_coverage: [eeg_prest_16, eeg_shhs_prest_18, eeg_six_datasets_18]
+  device: cuda
+  passed_checks:
+    - finite_forward
+    - finite_linear_head_backward
+    - optimizer_step
+    - frozen_encoder_no_gradients
+    - strict_checkpoint_reload
+  limitations: channel_panel_and_primary_checkpoint_not_yet_frozen
