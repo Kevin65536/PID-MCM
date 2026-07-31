@@ -31,7 +31,7 @@ gate_aggregation:
 
 execution_policy:
   mode: strict_serial_new_method_delivery_queue
-  active_delivery_method: cbramod
+  active_delivery_method: reve
   max_active_new_method_implementations: 1
   max_active_new_method_experiment_queues: 1
   serial_scope:
@@ -62,6 +62,9 @@ execution_policy:
       - method_id: biot
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
+      - method_id: cbramod
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
   protected_test_default: locked
   ordered_queue:
@@ -73,12 +76,12 @@ execution_policy:
     - order: 1
       method_id: cbramod
       state_at_adoption: queued
-      current_state: active
+      current_state: public_development_complete_protected_locked
       scope: fix_representation_layer_then_adapter_v2_full_public_gate
     - order: 2
       method_id: reve
       state_at_adoption: queued
-      current_state: queued
+      current_state: active
       scope: complete_identity_chain_then_adapter_v2_full_public_gate
     - order: 3
       method_id: brainfusion_nvc_csp_stacking_reimplementation

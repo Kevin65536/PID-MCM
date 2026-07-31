@@ -1,19 +1,19 @@
 # CBraMod adapter-alignment v2 status
 
-CBraMod is the active serial comparison method. Its representation layer has
-been corrected to the official downstream latent-token boundary, and all six
-supported classification cells have completed full-public adapter replay with
-A0–A7 passing. A8 public-development execution remains pending and is not
-self-authorized by this audit. REVE has not started.
+CBraMod has reached its public-development terminal state in the serial queue.
+Its representation layer is fixed at the official downstream latent-token
+boundary, and all six supported classification cells pass A0–A8. REFED remains
+preregistered unsupported. Protected evaluation remains separately locked, and
+the active delivery method has advanced to REVE.
 
 | Task | Unique public samples | Representation result | Disposition |
 | --- | ---: | --- | --- |
-| Motor imagery | 1,740 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
-| Mental arithmetic | 1,740 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
-| WG | 1,560 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
-| N-back | 702 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
-| DSR | 8,980 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
-| Visual | 7,720 | all 200 coordinates nonconstant | A0–A7 pass; A8 pending |
+| Motor imagery | 1,740 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
+| Mental arithmetic | 1,740 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
+| WG | 1,560 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
+| N-back | 702 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
+| DSR | 8,980 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
+| Visual | 7,720 | all 200 coordinates nonconstant | A0–A8 pass; protected locked |
 | REFED regression | — | not dereferenced | unsupported: `CBRAMOD_NO_PARTIAL_TIME_MASK_CONTRACT` |
 
 The six public-complete tasks cover 22,442 unique samples. Every task passed
@@ -62,13 +62,16 @@ hash-complete feature-cache identity, and a `weights_only=True` reloadable
 refit checkpoint. A cache cannot contain samples outside one fold's public
 train/validation membership.
 
-Both a connectivity smoke and a full MI/outer0/seed17 pilot pass independent
+Both a connectivity smoke and a full MI/outer0/seed17 pilot passed independent
 artifact auditing. They share the same retained fold-specific feature cache;
 their validation scores remain development-only and are not table-admissible.
-The retained 90-job candidate matrix is strictly serial
-(`max_concurrent_jobs=1`), permits no automatic retry, and is explicitly not
-self-authorizing.
+The separately authorized 90-job matrix then completed with 90 passes, zero
+failures, zero retries, and maximum concurrency one. Every retained run passed
+artifact re-audit. The compact completion evidence is
+[`evidence/public_development_v2/matrix_completion_summary.json`](evidence/public_development_v2/matrix_completion_summary.json),
+and the terminal cell bundle is
+[`evidence/alignment_v2/summary_final.json`](evidence/alignment_v2/summary_final.json).
 
-The next serial step is review of the controller followed by a separate public
-launch authorization. Neither the candidate matrix nor its pilot authorizes
-protected evaluation or concurrent REVE work.
+Public validation aggregates are development-only and remain explicitly
+non-table-admissible. CBraMod protected execution is not authorized and may not
+overlap REVE, which is now the sole active delivery method.

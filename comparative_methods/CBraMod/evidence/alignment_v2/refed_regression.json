@@ -41,10 +41,16 @@
     "A5": "not_applicable",
     "A6": "pass",
     "A7": "unsupported",
-    "A8": "pending"
+    "A8": "not_applicable"
   },
   "method_id": "cbramod",
   "protected_test_opened": false,
+  "protocol_freeze": {
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/CBraMod/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "1411d704e76c8a443919c80dd295fdd5fbea33bed28b32aa420a29d59f5b0c3e"
+  },
   "schema": "adapter_alignment_cell_evidence_v2",
   "task_id": "refed_regression",
   "track": "single_modal_eeg_official_pretrained_linear_probe",

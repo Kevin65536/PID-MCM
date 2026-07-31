@@ -68,7 +68,7 @@
   },
   "alignment_profile": "support_matched_direct",
   "cell_id": "cbramod__wg__support_matched_direct__v2",
-  "cell_status": "pending",
+  "cell_status": "pass",
   "comparison_fields": {
     "canonical_signal_branch": {
       "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
@@ -169,9 +169,16 @@
     "A5": "pass",
     "A6": "pass",
     "A7": "pass",
-    "A8": "pending"
+    "A8": "pass"
   },
   "method_id": "cbramod",
+  "protocol_freeze": {
+    "matrix_identity_sha256": "c2e6fdcea79b26adc83c83c71528142378277d1c26b00d144f1a910b67c09177",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/CBraMod/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "1411d704e76c8a443919c80dd295fdd5fbea33bed28b32aa420a29d59f5b0c3e"
+  },
   "public_audit": {
     "all_unique_public_samples_audited": true,
     "cache_identity_sha256": "29be01c9150187248ecd75ad5f69173b97c5176db3622d2e07baa82b01d9801b",

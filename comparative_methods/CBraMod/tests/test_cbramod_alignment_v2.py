@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -8,7 +10,10 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+import yaml
 
+import comparative_methods.CBraMod.audit_alignment_v2 as alignment_audit_module
+import comparative_methods.CBraMod.run_public_development_v2 as public_runner_module
 from comparative_methods.BIOT.alignment_data import load_config as load_biot_config
 from comparative_methods.BIOT.audit_alignment_v2 import comparison_fields as biot_fields
 from comparative_methods.CBraMod.alignment_data import (
@@ -38,6 +43,22 @@ from comparative_methods.audit_adapter_alignment import validate_cell
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 BIOT_CONFIG = METHOD_ROOT.parent / "BIOT/configs/alignment_v2.yaml"
+ALIGNMENT_CONTRACT = METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _review_historical_cbramod_under_its_frozen_active_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep historical runner tests executable after the queue advances to REVE."""
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    historical = copy.deepcopy(contract)
+    historical["execution_policy"]["active_delivery_method"] = "cbramod"
+    path = tmp_path / "cbramod_active_contract.yaml"
+    path.write_text(yaml.safe_dump(historical, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(alignment_audit_module, "ALIGNMENT_CONTRACT", path)
+    monkeypatch.setattr(public_runner_module, "ALIGNMENT_CONTRACT", path)
 
 
 def test_alignment_config_is_public_only_and_support_matched_to_biot() -> None:
@@ -279,3 +300,31 @@ def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
     assert report["public_matrix_launch_authorized"] is True
     assert report["protected_evaluation_authorized"] is False
     assert report["protected_test_opened"] is False
+
+
+def test_completed_public_matrix_is_terminal_and_queue_advanced_to_reve() -> None:
+    completion = json.loads(
+        (METHOD_ROOT / "evidence/public_development_v2/matrix_completion_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert completion["status"] == "pass"
+    assert completion["job_count"] == 90
+    assert completion["completed_job_count"] == 90
+    assert completion["failed_job_count"] == 0
+    assert completion["max_concurrent_jobs"] == 1
+    assert completion["automatic_retry_count"] == 0
+    assert completion["protected_evaluation_authorized"] is False
+    assert completion["protected_test_opened"] is False
+
+    final = json.loads(
+        (METHOD_ROOT / "evidence/alignment_v2/summary_final.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert final["status"] == "public_development_complete_A0_A8_pass_protected_locked"
+    assert final["protected_evaluation_authorized"] is False
+    assert final["protected_test_opened"] is False
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    assert contract["execution_policy"]["active_delivery_method"] == "reve"

@@ -1,0 +1,106 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-07-31T15:23:04.579450+00:00",
+  "completed_job_count": 90,
+  "failed_job_count": 0,
+  "finalizer_path": "comparative_methods/CBraMod/finalize_public_matrix_v2.py",
+  "finalizer_sha256": "4f59706e72ab99cb590f600c32a9d53cfa435eed24baa17842a1265d2a31c910",
+  "job_artifact_fingerprint_sha256": "58d7cbd12ab61b620d3f55771e99e68c934922c1fa48c985a67b96c1d65e79aa",
+  "job_count": 90,
+  "local_completed_audit_sha256": "5ddc206a682650ab92fad49d69333c88797f8c4442f708887683396cfe0a661f",
+  "local_controller_status_sha256": "bb905f3fa95507f2f334bede8fef491b599d7ac7e75d0cdc5a7a0295dddb4647",
+  "matrix_identity_sha256": "c2e6fdcea79b26adc83c83c71528142378277d1c26b00d144f1a910b67c09177",
+  "max_concurrent_jobs": 1,
+  "method_id": "cbramod",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "schema": "cbramod_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5375428650112587,
+      "public_validation_macro_f1_cell_sd": 0.014102834511353983,
+      "seed_mean_by_outer_fold": [
+        0.5423317158962776,
+        0.5236032940114963,
+        0.5546844106298402,
+        0.534610238728135,
+        0.5324846657905442
+      ],
+      "task": "motor_imagery"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6098581588514688,
+      "public_validation_macro_f1_cell_sd": 0.019605863620223072,
+      "seed_mean_by_outer_fold": [
+        0.5904609163657818,
+        0.6243400996252024,
+        0.6132346007710014,
+        0.6012050633275973,
+        0.6200501141677612
+      ],
+      "task": "mental_arithmetic"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6013653572498926,
+      "public_validation_macro_f1_cell_sd": 0.014728739355309233,
+      "seed_mean_by_outer_fold": [
+        0.5831685142162621,
+        0.6013792849558054,
+        0.5933809429399296,
+        0.6070336098246426,
+        0.6218644343128237
+      ],
+      "task": "wg"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.411365333219576,
+      "public_validation_macro_f1_cell_sd": 0.02578360951464315,
+      "seed_mean_by_outer_fold": [
+        0.4069994469625468,
+        0.39129959006432496,
+        0.41646885004627254,
+        0.4448480926341876,
+        0.3972106863905482
+      ],
+      "task": "nback"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.579336695944742,
+      "public_validation_macro_f1_cell_sd": 0.0071972836350709364,
+      "seed_mean_by_outer_fold": [
+        0.5692512006112487,
+        0.5843169342567492,
+        0.578352180178183,
+        0.5822958010455924,
+        0.5824673636319369
+      ],
+      "task": "dsr"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.26261199869589663,
+      "public_validation_macro_f1_cell_sd": 0.022061585015876524,
+      "seed_mean_by_outer_fold": [
+        0.2930479586281643,
+        0.25966985920506896,
+        0.2747409878051551,
+        0.23261967964413846,
+        0.2529815081969566
+      ],
+      "task": "visual"
+    }
+  ]
+}
