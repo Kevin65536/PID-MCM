@@ -29,6 +29,7 @@ from comparative_methods.BIOT.run_public_development_v2 import (
     select_and_refit,
 )
 from comparative_methods.BIOT.build_public_job_matrix_v2 import build_matrix
+from comparative_methods.BIOT.run_public_matrix_v2 import validate_jobs
 
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
@@ -219,3 +220,10 @@ def test_biot_job_matrix_is_serial_public_only_and_not_self_authorizing() -> Non
     assert matrix["protected_test_opened"] is False
     assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
     assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
+    jobs = validate_jobs(
+        matrix,
+        run_root=(
+            METHOD_ROOT / "runs/public_development_v2/matrix_v2"
+        ).resolve(),
+    )
+    assert [job["order"] for job in jobs] == list(range(90))
