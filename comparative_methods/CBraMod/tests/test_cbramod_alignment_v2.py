@@ -32,7 +32,7 @@ from comparative_methods.CBraMod.run_public_development_v2 import (
     run,
     select_and_refit,
 )
-from comparative_methods.CBraMod.run_public_matrix_v2 import validate_jobs
+from comparative_methods.CBraMod.run_public_matrix_v2 import execute, validate_jobs
 from comparative_methods.audit_adapter_alignment import validate_cell
 
 
@@ -268,3 +268,14 @@ def test_candidate_job_matrix_is_serial_public_only_and_not_self_authorizing() -
         run_root=(METHOD_ROOT / "runs/public_development_v2/matrix_v2").resolve(),
     )
     assert [job["order"] for job in jobs] == list(range(90))
+
+
+def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
+    report = execute(METHOD_ROOT / "configs/public_matrix_launch_v2.yaml", dry_run=True)
+    assert report["status"] == "pass"
+    assert report["job_count"] == 90
+    assert report["max_concurrent_jobs"] == 1
+    assert report["automatic_retry_count"] == 0
+    assert report["public_matrix_launch_authorized"] is True
+    assert report["protected_evaluation_authorized"] is False
+    assert report["protected_test_opened"] is False

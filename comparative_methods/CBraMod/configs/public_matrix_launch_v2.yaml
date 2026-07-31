@@ -1,0 +1,48 @@
+schema: cbramod_public_matrix_launch_v2
+launch_id: cbramod_public_matrix_launch_v2
+method_id: cbramod
+status: reviewed_public_launch
+mode: public_development_only
+protected_test_default: locked
+
+reviewed_commits:
+  representation_layer: dcbe719
+  adapter_alignment: ac4ba8f
+  public_runner_and_pilot: 61e78f9
+  serial_controller: fc71a56
+
+pilot_evidence:
+  path: comparative_methods/CBraMod/evidence/public_development_v2/pilot_audit.json
+  sha256: 5377d61ae5c5969f607fa460bc11a9579f91afb2dfe22654947931fef58ddfaa
+  required_status: pass
+
+matrix:
+  path: comparative_methods/CBraMod/evidence/public_development_v2/job_matrix_candidate.json
+  sha256: 60140b6b04b3c9f3b7f0125b6299e575f5eb5f46fa11d930b132a9f91fe51fd4
+  identity_sha256: c2e6fdcea79b26adc83c83c71528142378277d1c26b00d144f1a910b67c09177
+  expected_job_count: 90
+
+runner:
+  path: comparative_methods/CBraMod/run_public_development_v2.py
+  sha256: b8e093c515b9e7d4362c5550485fd6eb58563a5a817ffd0399f2eb59146d343c
+  config: comparative_methods/CBraMod/configs/public_development_v2.yaml
+  config_sha256: fcea43c89136363f0da250d86910d95db9b27582b6801b4693b77d5710b473bb
+
+controller:
+  path: comparative_methods/CBraMod/run_public_matrix_v2.py
+  sha256: e774aadfa1eaa0a577e73192b485c619c18fddf4496b2897be424ebb6a0cc684
+
+execution:
+  matrix_run_root: comparative_methods/CBraMod/runs/public_development_v2/matrix_v2
+  max_concurrent_jobs: 1
+  automatic_retry_count: 0
+  failure_action: retain_and_stop_queue
+  completed_output_action: audit_and_resume_without_overwrite
+
+authorization:
+  public_matrix_launch_authorized: true
+  protected_evaluation_authorized: false
+  reve_work_authorized: false
+  note: >-
+    This launch is limited to CBraMod public selection/refit jobs. It does not
+    unlock protected evaluation and does not advance the method queue.
