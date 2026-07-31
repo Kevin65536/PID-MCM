@@ -1,0 +1,199 @@
+{
+  "adapter_identity": {
+    "artifact_id": "cbramod_pretrained",
+    "delivered_channel_order": [
+      "F7",
+      "AFF5h",
+      "F3",
+      "AFp1",
+      "AFp2",
+      "AFF6h",
+      "F4",
+      "F8",
+      "AFF1h",
+      "AFF2h",
+      "Cz",
+      "Pz",
+      "FCC5h",
+      "FCC3h",
+      "CCP5h",
+      "CCP3h"
+    ],
+    "delivered_channel_order_sha256": "19fd0ab40d43978b4b692ee2dd60ba29f4dff38ae046f8bbd040266e80eb9f3c",
+    "deterministic_source_declared_sample_transform": "none_after_canonical_200hz_coordinate",
+    "embedding_dim": 200,
+    "geometry_encoding": "upstream_criss_cross_channel_axis_without_coordinate_injection",
+    "input_shape": [
+      "batch",
+      16,
+      1600
+    ],
+    "method_id": "cbramod",
+    "output_layer": "encoder_latent_before_pretraining_proj_out",
+    "output_shape": [
+      "batch",
+      200
+    ],
+    "patch_and_token_grid": {
+      "latent_tokens": 128,
+      "latent_width": 200,
+      "patch_samples": 200,
+      "patches_per_channel": 8
+    },
+    "patch_samples": 200,
+    "path": "comparative_methods/CBraMod/checkpoints/pretrained_weights.pth",
+    "pooling": "official_avgpooling_patch_reps",
+    "representation_layer": "encoder_latent_before_pretraining_proj_out",
+    "sha256": "0792cb808c14e6b7a2bb2ce1dff379bc47bc54c49a779825bdfeb33bf8157178",
+    "size_bytes": 19775842,
+    "source_deviation": "upstream raw-array divide-by-100 is omitted because the shared project input is already in the frozen recordwise robust-standard-deviation coordinate; the pretraining reconstruction projection is removed after strict loading, following every released downstream wrapper.",
+    "source_file_sha256": {
+      "adapter": "27cd8f1bf5143ca38908373f2126a6020614a6cdb704baab643c9846dd0124f4",
+      "alignment_audit": "a764cd15cbc6f32423d8c94da4b8afcad2c68a7f769deace635cd73dd8fa48eb",
+      "alignment_data": "680d452be3539b7cd37afaade465a9752d784a56bf19492c1a76a6a4a71dd535",
+      "config": "25dd2c9535f93a7aa070955bc65a1e03761152f3ab091342d172001aa4f0b753",
+      "representation_layer_audit": "ec037e701ed1fb4d1fd4097c0b10c8991bf5389cf3c05a1487d4d121a30f507e",
+      "upstream_model": "caa7c5a0e4acd488a6f625b56f7b54dc4e7190d6b68ef5b76dff2cef86874a14",
+      "upstream_transformer": "90e90b8c98ca7eb543c44e32afc29674d3f71cb090692ad9f82db3a43edf334c"
+    },
+    "source_revision": "500543c7e30bda1b22bfd51a49301b238dee21fd",
+    "target_corpus_exposure": {
+      "eeg_fnirs_single_trial": "none_by_declared_dataset_identity",
+      "refed": "none_by_declared_dataset_identity",
+      "simultaneous_eeg_nirs": "none_by_declared_dataset_identity",
+      "visual_cognitive_motivation": "none_by_declared_dataset_identity"
+    },
+    "train_partition_fitted_transform": "none_in_alignment_audit",
+    "trainable_parameter_boundary": "no_trainable_parameters"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "cbramod__mental_arithmetic__support_matched_direct__v2",
+  "cell_status": "pending",
+  "comparison_fields": {
+    "canonical_signal_branch": {
+      "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
+      "dataset_branch": {
+        "eeg_fnirs_single_trial": "single_trial_eeg_artifact_clean_v4",
+        "simultaneous_eeg_nirs": "simultaneous_eeg_eog_clean_v1",
+        "visual_cognitive_motivation": "raw_with_ocular_artifact"
+      },
+      "filter_band_hz": [
+        1.0,
+        45.0
+      ],
+      "fingerprints": {
+        "cache_manifest": "ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500",
+        "event_manifest": "ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031",
+        "geometry_manifest": "e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b",
+        "simultaneous_eeg_branch": "27c2b3432c3b1d0e10541f64ce6860d6b8b6e51a9f896834fe3be95891fedd3c",
+        "single_trial_eeg_branch": "7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0",
+        "task_adapter": "df503240ca967e1358ee06809e99eef800f7f916218fc7f3c2162e9c5eb62e39",
+        "unified_loader": "51fe7981f87ae67f2dce89a2c24e81812ad846c258029f9d0a6bb7af12d6b791"
+      },
+      "sample_rate_hz": 200.0,
+      "schema": "canonical_eeg_signal_branch_identity_v2",
+      "unit": "robust_standard_deviation"
+    },
+    "dataset_id": "eeg_fnirs_single_trial",
+    "measured_channel_identity_set": [
+      "AFF1h",
+      "AFF2h",
+      "AFF5h",
+      "AFF6h",
+      "AFp1",
+      "AFp2",
+      "CCP3h",
+      "CCP5h",
+      "Cz",
+      "F3",
+      "F4",
+      "F7",
+      "F8",
+      "FCC3h",
+      "FCC5h",
+      "Pz"
+    ],
+    "modality_identity": [
+      "eeg"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        8.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "macro_f1",
+    "recorded_support_mask": {
+      "mask_semantics": "all_true_recorded_support_no_padding",
+      "panel": [
+        "AFF1h",
+        "AFF2h",
+        "AFF5h",
+        "AFF6h",
+        "AFp1",
+        "AFp2",
+        "CCP3h",
+        "CCP5h",
+        "Cz",
+        "F3",
+        "F4",
+        "F7",
+        "F8",
+        "FCC3h",
+        "FCC5h",
+        "Pz"
+      ],
+      "sample_count": 1740,
+      "sample_inventory_sha256": "00faaa0d83530a0d1e190508b0b474d033ddc7e81282b7f4ab4239f9beab90dd",
+      "samples_per_item": 1600,
+      "sha256": "09bc66a99723cd8e50b1355cadc1c78f6adea6ff50ba22be17bfa96a447781f4"
+    },
+    "sample_inventory_sha256": "00faaa0d83530a0d1e190508b0b474d033ddc7e81282b7f4ab4239f9beab90dd",
+    "split_fingerprint": "0b74cdfaba5f73f6800188fbeb3f2c52f2e1abcdb84bc7e9ec9a2020dbbdc891",
+    "target_schema": "class_index_MA_BL",
+    "target_valid_mask": {
+      "semantics": "classification_scalar_all_observed",
+      "sha256": "f1364dd8879a6d40610c9810b19bac99e18869695dc146ce372df14a3bd201cc"
+    },
+    "task_id": "mental_arithmetic"
+  },
+  "comparison_group_id": "single_modal_eeg__mental_arithmetic__support_matched_direct__v2",
+  "evidence_scope": "public_complete",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "pass",
+    "A2": "pass",
+    "A3": "pass",
+    "A4": "pass",
+    "A5": "pass",
+    "A6": "pass",
+    "A7": "pass",
+    "A8": "pending"
+  },
+  "method_id": "cbramod",
+  "public_audit": {
+    "all_unique_public_samples_audited": true,
+    "cache_identity_sha256": "909295e2510fb72ad8eee18b01218cdb8727815ad42a20045d75caefd551b61a",
+    "class_counts": {
+      "BL": 870,
+      "MA": 870
+    },
+    "deterministic_replay_exact": true,
+    "elapsed_seconds": 17.688799291849136,
+    "feature_sha256": "90b69a2a2f4890b0c99da2032d3a86bf41dbfd59a353dc1ced5007082948a1aa",
+    "feature_shape": [
+      1740,
+      200
+    ],
+    "maximum_coordinate_std": 0.10935197571990249,
+    "minimum_coordinate_std": 0.00585956579645262,
+    "nonconstant_coordinate_count": 200,
+    "outer_fold_count": 5,
+    "protected_test_opened": false,
+    "unique_sample_count": 1740
+  },
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "task_id": "mental_arithmetic",
+  "track": "single_modal_eeg_official_pretrained_linear_probe"
+}
