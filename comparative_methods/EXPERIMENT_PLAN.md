@@ -16,15 +16,27 @@ protected-test 边界继续服从
 [`docs/comparisons/PROTOCOL.md`](../docs/comparisons/PROTOCOL.md) 和
 [`docs/comparisons/METRIC_ACCEPTANCE.md`](../docs/comparisons/METRIC_ACCEPTANCE.md)。
 
+尚未冻结的 adapter 和 comparison cell 还必须服从
+[`ADAPTER_ALIGNMENT_GATES_V2.md`](ADAPTER_ALIGNMENT_GATES_V2.md) 及其
+[机器合同](adapter_alignment_gate_contract_v2.yaml)。旧 manifest 中的
+`B1_input_contract: pass...` 不自动提升为 v2 通过；v2 按
+`method × task × track × alignment_profile` 判定，而不是按整个方法判定。
+
+执行策略为严格串行：同一时刻只允许一个 active method，其 adapter 实现、public
+preflight、public development、freeze 和 formal execution 全部完成或形成事前
+unsupported 处置后，才显式晋级下一方法。协议生效时正在运行的 EFRM LODO v2
+先作为队首排空，之后依次为 BIOT、CBraMod、REVE、BrainFusion、NormWear；
+STA-Net 只保留既有冻结结果。blocked 方法暂停整个队列，不自动跳过。
+
 ## 1. 固定方法队列
 
 ### 1.1 单模态：EEG-only
 
 | 方法 | 在本项目中的作用 | 计划输入 | 计划主评测轨 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| BIOT | 通用生理信号 foundation model 代表；检验跨数据预训练的 EEG 表征迁移 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | B0 已通过；B1–B4 待完成 |
-| CBraMod | EEG foundation model 代表；检验通道–时间结构化预训练表征 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | B0 已通过；B1–B4 待完成 |
-| REVE | 几何感知 EEG foundation model 代表；检验真实电极坐标编码的跨布局迁移 | EEG + 已登记电极坐标 | 官方预训练权重 + 冻结编码器 linear probe | B0 已通过；B1–B4 待完成，Single-Trial 单列 overlap |
+| BIOT | 通用生理信号 foundation model 代表；检验跨数据预训练的 EEG 表征迁移 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；v2 full-public gate blocked；REFED v1 unsupported |
+| CBraMod | EEG foundation model 代表；检验通道–时间结构化预训练表征 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；representation layer 与 v2 full-public gate blocked；REFED v1 unsupported |
+| REVE | 几何感知 EEG foundation model 代表；检验真实电极坐标编码的跨布局迁移 | EEG + 已登记电极坐标 | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；identity/coverage gate blocked；Single-Trial 单列 overlap，REFED v1 unsupported |
 
 本轨只回答“EEG 单模态表征能达到什么水平”。不得把 fNIRS、EEG–fNIRS
 融合或本项目的 derived teacher 特征输入这三个模型，也不得据此声称
@@ -123,7 +135,9 @@ full-label strict cross-subject 是统一主矩阵。Few-shot 曲线属于二级
 ### 3.3 输入与适配边界
 
 - 四个数据集使用相同 eligible subjects、样本清单、outer folds、标签、mask
-  和任务窗口；每个方法另存 split fingerprint。
+  和任务窗口；每个方法另存 split fingerprint。声称 direct comparison 时还必须
+  精确对齐每模态的 observation anchor/relative interval、真实通道身份集合和
+  canonical branch hash，而不只是 window 名称或 tensor shape。
 - 单模态表只加载 EEG。多模态表只使用真实同步 EEG–fNIRS pair，缺失模态样本
   不通过复制或生成伪装成 observed pair。
 - Single-Trial fNIRS 必须从双波长强度按数据合同转换为 HbO/HbR；不得把两条
@@ -132,17 +146,33 @@ full-label strict cross-subject 是统一主矩阵。Few-shot 曲线属于二级
   adapter；无法做到时将该 cell 标为不支持，而不是改变 measured support。
 - REVE 只消费 registry 中有来源的电极坐标。缺失或模板投影坐标必须保留其
   provenance，不能声称为被试级精确配准。
-- 所有 normalization、时频变换、NVC/CSP 特征、target scaling、head 和
-  threshold 均在 outer-training 内拟合。
+- 除数据合同已固定、对所有方法一致执行的 record-wise offline canonical
+  measurement transform 外，所有群体/特征 normalization、可学习时频变换、
+  NVC/CSP 特征、target scaling、head 和 threshold 均在 outer-training 内拟合。
+
+adapter 之后的 patch/token grid、method-native 通道顺序、几何编码和池化可以不同，
+因为它们属于方法定义；但共享 channel set 与实际 delivered order 必须分别保存
+hash。固定的无标签 source-declared sample transform 可以作为 adapter 语义保留，
+不得通过目标任务分数选择。使用不同数量通道的结果只能进入
+`native_capacity_secondary`，不能和 support-matched 主表直接排名。
+
+现有 STA-Net 冻结结果不回写或重跑，但其默认分类 observation budget 是 EEG 3 s +
+fNIRS 13 s，DSR 是 2 s + 13 s；这与 EFRM 的 8/8 s、DSR 2/2 s 不同。因此现有
+STA-Net 结果按 `method_native_context_reference` 保留，不能仅凭相同 sample/split
+声称为同步 support-matched direct comparison。
 
 ## 4. 每个新方法的实施门
 
 新方法按以下顺序推进，未通过前一门不得开始高成本正式矩阵：
 
+下表保留项目级 B0–B6 执行阶段；其中 B1 的实际准入由 adapter v2 的 A0–A7
+逐 cell 门控给出，B4 unlock 对应 A8。synthetic 或 public mini smoke 不能形成
+full-public A4/A7 结论。
+
 | 门 | 必须产生的证据 | 通过标准 |
 | --- | --- | --- |
 | B0 — 来源固定 | 论文、官方仓库、revision、许可证、checkpoint、预训练语料清单 | 来源可追溯；目标语料重叠状态不再是 `unknown` |
-| B1 — 输入合同 | adapter 说明、shape/rate/channel/geometry/mask assertions | 不伪造模态、通道、坐标或有效支持 |
+| B1 — 输入合同 | adapter v2 A0–A7 evidence bundle | scientific information budget 对齐；所有 planned cell 在 full public scope 下 resolved |
 | B2 — 软件 smoke | finite forward/backward、一次 optimizer step、checkpoint reload | 数值有限且可重复 |
 | B3 — source fidelity | 原任务或最小官方示例、关键模块和参数偏离表 | 能解释项目实现与 named method 的边界 |
 | B4 — 协议冻结 | folds、seeds、主指标、checkpoint rule、label budget、unlock rule | 测试数据保持不可访问 |
@@ -189,8 +219,8 @@ full-label strict cross-subject 是统一主矩阵。Few-shot 曲线属于二级
 | STA-Net 正式五折 | **已完成** |
 | B0 资产审计 | **7/7 方法通过；可获取的本地权重已做非反序列化哈希核验** |
 | EFRM LODO v2 | **Stage A 4/4 完成；Stage B 0/4 完成，首个 refit 运行中** |
-| BIOT / CBraMod | **B0/B2 已通过；B1/B3/B4 待完成** |
-| REVE | **B0/B2 已通过；B1/B3/B4 待完成** |
+| BIOT / CBraMod | **legacy public mini smoke 已通过；v2 A4/A7 full-public coverage 未通过，CBraMod 另有 representation-layer blocker；270-job matrix 暂停** |
+| REVE | **legacy public mini smoke 已通过；v2 position/code/cache identity 与 full-public coverage 待补；270-job matrix 暂停** |
 | BrainFusion NVC–CSP Stacking | **B0 通过；GPU NVC 等价测试通过；完整 B1–B4 待完成** |
 | NormWear EEG–fNIRS adaptation | **B0 已通过；B1–B4 待完成** |
 | fNIRS Few-Shot Foundation Model | **不单列，等待足以证明独立性的材料** |
@@ -203,7 +233,7 @@ revision、adapter、config、tests、source-fidelity 说明和运行工件，�
 
 ## 7. 实际运行合同草案
 
-以下字段在 B4 冻结前不得留作运行时自由选择：
+以下字段在 v2 A8 / B4 冻结前不得留作运行时自由选择：
 
 - 主协议为 strict cross-subject five-fold；outer seed 为 `42`，inner seed 为
   `43 + outer_fold`，下游 seeds 为 `[17, 42, 73]`；
@@ -257,7 +287,10 @@ Use Agreement 和禁止再分发边界约束。
    fingerprint 的 preflight report。
 
 退出条件是所有 planned cell 都明确为 `supported` 或有事前理由的
-`unsupported`，且不存在 unknown channel、coordinate、mask 或 target semantics。
+`unsupported`，不存在 unknown channel、coordinate、mask 或 target semantics，
+并且 A4/A7 报告覆盖全部 unique public inventory。带
+`max_records_per_task` 或 `max_samples_per_record` 截断的报告只能是
+`public_mini`，不得宣称退出 Batch 0。
 
 ### Batch 1 — B1/B2/B3 adapter 与 smoke
 
@@ -313,10 +346,11 @@ public selection/refit 训练 job；冻结 encoder feature 应在不做 target-w
 
 ### Batch 4 — 多模态补齐
 
-BrainFusion 可在共享 preflight 完成后进入 GPU lane 开发，正式结果仍等待 B4。
-NVC、CSP 和 stacking 的 GPU 实现必须先与可审计的小型 CPU
+BrainFusion 只有在 EFRM、BIOT、CBraMod 和 REVE 依序到达各自冻结 scope 的终态后
+才能晋级为 active method，正式结果仍等待 B4。NVC、CSP 和 stacking 的 GPU 实现必须先与可审计的小型 CPU
 reference 做数值等价性测试；计算后端变更不允许改变方法定义。NormWear 也使用
-GPU lane，两者都不得与 EFRM 的高显存 pretraining/refit 抢占同一 GPU。
+GPU lane，但必须等待 BrainFusion 到达终态，且任何方法都不得与另一个 comparison
+method 同时运行。
 
 两种新方法上限为 210 个结果单元、420 个 public selection/refit job。它们完成
 后，与 frozen STA-Net 和完成后的 EFRM v2 按各自 track 汇总；BrainFusion 与
@@ -340,14 +374,14 @@ NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文�
 
 - GPU0 正在运行 EFRM Stage-B Single-Trial final refit，项目进程约占
   16.6 GiB；在该队列结束前不向 GPU0 加入新方法任务；
-- GPU1 约有 23.4 GiB 可用，但存在其他用户进程，因此第一轮只允许一个 comparison
-  accelerator job，并以 Batch-1 memory smoke 给出的安全 batch size 为准；
+- GPU1 约有 23.4 GiB 可用，但只作为串行队列的下一执行资源；EFRM 队首仍活动时
+  不在 GPU1 启动 BIOT 或其他 comparison job；
 - `/SSD_2` 约有 1.5 TiB 可用。运行目录继续忽略，不复制 raw data、upstream
   checkout 或相同 checkpoint；feature cache 在生成前必须先给出体积估计。
 
 REVE-large、full fine-tuning、sample-random 和 few-shot 不进入当前资源队列。
-BrainFusion 与 NormWear 在 GPU1 串行；只有当 EFRM 不使用 GPU0 时才能评审增加
-第二条 comparison GPU lane，且不与 EFRM cache I/O 形成明显竞争。
+不再增加第二条 comparison GPU lane。每次只晋级一个 method；GPU0/GPU1 的物理
+空闲不构成并行启动下一方法的授权。
 
 ## 10. 失败、重试与停止规则
 

@@ -1,0 +1,484 @@
+schema: adapter_alignment_gate_contract_v2
+contract_version: 2
+status: active_for_unfrozen_comparison_work
+effective_date: "2026-07-31"
+
+authority:
+  normative_data_contract: docs/DATA_CONTRACT.md
+  normative_comparison_protocol: docs/comparisons/PROTOCOL.md
+  human_readable_design: comparative_methods/ADAPTER_ALIGNMENT_GATES_V2.md
+  legacy_b1_promotes_to_v2: false
+  protected_test_default: locked
+  scope_note: >-
+    This contract governs new or not-yet-frozen comparison cells. It does not
+    reopen completed protected evaluations or alter an already-running frozen
+    protocol.
+
+status_values:
+  - pass
+  - pending
+  - blocked
+  - unsupported
+  - not_applicable
+  - fail
+
+gate_aggregation:
+  decision_unit: method_x_task_x_track_x_alignment_profile
+  terminal_pre_unlock_statuses: [pass, unsupported, not_applicable]
+  method_level_pass_without_resolved_cells_allowed: false
+  unsupported_must_be_declared_before_target_performance: true
+  lower_evidence_scope_may_not_be_promoted_by_aggregation: true
+
+execution_policy:
+  mode: strict_serial_method_queue
+  max_active_method_implementations: 1
+  max_active_method_experiment_queues: 1
+  serial_scope:
+    - adapter_implementation
+    - public_preflight
+    - public_development
+    - protocol_freeze
+    - formal_execution
+  allowed_while_another_method_is_active:
+    - read_only_status_audit
+    - protocol_documentation_and_commit
+  advance_requires:
+    - current_method_has_no_live_jobs
+    - current_method_has_completed_its_frozen_scope_or_has_a_preregistered_unsupported_disposition
+    - current_method_evidence_bundle_is_retained
+    - next_method_is_explicitly_promoted_from_queued_to_active
+  blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
+  protected_test_default: locked
+  ordered_queue:
+    - order: 0
+      method_id: efrm_sync_200_10_variable_channel_v1
+      state_at_adoption: active_grandfathered_frozen_protocol
+      scope: finish_existing_lodo_v2_queue_without_starting_another_method
+    - order: 1
+      method_id: biot
+      state_at_adoption: queued
+      scope: adapter_v2_full_public_gate_then_public_development
+    - order: 2
+      method_id: cbramod
+      state_at_adoption: queued
+      scope: fix_representation_layer_then_adapter_v2_full_public_gate
+    - order: 3
+      method_id: reve
+      state_at_adoption: queued
+      scope: complete_identity_chain_then_adapter_v2_full_public_gate
+    - order: 4
+      method_id: brainfusion_nvc_csp_stacking_reimplementation
+      state_at_adoption: queued
+      scope: freeze_observation_budget_then_complete_fold_local_pipeline
+    - order: 5
+      method_id: normwear_eeg_fnirs_adapted
+      state_at_adoption: queued
+      scope: complete_named_eeg_fnirs_adaptation
+    - order: 6
+      method_id: sta_net_eeg_fnirs_supervised
+      state_at_adoption: preserved_no_new_execution
+      scope: retain_completed_method_native_context_reference
+
+evidence_scopes:
+  static:
+    rank: 0
+    permits_full_coverage_claim: false
+  synthetic:
+    rank: 1
+    permits_full_coverage_claim: false
+  public_mini:
+    rank: 2
+    permits_full_coverage_claim: false
+  public_complete:
+    rank: 3
+    permits_full_coverage_claim: true
+  protected:
+    rank: 4
+    permits_full_coverage_claim: false
+    note: protected evidence may evaluate a freeze but may not repair its adapter contract
+
+alignment_profiles:
+  support_matched_direct:
+    result_role: primary_direct_comparison
+    direct_ranking_allowed: true
+    exact_equal_fields:
+      - dataset_id
+      - task_id
+      - sample_inventory_sha256
+      - split_fingerprint
+      - target_schema
+      - target_valid_mask
+      - primary_endpoint
+      - observation_anchor
+      - modality_intervals_s
+      - modality_identity
+      - measured_channel_identity_set
+      - recorded_support_mask
+      - canonical_signal_branch
+    method_native_fields:
+      - delivered_channel_order
+      - deterministic_source_declared_sample_transform
+      - train_partition_fitted_transform
+      - patch_and_token_grid
+      - geometry_encoding
+      - pooling
+      - architecture
+    method_native_constraints:
+      delivered_channel_order: deterministic_hashed_and_declared
+      deterministic_source_declared_sample_transform: no_target_performance_selection
+      train_partition_fitted_transform: outer_training_only_with_state_hash
+      geometry_encoding: provenance_preserved_no_fabricated_subject_coordinates
+
+  native_capacity_secondary:
+    result_role: secondary_method_capacity_analysis
+    direct_ranking_allowed: false
+    exact_equal_fields:
+      - dataset_id
+      - task_id
+      - sample_inventory_sha256
+      - split_fingerprint
+      - target_schema
+      - target_valid_mask
+      - primary_endpoint
+      - observation_anchor
+      - modality_intervals_s
+      - modality_identity
+      - canonical_signal_branch
+    may_differ:
+      - measured_channel_identity_set
+      - recorded_support_mask
+    reporting_rule: never_pool_with_support_matched_direct
+
+  method_native_context_reference:
+    result_role: contextual_or_legacy_reference
+    direct_ranking_allowed: false
+    exact_equal_fields:
+      - dataset_id
+      - task_id
+      - target_schema
+      - primary_endpoint
+    may_differ:
+      - sample_inventory_sha256
+      - split_fingerprint
+      - observation_anchor
+      - modality_intervals_s
+      - measured_channel_identity_set
+      - canonical_signal_branch
+    reporting_rule: observation_budget_difference_must_be_in_table_caption
+
+canonical_measurement_boundary:
+  eeg:
+    sample_rate_hz: 200
+    filter_band_hz: [1.0, 45.0]
+    model_coordinate: robust_standard_deviation
+    calibration_scope: fixed_recordwise_offline_measurement_transform
+  fnirs:
+    sample_rate_hz: 10
+    required_roles: [HbO, HbR]
+    model_coordinate: robust_standard_deviation
+    calibration_scope: fixed_recordwise_offline_measurement_transform
+  rules:
+    - all directly compared methods start from the same canonical arrays and branch hashes
+    - native physical provenance remains visible after model-coordinate normalization
+    - adapter-local target-wide normalization is forbidden
+    - source-declared stateless transforms are adapter semantics, not measurement-branch changes
+
+dataset_contracts:
+  eeg_fnirs_single_trial:
+    documented_subject_count: 29
+    canonical_eeg_channel_count: 30
+    canonical_fnirs_spatial_location_count: 36
+    fnirs_source_coordinate: released_dual_wavelength_intensity_then_od_mbll_to_hbo_hbr
+    geometry_scope: template_or_layout_not_subject_digitization
+  simultaneous_eeg_nirs:
+    documented_raw_subject_count: 26
+    canonical_eeg_channel_count: 28
+    canonical_fnirs_spatial_location_count: 36
+    eeg_branch: simultaneous_eeg_eog_clean_v1
+    geometry_scope: registered_layout_not_exact_coregistration
+    dsr:
+      admitted_subject_count: 25
+      admitted_event_count: 8980
+      excluded_subjects: [VP005]
+      fnirs_role: synchronized_block_anchored_context_not_event_native_label
+  visual_cognitive_motivation:
+    documented_subject_count: 16
+    canonical_eeg_channel_count: 30
+    canonical_fnirs_spatial_location_count: record_probe_sidecar_specific
+    excluded_records: [S06_Part1]
+    fnirs_source_coordinate: released_oxy_deoxy_export_with_native_unit_provenance
+    geometry_scope: graphical_template_not_subject_digitization
+  refed:
+    documented_subject_count: 32
+    canonical_eeg_channel_count: 64
+    canonical_fnirs_spatial_location_count: 51
+    target_schema: continuous_valence_arousal_2_by_t_with_coordinate_mask
+    fnirs_source_coordinate: released_hbo_hbr_selected_from_mixed_signal_types
+    geometry_scope: standard_layout_not_subject_digitization
+    terminal_window_policy: partial_record_and_target_support_is_semantically_real
+
+task_contracts:
+  motor_imagery:
+    dataset_id: eeg_fnirs_single_trial
+    task_type: classification
+    target_schema: class_index_LMI_RMI
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 8.0]
+      fnirs_interval_s: [0.0, 8.0]
+      analysis_mode: offline_full_window
+  mental_arithmetic:
+    dataset_id: eeg_fnirs_single_trial
+    task_type: classification
+    target_schema: class_index_MA_BL
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 8.0]
+      fnirs_interval_s: [0.0, 8.0]
+      analysis_mode: offline_full_window
+  wg:
+    dataset_id: simultaneous_eeg_nirs
+    task_type: classification
+    target_schema: class_index_WG_BL
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 8.0]
+      fnirs_interval_s: [0.0, 8.0]
+      analysis_mode: offline_full_window
+  nback:
+    dataset_id: simultaneous_eeg_nirs
+    task_type: classification
+    target_schema: class_index_0back_2back_3back
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 8.0]
+      fnirs_interval_s: [0.0, 8.0]
+      analysis_mode: offline_full_window
+  dsr:
+    dataset_id: simultaneous_eeg_nirs
+    task_type: classification
+    target_schema: eeg_native_class_index_Go_No_go
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 2.0]
+      fnirs_interval_s: [0.0, 2.0]
+      analysis_mode: offline_synchronized_context
+      fnirs_interpretation: context_only_no_event_level_hemodynamic_response_claim
+  visual:
+    dataset_id: visual_cognitive_motivation
+    task_type: classification
+    target_schema: class_index_RR_RF_FF_FR
+    primary_endpoint: macro_f1
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 8.0]
+      fnirs_interval_s: [0.0, 8.0]
+      analysis_mode: offline_full_window
+  refed_regression:
+    dataset_id: refed
+    task_type: regression
+    target_schema: valence_arousal_2_by_20_with_coordinate_mask
+    primary_endpoint: masked_native_coordinate_ccc
+    primary_observation:
+      anchor: canonical_registry_window_start
+      eeg_interval_s: [0.0, 20.0]
+      fnirs_interval_s: [0.0, 20.0]
+      analysis_mode: offline_sequence_window
+      partial_support_policy: retain_masks_or_declare_entire_method_task_cell_unsupported
+
+family_input_profiles:
+  single_modal_eeg_support_matched_primary:
+    alignment_profile: support_matched_direct
+    methods: [biot, cbramod, reve]
+    modalities: [eeg]
+    channel_policy: frozen_task_specific_16_real_channel_set_no_copy_no_padding
+    channel_order_policy: method_native_order_allowed_but_both_set_and_delivered_order_are_hashed
+    refed_v1_policy: all_three_cells_unsupported_until_truthful_time_mask_contract_exists
+  multimodal_synchronous_support_matched_primary:
+    alignment_profile: support_matched_direct
+    methods:
+      - normwear_eeg_fnirs_adapted
+      - efrm_sync_200_10_variable_channel_v1
+      - brainfusion_nvc_csp_stacking_reimplementation
+      - sta_net_eeg_fnirs_supervised
+    modalities: [eeg, fnirs_hbo, fnirs_hbr]
+    channel_policy: same_real_measured_channel_identity_set_within_each_declared_direct_table
+    note: method families and training regimes still require separate result tables
+
+gates:
+  - id: A0
+    name: cell_registration
+    minimum_evidence_scope: static
+    pass_requires:
+      - method_task_track_alignment_profile_registered_before_scores
+      - planned_cell_is_supported_or_has_frozen_unsupported_reason
+      - exposure_class_is_per_method_per_dataset_not_global_only
+  - id: A1
+    name: estimand_identity
+    minimum_evidence_scope: static
+    pass_requires:
+      - sample_inventory_split_target_endpoint_and_aggregation_fingerprints_match_profile
+      - no_per_method_sample_deletion
+  - id: A2
+    name: observation_budget
+    minimum_evidence_scope: static
+    pass_requires:
+      - anchor_and_per_modality_intervals_are_explicit
+      - offline_or_causal_interpretation_is_explicit
+      - direct_profile_intervals_match_exactly
+  - id: A3
+    name: measurement_coordinate
+    minimum_evidence_scope: public_mini
+    pass_requires:
+      - branch_rate_unit_component_roles_and_transform_hashes_are_recorded
+      - single_trial_intensity_is_not_renamed_to_hbo_hbr
+      - same_canonical_array_identity_reaches_directly_compared_adapters
+  - id: A4
+    name: measured_support_and_masks
+    minimum_evidence_scope: public_complete
+    pass_requires:
+      - modality_and_channel_identity_sets_match_profile
+      - valid_channel_target_and_padding_masks_remain_distinct
+      - no_modality_channel_coordinate_or_recorded_support_is_fabricated
+      - every_unique_public_sample_is_audited_without_truncation
+  - id: A5
+    name: adapter_semantics
+    minimum_evidence_scope: public_mini
+    pass_requires:
+      - delivered_channel_order_input_output_shape_and_output_layer_are_explicit
+      - tokenization_geometry_pooling_and_normalization_fit_scope_are_explicit
+      - trainable_parameter_boundary_is_asserted
+      - deterministic_replay_matches_the_recorded_adapter_identity
+  - id: A6
+    name: method_fidelity_and_exposure
+    minimum_evidence_scope: static
+    pass_requires:
+      - checkpoint_upstream_code_trusted_code_and_auxiliary_asset_hashes_are_complete
+      - source_deviations_are_named
+      - target_corpus_exposure_is_resolved_for_each_method_dataset_cell
+  - id: A7
+    name: production_path_public_replay
+    minimum_evidence_scope: public_complete
+    pass_requires:
+      - production_adapter_path_succeeds_on_the_full_unique_public_inventory
+      - features_or_model_inputs_are_finite_and_nonconstant_under_declared_rules
+      - cache_identity_covers_all_code_data_checkpoint_geometry_and_transform_inputs
+      - failures_and_unsupported_cells_are_retained
+  - id: A8
+    name: protocol_freeze_and_unlock
+    minimum_evidence_scope: public_complete
+    pass_requires:
+      - every_planned_cell_has_a_terminal_pre_unlock_disposition
+      - job_matrix_retry_rules_and_failure_codes_are_frozen
+      - protected_indices_remain_non_dereferenceable
+      - any_estimand_or_information_budget_change_increments_protocol_version
+
+failure_codes:
+  A0_UNREGISTERED_CELL: method_task_track_or_profile_not_registered
+  A1_SAMPLE_IDENTITY_MISMATCH: sample_or_split_fingerprint_differs
+  A1_TARGET_OR_ENDPOINT_MISMATCH: target_mask_metric_or_aggregation_differs
+  A2_OBSERVATION_BUDGET_MISMATCH: anchor_or_modality_interval_differs_in_direct_profile
+  A3_MEASUREMENT_BRANCH_MISMATCH: branch_rate_unit_component_or_transform_identity_differs
+  A4_MODALITY_OR_CHANNEL_FABRICATION: unmeasured_support_was_copied_generated_or_mirrored
+  A4_CHANNEL_SET_MISMATCH: measured_channel_identity_set_differs_in_direct_profile
+  A4_MASK_SEMANTICS_MISMATCH: recorded_target_channel_and_padding_support_are_conflated
+  A4_PARTIAL_PUBLIC_COVERAGE: public_audit_was_truncated_or_did_not_cover_unique_inventory
+  A5_OUTPUT_SEMANTICS_MISMATCH: adapter_extracts_the_wrong_upstream_layer_or_shape
+  A5_FIT_SCOPE_LEAKAGE: transform_state_used_data_outside_allowed_training_partition
+  A5_NONDETERMINISTIC_ADAPTER: replay_or_delivered_order_differs_under_same_identity
+  A6_EXPOSURE_CLASS_MISMATCH: target_corpus_overlap_is_missing_or_reported_in_wrong_track
+  A6_ASSET_IDENTITY_INCOMPLETE: checkpoint_code_geometry_or_auxiliary_asset_hash_is_missing
+  A7_CACHE_IDENTITY_INCOMPLETE: reusable_cache_key_omits_a_semantics_affecting_input
+  A8_PROTECTED_BOUNDARY_VIOLATION: protected_identity_or_array_was_opened_before_unlock
+
+current_repository_assessment:
+  evidence_scope: repository_static_plus_partial_public
+  new_public_matrix_launch_hold: true
+  hold_does_not_apply_to:
+    - already_running_frozen_efrm_lodo_v2
+    - completed_frozen_sta_net_results
+  partial_preflight:
+    path: experiments/comparison_reports/20260731_comparison_batch0_v1/public_preflight_stage1.json
+    reported_status: partial_started
+    max_records_per_task: 5
+    promotes_A4_or_A7: false
+  method_readiness:
+    biot:
+      status: blocked
+      blockers: [A4_PARTIAL_PUBLIC_COVERAGE]
+      task_exceptions:
+        refed_regression: unsupported
+    cbramod:
+      status: blocked
+      blockers: [A5_OUTPUT_SEMANTICS_MISMATCH, A4_PARTIAL_PUBLIC_COVERAGE]
+      task_exceptions:
+        refed_regression: unsupported
+    reve:
+      status: blocked
+      blockers: [A6_ASSET_IDENTITY_INCOMPLETE, A7_CACHE_IDENTITY_INCOMPLETE, A4_PARTIAL_PUBLIC_COVERAGE]
+      task_exceptions:
+        motor_imagery: open_world_pretrained_with_target_corpus_overlap
+        mental_arithmetic: open_world_pretrained_with_target_corpus_overlap
+        refed_regression: unsupported
+    normwear_eeg_fnirs_adapted:
+      status: blocked
+      blockers: [A0_UNREGISTERED_CELL]
+    efrm_sync_200_10_variable_channel_v1:
+      status: pending
+      note: existing_frozen_protocol_continues_but_new_direct_tables_require_v2_profile_evidence
+    brainfusion_nvc_csp_stacking_reimplementation:
+      status: blocked
+      blockers: [A0_UNREGISTERED_CELL, A2_OBSERVATION_BUDGET_MISMATCH]
+    sta_net_eeg_fnirs_supervised:
+      status: pending
+      note: completed_results_are_preserved_but_current_method_native_context_is_not_support_matched_direct
+
+audited_migration_findings:
+  sta_net_default_classification_observation:
+    eeg_interval_s: [0.0, 3.0]
+    fnirs_interval_s: [0.0, 13.0]
+    disposition: method_native_context_reference
+  sta_net_dsr_observation:
+    eeg_interval_s: [0.0, 2.0]
+    fnirs_interval_s: [0.0, 13.0]
+    disposition: method_native_context_reference
+  sta_net_refed_observation:
+    eeg_interval_s: [0.0, 20.0]
+    fnirs_interval_s: [0.0, 20.0]
+    disposition: requires_mask_and_inventory_evidence_before_direct_profile
+  efrm_default_classification_observation:
+    eeg_interval_s: [0.0, 8.0]
+    fnirs_interval_s: [0.0, 8.0]
+  efrm_dsr_observation:
+    eeg_interval_s: [0.0, 2.0]
+    fnirs_interval_s: [0.0, 2.0]
+  efrm_refed_observation:
+    eeg_interval_s: [0.0, 20.0]
+    fnirs_interval_s: [0.0, 20.0]
+
+cell_evidence_schema:
+  schema: adapter_alignment_cell_evidence_v2
+  required_top_level_fields:
+    - schema
+    - cell_id
+    - comparison_group_id
+    - method_id
+    - task_id
+    - track
+    - alignment_profile
+    - evidence_scope
+    - cell_status
+    - comparison_fields
+    - adapter_identity
+    - gate_status
+  comparison_fields_follow_alignment_profile: true
+  gate_status_requires_all_gate_ids: true
+  unsupported_requires:
+    - unsupported_reason_code
+    - unsupported_reason
+  pass_requires_all_gates_pass: true

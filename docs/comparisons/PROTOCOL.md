@@ -8,6 +8,12 @@ protected-evaluation boundaries below. Current execution state is reported in
 [`STATUS.md`](STATUS.md); admission of a number to a paper table is governed by
 [`METRIC_ACCEPTANCE.md`](METRIC_ACCEPTANCE.md) and the
 [machine-readable targets](../../comparative_methods/comparison_metric_targets_v1.yaml).
+New or not-yet-frozen adapters are additionally governed by the
+[adapter alignment v2 contract](../../comparative_methods/ADAPTER_ALIGNMENT_GATES_V2.md)
+and its [machine-readable form](../../comparative_methods/adapter_alignment_gate_contract_v2.yaml).
+That contract uses a strict serial method queue: only one method may be active
+across adapter implementation, public preflight/development, freeze, and formal
+execution. Idle hardware does not authorize starting the next method.
 
 ## Benchmark matrix
 
@@ -35,12 +41,17 @@ synthetic ranking.
   masks, record dependencies, channel identities, and branch hashes.
 - Use identical eligible subjects, sample inventories, outer folds, targets,
   and endpoints for methods presented as direct comparisons.
+- A direct comparison also requires the same per-modality observation anchor
+  and interval, measured channel-identity set, recorded-support masks, and
+  canonical signal branch. Equal tensor shapes or equal task names do not
+  establish an equal information budget.
 - Label strict cross-subject, within-subject, and sample-random protocols
   separately. A sample-random result is an information-visible diagnostic and
   cannot support new-subject generalization.
-- Fit normalization, adapters, target scaling, hyperparameters, checkpoint
-  selection, and thresholds only on the training/development partitions
-  allowed by the owning frozen protocol.
+- After the fixed method-neutral record-wise canonical measurement transform,
+  fit any population/feature normalization, learned adapter, target scaling,
+  hyperparameter, checkpoint selection, and threshold only on the
+  training/development partitions allowed by the owning frozen protocol.
 - Keep protected indices non-dereferenceable until that protocol's explicit
   unlock gate. A completed earlier protocol does not authorize a later one.
 - Aggregate outer folds before comparing methods. Classification uses
@@ -55,7 +66,7 @@ synthetic ranking.
 
 | Stage | Required evidence | What it establishes |
 | --- | --- | --- |
-| C0 — contract | adapter, target/mask assertions, split fingerprint | comparable inputs |
+| C0 — contract | adapter v2 A0–A5 evidence, target/mask assertions, split fingerprint | comparable scientific information budget |
 | C1 — software smoke | finite forward/backward, optimizer step, artifact write | connectivity only |
 | C2 — source fidelity | pinned upstream revision, deviations, source-task check | named-method boundary |
 | C3 — public development | train/validation convergence and diagnostics | tuning evidence |
@@ -67,6 +78,12 @@ Failures, negative results, aborted jobs, and excluded folds remain visible.
 Software fidelity, loader correctness, or convergence does not establish
 field-wide SOTA or physiological coupling.
 
+Legacy method-level `B1` or `C0` labels do not promote a new cell to adapter v2.
+The v2 unit is `method × task × track × alignment profile`; public-mini evidence
+cannot establish full-public coverage. Internal patching, tokenization,
+geometry encoding, and pooling may remain method-native after the shared
+measurement boundary, provided their identity and fitting scope are frozen.
+
 ## Method boundaries
 
 ### STA-Net
@@ -77,6 +94,13 @@ MI/MA/WG are source-task adaptations; n-back, DSR, Visual, and REFED require
 explicit multiclass, context, or regression adapters. Original-paper
 subject-specific values are contextual and are never treated as same-protocol
 comparisons.
+
+The completed local STA-Net results retain their frozen status, but their
+default classification observation budget (EEG 3 s, fNIRS 13 s; DSR 2 s/13 s)
+is a method-native context reference rather than a direct match to the current
+synchronous 8 s/8 s and DSR 2 s/2 s profile. A future direct-profile result
+would require a new protocol version and separate authorization; existing
+protected results are not rewritten.
 
 ### EFRM
 
