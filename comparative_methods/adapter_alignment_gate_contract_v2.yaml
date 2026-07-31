@@ -409,8 +409,12 @@ current_repository_assessment:
     promotes_A4_or_A7: false
   method_readiness:
     biot:
-      status: blocked
-      blockers: [A4_PARTIAL_PUBLIC_COVERAGE]
+      status: implementation_review_complete_A0_A7_pass_A8_pending
+      evidence_scope: public_complete
+      evidence: comparative_methods/BIOT/evidence/alignment_v2/summary.json
+      audited_unique_public_sample_count: 22442
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7]
+      pending_gates: [A8]
       task_exceptions:
         refed_regression: unsupported
     cbramod:

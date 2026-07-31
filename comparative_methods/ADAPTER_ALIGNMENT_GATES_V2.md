@@ -112,7 +112,7 @@ foundation-model 排名。
 
 | 方法 | v2 判定 | 需要先处理的事项 |
 | --- | --- | --- |
-| BIOT | 六个分类 cell blocked；REFED v1 unsupported | 现有 preflight 每任务最多检查 5 records，需 A4/A7 全 public 覆盖；16-channel set/order 必须进入 identity |
+| BIOT | 六个分类 cell 已以 `public_complete` 通过 A0–A7；REFED v1 unsupported；A8 pending | 22,442 个唯一公开样本已由 production adapter 全量重放，16-channel set/order、分支、split、特征与 replay identity 已留存；下一步只在 BIOT 内完成 public development 和 A8 freeze，不提前进入 CBraMod |
 | CBraMod | blocked | 当前 adapter 直接执行完整 encoder 后 mean pool；上游 quick example 和 downstream modules 先将 `proj_out` 替换为 `Identity`。必须先固定实际 representation layer，再做全量覆盖 |
 | REVE | blocked；Single-Trial 两任务为 overlap track；REFED v1 unsupported | cache/identity 需包含 position bank、trusted code 与实际模型代码 hashes；完成全 public name-to-position 覆盖 |
 | NormWear | blocked | 尚未形成逐 cell 的 EEG/HbO/HbR、CWT、mask 与时间预算声明；只能以 adapted 名称进入 |

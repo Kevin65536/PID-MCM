@@ -1,0 +1,53 @@
+{
+  "adapter_identity": {
+    "artifact_id": "eeg_prest_16",
+    "method_id": "biot",
+    "source_deviation": "positional_transfer_from_prest_bipolar_montage_to_native_electrode_panel",
+    "time_mask_contract": "full_support_only"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "biot__refed_regression__support_matched_direct__v2",
+  "cell_status": "unsupported",
+  "comparison_fields": {
+    "canonical_signal_branch": "not_dereferenced_unsupported",
+    "dataset_id": "refed",
+    "measured_channel_identity_set": "not_applicable_unsupported",
+    "modality_identity": [
+      "eeg"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        20.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "masked_native_coordinate_ccc",
+    "recorded_support_mask": "partial_terminal_support_not_admitted",
+    "sample_inventory_sha256": "not_dereferenced_unsupported_before_public_signal_audit",
+    "split_fingerprint": "method_neutral_registry_identity_only",
+    "target_schema": "valence_arousal_2_by_20_with_coordinate_mask",
+    "target_valid_mask": "partial_coordinate_mask_required_but_not_supported",
+    "task_id": "refed_regression"
+  },
+  "comparison_group_id": "single_modal_eeg__refed_regression__support_matched_direct__v2",
+  "evidence_scope": "static",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "pass",
+    "A2": "pass",
+    "A3": "not_applicable",
+    "A4": "unsupported",
+    "A5": "not_applicable",
+    "A6": "pass",
+    "A7": "unsupported",
+    "A8": "pending"
+  },
+  "method_id": "biot",
+  "protected_test_opened": false,
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "task_id": "refed_regression",
+  "track": "single_modal_eeg_official_pretrained_linear_probe",
+  "unsupported_reason": "REFED contains semantically real partial terminal windows, while the frozen BIOT adapter admits only fully recorded time support.",
+  "unsupported_reason_code": "BIOT_NO_PARTIAL_TIME_MASK_CONTRACT"
+}

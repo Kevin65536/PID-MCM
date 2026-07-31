@@ -1,0 +1,199 @@
+{
+  "adapter_identity": {
+    "artifact_id": "eeg_prest_16",
+    "delivered_channel_order": [
+      "Fp1",
+      "AFF5h",
+      "AFz",
+      "F1",
+      "FC5",
+      "FC1",
+      "T7",
+      "C3",
+      "Cz",
+      "CP5",
+      "CP1",
+      "P7",
+      "P3",
+      "Pz",
+      "POz",
+      "O1"
+    ],
+    "delivered_channel_order_sha256": "1397e090491a31928738579cb7773b8d8a1eea13708fd39cac79ae3e82b7efdc",
+    "deterministic_source_declared_sample_transform": "none_after_canonical_200hz_coordinate",
+    "geometry_encoding": "upstream_channel_index_token_for_declared_native_electrode_order",
+    "hop_length": 100,
+    "input_shape": [
+      "batch",
+      16,
+      1600
+    ],
+    "method_id": "biot",
+    "n_channels": 16,
+    "n_fft": 200,
+    "output_layer": "upstream_biot_encoder_mean_embedding",
+    "output_shape": [
+      "batch",
+      256
+    ],
+    "patch_and_token_grid": {
+      "frames_per_channel": 15,
+      "sequence_tokens": 240,
+      "stft_hop_length": 100,
+      "stft_n_fft": 200
+    },
+    "path": "comparative_methods/BIOT/upstream/pretrained-models/EEG-PREST-16-channels.ckpt",
+    "pooling": "upstream_mean_over_channel_frequency_tokens",
+    "sha256": "40f55f5d23e83796495616c8145c8336fcff2b901c42e8ba5115223081c2ad70",
+    "size_bytes": 13791969,
+    "source_deviation": "positional_transfer_from_prest_bipolar_montage_to_native_electrode_panel",
+    "source_file_sha256": {
+      "adapter": "a25fb1a6dad87df3581438d81dda2d395998e26c14c0f782cce8a88274ac5d96",
+      "alignment_audit": "ee54d8adf0d553bc8b3cebc25fc8b9e0df2a1e3f98670f921f09c19c381639b2",
+      "alignment_data": "2cfe356e3ffa8f5d200ea5b561ee26c408ee8b496a2949b9ee0925409340dc91",
+      "config": "63d871fce65665577e0160171bd66e9e7dfa66b7066643f292f46b4ecce268e1",
+      "method_manifest": "2351aa4a2034df7bc4646a63971c7cf360871995106b0fb9d8ea59ff698a4e69",
+      "upstream_model": "2bba53052a93a005033b27ef89f20037fd7894780ce9da130b823c7c73029e01"
+    },
+    "source_revision": "d138e32634e52ae9fa6ec98ac9c4087b14ca869a",
+    "target_corpus_exposure": {
+      "eeg_fnirs_single_trial": "none_by_declared_dataset_identity",
+      "refed": "none_by_declared_dataset_identity",
+      "simultaneous_eeg_nirs": "none_by_declared_dataset_identity",
+      "visual_cognitive_motivation": "none_by_declared_dataset_identity"
+    },
+    "train_partition_fitted_transform": "none_in_alignment_audit",
+    "trainable_parameter_boundary": "no_trainable_parameters"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "biot__nback__support_matched_direct__v2",
+  "cell_status": "pending",
+  "comparison_fields": {
+    "canonical_signal_branch": {
+      "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
+      "dataset_branch": {
+        "eeg_fnirs_single_trial": "single_trial_eeg_artifact_clean_v4",
+        "simultaneous_eeg_nirs": "simultaneous_eeg_eog_clean_v1",
+        "visual_cognitive_motivation": "raw_with_ocular_artifact"
+      },
+      "filter_band_hz": [
+        1.0,
+        45.0
+      ],
+      "fingerprints": {
+        "cache_manifest": "ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500",
+        "event_manifest": "ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031",
+        "geometry_manifest": "e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b",
+        "simultaneous_eeg_branch": "27c2b3432c3b1d0e10541f64ce6860d6b8b6e51a9f896834fe3be95891fedd3c",
+        "single_trial_eeg_branch": "7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0",
+        "task_adapter": "df503240ca967e1358ee06809e99eef800f7f916218fc7f3c2162e9c5eb62e39",
+        "unified_loader": "51fe7981f87ae67f2dce89a2c24e81812ad846c258029f9d0a6bb7af12d6b791"
+      },
+      "sample_rate_hz": 200.0,
+      "schema": "canonical_eeg_signal_branch_identity_v2",
+      "unit": "robust_standard_deviation"
+    },
+    "dataset_id": "simultaneous_eeg_nirs",
+    "measured_channel_identity_set": [
+      "AFF5h",
+      "AFz",
+      "C3",
+      "CP1",
+      "CP5",
+      "Cz",
+      "F1",
+      "FC1",
+      "FC5",
+      "Fp1",
+      "O1",
+      "P3",
+      "P7",
+      "POz",
+      "Pz",
+      "T7"
+    ],
+    "modality_identity": [
+      "eeg"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        8.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "macro_f1",
+    "recorded_support_mask": {
+      "mask_semantics": "all_true_recorded_support_no_padding",
+      "panel": [
+        "AFF5h",
+        "AFz",
+        "C3",
+        "CP1",
+        "CP5",
+        "Cz",
+        "F1",
+        "FC1",
+        "FC5",
+        "Fp1",
+        "O1",
+        "P3",
+        "P7",
+        "POz",
+        "Pz",
+        "T7"
+      ],
+      "sample_count": 702,
+      "sample_inventory_sha256": "60764c3f03effd692b713c20917b27392252714f6aaf8ad2d74555cfb5aa8024",
+      "samples_per_item": 1600,
+      "sha256": "80591eef93dc61785e821f451f8037e97207a9cea2eddbc9803ca276781a72ec"
+    },
+    "sample_inventory_sha256": "60764c3f03effd692b713c20917b27392252714f6aaf8ad2d74555cfb5aa8024",
+    "split_fingerprint": "823ee760d2e9b69ff8cf4b8b280c12e4d475136f20869105d9799fdec7006626",
+    "target_schema": "class_index_0back_2back_3back",
+    "target_valid_mask": {
+      "semantics": "classification_scalar_all_observed",
+      "sha256": "301203eaf92dda618430297c37d747490d7b5931eac631b9660d89cc86c7afee"
+    },
+    "task_id": "nback"
+  },
+  "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+  "evidence_scope": "public_complete",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "pass",
+    "A2": "pass",
+    "A3": "pass",
+    "A4": "pass",
+    "A5": "pass",
+    "A6": "pass",
+    "A7": "pass",
+    "A8": "pending"
+  },
+  "method_id": "biot",
+  "public_audit": {
+    "all_unique_public_samples_audited": true,
+    "cache_identity_sha256": "0ce5e407a3e83559a748771db733df2fc7e6df5dfd9cd2730ddaddaa86bae375",
+    "class_counts": {
+      "0-back session": 234,
+      "2-back session": 234,
+      "3-back session": 234
+    },
+    "deterministic_replay_exact": true,
+    "elapsed_seconds": 13.119296616874635,
+    "feature_sha256": "dd2a484839eaee6dd87604e6eaefbe41fffee70d59c2555e49432438a8551c89",
+    "feature_shape": [
+      702,
+      256
+    ],
+    "maximum_coordinate_std": 3.1972266202541615,
+    "minimum_coordinate_std": 0.22630664915428736,
+    "nonconstant_coordinate_count": 256,
+    "outer_fold_count": 5,
+    "protected_test_opened": false,
+    "unique_sample_count": 702
+  },
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "task_id": "nback",
+  "track": "single_modal_eeg_official_pretrained_linear_probe"
+}

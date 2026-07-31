@@ -1,0 +1,67 @@
+schema: biot_adapter_alignment_v2
+protocol_id: biot_adapter_alignment_v2
+method_id: biot
+track: single_modal_eeg_official_pretrained_linear_probe
+alignment_profile: support_matched_direct
+mode: public_audit_only
+protected_test_default: locked
+
+registry:
+  manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  protocol: strict_cross_subject
+  outer_folds: [0, 1, 2, 3, 4]
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_sample_rate_hz: 200
+  panel_size: 16
+  channel_policy: frozen_task_panel_real_channels_reordered_no_copy_or_padding
+  time_support_policy: require_full_recorded_support_no_padding
+  signal_coordinate: canonical_recordwise_robust_standard_deviation
+
+adapter:
+  artifact_id: eeg_prest_16
+  output_layer: upstream_biot_encoder_mean_embedding
+  embedding_dim: 256
+  trainable_parameters: none_during_alignment_audit
+  source_deviation: positional_transfer_from_prest_bipolar_montage_to_native_electrode_panel
+
+tasks:
+  motor_imagery:
+    supported: true
+    duration_s: 8
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  mental_arithmetic:
+    supported: true
+    duration_s: 8
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  wg:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  nback:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  dsr:
+    supported: true
+    duration_s: 2
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  visual:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, Fp2, AF3, AF4, F3, F4, FC3, FC4, C3, C4, PO3, PO4, O1, O2, F5, F6]
+  refed_regression:
+    supported: false
+    duration_s: 20
+    unsupported_reason_code: BIOT_NO_PARTIAL_TIME_MASK_CONTRACT
+    unsupported_reason: >-
+      REFED contains semantically real partial terminal windows, while the
+      frozen BIOT adapter admits only fully recorded time support.
+
+resources:
+  default_device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  gpu_lock_path: /tmp/pid_mcm_biot_alignment_gpu1.lock
