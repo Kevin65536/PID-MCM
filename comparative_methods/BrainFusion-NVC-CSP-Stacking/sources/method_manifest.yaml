@@ -1,0 +1,53 @@
+schema: comparative_method_manifest_v1
+method_id: brainfusion_nvc_csp_stacking_reimplementation
+display_name: BrainFusion NVC-CSP Stacking
+category: multimodal_traditional_supervised_fusion
+planned_track: adapted_or_independent_reimplementation
+paper:
+  title: "BrainFusion: a Low-Code, Reproducible, and Deployable Software Framework for Multimodal Brain-Computer Interface and Brain-Body Interaction Research"
+  venue: Advanced Science
+  doi: 10.1002/advs.202417408
+  url: https://doi.org/10.1002/advs.202417408
+upstream:
+  url: https://github.com/lwh-scut/BrainFusion
+  revision: 1d9dcf4026f237efed7f0dd44ba44ef0bf87915b
+  local_path: upstream
+  license_status: BSD-3-Clause
+  source_entrypoints:
+    - src/BrainFusion/io/readTUBerlinBCI.py
+    - src/BrainFusion/pipeLine/preprocessing.py
+    - src/BrainFusion/pipeLine/coupling_analysis.py
+    - src/BrainFusion/pipeLine/machine_learning_dialog.py
+checkpoint:
+  status: not_applicable_supervised_fold_local_estimators
+  artifacts: []
+target_corpus_overlap:
+  eeg_fnirs_single_trial: source_case_dataset_overlap_not_pretraining
+  simultaneous_eeg_nirs: not_applicable_no_pretraining
+  visual_cognitive_motivation: not_applicable_no_pretraining
+  refed: not_applicable_no_pretraining
+source_fidelity:
+  nvc_implementation_public: true
+  csp_case_execution_public: false
+  stacking_case_execution_public: false
+  finding: >-
+    The public checkout computes EEG-HRF-to-fNIRS NVC, and its UI names an
+    NVC CSP feature and Integrated Model, but the ML run path is explicitly a
+    simulation placeholder rather than the paper-case CSP/ensemble training.
+  required_reporting_name: brainfusion_nvc_csp_stacking_reimplementation
+  original_numeric_reproduction_claim_allowed: false
+input_boundary:
+  modalities: [eeg, fnirs_hbo, fnirs_hbr]
+  all_fitting_must_be_outer_training_local:
+    - hrf_or_nvc_parameters
+    - csp_filters
+    - feature_selection
+    - base_estimators
+    - stacking_meta_estimator
+gate_status:
+  B0_source_fixed: pass_as_independent_reimplementation
+  B1_input_contract: pending
+  B2_software_smoke: pending
+  B3_source_fidelity: pending_reimplementation
+  B4_protocol_freeze: pending
+

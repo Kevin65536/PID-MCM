@@ -1,0 +1,39 @@
+schema: comparative_method_manifest_v1
+method_id: sta_net_eeg_fnirs_supervised
+display_name: STA-Net
+category: multimodal_supervised_deep_fusion
+planned_track: multimodal_supervised_end_to_end
+paper:
+  title: "STA-Net: Spatial-temporal alignment network for hybrid EEG-fNIRS decoding"
+  venue: Information Fusion
+  doi: 10.1016/j.inffus.2025.103023
+  url: https://doi.org/10.1016/j.inffus.2025.103023
+upstream:
+  url: https://github.com/MutianLiu-SHU/STA-Net
+  revision: b6db8bb5eb2f6491a13f0938880ee70e32162ee7
+  local_path: ../STA-Net
+  license_status: no_license_file_observed_blocks_redistribution
+  source_entrypoints:
+    - sta.py
+    - run_sta_net.py
+checkpoint:
+  status: not_applicable_no_upstream_pretrained_checkpoint
+  provenance: project_fold_checkpoints_trained_from_random_initialization
+  artifacts: []
+target_corpus_overlap:
+  eeg_fnirs_single_trial: source_task_dataset_not_pretraining
+  simultaneous_eeg_nirs: source_task_dataset_not_pretraining
+  visual_cognitive_motivation: not_applicable_no_pretraining
+  refed: not_applicable_no_pretraining
+implementation:
+  local_type: independent_pytorch_adaptation
+  formal_protocol: sources/20260727_no_artifact_mask_convergence_protocol.md
+  formal_result_status: completed_frozen
+  upstream_redistribution_allowed: false
+gate_status:
+  B0_source_fixed: pass_with_no_redistribution
+  B1_input_contract: pass_existing_adapter
+  B2_software_smoke: pass_existing_tests
+  B3_source_fidelity: source_task_adaptation_documented
+  B4_protocol_freeze: pass_existing_formal_protocol
+

@@ -1,0 +1,50 @@
+schema: comparative_method_manifest_v1
+method_id: cbramod
+display_name: CBraMod
+category: single_modal_eeg_foundation
+planned_track: single_modal_eeg_official_pretrained_linear_probe
+paper:
+  title: "CBraMod: A Criss-Cross Brain Foundation Model for EEG Decoding"
+  venue: ICLR 2025
+  url: https://openreview.net/forum?id=NPNUHgHF2w
+upstream:
+  url: https://github.com/wjq-learning/CBraMod
+  revision: 0ff6be918985689e7df679bc731ffb70e6c6224f
+  local_path: upstream
+  license_status: MIT
+  source_entrypoints:
+    - models/cbramod.py
+    - models/criss_cross_transformer.py
+    - quick_example.py
+checkpoint:
+  status: official_asset_downloaded
+  serialization_warning: pytorch_pickle_do_not_load_before_source_review
+  artifacts:
+    - artifact_id: cbramod_pretrained
+      role: official_pretrained_eeg_encoder
+      availability: downloaded
+      source_repository: weighting666/CBraMod
+      source_revision: 500543c7e30bda1b22bfd51a49301b238dee21fd
+      source_url: https://huggingface.co/weighting666/CBraMod/resolve/500543c7e30bda1b22bfd51a49301b238dee21fd/pretrained_weights.pth
+      local_path: checkpoints/pretrained_weights.pth
+      size_bytes: 19775842
+      sha256: 0792cb808c14e6b7a2bb2ce1dff379bc47bc54c49a779825bdfeb33bf8157178
+      weight_license_status: Apache-2.0_on_Hugging_Face_model_card
+      declared_pretraining_corpora: [TUEG]
+target_corpus_overlap:
+  eeg_fnirs_single_trial: none_by_declared_dataset_identity
+  simultaneous_eeg_nirs: none_by_declared_dataset_identity
+  visual_cognitive_motivation: none_by_declared_dataset_identity
+  refed: none_by_declared_dataset_identity
+input_boundary:
+  modalities: [eeg]
+  upstream_sampling_rate_hz: 200
+  upstream_patch_samples: 200
+  fnirs_allowed: false
+gate_status:
+  B0_source_fixed: pass
+  B1_input_contract: pending
+  B2_software_smoke: pending
+  B3_source_fidelity: pending
+  B4_protocol_freeze: pending
+

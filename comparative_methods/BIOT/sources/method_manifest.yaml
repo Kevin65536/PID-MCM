@@ -1,0 +1,66 @@
+schema: comparative_method_manifest_v1
+method_id: biot
+display_name: BIOT
+category: single_modal_eeg_foundation
+planned_track: single_modal_eeg_official_pretrained_linear_probe
+paper:
+  title: "BIOT: Biosignal Transformer for Cross-data Learning in the Wild"
+  venue: NeurIPS 2023
+  url: https://openreview.net/forum?id=c2LZyTyddi
+upstream:
+  url: https://github.com/ycq091044/BIOT
+  revision: d138e32634e52ae9fa6ec98ac9c4087b14ca869a
+  local_path: upstream
+  license_status: MIT
+  source_entrypoints:
+    - model/biot.py
+    - run_example.py
+    - run_binary_supervised.py
+    - run_multiclass_supervised.py
+checkpoint:
+  status: official_assets_source_bundled
+  serialization_warning: pytorch_pickle_do_not_load_before_source_review
+  artifacts:
+    - artifact_id: eeg_prest_16
+      role: official_pretrained_eeg_encoder
+      availability: source_bundled
+      source_revision: d138e32634e52ae9fa6ec98ac9c4087b14ca869a
+      source_url: https://raw.githubusercontent.com/ycq091044/BIOT/d138e32634e52ae9fa6ec98ac9c4087b14ca869a/pretrained-models/EEG-PREST-16-channels.ckpt
+      local_path: upstream/pretrained-models/EEG-PREST-16-channels.ckpt
+      size_bytes: 13791969
+      sha256: 40f55f5d23e83796495616c8145c8336fcff2b901c42e8ba5115223081c2ad70
+      declared_pretraining_corpora: [MGH_PREST]
+    - artifact_id: eeg_shhs_prest_18
+      role: official_pretrained_eeg_encoder
+      availability: source_bundled
+      source_revision: d138e32634e52ae9fa6ec98ac9c4087b14ca869a
+      source_url: https://raw.githubusercontent.com/ycq091044/BIOT/d138e32634e52ae9fa6ec98ac9c4087b14ca869a/pretrained-models/EEG-SHHS%2BPREST-18-channels.ckpt
+      local_path: upstream/pretrained-models/EEG-SHHS+PREST-18-channels.ckpt
+      size_bytes: 13794194
+      sha256: 391b53f77d5060e43746f3ffd5aae8107785f4fd122bf2f87221a1b5b2854a84
+      declared_pretraining_corpora: [MGH_PREST, SHHS]
+    - artifact_id: eeg_six_datasets_18
+      role: official_pretrained_eeg_encoder
+      availability: source_bundled
+      source_revision: d138e32634e52ae9fa6ec98ac9c4087b14ca869a
+      source_url: https://raw.githubusercontent.com/ycq091044/BIOT/d138e32634e52ae9fa6ec98ac9c4087b14ca869a/pretrained-models/EEG-six-datasets-18-channels.ckpt
+      local_path: upstream/pretrained-models/EEG-six-datasets-18-channels.ckpt
+      size_bytes: 13794371
+      sha256: 78ff15a1782f194286a97b1abe68b2bf100a39803325e2917337d0a77a228542
+      declared_pretraining_corpora: [MGH_PREST, SHHS, TUAB, TUEV, CHB_MIT, IIIC_Seizure]
+target_corpus_overlap:
+  eeg_fnirs_single_trial: none_by_declared_dataset_identity
+  simultaneous_eeg_nirs: none_by_declared_dataset_identity
+  visual_cognitive_motivation: none_by_declared_dataset_identity
+  refed: none_by_declared_dataset_identity
+input_boundary:
+  modalities: [eeg]
+  upstream_sampling_rate_hz: 200
+  fnirs_allowed: false
+gate_status:
+  B0_source_fixed: pass
+  B1_input_contract: pending
+  B2_software_smoke: pending
+  B3_source_fidelity: pending
+  B4_protocol_freeze: pending
+

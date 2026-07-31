@@ -6,10 +6,17 @@ paper:
 upstream:
   url: https://github.com/EuijinMisp/EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
   revision: a62bf3d4c092ac3022b6c0bad90ec3993d5a5720
+  local_path: ../EFRM-A-Multimodal-EEG-fNIRS-Representation-learning-Model
   license_status: no_license_file_observed_blocks_redistribution
 checkpoint:
   status: unavailable_after_author_contact
   provenance: retrained_from_random_initialization
+  artifacts: []
+target_corpus_overlap:
+  eeg_fnirs_single_trial: excluded_when_target_under_lodo_v2
+  simultaneous_eeg_nirs: excluded_when_target_under_lodo_v2
+  visual_cognitive_motivation: excluded_when_target_under_lodo_v2
+  refed: excluded_when_target_under_lodo_v2
 declared_deviations:
   - all pretraining inputs are synchronized paired EEG-fNIRS
   - EEG and fNIRS sampling rates are 200 Hz and 10 Hz

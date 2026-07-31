@@ -1,0 +1,77 @@
+schema: comparative_method_manifest_v1
+method_id: normwear_eeg_fnirs_adapted
+display_name: NormWear EEG-fNIRS adapted
+category: multimodal_generalist_adaptation
+planned_track: adapted_or_independent_reimplementation
+paper:
+  title: "Toward Foundation Model for Multivariate Wearable Sensing of Physiological Signals"
+  venue: ACM Transactions on Computing for Healthcare
+  doi: 10.1145/3803808
+  url: https://doi.org/10.1145/3803808
+upstream:
+  url: https://github.com/Mobile-Sensing-and-UbiComp-Laboratory/NormWear
+  revision: 07517fcb13def8c89cb586128359cec02f86ec8d
+  local_path: upstream
+  license_status: Apache-2.0
+  source_entrypoints:
+    - main_model.py
+    - modules/normwear.py
+    - modules/signal_preprocess.py
+    - downstream_pipeline/corrected_linear_prob.py
+checkpoint:
+  status: official_release_assets_downloaded
+  release_tag: v1.0.0-alpha
+  serialization_warning: pytorch_pickle_do_not_load_before_source_review
+  artifacts:
+    - artifact_id: normwear_pretrain
+      role: official_pretrained_backbone
+      availability: downloaded
+      source_url: https://github.com/Mobile-Sensing-and-UbiComp-Laboratory/NormWear/releases/download/v1.0.0-alpha/normwear_pretrain_ckpt.pth
+      local_path: checkpoints/normwear_pretrain_ckpt.pth
+      size_bytes: 544579503
+      sha256: 36d0bca18356ccfc8e8916058bf838f26f1212a646f5780b487ad78581a92561
+    - artifact_id: normwear_msitf_zeroshot
+      role: optional_official_text_alignment_module
+      availability: downloaded
+      source_url: https://github.com/Mobile-Sensing-and-UbiComp-Laboratory/NormWear/releases/download/v1.0.0-alpha/normwear_msitf_zeroshot_last_checkpoint-5.pth
+      local_path: checkpoints/normwear_msitf_zeroshot_last_checkpoint-5.pth
+      size_bytes: 230789454
+      sha256: 6605c137d3cea7cab479d8ab0f9bc06cc76f1ecd7429f33eb81a6f35e0887dbe
+pretraining_corpus:
+  declared_datasets:
+    - Cuff-Less-BP
+    - PPG-Dalia
+    - Auditory-EEG
+    - PhyAAt
+    - MAUS
+    - Mendeley-YAAD
+    - Brain-Cognitive
+    - EPHNOGRAM
+    - BIDMC
+  declared_modalities: [PPG, ECG, EEG, GSR, PCG, IMU]
+  fnirs_in_upstream_pretraining: false
+target_corpus_overlap:
+  eeg_fnirs_single_trial: none_by_declared_dataset_identity
+  simultaneous_eeg_nirs: none_by_declared_dataset_identity
+  visual_cognitive_motivation: none_by_declared_dataset_identity
+  refed: none_by_declared_dataset_identity
+input_boundary:
+  modalities: [eeg, fnirs_hbo, fnirs_hbr]
+  adaptation_required: true
+  must_record:
+    - modality_identity
+    - channel_identity
+    - source_sampling_rate
+    - resampling
+    - cwt_parameters
+    - hbo_hbr_representation
+    - mask_handling
+reporting_boundary:
+  required_name: normwear_eeg_fnirs_adapted
+  original_paper_fnirs_reproduction_claim_allowed: false
+gate_status:
+  B0_source_fixed: pass
+  B1_input_contract: pending
+  B2_software_smoke: pending
+  B3_source_fidelity: pending
+  B4_protocol_freeze: pending

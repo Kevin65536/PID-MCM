@@ -1,0 +1,73 @@
+schema: comparative_method_manifest_v1
+method_id: reve
+display_name: REVE
+category: single_modal_eeg_foundation
+planned_track: open_world_pretrained_with_overlap
+paper:
+  title: "REVE: A Foundation Model for EEG -- Adapting to Any Setup with Large-Scale Pretraining on 25,000 Subjects"
+  venue: NeurIPS 2025
+  url: https://brain-bzh.github.io/reve/
+upstream:
+  url: https://github.com/elouayas/reve_eeg
+  revision: 06a7059a07c3dabd80aee60c3dbc1eca4bdbe1c7
+  local_path: upstream
+  license_status: MIT
+  source_entrypoints:
+    - src/models/encoder.py
+    - src/dt.py
+    - src/eval_dt.py
+checkpoint:
+  status: official_encoder_assets_downloaded_under_gated_terms
+  weight_terms: custom_responsible_use_agreement_no_redistribution
+  artifacts:
+    - artifact_id: reve_base
+      role: official_pretrained_eeg_encoder_primary_candidate
+      availability: downloaded
+      access_condition: user_acceptance_of_responsible_use_agreement_required
+      source_repository: brain-bzh/reve-base
+      source_revision: fa9a2163a4b7c0a42c8e28b56077ef9c368944dc
+      source_url: https://huggingface.co/brain-bzh/reve-base
+      local_path: checkpoints/reve-base/model.safetensors
+      size_bytes: 276773456
+      sha256: 8ecc650619598748286c2457f81f5c6bd12e8bb59db44f7b02af1955c44de8fe
+    - artifact_id: reve_large
+      role: official_pretrained_eeg_encoder_secondary_candidate
+      availability: downloaded
+      access_condition: user_acceptance_of_responsible_use_agreement_required
+      source_repository: brain-bzh/reve-large
+      source_revision: ef50ef670d25e19f41898e462af05a503562eaeb
+      source_url: https://huggingface.co/brain-bzh/reve-large
+      local_path: checkpoints/reve-large/model.safetensors
+      size_bytes: 1559929248
+      sha256: f519428404aab27f7db816722c7fb8c73d08daf10986c9c21b0066be9e93bb31
+    - artifact_id: reve_positions
+      role: official_electrode_position_bank
+      availability: downloaded
+      source_repository: brain-bzh/reve-positions
+      source_revision: befa5b57a455b77cf302daf610c2e9ed8140bace
+      source_url: https://huggingface.co/brain-bzh/reve-positions
+      local_path: checkpoints/reve-positions/model.safetensors
+      size_bytes: 6628
+      sha256: 4b793820b9df0998667deb6c8ce2dbb86b38221d5165c1844bc4971941b13f13
+pretraining_corpus:
+  declared_scope: 92_datasets_60000_hours_25000_subjects
+  exhaustive_list_source: paper_appendix_B
+target_corpus_overlap:
+  eeg_fnirs_single_trial: confirmed_overlap_via_MOABB_Shin2017A
+  simultaneous_eeg_nirs: none_in_published_exhaustive_list
+  visual_cognitive_motivation: none_in_published_exhaustive_list
+  refed: none_in_published_exhaustive_list
+input_boundary:
+  modalities: [eeg, registered_electrode_coordinates]
+  upstream_sampling_rate_hz: 200
+  fnirs_allowed: false
+  coordinate_provenance_required: true
+reporting_boundary:
+  eeg_fnirs_single_trial: open_world_pretrained_with_target_corpus_overlap
+  target_excluded_claim_allowed: false
+gate_status:
+  B0_source_fixed: pass_with_gated_weight_access
+  B1_input_contract: pending
+  B2_software_smoke: pending
+  B3_source_fidelity: pending
+  B4_protocol_freeze: pending
