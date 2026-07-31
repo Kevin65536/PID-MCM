@@ -1,0 +1,106 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-07-31T14:17:03.163623+00:00",
+  "completed_job_count": 90,
+  "failed_job_count": 0,
+  "finalizer_path": "comparative_methods/BIOT/finalize_public_matrix_v2.py",
+  "finalizer_sha256": "d8991079f279e2256fde566357acb9dea00bc048ae03992625a205ebd58eb76d",
+  "job_artifact_fingerprint_sha256": "b2c1ea0d0b93b8926f4d9dde4eb76d171f4f724874464ca71d06e372ccbebfb9",
+  "job_count": 90,
+  "local_completed_audit_sha256": "d930f534074bdf8462974043df01665fb9a2e8d4b18c55c3455447284cd0cda8",
+  "local_controller_status_sha256": "09b9075514778162530431ace02d4c38dff6a8334b2cc2e44a852bfe9ed35503",
+  "matrix_identity_sha256": "5714161f2c05ac341caf6fd6c1ac38409cc45d57c0aa29d1ac27eeee86f5f968",
+  "max_concurrent_jobs": 1,
+  "method_id": "biot",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "schema": "biot_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.529864588228524,
+      "public_validation_macro_f1_cell_sd": 0.01770841640279257,
+      "seed_mean_by_outer_fold": [
+        0.5371390779610835,
+        0.5201958529021462,
+        0.5468221028527073,
+        0.536800640844903,
+        0.5083652665817798
+      ],
+      "task": "motor_imagery"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6094989752215088,
+      "public_validation_macro_f1_cell_sd": 0.025992045426676998,
+      "seed_mean_by_outer_fold": [
+        0.5776933019441775,
+        0.639764896013591,
+        0.6110800203536866,
+        0.5979053146087878,
+        0.6210513431873013
+      ],
+      "task": "mental_arithmetic"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5945579491294203,
+      "public_validation_macro_f1_cell_sd": 0.03401065524818509,
+      "seed_mean_by_outer_fold": [
+        0.5978054958113782,
+        0.5722549506669624,
+        0.6115583507482005,
+        0.5531948395607534,
+        0.6379761088598068
+      ],
+      "task": "wg"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.4011124427178443,
+      "public_validation_macro_f1_cell_sd": 0.023511695852521795,
+      "seed_mean_by_outer_fold": [
+        0.4072563085914855,
+        0.41902929286070395,
+        0.3736686781218643,
+        0.4037831188209362,
+        0.4018248151942318
+      ],
+      "task": "nback"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5398526300668862,
+      "public_validation_macro_f1_cell_sd": 0.008970927382425343,
+      "seed_mean_by_outer_fold": [
+        0.5362086049517695,
+        0.5519344924796616,
+        0.5458707160140088,
+        0.532255808522733,
+        0.5329935283662578
+      ],
+      "task": "dsr"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.26646738846540774,
+      "public_validation_macro_f1_cell_sd": 0.022513683095216872,
+      "seed_mean_by_outer_fold": [
+        0.3027731087458812,
+        0.26115408453997635,
+        0.27551819529825633,
+        0.24128494389383637,
+        0.2516066098490884
+      ],
+      "task": "visual"
+    }
+  ]
+}

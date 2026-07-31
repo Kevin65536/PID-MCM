@@ -23,10 +23,9 @@ and can be regenerated with:
 .venv/bin/python comparative_methods/BIOT/audit_alignment_v2.py
 ```
 
-A8 is deliberately still pending. It requires a frozen public-development job
-matrix, retry/failure rules, and a separate protected unlock decision. The
-serial queue therefore remains on BIOT; CBraMod implementation or execution
-must not start yet.
+A8 now passes for all six supported cells after the frozen 90-job public matrix
+completed with zero failures and zero retries. REFED remains unsupported.
+Protected evaluation is still locked and requires a separate decision.
 
 ## Public-development implementation
 
@@ -44,7 +43,8 @@ Both the connectivity smoke and the full MI/outer0/seed17 public pilot pass;
 their validation scores remain development-only and are not table-admissible.
 The candidate 90-job matrix is serial (`max_concurrent_jobs=1`), has zero
 automatic retries, retains failures, and is explicitly not self-authorizing.
-The separate reviewed launch manifest authorizes only this public matrix and
-keeps protected evaluation and CBraMod work unauthorized. A8 and the BIOT
-delivery queue therefore remain open during matrix execution; no protected
-command is present.
+The separate reviewed launch manifest authorized only this public matrix and
+kept protected evaluation and CBraMod work unauthorized during execution. The
+matrix is now complete, so the delivery queue has explicitly advanced to
+CBraMod. BIOT has no live job; its deferred protected evaluation remains locked
+and may not run concurrently with the active delivery method.

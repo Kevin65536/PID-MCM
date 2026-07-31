@@ -31,7 +31,7 @@ gate_aggregation:
 
 execution_policy:
   mode: strict_serial_new_method_delivery_queue
-  active_delivery_method: biot
+  active_delivery_method: cbramod
   max_active_new_method_implementations: 1
   max_active_new_method_experiment_queues: 1
   serial_scope:
@@ -55,28 +55,40 @@ execution_policy:
     - current_delivery_method_has_completed_review_scope_or_has_a_preregistered_unsupported_disposition
     - current_delivery_method_evidence_bundle_is_retained
     - next_delivery_method_is_explicitly_promoted_from_queued_to_active
+  deferred_locked_evaluation_policy:
+    rule: completed_public_delivery_may_advance_while_protected_remains_separately_locked
+    concurrency: deferred_protected_execution_may_not_run_with_an_active_delivery_method
+    current:
+      - method_id: biot
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
   protected_test_default: locked
   ordered_queue:
     - order: 0
       method_id: biot
       state_at_adoption: active
+      current_state: public_development_complete_protected_locked
       scope: adapter_v2_full_public_gate_then_public_development
     - order: 1
       method_id: cbramod
       state_at_adoption: queued
+      current_state: active
       scope: fix_representation_layer_then_adapter_v2_full_public_gate
     - order: 2
       method_id: reve
       state_at_adoption: queued
+      current_state: queued
       scope: complete_identity_chain_then_adapter_v2_full_public_gate
     - order: 3
       method_id: brainfusion_nvc_csp_stacking_reimplementation
       state_at_adoption: queued
+      current_state: queued
       scope: freeze_observation_budget_then_complete_fold_local_pipeline
     - order: 4
       method_id: normwear_eeg_fnirs_adapted
       state_at_adoption: queued
+      current_state: queued
       scope: complete_named_eeg_fnirs_adaptation
 
 evidence_scopes:
@@ -409,12 +421,13 @@ current_repository_assessment:
     promotes_A4_or_A7: false
   method_readiness:
     biot:
-      status: implementation_review_complete_A0_A7_pass_A8_pending
+      status: public_development_complete_A0_A8_pass_protected_locked
       evidence_scope: public_complete
-      evidence: comparative_methods/BIOT/evidence/alignment_v2/summary.json
+      evidence: comparative_methods/BIOT/evidence/alignment_v2/summary_final.json
       audited_unique_public_sample_count: 22442
-      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7]
-      pending_gates: [A8]
+      completed_public_job_count: 90
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
+      protected_evaluation_authorized: false
       task_exceptions:
         refed_regression: unsupported
     cbramod:

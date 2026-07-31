@@ -67,7 +67,7 @@
   },
   "alignment_profile": "support_matched_direct",
   "cell_id": "biot__visual__support_matched_direct__v2",
-  "cell_status": "pending",
+  "cell_status": "pass",
   "comparison_fields": {
     "canonical_signal_branch": {
       "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
@@ -168,9 +168,16 @@
     "A5": "pass",
     "A6": "pass",
     "A7": "pass",
-    "A8": "pending"
+    "A8": "pass"
   },
   "method_id": "biot",
+  "protocol_freeze": {
+    "matrix_identity_sha256": "5714161f2c05ac341caf6fd6c1ac38409cc45d57c0aa29d1ac27eeee86f5f968",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/BIOT/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "1acd62707938b42f947faab71e20fbccef7df95f365d6e4d307f6659423ce965"
+  },
   "public_audit": {
     "all_unique_public_samples_audited": true,
     "cache_identity_sha256": "b1c0b36ce7e0735ce71f666068a6c9ee165ae10f74eee86948526f34665bfe85",
