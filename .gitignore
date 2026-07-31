@@ -47,6 +47,7 @@ __pycache__/
 !/comparative_methods/comparison_metric_targets_v1.yaml
 !/comparative_methods/ASSET_STATUS.md
 !/comparative_methods/audit_assets.py
+!/comparative_methods/audit_public_preflight.py
 !/comparative_methods/BIOT/
 !/comparative_methods/CBraMod/
 !/comparative_methods/REVE/
