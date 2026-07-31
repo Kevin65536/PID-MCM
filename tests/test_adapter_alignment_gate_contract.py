@@ -46,17 +46,22 @@ def test_alignment_contract_has_complete_versioned_surface() -> None:
     assert set(contract["current_repository_assessment"]["method_readiness"]) == EXPECTED_METHODS
     assert contract["current_repository_assessment"]["new_public_matrix_launch_hold"] is True
     policy = contract["execution_policy"]
-    assert policy["mode"] == "strict_serial_method_queue"
-    assert policy["max_active_method_implementations"] == 1
-    assert policy["max_active_method_experiment_queues"] == 1
+    assert policy["mode"] == "strict_serial_new_method_delivery_queue"
+    assert policy["active_delivery_method"] == "biot"
+    assert policy["max_active_new_method_implementations"] == 1
+    assert policy["max_active_new_method_experiment_queues"] == 1
+    assert policy["grandfathered_background_execution"][0] == {
+        "method_id": "efrm_sync_200_10_variable_channel_v1",
+        "scope": "already_running_frozen_lodo_v2",
+        "blocks_new_method_delivery_queue": False,
+        "may_be_modified_by_new_method_work": False,
+    }
     assert [row["method_id"] for row in policy["ordered_queue"]] == [
-        "efrm_sync_200_10_variable_channel_v1",
         "biot",
         "cbramod",
         "reve",
         "brainfusion_nvc_csp_stacking_reimplementation",
         "normwear_eeg_fnirs_adapted",
-        "sta_net_eeg_fnirs_supervised",
     ]
 
 

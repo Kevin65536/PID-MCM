@@ -11,9 +11,11 @@ protected-evaluation boundaries below. Current execution state is reported in
 New or not-yet-frozen adapters are additionally governed by the
 [adapter alignment v2 contract](../../comparative_methods/ADAPTER_ALIGNMENT_GATES_V2.md)
 and its [machine-readable form](../../comparative_methods/adapter_alignment_gate_contract_v2.yaml).
-That contract uses a strict serial method queue: only one method may be active
-across adapter implementation, public preflight/development, freeze, and formal
-execution. Idle hardware does not authorize starting the next method.
+That contract uses a strict serial new-method delivery queue: only one new
+method may be active across adapter implementation/review, public development,
+freeze, and its formal execution. Already-running frozen EFRM work may continue
+in the background without blocking BIOT delivery and without being modified.
+Idle hardware does not authorize starting the next queued new method.
 
 ## Benchmark matrix
 

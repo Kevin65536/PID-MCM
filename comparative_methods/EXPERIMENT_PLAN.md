@@ -22,11 +22,12 @@ protected-test 边界继续服从
 `B1_input_contract: pass...` 不自动提升为 v2 通过；v2 按
 `method × task × track × alignment_profile` 判定，而不是按整个方法判定。
 
-执行策略为严格串行：同一时刻只允许一个 active method，其 adapter 实现、public
-preflight、public development、freeze 和 formal execution 全部完成或形成事前
-unsupported 处置后，才显式晋级下一方法。协议生效时正在运行的 EFRM LODO v2
-先作为队首排空，之后依次为 BIOT、CBraMod、REVE、BrainFusion、NormWear；
-STA-Net 只保留既有冻结结果。blocked 方法暂停整个队列，不自动跳过。
+新方法落地严格串行：同一时刻只允许一个 active delivery method，其 adapter 实现
+与审核、public preflight/development、freeze 和该方法的 formal execution 完成或
+形成事前 unsupported 处置后，才显式晋级下一方法。既有 EFRM LODO v2 冻结训练可
+继续后台执行，但不阻塞且不得被新方法工作修改。新方法依次为 BIOT、CBraMod、
+REVE、BrainFusion、NormWear，当前 active method 为 BIOT；STA-Net 只保留既有
+冻结结果。blocked 方法暂停新方法队列，不自动跳过。
 
 ## 1. 固定方法队列
 
@@ -374,14 +375,14 @@ NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文�
 
 - GPU0 正在运行 EFRM Stage-B Single-Trial final refit，项目进程约占
   16.6 GiB；在该队列结束前不向 GPU0 加入新方法任务；
-- GPU1 约有 23.4 GiB 可用，但只作为串行队列的下一执行资源；EFRM 队首仍活动时
-  不在 GPU1 启动 BIOT 或其他 comparison job；
+- GPU1 约有 23.4 GiB 可用，可供当前 active delivery method BIOT 的 public
+  audit/development 使用；不得借空闲资源提前启动 CBraMod 或更后方法；
 - `/SSD_2` 约有 1.5 TiB 可用。运行目录继续忽略，不复制 raw data、upstream
   checkout 或相同 checkpoint；feature cache 在生成前必须先给出体积估计。
 
 REVE-large、full fine-tuning、sample-random 和 few-shot 不进入当前资源队列。
-不再增加第二条 comparison GPU lane。每次只晋级一个 method；GPU0/GPU1 的物理
-空闲不构成并行启动下一方法的授权。
+EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新方法侧每次只晋级
+一个 method；GPU0/GPU1 的物理空闲不构成提前启动下一 delivery method 的授权。
 
 ## 10. 失败、重试与停止规则
 

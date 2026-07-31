@@ -16,17 +16,18 @@ patch/token、通道顺序、几何编码、池化和源方法声明的固定变
 这一定义解决两个相反风险：只对齐 shape 会把不同长度上下文或伪造通道藏起来；
 把所有上游预处理和 tokenization 强制做成相同又会破坏 named method 的复现边界。
 
-## 严格串行执行
+## 新方法严格串行落地
 
-从本版本开始只允许一个 active method。串行范围包括 adapter 实现、public
-preflight、public development、协议冻结和正式执行；另一个方法活动期间，只允许
-只读状态审计和协议文档/提交，不提前实现或试跑队列中的下一种方法。
+从本版本开始只允许一个 active delivery method。串行范围包括 adapter 实现与审核、
+public preflight/development、协议冻结和该新方法的正式执行；当前方法未完成前，不
+提前实现或试跑队列中的下一种方法。
 
-协议生效时已有 EFRM LODO v2 冻结队列正在运行，因此它作为队首先完成。之后依次为
-BIOT、CBraMod、REVE、BrainFusion、NormWear。STA-Net 只保留已完成结果，不开启新
-执行。当前方法仍有 live job、证据包未保留或未到达冻结 scope 的完成/事前
-unsupported 处置时，不得晋级下一方法；若当前方法 blocked，则暂停队列处理该
-blocker，不能静默跳过。protected data 继续默认锁定。
+协议生效前已经运行的 EFRM LODO v2 冻结训练可以继续，但它是不可修改的后台协议，
+不阻塞新方法代码落地。STA-Net 同样只保留已完成结果。新的实现顺序为 BIOT、
+CBraMod、REVE、BrainFusion、NormWear，当前 active method 是 BIOT。BIOT 的实现、
+审核和证据包未完成或形成事前 unsupported 处置前，不进入 CBraMod；若当前方法
+blocked，则暂停新方法队列处理 blocker，不能静默跳过。protected data 继续默认
+锁定。
 
 ## 数据集特征对门控的约束
 
