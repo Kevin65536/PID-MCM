@@ -3,20 +3,19 @@
 NormWear has completed source identity, A0 cell registration, and the full
 public A1-A4 data-boundary audit as an explicitly named EEG-fNIRS adaptation.
 The executable model semantics and source-fidelity gates A5/A6 pass. Full
-public production replay A7 now also passes. The A8 public-development runner
-and its independent artifact auditor are implemented; both the first
-n-back/outer0/seed17 connectivity smoke and the corresponding complete public
-selection/refit job pass. The remaining folds, matrix freeze, and protected
-evaluation remain pending/locked.
+public production replay A7 and the A8 public-development freeze now pass. All
+90 task/fold/seed public selection-refit jobs completed under a one-job serial
+controller and passed independent artifact audit; failures and automatic
+retries were both zero. Protected evaluation remains locked.
 
 | Task | Unique public samples | Measured input | Current status |
 | --- | ---: | --- | --- |
-| Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
-| Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
-| WG | 1,560 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
-| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 outer0 pilot pass |
-| DSR | 8,980 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
-| Visual | 7,720 | EEG 30; HbO/HbR 24 locations | A0-A7 pass; A8 pending |
+| Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A8 pass; protected locked |
+| Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A8 pass; protected locked |
+| WG | 1,560 | EEG 28; HbO/HbR 36 locations | A0-A8 pass; protected locked |
+| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0-A8 pass; protected locked |
+| DSR | 8,980 | EEG 28; HbO/HbR 36 locations | A0-A8 pass; protected locked |
+| Visual | 7,720 | EEG 30; HbO/HbR 24 locations | A0-A8 pass; protected locked |
 | REFED regression | — | partial terminal support | preregistered unsupported |
 
 All 22,442 supported public identities were read exactly once through the
@@ -46,5 +45,6 @@ public train/validation membership, fits its coordinate standardizer on
 outer-train only, selects a linear-probe candidate on public validation, and
 refits only on public train plus validation. The n-back connectivity smoke and
 complete outer0/seed17 pilot audits are retained under
-`evidence/public_development_v2`; both are explicitly public-development
-artifacts and are not admissible as final performance evidence.
+`evidence/public_development_v2`. The same directory retains the 90-job matrix
+completion summary. All are explicitly public-development artifacts and are
+not admissible as protected/final-table performance evidence.

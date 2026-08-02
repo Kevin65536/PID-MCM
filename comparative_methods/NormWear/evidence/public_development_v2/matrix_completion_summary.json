@@ -1,0 +1,161 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-08-02T15:05:51.108724+00:00",
+  "completed_job_count": 90,
+  "device": "cuda:1",
+  "failed_job_count": 0,
+  "finalizer_path": "comparative_methods/NormWear/finalize_public_matrix_v2.py",
+  "finalizer_sha256": "6c5f1ad4cb5a2bb4f8e8e537077e5d945473d4138b51bc09586d631b6740359c",
+  "job_artifact_fingerprint_sha256": "52c3163ac574219c53b5d07b8f548efe668c897884902aed8d7ddc9ce10f851c",
+  "job_count": 90,
+  "local_completed_audit_sha256": "01e5af5e9812226530c27ab0e1e37d58cd76852d97d499a667fd12ce80a6b4e9",
+  "local_controller_status_sha256": "4f06a3fa26498e07ee361bb88c0d141151b502760a12536ba37a755fbdb9f628",
+  "matrix_identity_sha256": "331a64e492f989295f21c92b45fed25bf60eef758c054721f920079a86bc66fe",
+  "max_concurrent_jobs": 1,
+  "method_id": "normwear_eeg_fnirs_adapted",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "schema": "normwear_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5552916448647557,
+      "public_validation_macro_f1_cell_sd": 0.025464487952860552,
+      "public_validation_macro_f1_max": 0.5854148672520281,
+      "public_validation_macro_f1_min": 0.4957983193277311,
+      "seed_mean_by_outer_fold": [
+        0.510072181425099,
+        0.5683301766808061,
+        0.5742144018806351,
+        0.5669548692851181,
+        0.5568865950521199
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "ac7a2879115ce2d1ab9f2b45b744309f1a62fbdcc49520e4464fd83c4de82a43",
+        "1": "52886d6cdf13547aa60bb1c1f4c72f001f49c2acaab8a16eff222fb5f73deef8",
+        "2": "b06043739918e57cd8337c829fb51f52fe2c6c785e027ee241ed7020e4f91492",
+        "3": "15cb180dd8d67e7e2e3379461eb4dd1043314f67e558ca71b925e492004f4af7",
+        "4": "5c104214938a528793dcd0521f6d264b8a0a73568c863c4cff7a8f82003d5aaf"
+      },
+      "task": "motor_imagery"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6215888638173277,
+      "public_validation_macro_f1_cell_sd": 0.022993112252687246,
+      "public_validation_macro_f1_max": 0.6729038894748491,
+      "public_validation_macro_f1_min": 0.5770668125056968,
+      "seed_mean_by_outer_fold": [
+        0.6182543650987578,
+        0.6247682761127274,
+        0.5913722041069951,
+        0.6194141048103883,
+        0.6541353689577699
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "e4b3b73d6b73091fb04b8bcf2806547062401b804f924c8062b9a3c4ea424068",
+        "1": "3fd9e3fab223f1324db54d34640a5631ad203785b774139b8c9e54392c62026c",
+        "2": "69f92dbe3d30ce5d211223d89b4da9937571a987611a4156799f28a2117ab4b1",
+        "3": "b208f3b31bbc1d8c11010dd4761f575e03b3439951cdc5c3bb980f9ddc78f8f9",
+        "4": "21b9a46e468fe4dcae356c5a1d8173ee33093298c4fc18982f786b1203d79f37"
+      },
+      "task": "mental_arithmetic"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6182881334438944,
+      "public_validation_macro_f1_cell_sd": 0.016543135265151897,
+      "public_validation_macro_f1_max": 0.6499503897944718,
+      "public_validation_macro_f1_min": 0.5903925971286657,
+      "seed_mean_by_outer_fold": [
+        0.6083804107676131,
+        0.635602249955831,
+        0.6020426638862554,
+        0.6255255539219535,
+        0.6198897886878191
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "e132cb5897ae184a5c1b9366fb88916a1749726242fe9cdc5468f329b961369f",
+        "1": "f100c5e0192d9cf0a3d7d74f8f03772bb4cd487c49a391fd3de4630ab9bdde73",
+        "2": "a6a9a06e99dbc7fdac34878e290497c78ab19e07e6a742522c3d5088329c1611",
+        "3": "6d211f614b939320802c92345fe1a80471ca9dc542f002232754c4b6ce05a219",
+        "4": "abd759e7bf192c093c833b51db263ce087ad80e0a107268d67f85e3a3f4bd5ef"
+      },
+      "task": "wg"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.4533105938496885,
+      "public_validation_macro_f1_cell_sd": 0.0232508268639849,
+      "public_validation_macro_f1_max": 0.5044562310168185,
+      "public_validation_macro_f1_min": 0.4101931717043709,
+      "seed_mean_by_outer_fold": [
+        0.47819514921185013,
+        0.461210870596898,
+        0.44094348163541813,
+        0.43559359660081926,
+        0.4506098712034572
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "b33933a65dd65718e420e3e57e5b4eaa27459fec76d78944422923e30fdca5e9",
+        "1": "0948ace619d72b0648dc2111735791abcc7af2cc602e7ea8fb04f2650755c760",
+        "2": "56a08694c4628a697f624933e4cf0931f0eaa055fc31b7a3e1c62516f7e17664",
+        "3": "a8de07bb3f1181d0404667f7c8a344ff42e2edec651aa343d989d6118ef47df8",
+        "4": "0b70ef6d2f9ba1494d557bbef529dd29803cd3eb364e58327b8605f9bb03fb04"
+      },
+      "task": "nback"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5893196384098213,
+      "public_validation_macro_f1_cell_sd": 0.011039376519977544,
+      "public_validation_macro_f1_max": 0.6041152522513269,
+      "public_validation_macro_f1_min": 0.5673396107145978,
+      "seed_mean_by_outer_fold": [
+        0.5717572447294248,
+        0.6018835550183027,
+        0.5846708705987661,
+        0.5950955620049199,
+        0.5931909596976935
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "fcc734ea397a5f1b368264c488905ee4f893c00ae3f06d3130266a9eaa6f3c94",
+        "1": "877c200a2c6cb5351baeaa26f94897c39edfbd046f9a11ce92302871cd1e4fc6",
+        "2": "b3f5add85357a57f8bfe18c210a487895ced71d4bad114af8b03f40126af9eed",
+        "3": "e09659a0443ded375a0e4ab1fbfd2ef6fc69adb5eb89b7130c457595fd4990a0",
+        "4": "22e5c19198158cdaa14197f0d1d81c72c42db4b422bcb97a39101fc3e2f43fba"
+      },
+      "task": "dsr"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.27720703412467124,
+      "public_validation_macro_f1_cell_sd": 0.011753134813920941,
+      "public_validation_macro_f1_max": 0.30170733875225125,
+      "public_validation_macro_f1_min": 0.2636747278094747,
+      "seed_mean_by_outer_fold": [
+        0.2926942448118764,
+        0.2752073016296359,
+        0.28642988111278495,
+        0.2660601528010334,
+        0.26564359026802536
+      ],
+      "selected_public_feature_sha256_by_outer_fold": {
+        "0": "d3a3fbd024e86fa1f8df94c4f38e5de58e68d57bc04bac8ffed9aa2ba9b2f5ba",
+        "1": "0b3459949ec6846320747842a4e635282b536b50c46cd3614da25ba7620f7149",
+        "2": "68f4070f9357800f4578f80338795ecae15f829cbfb600da04049758ce9bd837",
+        "3": "520f0a3412a2ee234ba19485c4eff475cf73f6181c875bec62a6a495daded0fa",
+        "4": "9e8044eb4fd3d09e051def8b826c6d308549af1348b7d2eefea7a6e5401c8a24"
+      },
+      "task": "visual"
+    }
+  ]
+}

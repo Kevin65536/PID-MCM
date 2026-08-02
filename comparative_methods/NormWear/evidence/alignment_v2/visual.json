@@ -190,7 +190,7 @@
   },
   "alignment_profile": "support_matched_direct",
   "cell_id": "normwear__visual__support_matched_direct__v2",
-  "cell_status": "pending",
+  "cell_status": "pass",
   "comparison_fields": {
     "canonical_signal_branch": {
       "eeg": {
@@ -448,9 +448,16 @@
     "A5": "pass",
     "A6": "pass",
     "A7": "pass",
-    "A8": "pending"
+    "A8": "pass"
   },
   "method_id": "normwear_eeg_fnirs_adapted",
+  "protocol_freeze": {
+    "matrix_identity_sha256": "331a64e492f989295f21c92b45fed25bf60eef758c054721f920079a86bc66fe",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/NormWear/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "79936c9b93fc284455c1dd200d0cfc4cb64f025f486d481fed163223df651eb3"
+  },
   "public_adapter_audit": {
     "all_unique_public_samples_executed": true,
     "cache_directory": "comparative_methods/NormWear/runs/public_feature_cache_v2/visual/a8670a5115e06887e27de50b49e376e97ff4c0510d97f5c59735a38393175f28",

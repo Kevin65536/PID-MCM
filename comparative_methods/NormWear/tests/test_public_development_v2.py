@@ -186,3 +186,41 @@ def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
     assert report["public_matrix_launch_authorized"] is True
     assert report["protected_evaluation_authorized"] is False
     assert report["protected_test_opened"] is False
+
+
+def test_completed_public_matrix_closes_delivery_queue_with_protected_locked() -> None:
+    import json
+
+    completion = json.loads(
+        (METHOD_ROOT / "evidence/public_development_v2/matrix_completion_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert completion["status"] == "pass"
+    assert completion["job_count"] == 90
+    assert completion["completed_job_count"] == 90
+    assert completion["failed_job_count"] == 0
+    assert completion["max_concurrent_jobs"] == 1
+    assert completion["automatic_retry_count"] == 0
+    assert len(completion["tasks"]) == 6
+    assert all(task["job_count"] == 15 for task in completion["tasks"])
+    assert completion["protected_evaluation_authorized"] is False
+    assert completion["protected_test_opened"] is False
+
+    final = json.loads(
+        (METHOD_ROOT / "evidence/alignment_v2/summary_final.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert final["status"] == "public_development_complete_A0_A8_pass_protected_locked"
+    assert final["completed_public_job_count"] == 90
+    assert final["protected_evaluation_authorized"] is False
+    assert final["protected_test_opened"] is False
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    assert contract["execution_policy"]["active_delivery_method"] == (
+        "none_public_delivery_queue_complete"
+    )
+    queue = contract["execution_policy"]["ordered_queue"]
+    assert queue[-1]["method_id"] == "normwear_eeg_fnirs_adapted"
+    assert queue[-1]["current_state"] == "public_development_complete_protected_locked"

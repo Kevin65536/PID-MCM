@@ -1,6 +1,6 @@
 schema: adapter_alignment_gate_contract_v2
 contract_version: 2
-status: active_for_unfrozen_comparison_work
+status: public_delivery_queue_complete_protected_locked
 effective_date: "2026-07-31"
 
 authority:
@@ -31,7 +31,7 @@ gate_aggregation:
 
 execution_policy:
   mode: strict_serial_new_method_delivery_queue
-  active_delivery_method: normwear_eeg_fnirs_adapted
+  active_delivery_method: none_public_delivery_queue_complete
   max_active_new_method_implementations: 1
   max_active_new_method_experiment_queues: 1
   serial_scope:
@@ -71,6 +71,9 @@ execution_policy:
       - method_id: brainfusion_nvc_csp_stacking_reimplementation
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
+      - method_id: normwear_eeg_fnirs_adapted
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
   protected_test_default: locked
   ordered_queue:
@@ -97,7 +100,7 @@ execution_policy:
     - order: 4
       method_id: normwear_eeg_fnirs_adapted
       state_at_adoption: queued
-      current_state: active
+      current_state: public_development_complete_protected_locked
       scope: complete_named_eeg_fnirs_adaptation
 
 evidence_scopes:
@@ -462,14 +465,12 @@ current_repository_assessment:
         mental_arithmetic: open_world_pretrained_with_target_corpus_overlap
         refed_regression: unsupported
     normwear_eeg_fnirs_adapted:
-      status: active_delivery_A0_A7_pass_A8_pending
+      status: public_development_complete_A0_A8_pass_protected_locked
       evidence_scope: public_complete
-      evidence:
-        alignment: comparative_methods/NormWear/evidence/alignment_v2/summary.json
-        adapter_smoke: comparative_methods/NormWear/evidence/adapter_smoke_v2/summary.json
+      evidence: comparative_methods/NormWear/evidence/alignment_v2/summary_final.json
       audited_unique_public_sample_count: 22442
-      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7]
-      pending_gates: [A8]
+      completed_public_job_count: 90
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
       protected_evaluation_authorized: false
       task_exceptions:
         refed_regression: unsupported

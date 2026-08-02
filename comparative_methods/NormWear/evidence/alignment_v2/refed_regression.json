@@ -50,10 +50,17 @@
     "A5": "unsupported",
     "A6": "pass",
     "A7": "unsupported",
-    "A8": "pending"
+    "A8": "not_applicable"
   },
   "method_id": "normwear_eeg_fnirs_adapted",
   "protected_test_opened": false,
+  "protocol_freeze": {
+    "matrix_identity_sha256": "331a64e492f989295f21c92b45fed25bf60eef758c054721f920079a86bc66fe",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/NormWear/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "79936c9b93fc284455c1dd200d0cfc4cb64f025f486d481fed163223df651eb3"
+  },
   "schema": "adapter_alignment_cell_evidence_v2",
   "task_id": "refed_regression",
   "track": "preregistered_unsupported",

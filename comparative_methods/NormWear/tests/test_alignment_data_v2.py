@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 import yaml
 
+import comparative_methods.NormWear.audit_alignment_v2 as alignment_audit_module
+import comparative_methods.NormWear.audit_data_boundary_v2 as data_audit_module
 from comparative_methods.NormWear.alignment_data import (
     NormWearPublicView,
     PublicInventory,
@@ -32,6 +34,22 @@ from comparative_methods.audit_adapter_alignment import validate_cell
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = METHOD_ROOT / "configs/alignment_v2.yaml"
 BRAINFUSION_CONFIG = METHOD_ROOT.parent / "BrainFusion-NVC-CSP-Stacking/configs/alignment_v2.yaml"
+ALIGNMENT_CONTRACT = METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _review_historical_normwear_under_its_frozen_active_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    historical = copy.deepcopy(contract)
+    historical["execution_policy"]["active_delivery_method"] = (
+        "normwear_eeg_fnirs_adapted"
+    )
+    path = tmp_path / "normwear_active_contract.yaml"
+    path.write_text(yaml.safe_dump(historical, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(data_audit_module, "ALIGNMENT_CONTRACT", path)
+    monkeypatch.setattr(alignment_audit_module, "ALIGNMENT_CONTRACT", path)
 
 
 def test_config_freezes_public_support_matched_multimodal_boundary() -> None:
@@ -208,7 +226,7 @@ def test_retained_full_public_data_boundary_evidence_is_complete() -> None:
     for task in SUPPORTED_TASKS:
         cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
         assert cell["evidence_scope"] == "public_complete"
-        assert cell["cell_status"] == "pending"
+        assert cell["cell_status"] == "pass"
         assert [cell["gate_status"][f"A{index}"] for index in range(5)] == ["pass"] * 5
         assert cell["gate_status"]["A6"] == "pass"
         if "public_adapter_audit" in cell:
@@ -217,7 +235,7 @@ def test_retained_full_public_data_boundary_evidence_is_complete() -> None:
         else:
             assert cell["gate_status"]["A5"] == "pending"
             assert cell["gate_status"]["A7"] == "pending"
-        assert cell["gate_status"]["A8"] == "pending"
+        assert cell["gate_status"]["A8"] == "pass"
         assert cell["public_data_audit"]["all_unique_public_samples_audited"] is True
         assert cell["public_data_audit"]["protected_test_opened"] is False
 
@@ -276,7 +294,7 @@ def test_retained_nback_production_pilot_passes_a7() -> None:
         (METHOD_ROOT / "evidence/alignment_v2/nback.json").read_text(encoding="utf-8")
     )
     assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
-    assert cell["gate_status"]["A8"] == "pending"
+    assert cell["gate_status"]["A8"] == "pass"
     audit = cell["public_adapter_audit"]
     assert audit["unique_sample_count"] == 702
     assert audit["all_unique_public_samples_executed"] is True
@@ -311,7 +329,7 @@ def test_retained_full_public_production_replay_passes_a7() -> None:
     for task, (count, width) in expected.items():
         cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
         assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
-        assert cell["gate_status"]["A8"] == "pending"
+        assert cell["gate_status"]["A8"] == "pass"
         audit = cell["public_adapter_audit"]
         assert audit["feature_shape"] == [count, width]
         assert audit["nonconstant_coordinate_count"] == width

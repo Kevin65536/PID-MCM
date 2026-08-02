@@ -115,7 +115,7 @@ foundation-model 排名。
 | BIOT | 六个分类 cell 以 `public_complete` 通过 A0–A8；REFED v1 unsupported；protected locked | 22,442 个唯一公开样本和 90 个串行 public selection/refit jobs 已全部审核通过，失败/重试均为 0；public delivery 已完成并晋级 CBraMod，BIOT protected 仍需独立授权 |
 | CBraMod | blocked | 当前 adapter 直接执行完整 encoder 后 mean pool；上游 quick example 和 downstream modules 先将 `proj_out` 替换为 `Identity`。必须先固定实际 representation layer，再做全量覆盖 |
 | REVE | blocked；Single-Trial 两任务为 overlap track；REFED v1 unsupported | cache/identity 需包含 position bank、trusted code 与实际模型代码 hashes；完成全 public name-to-position 覆盖 |
-| NormWear | active；A0–A7 pass，A8 pending；REFED unsupported | 22,442 个 public 输入已全部通过 production replay；继续完成 public pilot、job matrix 与协议冻结，只能以 adapted 名称进入 |
+| NormWear | 六个分类 cell 以 adapted 名称和 `public_complete` 通过 A0–A8；REFED unsupported；protected locked | 22,442 个公开输入的 production replay 与 90 个串行 public selection/refit jobs 全部审核通过，失败/重试均为 0；新方法交付队列已完成 |
 | EFRM | 现有冻结协议继续；新 direct table 为 pending | 当前 observation budget 是分类 8/8 s、DSR 2/2 s、REFED 20/20 s；补齐 v2 evidence 后可作为 synchronous profile 的基准 |
 | BrainFusion | blocked | 先冻结 NVC/HRF observation interval；NVC/CSP/selection/stacking 必须全部 fold-local，不能用 source-native context 自动进入 direct 表 |
 | STA-Net | 完成结果保留，但当前归 `method_native_context_reference` | 默认分类实际为 EEG 3 s + fNIRS 13 s，DSR 为 2 s + 13 s，与 synchronous profile 不同；不回写既有 protected 结果。如需 direct profile，必须新版本、重新冻结并独立授权 |
