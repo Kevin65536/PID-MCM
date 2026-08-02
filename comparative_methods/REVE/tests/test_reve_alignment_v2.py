@@ -34,6 +34,7 @@ from comparative_methods.REVE.run_public_development_v2 import (
     run,
     select_and_refit,
 )
+from comparative_methods.REVE.run_public_matrix_v2 import validate_jobs
 from comparative_methods.audit_adapter_alignment import validate_cell
 
 
@@ -337,3 +338,8 @@ def test_candidate_job_matrix_is_serial_public_only_and_not_self_authorizing() -
     assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
     assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
     assert [job["order"] for job in matrix["jobs"]] == list(range(90))
+    jobs = validate_jobs(
+        matrix,
+        run_root=(METHOD_ROOT / "runs/public_development_v2/matrix_v2").resolve(),
+    )
+    assert [job["order"] for job in jobs] == list(range(90))
