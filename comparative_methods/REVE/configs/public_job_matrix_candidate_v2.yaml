@@ -1,0 +1,31 @@
+schema: reve_public_job_matrix_candidate_v2
+protocol_id: reve_public_job_matrix_candidate_v2
+method_id: reve
+status: candidate_after_pilot_before_A8
+mode: public_development_only
+protected_test_default: locked
+
+runner:
+  path: comparative_methods/REVE/run_public_development_v2.py
+  config: comparative_methods/REVE/configs/public_development_v2.yaml
+  config_sha256: cbe91de1d18547358c5e52860f44c7d81e586949e88c440e59fbbbda14a866ec
+
+matrix:
+  task_order: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  outer_fold_order: [0, 1, 2, 3, 4]
+  seed_order: [17, 42, 73]
+  expected_job_count: 90
+  output_root: comparative_methods/REVE/runs/public_development_v2/matrix_v2
+  max_concurrent_jobs: 1
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  completed_run_overwrite: forbidden
+  failed_job_replacement: forbidden
+  retry_requires_new_reviewed_matrix_version: true
+
+authorization:
+  public_matrix_launch_authorized: false
+  protected_evaluation_authorized: false
+  note: candidate matrix is retained for review and does not itself launch jobs

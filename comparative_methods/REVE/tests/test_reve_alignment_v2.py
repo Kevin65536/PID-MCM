@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+import torch
 
 from comparative_methods.BIOT.alignment_data import load_config as load_biot_config
 from comparative_methods.BIOT.audit_alignment_v2 import comparison_fields as biot_fields
@@ -23,6 +24,15 @@ from comparative_methods.REVE.audit_alignment_v2 import (
     parse_tasks,
     unsupported_refed_cell,
     write_json,
+)
+from comparative_methods.REVE.build_public_job_matrix_v2 import build_matrix
+from comparative_methods.REVE.run_public_development_v2 import (
+    DEFAULT_CONFIG as DEFAULT_PUBLIC_CONFIG,
+    PublicFold,
+    class_weights,
+    load_runner_config,
+    run,
+    select_and_refit,
 )
 from comparative_methods.audit_adapter_alignment import validate_cell
 
@@ -213,3 +223,117 @@ def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
     assert refed["cell_status"] == "unsupported"
     assert refed["unsupported_reason_code"] == "REVE_NO_PARTIAL_TIME_MASK_CONTRACT"
     assert refed["protected_test_opened"] is False
+
+
+def test_public_runner_config_freezes_one_reve_matrix_and_track_map() -> None:
+    config, _config_path, alignment, _alignment_path = load_runner_config(
+        DEFAULT_PUBLIC_CONFIG
+    )
+    assert config["method_id"] == "reve"
+    assert config["job_matrix"]["expected_public_jobs"] == 90
+    assert tuple(config["job_matrix"]["tasks"]) == SUPPORTED_TASKS
+    assert alignment["method_id"] == "reve"
+    assert config["protected_test_default"] == "locked"
+    assert alignment["tasks"]["motor_imagery"]["track"] == (
+        "open_world_pretrained_with_target_corpus_overlap"
+    )
+
+
+def test_inverse_frequency_weights_reject_empty_training_class() -> None:
+    np.testing.assert_allclose(class_weights(np.asarray([0, 0, 1]), 2), [0.75, 1.5])
+    with pytest.raises(RuntimeError, match="empty class"):
+        class_weights(np.asarray([0, 0]), 2)
+
+
+def test_public_probe_selects_refits_512d_and_weights_only_reloads(tmp_path: Path) -> None:
+    rng = np.random.default_rng(17)
+    features = np.concatenate(
+        (rng.normal(-1.0, 0.1, (12, 512)), rng.normal(1.0, 0.1, (12, 512)))
+    ).astype(np.float32)
+    arrays = {
+        "features": features,
+        "targets": np.asarray([0] * 12 + [1] * 12, dtype=np.int64),
+        "dataset_indices": np.arange(24, dtype=np.int64),
+        "subjects": np.asarray([f"s{index // 4}" for index in range(24)]),
+        "sample_ids": np.asarray([f"sample-{index}" for index in range(24)]),
+    }
+    inventory = SimpleNamespace(
+        task="motor_imagery",
+        dataset=SimpleNamespace(spec=SimpleNamespace(class_names=("left", "right"))),
+    )
+    fold = PublicFold(
+        inventory=inventory,  # type: ignore[arg-type]
+        outer_fold=0,
+        public_manifest_path=tmp_path / "public.json",
+        public_manifest_sha256="a" * 64,
+        train_indices=tuple([*range(8), *range(12, 20)]),
+        validation_indices=tuple([*range(8, 12), *range(20, 24)]),
+    )
+    config, config_path, _alignment, alignment_path = load_runner_config(
+        DEFAULT_PUBLIC_CONFIG
+    )
+    report, logits = select_and_refit(
+        arrays=arrays,
+        fold=fold,
+        train_indices=fold.train_indices,
+        validation_indices=fold.validation_indices,
+        config=config,
+        config_path=config_path,
+        alignment_path=alignment_path,
+        method_identity={"artifact_id": "synthetic"},
+        cache_identity={"feature_cache_key": "synthetic"},
+        seed=17,
+        device=torch.device("cpu"),
+        smoke=True,
+        output_dir=tmp_path,
+    )
+    assert logits.shape == (8, 2)
+    assert report["public_refit"]["membership"] == "smoke_train_plus_validation_subset"
+    assert report["public_refit"]["weights_only_reload_match"] is True
+    checkpoint = torch.load(
+        tmp_path / "checkpoint_public_refit.pt", map_location="cpu", weights_only=True
+    )
+    assert checkpoint["head_state"]["weight"].shape == (2, 512)
+    assert checkpoint["method_id"] == "reve"
+
+
+def test_public_runner_refuses_output_outside_reve_run_root(tmp_path: Path) -> None:
+    args = SimpleNamespace(
+        config=DEFAULT_PUBLIC_CONFIG,
+        task="motor_imagery",
+        outer_fold=0,
+        seed=17,
+        output_dir=tmp_path / "outside",
+        smoke=True,
+    )
+    with pytest.raises(PermissionError, match="must remain under"):
+        run(args)
+
+
+def test_pilot_audit_passes_without_performance_or_protected_claim() -> None:
+    pilot = json.loads(
+        (
+            METHOD_ROOT / "evidence/public_development_v2/pilot_audit.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert pilot["status"] == "pass"
+    assert pilot["protected_test_opened"] is False
+    assert len(pilot["run_reports"]) == 1
+    report = pilot["run_reports"][0]
+    assert report["mode"] == "smoke_only"
+    assert report["status"] == "pass"
+    assert report["table_admissible"] is False
+    assert report["track"] == "open_world_pretrained_with_target_corpus_overlap"
+
+
+def test_candidate_job_matrix_is_serial_public_only_and_not_self_authorizing() -> None:
+    matrix = build_matrix()
+    assert matrix["job_count"] == 90
+    assert matrix["max_concurrent_jobs"] == 1
+    assert matrix["automatic_retry_count"] == 0
+    assert matrix["public_matrix_launch_authorized"] is False
+    assert matrix["protected_evaluation_authorized"] is False
+    assert matrix["protected_test_opened"] is False
+    assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
+    assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
+    assert [job["order"] for job in matrix["jobs"]] == list(range(90))

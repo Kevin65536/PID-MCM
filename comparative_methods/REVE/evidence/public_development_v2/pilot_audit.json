@@ -1,0 +1,35 @@
+{
+  "auditor_path": "comparative_methods/REVE/audit_public_run_v2.py",
+  "auditor_sha256": "e8aea1056986623f40fbd7a0834155eb4ec90994202451fb0c8e3e87e5a566af",
+  "created_at": "2026-08-02T08:04:36.036041+00:00",
+  "protected_test_opened": false,
+  "run_reports": [
+    {
+      "feature_cache_sha256": "cd8702bf2ae92879a3ae0794314727c474ead00b9019e9474c6c674c6026f2ad",
+      "manifest_sha256": "23348f5c5156c5ce07328c82807cc3dc08a03e48235fd470effb8c47c5e6b37d",
+      "mode": "smoke_only",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "2c7c90f89e8102039abd83de5923f655c585124f0819601686bac83b1efaf9af",
+      "run_dir": "comparative_methods/REVE/runs/public_development_v2/pilot_mi_outer0_seed17_smoke_v2",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 1,
+        "candidate_index": 0,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "selection_train_sample_count": 8,
+      "selection_validation_sample_count": 8,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "motor_imagery",
+      "track": "open_world_pretrained_with_target_corpus_overlap",
+      "validation_macro_f1": 0.2727272727272727
+    }
+  ],
+  "runner_config_path": "comparative_methods/REVE/configs/public_development_v2.yaml",
+  "runner_config_sha256": "cbe91de1d18547358c5e52860f44c7d81e586949e88c440e59fbbbda14a866ec",
+  "schema": "reve_public_development_audit_v2",
+  "status": "pass"
+}

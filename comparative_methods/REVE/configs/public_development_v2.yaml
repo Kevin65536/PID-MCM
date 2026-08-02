@@ -1,0 +1,61 @@
+schema: reve_public_development_v2
+protocol_id: reve_public_development_v2
+method_id: reve
+track: task_specific_declared_pretraining_exposure
+mode: public_development_only
+protected_test_default: locked
+
+alignment:
+  config: comparative_methods/REVE/configs/alignment_v2.yaml
+  config_sha256: 9174980d1a86d94cadc65ebf3a72730a64f0ec670f93d133924f821642941545
+  evidence_summary: comparative_methods/REVE/evidence/alignment_v2/summary.json
+  evidence_summary_sha256: 1a2fc8fea092e570a748219ada07c9d8e0a9d3e15fd80f5c14f4a33e83f08ea2
+  required_status: implementation_review_complete_A0_A7_pass_A8_pending
+
+job_matrix:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  outer_folds: [0, 1, 2, 3, 4]
+  seeds: [17, 42, 73]
+  expected_public_jobs: 90
+  refed_regression: unsupported_REVE_NO_PARTIAL_TIME_MASK_CONTRACT
+
+selection:
+  metric: macro_f1
+  mode: max
+  learning_rates: [0.001, 0.0003]
+  weight_decays: [0.0, 0.01]
+  epoch_cap: 40
+  batch_size: 128
+  class_weighting: inverse_frequency
+  feature_standardization: outer_train_coordinate_zscore
+  feature_standardization_epsilon: 1.0e-6
+  tie_break: lower_candidate_index
+
+refit:
+  membership: outer_train_plus_public_validation
+  epochs: selected_best_epoch
+  hyperparameters: selected_public_validation_candidate
+  feature_standardization: refit_membership_coordinate_zscore
+  protected_evaluation: forbidden_until_separate_unlock
+
+smoke:
+  train_samples_per_class: 4
+  validation_samples_per_class: 4
+  epoch_cap: 2
+  learning_rates: [0.001]
+  weight_decays: [0.0]
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  oom_batch_size_fallback: forbidden_before_A8_freeze
+  completed_run_overwrite: forbidden
+
+resources:
+  device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  minimum_free_gpu_gib: 6
+  gpu_lock_path: /tmp/pid_mcm_reve_public_gpu1.lock
+  feature_cache_root: comparative_methods/REVE/runs/feature_cache_v2
+  run_root: comparative_methods/REVE/runs/public_development_v2

@@ -1,7 +1,9 @@
 # REVE adapter-alignment v2 status
 
-REVE has completed implementation review and the full-public A0–A7 gate. A8
-public probe execution remains pending. Protected evaluation remains locked.
+REVE has completed implementation review and the full-public A0–A7 gate. The
+A8 runner and one public-only connectivity pilot have passed review; the
+candidate 90-job matrix is retained but not launch-authorized. Protected
+evaluation remains locked.
 
 ## Retained public evidence
 
@@ -42,6 +44,10 @@ boundary across methods.
 
 ## Next serial gate
 
-A8 may begin only after this A0–A7 bundle and its tests are committed. The
-candidate experiment matrix must remain public-only and serial, with protected
-evaluation authorization set to false.
+The A8 pilot uses MI outer fold 0 and seed 17 with a balanced per-class smoke
+subset. Its artifact audit recomputes membership, targets, metrics, feature
+identity and the weights-only checkpoint, and explicitly marks the result as
+non-table-admissible. The candidate 90-job matrix is serial
+(`max_concurrent_jobs=1`), has zero automatic retries, and cannot authorize
+itself. A separate reviewed launch artifact is required, with protected
+evaluation authorization still false.
