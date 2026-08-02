@@ -35,6 +35,7 @@ def test_gpu_reference_targets_the_pinned_public_nvc_source() -> None:
         pytest.skip("pinned BrainFusion checkout is not available locally")
     assert source.stat().st_size == 11140
     assert _sha256(source) == "4a406a9d3f3f2752cede4ddf29bffe296ac906d7fb3af65c8fd01a67404c459d"
+    assert NVCConfig().hrf_oversampling == 1
 
 
 def test_gpu_avg_raw_nvc_matches_cpu_reference_for_every_channel_pair() -> None:
@@ -91,3 +92,6 @@ def test_gpu_nvc_is_differentiable_and_rejects_cpu_or_constant_inputs() -> None:
         brainfusion_gpu_nvc_avg_raw(eeg.detach().cpu(), fnirs.cpu())
     with pytest.raises(ValueError, match="non-constant"):
         brainfusion_gpu_nvc_avg_raw(torch.ones_like(eeg.detach()), fnirs)
+
+    with pytest.raises(ValueError, match="identical EEG-summary and fNIRS grids"):
+        brainfusion_gpu_nvc_avg_raw(eeg.detach(), fnirs[..., :-1])

@@ -1,0 +1,92 @@
+schema: brainfusion_adapter_alignment_v2
+method_id: brainfusion_nvc_csp_stacking_reimplementation
+mode: public_audit_only
+protected_test_default: locked
+
+registry:
+  manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  protocol: strict_cross_subject
+  outer_folds: [0, 1, 2, 3, 4]
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_sample_rate_hz: 200
+  fnirs_sample_rate_hz: 10
+  required_modalities: [eeg, fnirs_hbo, fnirs_hbr]
+  support_policy: full_recorded_and_analysis_valid_support_only
+  channel_policy: frozen_task_inventory_real_measured_channels_no_copy_no_padding
+
+observation_budget:
+  alignment_profile: support_matched_direct
+  anchor: canonical_registry_window_start
+  extra_pre_anchor_context_s: 0.0
+  extra_post_interval_context_s: 0.0
+  hrf_is_method_local_transform_not_permission_for_extra_input: true
+  minimum_supported_nvc_interval_s: 8.0
+  dsr_disposition: unsupported_because_two_seconds_cannot_support_frozen_nvc_hrf_contract
+  refed_disposition: unsupported_classification_pipeline_and_partial_terminal_support
+
+adapter:
+  eeg_downsampling: nonoverlapping_mean_20_samples_to_10hz
+  nvc_branch: public_avg_raw_component
+  nvc_normalization: per_sample_per_channel_minmax_source_declared_stateless
+  hrf:
+    tr: 1.0
+    oversampling: 1
+    time_length_s: 32.0
+    convolution: causal_full_then_crop_to_observed_interval
+  learned_transforms:
+    - csp_filters_outer_training_only
+    - nvc_pair_selection_outer_training_only
+    - feature_standardizers_outer_training_only
+    - base_estimators_outer_training_only
+    - stacking_oof_meta_estimator_outer_training_only
+
+channel_inventories:
+  eeg_fnirs_single_trial:
+    eeg: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h, T7, P7, P3, PPO1h, POO1, POO2, PPO2h, P4, FCC4h, FCC6h, CCP4h, CCP6h, P8, T8]
+    fnirs_locations: [AF7Fp1, AF3Fp1, AF3AFz, FpzFp1, FpzAFz, FpzFp2, AF4AFz, AF4Fp2, AF8Fp2, OzPOz, OzO1, OzO2, C5CP5, C5FC5, C5C3, FC3FC5, FC3C3, FC3FC1, CP3CP5, CP3C3, CP3CP1, C1C3, C1FC1, C1CP1, C2FC2, C2CP2, C2C4, FC4FC2, FC4C4, FC4FC6, CP4CP6, CP4CP2, CP4C4, C6CP6, C6C4, C6FC6]
+  simultaneous_eeg_nirs:
+    eeg: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1, Fp2, AFF6h, F2, FC2, FC6, C4, T8, CP2, CP6, P4, P8, O2]
+    fnirs_locations: [AF7, AFF5, AFp7, AF5h, AFp3, AFF3h, AF1, AFFz, AFpz, AF2, AFp4, FCC3, C3h, C5h, CCP3, CPP3, P3h, P5h, PPO3, AFF4h, AF6h, AFF6, AFp8, AF8, FCC4, C6h, C4h, CCP4, CPP4, P6h, P4h, PPO4, PPOz, PO1, PO2, POOz]
+  visual_cognitive_motivation:
+    eeg: [Fp1, Fp2, AF3, AF4, F3, F4, FC3, FC4, C3, C4, PO3, PO4, O1, O2, F5, F6, F7, F8, T7, CP3, CP4, P3, P4, T8, P5, P6, P7, P8, Fz, Cz]
+    fnirs_locations: [CH1, CH2, CH3, CH4, CH5, CH6, CH7, CH8, CH9, CH10, CH11, CH12, CH13, CH14, CH15, CH16, CH17, CH18, CH19, CH20, CH21, CH22, CH23, CH24]
+
+tasks:
+  motor_imagery:
+    supported: true
+    dataset_id: eeg_fnirs_single_trial
+    duration_s: 8.0
+    track: source_case_corpus_supervised_reimplementation
+  mental_arithmetic:
+    supported: true
+    dataset_id: eeg_fnirs_single_trial
+    duration_s: 8.0
+    track: cross_task_supervised_reimplementation
+  wg:
+    supported: true
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 8.0
+    track: cross_task_supervised_reimplementation
+  nback:
+    supported: true
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 8.0
+    track: cross_task_supervised_reimplementation
+  dsr:
+    supported: false
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 2.0
+    unsupported_reason_code: BRAINFUSION_NVC_TWO_SECOND_CONTEXT_UNSUPPORTED
+  visual:
+    supported: true
+    dataset_id: visual_cognitive_motivation
+    duration_s: 8.0
+    track: cross_task_supervised_reimplementation
+  refed_regression:
+    supported: false
+    dataset_id: refed
+    duration_s: 20.0
+    unsupported_reason_code: BRAINFUSION_CLASSIFICATION_ONLY_AND_NO_PARTIAL_MASK_CONTRACT

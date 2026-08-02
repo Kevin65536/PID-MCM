@@ -47,7 +47,9 @@ def test_alignment_contract_has_complete_versioned_surface() -> None:
     assert contract["current_repository_assessment"]["new_public_matrix_launch_hold"] is True
     policy = contract["execution_policy"]
     assert policy["mode"] == "strict_serial_new_method_delivery_queue"
-    assert policy["active_delivery_method"] == "biot"
+    assert policy["active_delivery_method"] == (
+        "brainfusion_nvc_csp_stacking_reimplementation"
+    )
     assert policy["max_active_new_method_implementations"] == 1
     assert policy["max_active_new_method_experiment_queues"] == 1
     assert policy["grandfathered_background_execution"][0] == {
@@ -63,6 +65,8 @@ def test_alignment_contract_has_complete_versioned_surface() -> None:
         "brainfusion_nvc_csp_stacking_reimplementation",
         "normwear_eeg_fnirs_adapted",
     ]
+    active = [row for row in policy["ordered_queue"] if row["current_state"] == "active"]
+    assert [row["method_id"] for row in active] == [policy["active_delivery_method"]]
 
 
 def test_direct_profile_aligns_information_not_internal_tensorization() -> None:

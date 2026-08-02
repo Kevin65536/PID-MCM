@@ -16,7 +16,7 @@ class NVCConfig:
     fnirs_sampling_rate_hz: int = 10
     eeg_window_samples: int = 20
     hrf_tr: float = 1.0
-    hrf_oversampling: int = 16
+    hrf_oversampling: int = 1
     hrf_time_length: float = 32.0
 
 
@@ -112,6 +112,10 @@ def brainfusion_gpu_nvc_avg_raw(
         raise ValueError("BrainFusion NVC EEG input is shorter than one averaging window")
     processed_eeg = eeg[..., :complete_samples].reshape(*eeg.shape[:-1], -1, window).mean(dim=-1)
     processed_eeg = _tensor_minmax(processed_eeg)
+    if processed_eeg.shape[-1] != fnirs.shape[-1]:
+        raise ValueError(
+            "BrainFusion support-matched NVC requires identical EEG-summary and fNIRS grids"
+        )
 
     hrf_numpy = spm_hrf(
         config.hrf_tr,
@@ -128,9 +132,6 @@ def brainfusion_gpu_nvc_avg_raw(
 
     normalized_convolved = _tensor_minmax(convolved)
     normalized_fnirs = _tensor_minmax(fnirs)
-    length = min(normalized_convolved.shape[-1], normalized_fnirs.shape[-1])
-    normalized_convolved = normalized_convolved[..., :length]
-    normalized_fnirs = normalized_fnirs[..., :length]
     centered_eeg = normalized_convolved - normalized_convolved.mean(dim=-1, keepdim=True)
     centered_fnirs = normalized_fnirs - normalized_fnirs.mean(dim=-1, keepdim=True)
     numerator = torch.einsum("bet,bft->bef", centered_eeg, centered_fnirs)
