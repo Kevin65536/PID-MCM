@@ -31,7 +31,7 @@ gate_aggregation:
 
 execution_policy:
   mode: strict_serial_new_method_delivery_queue
-  active_delivery_method: brainfusion_nvc_csp_stacking_reimplementation
+  active_delivery_method: normwear_eeg_fnirs_adapted
   max_active_new_method_implementations: 1
   max_active_new_method_experiment_queues: 1
   serial_scope:
@@ -68,6 +68,9 @@ execution_policy:
       - method_id: reve
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
+      - method_id: brainfusion_nvc_csp_stacking_reimplementation
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
   protected_test_default: locked
   ordered_queue:
@@ -89,12 +92,12 @@ execution_policy:
     - order: 3
       method_id: brainfusion_nvc_csp_stacking_reimplementation
       state_at_adoption: queued
-      current_state: active
+      current_state: public_development_complete_protected_locked
       scope: freeze_observation_budget_then_complete_fold_local_pipeline
     - order: 4
       method_id: normwear_eeg_fnirs_adapted
       state_at_adoption: queued
-      current_state: queued
+      current_state: active
       scope: complete_named_eeg_fnirs_adaptation
 
 evidence_scopes:
@@ -459,19 +462,19 @@ current_repository_assessment:
         mental_arithmetic: open_world_pretrained_with_target_corpus_overlap
         refed_regression: unsupported
     normwear_eeg_fnirs_adapted:
-      status: blocked
+      status: active_delivery_A0_registration_required
       blockers: [A0_UNREGISTERED_CELL]
     efrm_sync_200_10_variable_channel_v1:
       status: pending
       note: existing_frozen_protocol_continues_but_new_direct_tables_require_v2_profile_evidence
     brainfusion_nvc_csp_stacking_reimplementation:
-      status: active_A0_A7_pass_A8_pending
+      status: public_development_complete_A0_A8_pass_protected_locked
       evidence_scope: public_complete
-      evidence: comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary.json
+      evidence: comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json
       audited_unique_public_sample_count: 13462
-      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7]
+      completed_public_job_count: 75
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
       protected_evaluation_authorized: false
-      blockers: [A8_PROTOCOL_FREEZE_PENDING]
       task_exceptions:
         dsr: unsupported
         refed_regression: unsupported

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 import json
 import sys
@@ -7,12 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-
+import yaml
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 if str(METHOD_ROOT) not in sys.path:
     sys.path.insert(0, str(METHOD_ROOT))
 
+import run_public_development_v2 as public_runner_module
 from run_public_development_v2 import (
     DEFAULT_CONFIG,
     diverse_balanced_subset,
@@ -23,6 +25,25 @@ from run_public_development_v2 import (
 )
 from build_public_job_matrix_v2 import build_matrix
 from run_public_matrix_v2 import execute, exclusive_controller_lock, validate_jobs
+
+
+ALIGNMENT_CONTRACT = METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _review_historical_brainfusion_runner_under_its_frozen_active_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep historical runner tests reproducible after the serial queue advances."""
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    historical = copy.deepcopy(contract)
+    historical["execution_policy"]["active_delivery_method"] = (
+        "brainfusion_nvc_csp_stacking_reimplementation"
+    )
+    path = tmp_path / "brainfusion_active_contract.yaml"
+    path.write_text(yaml.safe_dump(historical, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(public_runner_module, "ALIGNMENT_CONTRACT", path)
 
 
 def test_runner_config_freezes_75_serial_public_jobs() -> None:
@@ -73,6 +94,32 @@ def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
     assert report["protected_evaluation_authorized"] is False
     assert report["normwear_work_authorized"] is False
     assert report["protected_test_opened"] is False
+
+
+def test_completed_matrix_is_terminal_and_queue_advanced_to_normwear() -> None:
+    completion = json.loads(
+        (METHOD_ROOT / "evidence/public_development_v2/matrix_completion_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert completion["status"] == "pass"
+    assert completion["job_count"] == completion["completed_job_count"] == 75
+    assert completion["failed_job_count"] == 0
+    assert completion["max_concurrent_jobs"] == 1
+    assert completion["automatic_retry_count"] == 0
+    assert completion["table_admissible"] is False
+    assert completion["protected_test_opened"] is False
+    final = json.loads(
+        (METHOD_ROOT / "evidence/alignment_v2/summary_final.json").read_text(encoding="utf-8")
+    )
+    assert final["status"] == "public_development_complete_A0_A8_pass_protected_locked"
+    assert final["completed_public_job_count"] == 75
+    contract = yaml.safe_load(
+        (METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert contract["execution_policy"]["active_delivery_method"] == "normwear_eeg_fnirs_adapted"
 
 
 class _Dataset:

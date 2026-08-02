@@ -50,10 +50,17 @@
     "A5": "unsupported",
     "A6": "pass",
     "A7": "unsupported",
-    "A8": "pending"
+    "A8": "not_applicable"
   },
   "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
   "protected_test_opened": false,
+  "protocol_freeze": {
+    "matrix_identity_sha256": "0c4f04b7cb776c6f8e2556160bf0c2d3d8ef116b2f6568ffbd0b2f949749f3c1",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "3f5069d667c5e0c56536ac2daebc2c685361e3ea21cba8b1b8557d8e80421acd"
+  },
   "schema": "adapter_alignment_cell_evidence_v2",
   "task_id": "dsr",
   "track": "preregistered_unsupported",

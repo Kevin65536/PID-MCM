@@ -52,7 +52,7 @@ gate_status:
   B1_input_contract: pass_support_matched_public_only
   B2_software_smoke: pass_complete_fold_local_reload
   B3_source_fidelity: pass_component_fidelity_independent_reimplementation
-  B4_protocol_freeze: pending
+  B4_protocol_freeze: pass_public_matrix_complete_protected_locked
 component_smoke:
   gpu_nvc:
     test: tests/test_gpu_nvc.py

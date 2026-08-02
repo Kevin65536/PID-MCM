@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 import json
 import sys
 from types import SimpleNamespace
 
 import pytest
-
+import yaml
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 if str(METHOD_ROOT) not in sys.path:
     sys.path.insert(0, str(METHOD_ROOT))
+
+import audit_alignment_v2 as alignment_audit_module
+
+ALIGNMENT_CONTRACT = METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _review_historical_brainfusion_under_its_frozen_active_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep historical alignment tests executable after the serial queue advances."""
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    historical = copy.deepcopy(contract)
+    historical["execution_policy"]["active_delivery_method"] = (
+        "brainfusion_nvc_csp_stacking_reimplementation"
+    )
+    path = tmp_path / "brainfusion_active_contract.yaml"
+    path.write_text(yaml.safe_dump(historical, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(alignment_audit_module, "ALIGNMENT_CONTRACT", path)
 
 from alignment_data import load_config
 from audit_alignment_v2 import (
@@ -99,10 +120,10 @@ def test_task_parser_excludes_unsupported_cells_from_execution() -> None:
         parse_tasks(["wg", "wg"])
 
 
-def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
+def test_retained_full_public_evidence_is_terminal_through_a8() -> None:
     root = METHOD_ROOT / "evidence/alignment_v2"
-    summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
-    assert summary["status"] == "implementation_review_complete_A0_A7_pass_A8_pending"
+    summary = json.loads((root / "summary_final.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "public_development_complete_A0_A8_pass_protected_locked"
     assert summary["supported_unique_public_sample_count"] == 13_462
     assert summary["schema_audit"]["status"] == "pass"
     assert len(summary["schema_audit"]["direct_group_reports"]) == 7
@@ -118,9 +139,8 @@ def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
     for task, count in expected.items():
         cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
         assert cell["evidence_scope"] == "public_complete"
-        assert cell["cell_status"] == "pending"
-        assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
-        assert cell["gate_status"]["A8"] == "pending"
+        assert cell["cell_status"] == "pass"
+        assert [cell["gate_status"][f"A{index}"] for index in range(9)] == ["pass"] * 9
         assert cell["public_audit"]["unique_sample_count"] == count
         assert cell["public_audit"]["all_unique_public_samples_audited"] is True
         assert cell["public_audit"]["all_model_inputs_finite_and_nonconstant"] is True
@@ -130,4 +150,5 @@ def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
     for task in ("dsr", "refed_regression"):
         cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
         assert cell["cell_status"] == "unsupported"
+        assert cell["gate_status"]["A8"] == "not_applicable"
         assert cell["protected_test_opened"] is False

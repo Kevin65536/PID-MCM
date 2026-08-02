@@ -1,0 +1,98 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-08-02T11:01:38.568149+00:00",
+  "completed_job_count": 75,
+  "device": "cuda:1",
+  "failed_job_count": 0,
+  "finalizer_path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/finalize_public_matrix_v2.py",
+  "finalizer_sha256": "fa295b21c7d4042455398f1114b5a5e7ce4109733eca508f9af7e035d01cc08a",
+  "job_artifact_fingerprint_sha256": "12f87db96c7288b3441067814e7276cf07a99ab4597f07cff1bd9c0b63dc7f14",
+  "job_count": 75,
+  "local_completed_audit_sha256": "24aadb9718c63179e0262ba9cf64b7a284d11e4694da657e15ee4183c20aed59",
+  "local_controller_status_sha256": "1e5ecf84caf73b55420e25c2399d18fa7ce16f3859456a460910b6dabba2cb91",
+  "matrix_identity_sha256": "0c4f04b7cb776c6f8e2556160bf0c2d3d8ef116b2f6568ffbd0b2f949749f3c1",
+  "max_concurrent_jobs": 1,
+  "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "schema": "brainfusion_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5268579406899455,
+      "public_validation_macro_f1_cell_sd": 0.013553446010615392,
+      "seed_mean_by_outer_fold": [
+        0.5282156852356772,
+        0.5346713926512147,
+        0.5373963674048217,
+        0.5164852923532496,
+        0.5175209658047645
+      ],
+      "task": "motor_imagery",
+      "track": "source_case_corpus_supervised_reimplementation"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5269699763613381,
+      "public_validation_macro_f1_cell_sd": 0.027495245743579175,
+      "seed_mean_by_outer_fold": [
+        0.5154593698292697,
+        0.5004202213700942,
+        0.5101286422886785,
+        0.5662788384030214,
+        0.5425628099156269
+      ],
+      "task": "mental_arithmetic",
+      "track": "cross_task_supervised_reimplementation"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5315669841104279,
+      "public_validation_macro_f1_cell_sd": 0.030512054784394248,
+      "seed_mean_by_outer_fold": [
+        0.5149139830442323,
+        0.510681886504296,
+        0.5013803613727386,
+        0.5747687893247104,
+        0.5560899003061622
+      ],
+      "task": "wg",
+      "track": "cross_task_supervised_reimplementation"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.3546698623267072,
+      "public_validation_macro_f1_cell_sd": 0.030655296120620915,
+      "seed_mean_by_outer_fold": [
+        0.36546829833987776,
+        0.37669835724636713,
+        0.31700318577765985,
+        0.36992020545565696,
+        0.3442592648139747
+      ],
+      "task": "nback",
+      "track": "cross_task_supervised_reimplementation"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.24029050786976255,
+      "public_validation_macro_f1_cell_sd": 0.02362419066523935,
+      "seed_mean_by_outer_fold": [
+        0.2706065479755504,
+        0.21871623959547018,
+        0.23396507560748267,
+        0.26334172816109863,
+        0.2148229480092109
+      ],
+      "task": "visual",
+      "track": "cross_task_supervised_reimplementation"
+    }
+  ]
+}

@@ -210,7 +210,7 @@
   },
   "alignment_profile": "support_matched_direct",
   "cell_id": "brainfusion__motor_imagery__support_matched_direct__v2",
-  "cell_status": "pending",
+  "cell_status": "pass",
   "comparison_fields": {
     "canonical_signal_branch": {
       "eeg": {
@@ -516,9 +516,16 @@
     "A5": "pass",
     "A6": "pass",
     "A7": "pass",
-    "A8": "pending"
+    "A8": "pass"
   },
   "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "protocol_freeze": {
+    "matrix_identity_sha256": "0c4f04b7cb776c6f8e2556160bf0c2d3d8ef116b2f6568ffbd0b2f949749f3c1",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "3f5069d667c5e0c56536ac2daebc2c685361e3ea21cba8b1b8557d8e80421acd"
+  },
   "public_audit": {
     "all_model_inputs_finite_and_nonconstant": true,
     "all_unique_public_samples_audited": true,

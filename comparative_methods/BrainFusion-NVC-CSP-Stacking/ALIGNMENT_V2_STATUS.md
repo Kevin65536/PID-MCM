@@ -1,19 +1,19 @@
 # BrainFusion adapter-alignment v2 status
 
 BrainFusion has completed implementation review and the full-public A0–A7
-gate as an explicitly independent NVC-CSP-stacking reimplementation. Five
+gate and A8 freeze as an explicitly independent NVC-CSP-stacking reimplementation. Five
 8-second classification cells are supported; DSR and REFED are preregistered
-unsupported. Independently audited smoke and full-fold public pilots have
-passed. The full A8 public-development matrix remains pending and protected
+unsupported. Independently audited smoke and full-fold public pilots passed,
+followed by a terminal 75-job serial public-development matrix. Protected
 evaluation remains locked.
 
 | Task | Unique public samples | Measured input | Status |
 | --- | ---: | --- | --- |
-| Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0–A7 pass |
-| Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0–A7 pass |
-| WG | 1,560 | EEG 28; HbO/HbR 36 locations | A0–A7 pass |
-| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0–A7 pass |
-| Visual | 7,720 | EEG 30; HbO/HbR 24 locations | A0–A7 pass |
+| Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0–A8 pass |
+| Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0–A8 pass |
+| WG | 1,560 | EEG 28; HbO/HbR 36 locations | A0–A8 pass |
+| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0–A8 pass |
+| Visual | 7,720 | EEG 30; HbO/HbR 24 locations | A0–A8 pass |
 | DSR | — | two-second synchronized context | unsupported |
 | REFED regression | — | masked continuous target/partial support | unsupported |
 
@@ -47,10 +47,10 @@ be regenerated without protected reads using:
 PYTHONPATH=. .venv/bin/python comparative_methods/BrainFusion-NVC-CSP-Stacking/audit_alignment_v2.py --device cuda:1
 ```
 
-The retained public-only pilots independently reproduce fold membership,
-targets, macro-F1, checkpoint predictions, and decision scores. The full-fold
-pilot additionally verifies that cached validation tensors are bitwise equal
-to fresh raw-adapter materialization. Neither pilot is a performance claim. The
-next serial gate is a separately reviewed and authorized 75-job serial matrix.
-Public validation results remain development-only and non-table-admissible
-until the protocol is frozen.
+The retained public-only pilots and all 75 matrix jobs independently reproduce
+fold membership, targets, macro-F1, checkpoint predictions, and decision
+scores. Every matrix job also verifies that cached validation tensors are
+bitwise equal to fresh raw-adapter materialization. Public validation results
+remain development-only and non-table-admissible; protected evaluation was not
+authorized. BrainFusion is terminal for the current public delivery scope, and
+the serial implementation queue advances to NormWear.
