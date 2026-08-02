@@ -1,0 +1,50 @@
+schema: brainfusion_public_matrix_launch_v2
+launch_id: brainfusion_public_matrix_launch_v2
+method_id: brainfusion_nvc_csp_stacking_reimplementation
+status: reviewed_public_launch
+mode: public_development_only
+protected_test_default: locked
+
+reviewed_commits:
+  alignment_public_audit: 6941b1f
+  audited_smoke_pilot: cc345d9
+  full_fold_pilot_and_cache: 574987e
+  matrix_candidate: 8697a7f
+  serial_controller: 5aafc15
+
+pilot_evidence:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/full_fold_pilot_audit.json
+  sha256: 209dbcb7bc8e68f1fc9f8c7532ff1a066c2831ba83bf91fadfb9bf5b07be1ad9
+  required_status: pass
+
+matrix:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/job_matrix_candidate.json
+  sha256: 18310c14b9b9bbf52671b22b12245c62bf84982b22f69ca7d0b18192ee64dcf1
+  identity_sha256: 0c4f04b7cb776c6f8e2556160bf0c2d3d8ef116b2f6568ffbd0b2f949749f3c1
+  expected_job_count: 75
+
+runner:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/run_public_development_v2.py
+  sha256: 1db7a30786203639427d33c43557fd22131bf9e105551dc697c9359839679327
+  config: comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/public_development_v2.yaml
+  config_sha256: ecdcede1f3fd64cc47bc26d53a50dfd68506b8c5332d764dc48273ad3a95cea4
+
+controller:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/run_public_matrix_v2.py
+  sha256: 318382b5293fe141c3e0be10e36825664b1b0d6498ab916a7b8e33c284fa2afd
+
+execution:
+  matrix_run_root: comparative_methods/BrainFusion-NVC-CSP-Stacking/runs/public_development_v2/matrix_v2
+  max_concurrent_jobs: 1
+  automatic_retry_count: 0
+  device: cuda:1
+  failure_action: retain_and_stop_queue
+  completed_output_action: audit_and_resume_without_overwrite
+
+authorization:
+  public_matrix_launch_authorized: true
+  protected_evaluation_authorized: false
+  normwear_work_authorized: false
+  note: >-
+    This launch is limited to BrainFusion public-development jobs on GPU1. It
+    does not unlock protected evaluation or authorize concurrent NormWear work.

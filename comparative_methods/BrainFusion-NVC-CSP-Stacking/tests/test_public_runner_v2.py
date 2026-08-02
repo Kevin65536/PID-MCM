@@ -22,7 +22,7 @@ from run_public_development_v2 import (
     validate_tensor_cache,
 )
 from build_public_job_matrix_v2 import build_matrix
-from run_public_matrix_v2 import exclusive_controller_lock, validate_jobs
+from run_public_matrix_v2 import execute, exclusive_controller_lock, validate_jobs
 
 
 def test_runner_config_freezes_75_serial_public_jobs() -> None:
@@ -60,6 +60,19 @@ def test_controller_lock_rejects_a_second_executor(tmp_path: Path) -> None:
         with pytest.raises(RuntimeError, match="already running"):
             with exclusive_controller_lock(lock_path):
                 pass
+
+
+def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
+    report = execute(METHOD_ROOT / "configs/public_matrix_launch_v2.yaml", dry_run=True)
+    assert report["status"] == "pass"
+    assert report["job_count"] == 75
+    assert report["max_concurrent_jobs"] == 1
+    assert report["automatic_retry_count"] == 0
+    assert report["device"] == "cuda:1"
+    assert report["public_matrix_launch_authorized"] is True
+    assert report["protected_evaluation_authorized"] is False
+    assert report["normwear_work_authorized"] is False
+    assert report["protected_test_opened"] is False
 
 
 class _Dataset:
