@@ -144,3 +144,72 @@ def brainfusion_gpu_nvc_avg_raw(
     if not bool(torch.isfinite(correlations).all()):
         raise RuntimeError("BrainFusion GPU NVC produced non-finite correlations")
     return convolved, correlations
+
+
+def brainfusion_nvc_contribution_timeseries(
+    eeg: torch.Tensor,
+    hbo: torch.Tensor,
+    hbr: torch.Tensor,
+    config: NVCConfig = NVCConfig(),
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return dynamic per-pair Pearson contributions on CPU or CUDA.
+
+    Pair order is EEG-major, with all HbO locations followed by the matching
+    HbR locations. Summing a pair's contribution over time gives exactly its
+    Pearson NVC coefficient.
+    """
+
+    if eeg.ndim != 3 or hbo.ndim != 3 or hbr.ndim != 3:
+        raise ValueError("BrainFusion dynamic NVC inputs must have shapes [B,C,T]")
+    if hbo.shape != hbr.shape:
+        raise ValueError("BrainFusion dynamic NVC requires paired HbO/HbR shapes")
+    if eeg.shape[0] != hbo.shape[0]:
+        raise ValueError("BrainFusion dynamic NVC modalities must share a batch size")
+    if eeg.device != hbo.device or eeg.device != hbr.device:
+        raise ValueError("BrainFusion dynamic NVC modalities must share a device")
+    if not all(torch.is_floating_point(value) for value in (eeg, hbo, hbr)):
+        raise TypeError("BrainFusion dynamic NVC inputs must be floating-point tensors")
+    if not all(bool(torch.isfinite(value).all()) for value in (eeg, hbo, hbr)):
+        raise ValueError("BrainFusion dynamic NVC inputs contain non-finite values")
+    if config.eeg_sampling_rate_hz // config.fnirs_sampling_rate_hz != config.eeg_window_samples:
+        raise ValueError("dynamic NVC window must preserve the EEG/fNIRS rate ratio")
+
+    window = int(config.eeg_window_samples)
+    if eeg.shape[-1] % window:
+        raise ValueError("dynamic NVC refuses an incomplete EEG averaging window")
+    processed_eeg = eeg.reshape(*eeg.shape[:-1], -1, window).mean(dim=-1)
+    if processed_eeg.shape[-1] != hbo.shape[-1]:
+        raise ValueError(
+            "BrainFusion support-matched NVC requires identical EEG-summary and fNIRS grids"
+        )
+    processed_eeg = _tensor_minmax(processed_eeg)
+    hrf_numpy = spm_hrf(
+        config.hrf_tr,
+        oversampling=config.hrf_oversampling,
+        time_length=config.hrf_time_length,
+    )
+    hrf = torch.as_tensor(hrf_numpy, dtype=eeg.dtype, device=eeg.device)
+    flattened = processed_eeg.reshape(-1, 1, processed_eeg.shape[-1])
+    convolved = F.conv1d(
+        F.pad(flattened, (hrf.numel() - 1, 0)),
+        hrf.flip(0).reshape(1, 1, -1),
+    ).reshape_as(processed_eeg)
+
+    normalized_eeg = _tensor_minmax(convolved)
+    fnirs = torch.cat((hbo, hbr), dim=1)
+    normalized_fnirs = _tensor_minmax(fnirs)
+    centered_eeg = normalized_eeg - normalized_eeg.mean(dim=-1, keepdim=True)
+    centered_fnirs = normalized_fnirs - normalized_fnirs.mean(dim=-1, keepdim=True)
+    eeg_norm = torch.linalg.vector_norm(centered_eeg, dim=-1, keepdim=True)
+    fnirs_norm = torch.linalg.vector_norm(centered_fnirs, dim=-1, keepdim=True)
+    if bool((eeg_norm <= 0).any()) or bool((fnirs_norm <= 0).any()):
+        raise ValueError("BrainFusion dynamic NVC received a constant processed signal")
+    standardized_eeg = centered_eeg / eeg_norm
+    standardized_fnirs = centered_fnirs / fnirs_norm
+    contributions = (
+        standardized_eeg.unsqueeze(2) * standardized_fnirs.unsqueeze(1)
+    ).flatten(1, 2)
+    correlations = contributions.sum(dim=-1)
+    if not bool(torch.isfinite(contributions).all()):
+        raise RuntimeError("BrainFusion dynamic NVC produced non-finite contributions")
+    return convolved, contributions, correlations
