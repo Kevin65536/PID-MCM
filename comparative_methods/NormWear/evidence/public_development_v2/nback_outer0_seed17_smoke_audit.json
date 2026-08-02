@@ -1,0 +1,34 @@
+{
+  "auditor_path": "comparative_methods/NormWear/audit_public_run_v2.py",
+  "auditor_sha256": "643260015d9dba6e5e254a395a036b14b49de77de78ac3587416a326d4ba7051",
+  "created_at": "2026-08-02T14:28:27.984117+00:00",
+  "protected_test_opened": false,
+  "run_reports": [
+    {
+      "manifest_sha256": "ec31e7bea70cb51bc93da4adc64cacb70395aa3122d9e68f2f13437e97254a07",
+      "mode": "smoke_only",
+      "outer_fold": 0,
+      "protected_test_opened": false,
+      "public_refit_checkpoint_sha256": "52b02b502f2bc2f67df7b8b8b3d817e77797a0dd92d674a765e8770fbb628fde",
+      "run_dir": "comparative_methods/NormWear/runs/public_development_v2/pilots/nback_outer0_seed17_smoke",
+      "seed": 17,
+      "selected_candidate": {
+        "best_epoch": 1,
+        "candidate_index": 0,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0
+      },
+      "selected_public_feature_sha256": "b33933a65dd65718e420e3e57e5b4eaa27459fec76d78944422923e30fdca5e9",
+      "selection_train_sample_count": 12,
+      "selection_validation_sample_count": 12,
+      "status": "pass",
+      "table_admissible": false,
+      "task": "nback",
+      "validation_macro_f1": 0.1904761904761905
+    }
+  ],
+  "runner_config_path": "comparative_methods/NormWear/configs/public_development_v2.yaml",
+  "runner_config_sha256": "62bdd377165c069553712cb07edecfb7712e0505508d083599aec9d5c2906823",
+  "schema": "normwear_public_development_audit_v2",
+  "status": "pass"
+}
