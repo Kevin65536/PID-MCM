@@ -1,6 +1,6 @@
 {
   "all_supported_tasks_complete": false,
-  "completed_at": "2026-08-02T12:52:08.549358+00:00",
+  "completed_at": "2026-08-02T13:12:44.339411+00:00",
   "method_id": "normwear_eeg_fnirs_adapted",
   "protected_test_opened": false,
   "schema": "normwear_alignment_audit_summary_v2",
@@ -8,14 +8,14 @@
     "cell_reports": [
       {
         "alignment_profile": "support_matched_direct",
-        "cell_id": "normwear__mental_arithmetic__support_matched_direct__v2",
+        "cell_id": "normwear__dsr__support_matched_direct__v2",
         "cell_status": "pending",
-        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
         "direct_ranking_allowed": true,
         "evidence_scope": "public_complete",
         "method_id": "normwear_eeg_fnirs_adapted",
-        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/mental_arithmetic.json",
-        "task_id": "mental_arithmetic"
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
       }
     ],
     "contract": {
@@ -39,7 +39,7 @@
       {
         "alignment_profile": "support_matched_direct",
         "cell_count": 1,
-        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
         "exact_fields_checked": [
           "dataset_id",
           "task_id",
@@ -61,18 +61,18 @@
     "schema": "adapter_alignment_audit_report_v2",
     "status": "pass"
   },
-  "started_at": "2026-08-02T12:35:11.628895+00:00",
+  "started_at": "2026-08-02T12:52:31.329822+00:00",
   "status": "partial_A7_replay_in_serial_progress_protected_locked",
   "task_reports": [
     {
-      "feature_sha256": "d1c2729311036189ad06fed22f573e63774d7b04ec576d5fe8f2c501fd79e303",
-      "path": "comparative_methods/NormWear/evidence/alignment_v2/mental_arithmetic.json",
-      "sample_count": 1740,
+      "feature_sha256": "673c9e28a13e5f6844b7ca1e8ff5e82e5f9f170b50a41aed02bf7a5a114bea0a",
+      "path": "comparative_methods/NormWear/evidence/alignment_v2/dsr.json",
+      "sample_count": 8980,
       "status": "A0_A7_pass_A8_pending",
-      "task": "mental_arithmetic"
+      "task": "dsr"
     }
   ],
   "tasks_completed_this_run": [
-    "mental_arithmetic"
+    "dsr"
   ]
 }
