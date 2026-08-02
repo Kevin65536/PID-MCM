@@ -36,8 +36,22 @@ def test_base_and_position_bank_are_hash_verified_and_locally_loadable() -> None
     assert metadata.patch_samples == 200
     assert metadata.patch_overlap == 20
     assert metadata.embedding_dim == 512
+    assert metadata.position_artifact_id == "reve_positions"
+    assert metadata.position_bank_size == 543
+    assert len(metadata.position_sha256) == 64
+    assert len(metadata.position_source_revision) == 40
+    assert len(metadata.upstream_code_revision) == 40
+    assert metadata.representation_layer == (
+        "final_transformer_latent_tokens_after_identity_final_layer"
+    )
+    assert metadata.pooling == "frozen_pretrained_cls_query_attention_pooling"
     assert len(metadata.sha256) == 64
+    assert metadata.path.is_file()
+    assert metadata.position_path.is_file()
     assert all(name in position_bank.mapping for name in CHANNELS)
+    assert position_bank.embedding.shape == (543, 3)
+    assert encoder.cls_query_token.shape == (1, 1, 512)
+    assert isinstance(encoder.final_layer, torch.nn.Identity)
     assert not any(parameter.requires_grad for parameter in encoder.parameters())
     assert not any(parameter.requires_grad for parameter in position_bank.parameters())
     assert encoder.training is False
@@ -72,6 +86,29 @@ def test_adapter_rejects_unknown_coordinates_wrong_rate_and_missing_support() ->
             channel_names=CHANNELS,
             sample_valid=torch.zeros(2, 200, dtype=torch.bool),
         )
+    with pytest.raises(ValueError, match="only frozen_pretrained"):
+        REVEFrozenEncoder(encoder, position_bank, pooling="mean")
+
+
+def test_adapter_matches_frozen_pretrained_query_pooling_exactly() -> None:
+    _require_local_assets()
+    encoder, position_bank, _ = load_verified_reve_base()
+    adapter = REVEFrozenEncoder(encoder, position_bank)
+    eeg = torch.randn(2, 4, 380)
+    with torch.no_grad():
+        indices = torch.tensor([position_bank.mapping[name] for name in CHANNELS])
+        positions = position_bank.embedding[indices].unsqueeze(0).expand(2, -1, -1)
+        tokens = encoder(eeg=eeg, pos=positions)
+        flattened = tokens.flatten(1, 2)
+        query = encoder.cls_query_token.expand(2, -1, -1)
+        weights = torch.softmax(
+            torch.matmul(query, flattened.transpose(-1, -2)) / (512**0.5),
+            dim=-1,
+        )
+        expected = torch.matmul(weights, flattened).squeeze(1)
+        actual = adapter(eeg, sampling_rate_hz=200.0, channel_names=CHANNELS)
+    assert tokens.shape == (2, 4, 2, 512)
+    torch.testing.assert_close(actual, expected)
 
 
 def test_gpu_frozen_probe_forward_backward_optimizer_and_reload() -> None:
@@ -84,6 +121,10 @@ def test_gpu_frozen_probe_forward_backward_optimizer_and_reload() -> None:
     probe.train()
     assert probe.frozen_encoder.encoder.training is False
     assert probe.frozen_encoder.position_bank.training is False
+    assert probe.frozen_encoder.encoder.cls_query_token.requires_grad is False
+    assert {
+        name for name, parameter in probe.named_parameters() if parameter.requires_grad
+    } == {"head.weight", "head.bias"}
 
     eeg = torch.randn(2, 4, 200, device=device)
     target = torch.tensor([0, 1], device=device)

@@ -25,9 +25,18 @@ class REVECheckpointMetadata:
     sha256: str
     size_bytes: int
     source_revision: str
+    position_artifact_id: str
+    position_path: Path
+    position_sha256: str
+    position_size_bytes: int
+    position_source_revision: str
+    upstream_code_revision: str
     patch_samples: int
     patch_overlap: int
     embedding_dim: int
+    position_bank_size: int
+    representation_layer: str
+    pooling: str
 
 
 def _sha256(path: Path) -> str:
@@ -105,7 +114,9 @@ def load_verified_reve_base(
     encoder_artifact = _artifact(manifest, "reve_base")
     position_artifact = _artifact(manifest, "reve_positions")
     encoder_path, encoder_hash, encoder_size = _verify_artifact(method_root, encoder_artifact)
-    position_path, _, _ = _verify_artifact(method_root, position_artifact)
+    position_path, position_hash, position_size = _verify_artifact(
+        method_root, position_artifact
+    )
 
     # trust_remote_code is intentionally restricted to the already downloaded,
     # pinned local snapshot whose model tensor was verified above.
@@ -125,6 +136,29 @@ def load_verified_reve_base(
         raise TypeError("local REVE position snapshot has no auditable mapping")
     if int(encoder.config.embed_dim) != 512 or int(encoder.config.patch_size) != 200:
         raise ValueError("unexpected REVE-base architecture config")
+    if int(encoder.config.patch_overlap) != 20:
+        raise ValueError("unexpected REVE-base patch overlap")
+    if not isinstance(getattr(encoder, "final_layer", None), nn.Identity):
+        raise ValueError("REVE-base output must be the final transformer latent tokens")
+    query = getattr(encoder, "cls_query_token", None)
+    if not isinstance(query, nn.Parameter) or query.shape != (1, 1, 512):
+        raise ValueError("REVE-base pretrained attention-pooling query is unavailable")
+    if not bool(torch.isfinite(query).all()):
+        raise ValueError("REVE-base pretrained attention-pooling query is non-finite")
+
+    mapping = position_bank.mapping
+    positions = position_bank.embedding
+    if not isinstance(mapping, dict) or len(mapping) != 543:
+        raise ValueError("unexpected REVE official position-bank mapping")
+    if set(mapping.values()) != set(range(543)):
+        raise ValueError("REVE official position-bank indices are not one-to-one")
+    if positions.shape != (543, 3) or not bool(torch.isfinite(positions).all()):
+        raise ValueError("unexpected REVE official position-bank tensor")
+
+    upstream = manifest.get("upstream", {})
+    upstream_revision = str(upstream.get("revision", ""))
+    if len(upstream_revision) != 40:
+        raise ValueError("REVE upstream source revision is not pinned to a Git commit")
 
     encoder.requires_grad_(False)
     position_bank.requires_grad_(False)
@@ -136,9 +170,18 @@ def load_verified_reve_base(
         sha256=encoder_hash,
         size_bytes=encoder_size,
         source_revision=str(encoder_artifact["source_revision"]),
+        position_artifact_id="reve_positions",
+        position_path=position_path.resolve(),
+        position_sha256=position_hash,
+        position_size_bytes=position_size,
+        position_source_revision=str(position_artifact["source_revision"]),
+        upstream_code_revision=upstream_revision,
         patch_samples=int(encoder.config.patch_size),
         patch_overlap=int(encoder.config.patch_overlap),
         embedding_dim=int(encoder.config.embed_dim),
+        position_bank_size=len(mapping),
+        representation_layer="final_transformer_latent_tokens_after_identity_final_layer",
+        pooling="frozen_pretrained_cls_query_attention_pooling",
     )
     return encoder, position_bank, metadata
 
@@ -152,11 +195,21 @@ class REVEFrozenEncoder(nn.Module):
         position_bank: nn.Module,
         *,
         sampling_rate_hz: float = 200.0,
+        pooling: str = "frozen_pretrained_cls_query_attention_pooling",
     ) -> None:
         super().__init__()
+        if pooling != "frozen_pretrained_cls_query_attention_pooling":
+            raise ValueError("only frozen_pretrained_cls_query_attention_pooling is implemented")
+        if not isinstance(getattr(encoder, "final_layer", None), nn.Identity):
+            raise ValueError("REVE adapter requires final transformer latent tokens")
+        query = getattr(encoder, "cls_query_token", None)
+        expected_dim = int(encoder.config.embed_dim)
+        if not isinstance(query, nn.Parameter) or query.shape != (1, 1, expected_dim):
+            raise ValueError("REVE adapter requires the pretrained attention-pooling query")
         self.encoder = encoder
         self.position_bank = position_bank
         self.sampling_rate_hz = float(sampling_rate_hz)
+        self.pooling = pooling
         self.encoder.requires_grad_(False)
         self.position_bank.requires_grad_(False)
         self.encoder.eval()
@@ -212,9 +265,24 @@ class REVEFrozenEncoder(nn.Module):
         )
         positions = self.position_bank.embedding[indices]
         positions = positions.unsqueeze(0).expand(batch, -1, -1).to(eeg)
+        if positions.shape != (batch, channels, 3) or not bool(torch.isfinite(positions).all()):
+            raise RuntimeError("REVE position bank returned invalid coordinates")
         self.encoder.eval()
         with torch.no_grad():
             tokens = self.encoder(eeg=eeg, pos=positions)
+            patch_samples = int(self.encoder.config.patch_size)
+            patch_step = patch_samples - int(self.encoder.config.patch_overlap)
+            patch_count = 1 + (samples - patch_samples) // patch_step
+            expected_tokens = (
+                batch,
+                channels,
+                patch_count,
+                int(self.encoder.config.embed_dim),
+            )
+            if tokens.shape != expected_tokens or not bool(torch.isfinite(tokens).all()):
+                raise RuntimeError(
+                    f"REVE encoder returned invalid latent tokens {tuple(tokens.shape)}"
+                )
             embedding = self.encoder.attention_pooling(tokens)
         expected_dim = int(self.encoder.config.embed_dim)
         if embedding.shape != (batch, expected_dim) or not bool(torch.isfinite(embedding).all()):
