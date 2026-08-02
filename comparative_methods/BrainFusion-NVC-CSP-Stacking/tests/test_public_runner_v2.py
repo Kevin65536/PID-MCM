@@ -22,6 +22,7 @@ from run_public_development_v2 import (
     validate_tensor_cache,
 )
 from build_public_job_matrix_v2 import build_matrix
+from run_public_matrix_v2 import exclusive_controller_lock, validate_jobs
 
 
 def test_runner_config_freezes_75_serial_public_jobs() -> None:
@@ -46,6 +47,19 @@ def test_candidate_matrix_is_serial_public_only_and_not_self_authorizing() -> No
     assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
     assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
     assert all(job["command"][-4:-2] == ["--device", "cuda:1"] for job in matrix["jobs"])
+    jobs = validate_jobs(
+        matrix,
+        run_root=(METHOD_ROOT / "runs/public_development_v2/matrix_v2").resolve(),
+    )
+    assert [job["order"] for job in jobs] == list(range(75))
+
+
+def test_controller_lock_rejects_a_second_executor(tmp_path: Path) -> None:
+    lock_path = tmp_path / "matrix" / ".controller.lock"
+    with exclusive_controller_lock(lock_path):
+        with pytest.raises(RuntimeError, match="already running"):
+            with exclusive_controller_lock(lock_path):
+                pass
 
 
 class _Dataset:
