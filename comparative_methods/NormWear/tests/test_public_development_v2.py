@@ -11,6 +11,7 @@ import yaml
 
 import comparative_methods.NormWear.run_public_development_v2 as runner_module
 from comparative_methods.NormWear.alignment_data import SUPPORTED_TASKS
+from comparative_methods.NormWear.build_public_job_matrix_v2 import build_matrix
 from comparative_methods.NormWear.run_public_development_v2 import (
     DEFAULT_CONFIG,
     PublicFold,
@@ -22,6 +23,7 @@ from comparative_methods.NormWear.run_public_development_v2 import (
     select_and_refit,
     standardizer,
 )
+from comparative_methods.NormWear.run_public_matrix_v2 import validate_jobs
 
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
@@ -156,3 +158,20 @@ def test_public_runner_refuses_output_outside_normwear_run_root(tmp_path: Path) 
     )
     with pytest.raises(PermissionError, match="must remain under"):
         run(args)
+
+
+def test_candidate_matrix_is_serial_public_only_and_not_self_authorizing() -> None:
+    matrix = build_matrix()
+    assert matrix["job_count"] == 90
+    assert matrix["max_concurrent_jobs"] == 1
+    assert matrix["automatic_retry_count"] == 0
+    assert matrix["public_matrix_launch_authorized"] is False
+    assert matrix["protected_evaluation_authorized"] is False
+    assert matrix["protected_test_opened"] is False
+    assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
+    assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
+    jobs = validate_jobs(
+        matrix,
+        run_root=(METHOD_ROOT / "runs/public_development_v2/matrix_v2").resolve(),
+    )
+    assert [job["order"] for job in jobs] == list(range(90))

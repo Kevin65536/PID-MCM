@@ -1,0 +1,29 @@
+schema: normwear_public_job_matrix_candidate_v2
+protocol_id: normwear_public_job_matrix_candidate_v2
+method_id: normwear_eeg_fnirs_adapted
+mode: public_development_only
+protected_test_default: locked
+
+runner:
+  path: comparative_methods/NormWear/run_public_development_v2.py
+  sha256: f93da159064848de07f62dcafdc388e47a2d6ca7b052913cce8c28e4d7281871
+  config: comparative_methods/NormWear/configs/public_development_v2.yaml
+  config_sha256: 62bdd377165c069553712cb07edecfb7712e0505508d083599aec9d5c2906823
+
+matrix:
+  task_order: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  outer_fold_order: [0, 1, 2, 3, 4]
+  seed_order: [17, 42, 73]
+  expected_job_count: 90
+  output_root: comparative_methods/NormWear/runs/public_development_v2/matrix_v2
+  max_concurrent_jobs: 1
+
+failure_policy:
+  automatic_retry_count: 0
+  retain_failure_and_stop: true
+  completed_output_action: audit_and_resume_without_overwrite
+
+authorization:
+  public_matrix_launch_authorized: false
+  protected_evaluation_authorized: false
+  note: candidate generation does not authorize execution
