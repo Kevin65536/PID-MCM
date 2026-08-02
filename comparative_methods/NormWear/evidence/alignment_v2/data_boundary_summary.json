@@ -1,0 +1,271 @@
+{
+  "audited_unique_public_sample_count": 22442,
+  "completed_at": "2026-08-02T11:27:48.564039+00:00",
+  "evidence_paths": [
+    "comparative_methods/NormWear/evidence/alignment_v2/motor_imagery.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/mental_arithmetic.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/wg.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/nback.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/dsr.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/visual.json",
+    "comparative_methods/NormWear/evidence/alignment_v2/refed_regression.json"
+  ],
+  "method_id": "normwear_eeg_fnirs_adapted",
+  "protected_test_opened": false,
+  "schema": "normwear_data_boundary_audit_summary_v2",
+  "schema_audit": {
+    "cell_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__motor_imagery__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__mental_arithmetic__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/mental_arithmetic.json",
+        "task_id": "mental_arithmetic"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__wg__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__nback__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__dsr__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__visual__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__visual__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/visual.json",
+        "task_id": "visual"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__refed_regression__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "multimodal_synchronous__refed_regression__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/refed_regression.json",
+        "task_id": "refed_regression"
+      }
+    ],
+    "contract": {
+      "contract_version": 2,
+      "gate_ids": [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "profile_count": 3,
+      "schema": "adapter_alignment_gate_contract_v2",
+      "task_count": 7
+    },
+    "direct_group_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__refed_regression__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__visual__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      }
+    ],
+    "protected_test_opened": false,
+    "schema": "adapter_alignment_audit_report_v2",
+    "status": "pass"
+  },
+  "started_at": "2026-08-02T11:22:05.496085+00:00",
+  "status": "A0_A4_pass_A5_A8_pending_protected_locked",
+  "supported_cell_count": 6,
+  "tasks": [
+    "motor_imagery",
+    "mental_arithmetic",
+    "wg",
+    "nback",
+    "dsr",
+    "visual"
+  ],
+  "unsupported_cell_count": 1
+}

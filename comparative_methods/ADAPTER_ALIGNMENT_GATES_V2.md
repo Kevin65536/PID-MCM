@@ -24,10 +24,10 @@ public preflight/development、协议冻结和该新方法的正式执行；当�
 
 协议生效前已经运行的 EFRM LODO v2 冻结训练可以继续，但它是不可修改的后台协议，
 不阻塞新方法代码落地。STA-Net 同样只保留已完成结果。新的实现顺序为 BIOT、
-CBraMod、REVE、BrainFusion、NormWear。BIOT 已完成 A0–A8 和 90 个串行 public
-jobs，protected 仍单独锁定；当前 active method 已显式晋级为 CBraMod。若当前方法
-blocked，则暂停新方法队列处理 blocker，不能静默跳过。任何延后的 protected
-执行都不得与 active delivery method 并发。
+CBraMod、REVE、BrainFusion、NormWear。BIOT、CBraMod、REVE 和 BrainFusion 均已
+完成各自 public delivery，protected 仍分别锁定；当前 active method 是 NormWear。
+若当前方法 blocked，则暂停新方法队列处理 blocker，不能静默跳过。任何延后的
+protected 执行都不得与 active delivery method 并发。
 
 ## 数据集特征对门控的约束
 
@@ -115,7 +115,7 @@ foundation-model 排名。
 | BIOT | 六个分类 cell 以 `public_complete` 通过 A0–A8；REFED v1 unsupported；protected locked | 22,442 个唯一公开样本和 90 个串行 public selection/refit jobs 已全部审核通过，失败/重试均为 0；public delivery 已完成并晋级 CBraMod，BIOT protected 仍需独立授权 |
 | CBraMod | blocked | 当前 adapter 直接执行完整 encoder 后 mean pool；上游 quick example 和 downstream modules 先将 `proj_out` 替换为 `Identity`。必须先固定实际 representation layer，再做全量覆盖 |
 | REVE | blocked；Single-Trial 两任务为 overlap track；REFED v1 unsupported | cache/identity 需包含 position bank、trusted code 与实际模型代码 hashes；完成全 public name-to-position 覆盖 |
-| NormWear | blocked | 尚未形成逐 cell 的 EEG/HbO/HbR、CWT、mask 与时间预算声明；只能以 adapted 名称进入 |
+| NormWear | active；A0–A4、A6 pass，A5/A7/A8 pending；REFED unsupported | 已全量审计 22,442 个 public 输入；继续验证 200/10→65 Hz、CWT、冻结编码器输出和 production replay，只能以 adapted 名称进入 |
 | EFRM | 现有冻结协议继续；新 direct table 为 pending | 当前 observation budget 是分类 8/8 s、DSR 2/2 s、REFED 20/20 s；补齐 v2 evidence 后可作为 synchronous profile 的基准 |
 | BrainFusion | blocked | 先冻结 NVC/HRF observation interval；NVC/CSP/selection/stacking 必须全部 fold-local，不能用 source-native context 自动进入 direct 表 |
 | STA-Net | 完成结果保留，但当前归 `method_native_context_reference` | 默认分类实际为 EEG 3 s + fNIRS 13 s，DSR 为 2 s + 13 s，与 synchronous profile 不同；不回写既有 protected 结果。如需 direct profile，必须新版本、重新冻结并独立授权 |

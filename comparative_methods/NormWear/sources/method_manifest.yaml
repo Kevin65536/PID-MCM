@@ -116,7 +116,14 @@ reporting_boundary:
   original_paper_fnirs_reproduction_claim_allowed: false
 gate_status:
   B0_source_fixed: pass
-  B1_input_contract: registered_pending_full_public_validation
+  B1_input_contract: pass_support_matched_full_public
   B2_software_smoke: pending
   B3_source_fidelity: pending
   B4_protocol_freeze: pending
+public_data_audit:
+  status: pass_A0_A4_and_A6_A5_A8_pending
+  evidence: evidence/alignment_v2/data_boundary_summary.json
+  audited_unique_public_sample_count: 22442
+  supported_tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  unsupported_tasks: [refed_regression]
+  protected_test_opened: false
