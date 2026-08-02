@@ -1,0 +1,38 @@
+schema: brainfusion_public_development_v2
+method_id: brainfusion_nvc_csp_stacking_reimplementation
+mode: public_development_only
+protected_test_default: locked
+alignment_config: comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/alignment_v2.yaml
+
+job_matrix:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, visual]
+  outer_folds: [0, 1, 2, 3, 4]
+  seeds: [17, 42, 73]
+  expected_public_jobs: 75
+  max_concurrent_jobs: 1
+  automatic_retry_count: 0
+
+features:
+  nvc_pair_count: 32
+  csp_components_per_class: 2
+  csp_regularization: 0.1
+
+stacking:
+  inner_folds: 5
+  linear_svm_c_values: [0.1, 1.0]
+  rbf_svm_c_values: [1.0]
+  random_forest_estimators: 200
+  random_forest_max_depth: null
+  meta_svm_c: 1.0
+
+smoke:
+  train_samples_per_class: 18
+  validation_samples_per_class: 8
+  inner_folds: 3
+  random_forest_estimators: 24
+
+reporting:
+  primary_endpoint: macro_f1
+  table_admissible: false
+  claim_boundary: public_development_only
+  protected_evaluation_authorized: false

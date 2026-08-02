@@ -3,7 +3,8 @@
 BrainFusion has completed implementation review and the full-public A0–A7
 gate as an explicitly independent NVC-CSP-stacking reimplementation. Five
 8-second classification cells are supported; DSR and REFED are preregistered
-unsupported. A8 public-development execution remains pending and protected
+unsupported. An independently audited, non-table-admissible public smoke pilot
+has passed. The full A8 public-development matrix remains pending and protected
 evaluation remains locked.
 
 | Task | Unique public samples | Measured input | Status |
@@ -46,6 +47,8 @@ be regenerated without protected reads using:
 PYTHONPATH=. .venv/bin/python comparative_methods/BrainFusion-NVC-CSP-Stacking/audit_alignment_v2.py --device cuda:1
 ```
 
-The next serial gate is an independently audited public-only pilot, followed
-by a separately authorized serial matrix. Public validation results will be
+The retained public-only smoke pilot independently reproduces fold membership,
+targets, macro-F1, checkpoint predictions, and decision scores. It is not a
+performance claim. The next serial gate is a full-fold pilot, followed by a
+separately authorized 75-job serial matrix. Public validation results remain
 development-only and non-table-admissible until the protocol is frozen.

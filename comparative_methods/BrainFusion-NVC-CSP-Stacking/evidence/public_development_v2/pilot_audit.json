@@ -1,0 +1,23 @@
+{
+  "audited_at": "2026-08-02T09:40:06.036676+00:00",
+  "checkpoint_predictions_recomputed": true,
+  "checkpoint_reload_exact": true,
+  "membership_recomputed": true,
+  "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "metric_recomputed": true,
+  "mode": "smoke_only",
+  "outer_fold": 0,
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "run_report_path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/runs/public_development_v2/pilot_mi_outer0_seed17_smoke/run_report.json",
+  "run_report_sha256": "95f3d52cdf0135107e246b3eb723d86b0083f95c143759c14007f48d95d220d9",
+  "schema": "brainfusion_public_run_artifact_audit_v2",
+  "seed": 17,
+  "status": "pass",
+  "table_admissible": false,
+  "targets_recomputed": true,
+  "task": "motor_imagery",
+  "train_sample_count": 36,
+  "validation_macro_f1": 0.5465587044534412,
+  "validation_sample_count": 16
+}
