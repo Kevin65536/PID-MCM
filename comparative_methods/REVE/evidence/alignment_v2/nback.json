@@ -1,0 +1,214 @@
+{
+  "adapter_identity": {
+    "artifact_id": "reve_base",
+    "delivered_channel_order": [
+      "Fp1",
+      "AFF5h",
+      "AFz",
+      "F1",
+      "FC5",
+      "FC1",
+      "T7",
+      "C3",
+      "Cz",
+      "CP5",
+      "CP1",
+      "P7",
+      "P3",
+      "Pz",
+      "POz",
+      "O1"
+    ],
+    "delivered_channel_order_sha256": "1397e090491a31928738579cb7773b8d8a1eea13708fd39cac79ae3e82b7efdc",
+    "deterministic_source_declared_sample_transform": "none_after_canonical_200hz_coordinate",
+    "embedding_dim": 512,
+    "geometry_encoding": "registry_provenance_checked_exact_name_lookup_in_verified_official_543_electrode_position_bank",
+    "input_shape": [
+      "batch",
+      16,
+      1600
+    ],
+    "method_id": "reve",
+    "output_layer": "final_transformer_latent_tokens_after_identity_final_layer",
+    "output_shape": [
+      "batch",
+      512
+    ],
+    "patch_and_token_grid": {
+      "covered_input_samples": 1460,
+      "discarded_real_tail_samples": 140,
+      "latent_tokens": 128,
+      "latent_width": 512,
+      "patch_overlap": 20,
+      "patch_samples": 200,
+      "patch_step": 180,
+      "patches_per_channel": 8
+    },
+    "patch_overlap": 20,
+    "patch_samples": 200,
+    "path": "comparative_methods/REVE/checkpoints/reve-base/model.safetensors",
+    "pooling": "frozen_pretrained_cls_query_attention_pooling",
+    "position_artifact_id": "reve_positions",
+    "position_bank_size": 543,
+    "position_path": "comparative_methods/REVE/checkpoints/reve-positions/model.safetensors",
+    "position_sha256": "4b793820b9df0998667deb6c8ce2dbb86b38221d5165c1844bc4971941b13f13",
+    "position_size_bytes": 6628,
+    "position_source_revision": "befa5b57a455b77cf302daf610c2e9ed8140bace",
+    "representation_layer": "final_transformer_latent_tokens_after_identity_final_layer",
+    "sha256": "8ecc650619598748286c2457f81f5c6bd12e8bb59db44f7b02af1955c44de8fe",
+    "size_bytes": 276773456,
+    "source_deviation": "upstream task-dependent raw-array scale factors are omitted because the shared project input is already in the frozen recordwise robust-standard-deviation coordinate; unlike upstream REVE linear probing, the pretrained 512-parameter query token remains frozen so every method exposes a static representation to an equal-capacity linear head.",
+    "source_file_sha256": {
+      "adapter": "792c0ea0ccd9d81e99d4044f5db8333537286160a621aa4463240dc68c291144",
+      "alignment_audit": "5d36df0df1ec48a0495708be0b2321531d440bd98d67ea1df5c0db1562bdba5f",
+      "alignment_data": "f00e49e1762bf5095488f19b9571e5b9af1a13d6d4dd38a5c1d35e2a275bc42a",
+      "checkpoint_model_code": "207a9c51218d806ab317eabf4eb6d3234eabe887f48e541ef5580c4b9b45359f",
+      "checkpoint_position_code": "26ad5d55fb667da7c80bcc8e8512eb35bca33054a3b3e2bcafe4775543aa1cd0",
+      "config": "9174980d1a86d94cadc65ebf3a72730a64f0ec670f93d133924f821642941545",
+      "identity_and_representation_audit": "c02d3d53ed37276c9cfb32842888b46990421158b5eac2c3f0016e7290b2e7eb",
+      "upstream_classifier": "cf71d0f455df0e9a263363213d75fbf493ffc5d587cd3c1f80cdc90ab961f90f",
+      "upstream_freeze_utility": "b989ec421d710e44e7e735a949025b01aa8e7a1976917ad3199cf433ffbc552b"
+    },
+    "source_revision": "fa9a2163a4b7c0a42c8e28b56077ef9c368944dc",
+    "target_corpus_exposure": {
+      "eeg_fnirs_single_trial": "confirmed_overlap_via_Shin2017A",
+      "refed": "none_in_published_exhaustive_list",
+      "simultaneous_eeg_nirs": "none_in_published_exhaustive_list",
+      "visual_cognitive_motivation": "none_in_published_exhaustive_list"
+    },
+    "train_partition_fitted_transform": "none_in_alignment_audit",
+    "trainable_parameter_boundary": "no_trainable_parameters",
+    "upstream_code_revision": "06a7059a07c3dabd80aee60c3dbc1eca4bdbe1c7"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "reve__nback__support_matched_direct__v2",
+  "cell_status": "pending",
+  "comparison_fields": {
+    "canonical_signal_branch": {
+      "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
+      "dataset_branch": {
+        "eeg_fnirs_single_trial": "single_trial_eeg_artifact_clean_v4",
+        "simultaneous_eeg_nirs": "simultaneous_eeg_eog_clean_v1",
+        "visual_cognitive_motivation": "raw_with_ocular_artifact"
+      },
+      "filter_band_hz": [
+        1.0,
+        45.0
+      ],
+      "fingerprints": {
+        "cache_manifest": "ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500",
+        "event_manifest": "ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031",
+        "geometry_manifest": "e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b",
+        "simultaneous_eeg_branch": "27c2b3432c3b1d0e10541f64ce6860d6b8b6e51a9f896834fe3be95891fedd3c",
+        "single_trial_eeg_branch": "7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0",
+        "task_adapter": "df503240ca967e1358ee06809e99eef800f7f916218fc7f3c2162e9c5eb62e39",
+        "unified_loader": "51fe7981f87ae67f2dce89a2c24e81812ad846c258029f9d0a6bb7af12d6b791"
+      },
+      "sample_rate_hz": 200.0,
+      "schema": "canonical_eeg_signal_branch_identity_v2",
+      "unit": "robust_standard_deviation"
+    },
+    "dataset_id": "simultaneous_eeg_nirs",
+    "measured_channel_identity_set": [
+      "AFF5h",
+      "AFz",
+      "C3",
+      "CP1",
+      "CP5",
+      "Cz",
+      "F1",
+      "FC1",
+      "FC5",
+      "Fp1",
+      "O1",
+      "P3",
+      "P7",
+      "POz",
+      "Pz",
+      "T7"
+    ],
+    "modality_identity": [
+      "eeg"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        8.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "macro_f1",
+    "recorded_support_mask": {
+      "mask_semantics": "all_true_recorded_support_no_padding",
+      "panel": [
+        "AFF5h",
+        "AFz",
+        "C3",
+        "CP1",
+        "CP5",
+        "Cz",
+        "F1",
+        "FC1",
+        "FC5",
+        "Fp1",
+        "O1",
+        "P3",
+        "P7",
+        "POz",
+        "Pz",
+        "T7"
+      ],
+      "sample_count": 702,
+      "sample_inventory_sha256": "60764c3f03effd692b713c20917b27392252714f6aaf8ad2d74555cfb5aa8024",
+      "samples_per_item": 1600,
+      "sha256": "80591eef93dc61785e821f451f8037e97207a9cea2eddbc9803ca276781a72ec"
+    },
+    "sample_inventory_sha256": "60764c3f03effd692b713c20917b27392252714f6aaf8ad2d74555cfb5aa8024",
+    "split_fingerprint": "823ee760d2e9b69ff8cf4b8b280c12e4d475136f20869105d9799fdec7006626",
+    "target_schema": "class_index_0back_2back_3back",
+    "target_valid_mask": {
+      "semantics": "classification_scalar_all_observed",
+      "sha256": "301203eaf92dda618430297c37d747490d7b5931eac631b9660d89cc86c7afee"
+    },
+    "task_id": "nback"
+  },
+  "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+  "evidence_scope": "public_complete",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "pass",
+    "A2": "pass",
+    "A3": "pass",
+    "A4": "pass",
+    "A5": "pass",
+    "A6": "pass",
+    "A7": "pass",
+    "A8": "pending"
+  },
+  "method_id": "reve",
+  "public_audit": {
+    "all_unique_public_samples_audited": true,
+    "cache_identity_sha256": "dc734d48455432b7c89200a8fc679c1b7fc98631fa592625570a54cf931ec611",
+    "class_counts": {
+      "0-back session": 234,
+      "2-back session": 234,
+      "3-back session": 234
+    },
+    "deterministic_replay_exact": true,
+    "elapsed_seconds": 13.786023654974997,
+    "feature_sha256": "3dda3767e7780cc7c46dace780e3dfe9d5328f3b9b9dff7a6810b9e91f6d5589",
+    "feature_shape": [
+      702,
+      512
+    ],
+    "maximum_coordinate_std": 3.2678019844320345,
+    "minimum_coordinate_std": 0.21170968273568044,
+    "nonconstant_coordinate_count": 512,
+    "outer_fold_count": 5,
+    "protected_test_opened": false,
+    "unique_sample_count": 702
+  },
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "task_id": "nback",
+  "track": "single_modal_eeg_official_pretrained_linear_probe"
+}

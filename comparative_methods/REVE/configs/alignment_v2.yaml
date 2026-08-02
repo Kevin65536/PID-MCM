@@ -1,0 +1,86 @@
+schema: reve_adapter_alignment_v2
+protocol_id: reve_adapter_alignment_v2
+method_id: reve
+track: task_specific_declared_pretraining_exposure
+alignment_profile: support_matched_direct
+mode: public_audit_only
+protected_test_default: locked
+
+registry:
+  manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  protocol: strict_cross_subject
+  outer_folds: [0, 1, 2, 3, 4]
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_sample_rate_hz: 200
+  panel_size: 16
+  channel_policy: frozen_task_panel_real_channels_reordered_no_copy_or_padding
+  time_support_policy: require_full_recorded_support_no_padding
+  signal_coordinate: canonical_recordwise_robust_standard_deviation
+  geometry_policy: registry_provenance_checked_then_exact_official_position_bank_lookup
+
+adapter:
+  artifact_id: reve_base
+  position_artifact_id: reve_positions
+  output_layer: final_transformer_latent_tokens_after_identity_final_layer
+  embedding_dim: 512
+  patch_samples: 200
+  patch_overlap: 20
+  pooling: frozen_pretrained_cls_query_attention_pooling
+  trainable_parameters: none_during_alignment_audit
+  deterministic_source_declared_sample_transform: none_after_canonical_200hz_coordinate
+  source_deviation: >-
+    upstream task-dependent raw-array scale factors are omitted because the
+    shared project input is already in the frozen recordwise
+    robust-standard-deviation coordinate; unlike upstream REVE linear probing,
+    the pretrained 512-parameter query token remains frozen so every method
+    exposes a static representation to an equal-capacity linear head.
+
+tasks:
+  motor_imagery:
+    supported: true
+    duration_s: 8
+    track: open_world_pretrained_with_target_corpus_overlap
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  mental_arithmetic:
+    supported: true
+    duration_s: 8
+    track: open_world_pretrained_with_target_corpus_overlap
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  wg:
+    supported: true
+    duration_s: 8
+    track: single_modal_eeg_official_pretrained_linear_probe
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  nback:
+    supported: true
+    duration_s: 8
+    track: single_modal_eeg_official_pretrained_linear_probe
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  dsr:
+    supported: true
+    duration_s: 2
+    track: single_modal_eeg_official_pretrained_linear_probe
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  visual:
+    supported: true
+    duration_s: 8
+    track: single_modal_eeg_official_pretrained_linear_probe
+    panel: [Fp1, Fp2, AF3, AF4, F3, F4, FC3, FC4, C3, C4, PO3, PO4, O1, O2, F5, F6]
+  refed_regression:
+    supported: false
+    duration_s: 20
+    track: single_modal_eeg_official_pretrained_linear_probe
+    unsupported_reason_code: REVE_NO_PARTIAL_TIME_MASK_CONTRACT
+    unsupported_reason: >-
+      REFED contains semantically real partial terminal windows, while the
+      frozen REVE snapshot has no mask argument for excluding padded temporal
+      tokens from transformer attention or query pooling.
+
+resources:
+  default_device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  gpu_lock_path: /tmp/pid_mcm_reve_alignment_gpu1.lock
