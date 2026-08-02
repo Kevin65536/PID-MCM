@@ -128,6 +128,14 @@ adapter_smoke:
   channel_attention_chunk_size: 16
   unchunked_upstream_bitwise_exact: true
   protected_test_opened: false
+public_adapter_audit:
+  status: pass_A0_A7_A8_pending
+  evidence: evidence/alignment_v2/summary.json
+  audited_unique_public_sample_count: 22442
+  feature_cache_dtype: float32
+  feature_cache_batch_size: 2
+  all_task_first_batch_replay_exact: true
+  protected_test_opened: false
 public_data_audit:
   status: pass_A0_A4_and_A6_A5_A8_pending
   evidence: evidence/alignment_v2/data_boundary_summary.json

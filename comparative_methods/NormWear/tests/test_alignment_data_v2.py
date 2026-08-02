@@ -286,3 +286,39 @@ def test_retained_nback_production_pilot_passes_a7() -> None:
     assert audit["cache_replay_exact"] is True
     assert audit["cache_replay_batch_size"] == 2
     assert audit["protected_test_opened"] is False
+
+
+def test_retained_full_public_production_replay_passes_a7() -> None:
+    import json
+
+    root = METHOD_ROOT / "evidence/alignment_v2"
+    summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "A0_A7_pass_A8_pending_protected_locked"
+    assert summary["all_supported_tasks_complete"] is True
+    assert summary["schema_audit"]["status"] == "pass"
+    assert len(summary["schema_audit"]["cell_reports"]) == 7
+    assert summary["protected_test_opened"] is False
+
+    expected = {
+        "motor_imagery": (1740, 78_336),
+        "mental_arithmetic": (1740, 78_336),
+        "wg": (1560, 76_800),
+        "nback": (702, 76_800),
+        "dsr": (8980, 76_800),
+        "visual": (7720, 59_904),
+    }
+    total = 0
+    for task, (count, width) in expected.items():
+        cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
+        assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
+        assert cell["gate_status"]["A8"] == "pending"
+        audit = cell["public_adapter_audit"]
+        assert audit["feature_shape"] == [count, width]
+        assert audit["nonconstant_coordinate_count"] == width
+        assert audit["cache_replay_exact"] is True
+        assert audit["protected_test_opened"] is False
+        total += count
+    assert total == 22_442
+    refed = json.loads((root / "refed_regression.json").read_text(encoding="utf-8"))
+    assert refed["cell_status"] == "unsupported"
+    assert refed["protected_test_opened"] is False

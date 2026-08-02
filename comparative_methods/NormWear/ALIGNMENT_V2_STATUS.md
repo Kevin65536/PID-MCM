@@ -2,9 +2,9 @@
 
 NormWear has completed source identity, A0 cell registration, and the full
 public A1-A4 data-boundary audit as an explicitly named EEG-fNIRS adaptation.
-The executable model semantics and source-fidelity gates A5/A6 now pass. Full
-public production replay A7 and protocol freeze A8 remain pending; protected
-evaluation is locked.
+The executable model semantics and source-fidelity gates A5/A6 pass. Full
+public production replay A7 now also passes; protocol freeze A8 remains
+pending and protected evaluation is locked.
 
 | Task | Unique public samples | Measured input | Current status |
 | --- | ---: | --- | --- |
@@ -32,5 +32,7 @@ Retained public data evidence is in `evidence/alignment_v2`; retained adapter
 smoke evidence is in `evidence/adapter_smoke_v2`. The latter verifies safe
 encoder-only loading, upstream equivalence, bounded chunked numerics, bitwise
 replay on real DSR and 8-second inputs, a trainable linear head, and zero encoder
-gradients. A7 remains pending until this production path covers every unique
-public sample.
+gradients. The production path subsequently covered all 22,442 unique public
+samples and retained a task-specific float32 cache with checkpoint, code,
+configuration, batch, channel-order, inventory, split, and data-branch identity.
+Every task's first full cache batch replays bitwise exactly.

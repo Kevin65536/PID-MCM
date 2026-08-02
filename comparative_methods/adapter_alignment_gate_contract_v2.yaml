@@ -462,14 +462,14 @@ current_repository_assessment:
         mental_arithmetic: open_world_pretrained_with_target_corpus_overlap
         refed_regression: unsupported
     normwear_eeg_fnirs_adapted:
-      status: active_delivery_A0_A6_pass_A7_A8_pending
-      evidence_scope: public_complete_data_boundary_plus_public_model_smoke
+      status: active_delivery_A0_A7_pass_A8_pending
+      evidence_scope: public_complete
       evidence:
-        data_boundary: comparative_methods/NormWear/evidence/alignment_v2/data_boundary_summary.json
+        alignment: comparative_methods/NormWear/evidence/alignment_v2/summary.json
         adapter_smoke: comparative_methods/NormWear/evidence/adapter_smoke_v2/summary.json
       audited_unique_public_sample_count: 22442
-      completed_gates: [A0, A1, A2, A3, A4, A5, A6]
-      pending_gates: [A7, A8]
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7]
+      pending_gates: [A8]
       protected_evaluation_authorized: false
       task_exceptions:
         refed_regression: unsupported
