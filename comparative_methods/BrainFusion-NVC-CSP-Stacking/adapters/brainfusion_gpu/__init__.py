@@ -7,6 +7,8 @@ from .nvc import (
     brainfusion_nvc_contribution_timeseries,
 )
 from .features import BrainFusionFeaturePipeline, CSPConfig, NVCPairSelector, TorchCSP
+from .stacking import FoldLocalStackingClassifier, StackingConfig
+from .pipeline import BrainFusionFoldPipeline
 
 __all__ = [
     "NVCConfig",
@@ -17,4 +19,7 @@ __all__ = [
     "CSPConfig",
     "NVCPairSelector",
     "TorchCSP",
+    "FoldLocalStackingClassifier",
+    "StackingConfig",
+    "BrainFusionFoldPipeline",
 ]

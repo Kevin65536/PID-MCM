@@ -11,5 +11,8 @@ missing, or padded support. `test_fold_local_features.py` verifies that dynamic
 NVC contributions sum to the public Pearson coefficient and that pair
 selection plus CSP are deterministic and bound to one training identity set.
 
-Base estimators, stacking, and the complete reload smoke remain pending, so
-BrainFusion has not yet passed B2.
+`test_fold_local_stacking.py` checks grouped OOF base selection, train-only
+meta-estimator fitting, and estimator reload. `test_pipeline_reload.py` binds
+all feature and estimator state to the same outer-training identity and checks
+exact complete-pipeline prediction replay. BrainFusion's implementation smoke
+therefore passes; full-public A0–A8 evidence remains separate and pending.

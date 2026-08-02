@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import hashlib
 import json
 from typing import Any, Sequence
@@ -290,3 +290,63 @@ class BrainFusionFeaturePipeline:
             and self.selector.fit_sample_identity_sha256_
             == self.fit_sample_identity_sha256_,
         }
+
+    def state_dict(self) -> dict[str, Any]:
+        audit = self.audit_state()
+        if self.selector.indices_ is None or self.selector.scores_ is None:
+            raise RuntimeError("BrainFusion NVC selector state is incomplete")
+        csp_states: dict[str, dict[str, Any]] = {}
+        for name, csp in self.csps.items():
+            if csp.filters_ is None or csp.classes_ is None:
+                raise RuntimeError(f"BrainFusion CSP state is incomplete: {name}")
+            csp_states[name] = {
+                "filters": csp.filters_.detach().cpu(),
+                "classes": csp.classes_.detach().cpu(),
+                "fit_sample_identity_sha256": csp.fit_sample_identity_sha256_,
+            }
+        return {
+            "schema": "brainfusion_fold_local_feature_checkpoint_v2",
+            "nvc_config": asdict(self.nvc_config),
+            "csp_config": asdict(self.csps["eeg"].config),
+            "selector_pair_count": self.selector.pair_count,
+            "selector_variance_floor": self.selector.variance_floor,
+            "selector_indices": self.selector.indices_.detach().cpu(),
+            "selector_scores": self.selector.scores_.detach().cpu(),
+            "selector_fit_sample_identity_sha256": (
+                self.selector.fit_sample_identity_sha256_
+            ),
+            "csp_states": csp_states,
+            "fit_sample_identity_sha256": self.fit_sample_identity_sha256_,
+            "audit": audit,
+        }
+
+    @classmethod
+    def from_state_dict(
+        cls, state: dict[str, Any], *, device: torch.device | str = "cpu"
+    ) -> "BrainFusionFeaturePipeline":
+        if state.get("schema") != "brainfusion_fold_local_feature_checkpoint_v2":
+            raise ValueError("invalid BrainFusion feature checkpoint schema")
+        pipeline = cls(
+            nvc_config=NVCConfig(**state["nvc_config"]),
+            csp_config=CSPConfig(**state["csp_config"]),
+            nvc_pair_count=int(state["selector_pair_count"]),
+        )
+        target = torch.device(device)
+        pipeline.selector.variance_floor = float(state["selector_variance_floor"])
+        pipeline.selector.indices_ = state["selector_indices"].to(target)
+        pipeline.selector.scores_ = state["selector_scores"].to(target)
+        pipeline.selector.fit_sample_identity_sha256_ = state[
+            "selector_fit_sample_identity_sha256"
+        ]
+        for name, csp_state in state["csp_states"].items():
+            if name not in pipeline.csps:
+                raise ValueError(f"unknown BrainFusion CSP checkpoint view: {name}")
+            pipeline.csps[name].filters_ = csp_state["filters"].to(target)
+            pipeline.csps[name].classes_ = csp_state["classes"].to(target)
+            pipeline.csps[name].fit_sample_identity_sha256_ = csp_state[
+                "fit_sample_identity_sha256"
+            ]
+        pipeline.fit_sample_identity_sha256_ = state["fit_sample_identity_sha256"]
+        if pipeline.audit_state() != state["audit"]:
+            raise ValueError("BrainFusion feature checkpoint audit identity drifted")
+        return pipeline

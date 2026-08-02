@@ -6,5 +6,8 @@ the public `avg_raw` NVC branch, dynamic Pearson-contribution sequences,
 training-only NVC-pair selection, and deterministic regularized CSP on CPU or
 CUDA.
 
-Base-estimator selection, leakage-safe out-of-fold stacking, and complete
-pipeline serialization remain the next serial implementation gate.
+The complete fold-local pipeline now selects SVM/RF base learners independently
+for EEG, HbO, HbR, and NVC views using training-only grouped OOF predictions.
+The linear-SVM meta-estimator sees only those OOF scores. Feature state and
+classical estimator state are serialized separately, hash-bound in a public
+manifest, and reload to identical predictions.

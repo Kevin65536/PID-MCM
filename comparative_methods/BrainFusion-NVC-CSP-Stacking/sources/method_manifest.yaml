@@ -49,9 +49,9 @@ input_boundary:
     - stacking_meta_estimator
 gate_status:
   B0_source_fixed: pass_as_independent_reimplementation
-  B1_input_contract: pending
-  B2_software_smoke: pending
-  B3_source_fidelity: pending_reimplementation
+  B1_input_contract: pass_support_matched_public_only
+  B2_software_smoke: pass_complete_fold_local_reload
+  B3_source_fidelity: pass_component_fidelity_independent_reimplementation
   B4_protocol_freeze: pending
 component_smoke:
   gpu_nvc:
@@ -59,8 +59,16 @@ component_smoke:
     status: pass_cpu_reference_equivalence
     backend: torch_cuda
     covered_upstream_branch: avg_raw
-    pending_before_B2:
-      - gpu_csp
-      - gpu_base_estimators
-      - gpu_stacking_meta_estimator
-      - fold_local_pipeline_reload
+    hrf_oversampling: 1
+  fold_local_pipeline:
+    status: pass_synthetic_complete_reload
+    feature_backend: torch_cpu_or_cuda
+    estimator_backend: scikit_learn_cpu
+    fitted_components:
+      - nvc_pair_selection
+      - eeg_hbo_hbr_nvc_csp
+      - per_view_standardization
+      - per_view_svm_or_random_forest_selection
+      - grouped_oof_linear_svm_stacking
+    fit_scope: outer_training_only
+    protected_test_opened: false
