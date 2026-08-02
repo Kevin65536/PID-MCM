@@ -210,9 +210,14 @@ def test_retained_full_public_data_boundary_evidence_is_complete() -> None:
         assert cell["evidence_scope"] == "public_complete"
         assert cell["cell_status"] == "pending"
         assert [cell["gate_status"][f"A{index}"] for index in range(5)] == ["pass"] * 5
-        assert cell["gate_status"]["A5"] == "pending"
         assert cell["gate_status"]["A6"] == "pass"
-        assert cell["gate_status"]["A7"] == "pending"
+        if "public_adapter_audit" in cell:
+            assert cell["gate_status"]["A5"] == "pass"
+            assert cell["gate_status"]["A7"] == "pass"
+        else:
+            assert cell["gate_status"]["A5"] == "pending"
+            assert cell["gate_status"]["A7"] == "pending"
+        assert cell["gate_status"]["A8"] == "pending"
         assert cell["public_data_audit"]["all_unique_public_samples_audited"] is True
         assert cell["public_data_audit"]["protected_test_opened"] is False
 
@@ -262,3 +267,22 @@ def test_feature_cache_identity_covers_semantic_inputs() -> None:
         config=config,
     )
     assert changed["feature_cache_key"] != identity["feature_cache_key"]
+
+
+def test_retained_nback_production_pilot_passes_a7() -> None:
+    import json
+
+    cell = json.loads(
+        (METHOD_ROOT / "evidence/alignment_v2/nback.json").read_text(encoding="utf-8")
+    )
+    assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
+    assert cell["gate_status"]["A8"] == "pending"
+    audit = cell["public_adapter_audit"]
+    assert audit["unique_sample_count"] == 702
+    assert audit["all_unique_public_samples_executed"] is True
+    assert audit["feature_shape"] == [702, 76_800]
+    assert audit["feature_dtype"] == "float32"
+    assert audit["nonconstant_coordinate_count"] == 76_800
+    assert audit["cache_replay_exact"] is True
+    assert audit["cache_replay_batch_size"] == 2
+    assert audit["protected_test_opened"] is False

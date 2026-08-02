@@ -1,0 +1,78 @@
+{
+  "all_supported_tasks_complete": false,
+  "completed_at": "2026-08-02T12:00:51.070542+00:00",
+  "method_id": "normwear_eeg_fnirs_adapted",
+  "protected_test_opened": false,
+  "schema": "normwear_alignment_audit_summary_v2",
+  "schema_audit": {
+    "cell_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "normwear__nback__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "normwear_eeg_fnirs_adapted",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      }
+    ],
+    "contract": {
+      "contract_version": 2,
+      "gate_ids": [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "profile_count": 3,
+      "schema": "adapter_alignment_gate_contract_v2",
+      "task_count": 7
+    },
+    "direct_group_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      }
+    ],
+    "protected_test_opened": false,
+    "schema": "adapter_alignment_audit_report_v2",
+    "status": "pass"
+  },
+  "started_at": "2026-08-02T11:54:08.181564+00:00",
+  "status": "partial_A7_replay_in_serial_progress_protected_locked",
+  "task_reports": [
+    {
+      "feature_sha256": "cce74f1f574a2b4a7c239f9d79fb3a72a4b8418f63228dc3162858391b23363e",
+      "path": "comparative_methods/NormWear/evidence/alignment_v2/nback.json",
+      "sample_count": 702,
+      "status": "A0_A7_pass_A8_pending",
+      "task": "nback"
+    }
+  ],
+  "tasks_completed_this_run": [
+    "nback"
+  ]
+}
