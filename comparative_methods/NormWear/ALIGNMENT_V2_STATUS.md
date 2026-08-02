@@ -4,16 +4,17 @@ NormWear has completed source identity, A0 cell registration, and the full
 public A1-A4 data-boundary audit as an explicitly named EEG-fNIRS adaptation.
 The executable model semantics and source-fidelity gates A5/A6 pass. Full
 public production replay A7 now also passes. The A8 public-development runner
-and its independent artifact auditor are implemented; the first
-n-back/outer0/seed17 connectivity smoke passes, while full public selection,
-matrix freeze, and protected evaluation remain pending/locked.
+and its independent artifact auditor are implemented; both the first
+n-back/outer0/seed17 connectivity smoke and the corresponding complete public
+selection/refit job pass. The remaining folds, matrix freeze, and protected
+evaluation remain pending/locked.
 
 | Task | Unique public samples | Measured input | Current status |
 | --- | ---: | --- | --- |
 | Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
 | Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
 | WG | 1,560 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
-| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 smoke pass |
+| N-back | 702 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 outer0 pilot pass |
 | DSR | 8,980 | EEG 28; HbO/HbR 36 locations | A0-A7 pass; A8 pending |
 | Visual | 7,720 | EEG 30; HbO/HbR 24 locations | A0-A7 pass; A8 pending |
 | REFED regression | — | partial terminal support | preregistered unsupported |
@@ -43,6 +44,7 @@ The A8 runner consumes the retained A7 representation without loading the
 encoder again. For each outer fold it materializes labels only for that fold's
 public train/validation membership, fits its coordinate standardizer on
 outer-train only, selects a linear-probe candidate on public validation, and
-refits only on public train plus validation. The n-back connectivity smoke is
-retained under `evidence/public_development_v2`; it is explicitly not admissible
-as performance evidence.
+refits only on public train plus validation. The n-back connectivity smoke and
+complete outer0/seed17 pilot audits are retained under
+`evidence/public_development_v2`; both are explicitly public-development
+artifacts and are not admissible as final performance evidence.
