@@ -31,6 +31,9 @@ smoke:
   inner_folds: 3
   random_forest_estimators: 24
 
+resources:
+  tensor_cache_root: comparative_methods/BrainFusion-NVC-CSP-Stacking/runs/tensor_cache_v2
+
 reporting:
   primary_endpoint: macro_f1
   table_admissible: false

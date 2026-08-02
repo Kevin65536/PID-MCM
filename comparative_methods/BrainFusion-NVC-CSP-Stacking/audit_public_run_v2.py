@@ -22,7 +22,7 @@ for import_path in (REPO_ROOT, METHOD_ROOT, ADAPTER_ROOT):
     if str(import_path) not in sys.path:
         sys.path.insert(0, str(import_path))
 
-from alignment_data import BrainFusionPublicView, stable_hash
+from alignment_data import BrainFusionPublicView, resolve_repo_path, stable_hash
 from brainfusion_gpu.pipeline import BrainFusionFoldPipeline
 from comparative_methods.audit_public_preflight import sha256_file
 from run_public_development_v2 import (
@@ -30,7 +30,10 @@ from run_public_development_v2 import (
     _fold_membership,
     _materialize,
     diverse_balanced_subset,
+    fold_data_from_cache,
     load_runner_config,
+    load_tensor_cache_payload,
+    tensor_cache_identity,
     write_json,
 )
 
@@ -97,8 +100,50 @@ def audit_run(
             seed=seed + 1,
         )
     view = BrainFusionPublicView(inventory)
-    train_data = _materialize(view, inventory, train)
-    validation_data = _materialize(view, inventory, validation)
+    cache_validation_matches_raw = False
+    if report["mode"] == "smoke_only":
+        if report.get("tensor_cache") is not None:
+            raise RuntimeError("BrainFusion smoke run unexpectedly retained a full tensor cache")
+        train_data = _materialize(view, inventory, train)
+        validation_data = _materialize(view, inventory, validation)
+    else:
+        cache_report = report.get("tensor_cache")
+        if not isinstance(cache_report, dict) or cache_report.get(
+            "protected_test_opened"
+        ) is not False:
+            raise PermissionError("BrainFusion full run lacks a valid public tensor cache")
+        cache_path = resolve_repo_path(cache_report["path"])
+        cache_manifest_path = resolve_repo_path(cache_report["manifest_path"])
+        if "protected" in {
+            part.lower() for path in (cache_path, cache_manifest_path) for part in path.parts
+        }:
+            raise PermissionError("BrainFusion tensor cache audit crossed protected data")
+        if sha256_file(cache_path) != cache_report["file_sha256"]:
+            raise RuntimeError("BrainFusion reported tensor cache hash drifted")
+        if sha256_file(cache_manifest_path) != cache_report["manifest_sha256"]:
+            raise RuntimeError("BrainFusion reported tensor cache manifest hash drifted")
+        identity = tensor_cache_identity(
+            inventory, alignment=alignment, alignment_path=resolve_repo_path(config["alignment_config"])
+        )
+        if stable_hash(identity) != cache_report["identity_sha256"]:
+            raise RuntimeError("BrainFusion reported tensor cache identity drifted")
+        if identity["tensor_cache_key"] != cache_report["tensor_cache_key"]:
+            raise RuntimeError("BrainFusion reported tensor cache key drifted")
+        payload, _cache_manifest = load_tensor_cache_payload(
+            cache_path,
+            cache_manifest_path,
+            expected_identity=identity,
+            inventory=inventory,
+        )
+        train_data = fold_data_from_cache(payload, inventory, train)
+        validation_data = fold_data_from_cache(payload, inventory, validation)
+        raw_validation = _materialize(view, inventory, validation)
+        if any(
+            not torch.equal(cached, raw)
+            for cached, raw in zip(validation_data[:4], raw_validation[:4], strict=True)
+        ) or validation_data[4:] != raw_validation[4:]:
+            raise RuntimeError("BrainFusion cached validation tensors differ from raw adapter")
+        cache_validation_matches_raw = True
     if stable_hash(train_data[4]) != report["train_sample_identity_sha256"]:
         raise RuntimeError("BrainFusion audited training membership drifted")
     if stable_hash(validation_data[4]) != report["validation_sample_identity_sha256"]:
@@ -157,6 +202,8 @@ def audit_run(
         "metric_recomputed": True,
         "checkpoint_predictions_recomputed": True,
         "checkpoint_reload_exact": True,
+        "tensor_cache_audited": report["mode"] != "smoke_only",
+        "cached_validation_matches_raw_adapter": cache_validation_matches_raw,
         "train_sample_count": len(train_data[4]),
         "validation_sample_count": len(validation_data[4]),
         "validation_macro_f1": metric,

@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
-from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
-import math
 from pathlib import Path
 import random
 import sys
@@ -32,6 +30,8 @@ from alignment_data import (
     METHOD_ID,
     SUPPORTED_TASKS,
     BrainFusionPublicView,
+    PublicInventory,
+    data_branch_fingerprints,
     load_config as load_alignment_config,
     load_public_inventory,
     resolve_repo_path,
@@ -50,6 +50,7 @@ from comparative_methods.audit_public_preflight import (
 
 
 CONFIG_SCHEMA = "brainfusion_public_development_v2"
+TENSOR_CACHE_SCHEMA = "brainfusion_full_public_tensor_cache_v2"
 DEFAULT_CONFIG = METHOD_ROOT / "configs/public_development_v2.yaml"
 ALIGNMENT_CONTRACT = REPO_ROOT / "comparative_methods/adapter_alignment_gate_contract_v2.yaml"
 RUN_ROOT = METHOD_ROOT / "runs/public_development_v2"
@@ -57,6 +58,14 @@ RUN_ROOT = METHOD_ROOT / "runs/public_development_v2"
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def portable_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(resolved)
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -68,6 +77,13 @@ def write_json(path: Path, payload: Mapping[str, Any]) -> None:
     temporary.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    temporary.replace(path)
+
+
+def atomic_torch_save(path: Path, payload: Mapping[str, torch.Tensor]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(dict(payload), temporary)
     temporary.replace(path)
 
 
@@ -104,6 +120,12 @@ def load_runner_config(
         raise ValueError("BrainFusion public matrix must remain serial")
     if int(matrix.get("automatic_retry_count", -1)) != 0:
         raise ValueError("BrainFusion public jobs may not retry automatically")
+    cache_root = resolve_repo_path(config["resources"]["tensor_cache_root"])
+    method_runs = (METHOD_ROOT / "runs").resolve()
+    if cache_root != method_runs and method_runs not in cache_root.parents:
+        raise PermissionError("BrainFusion tensor cache must remain under method runs")
+    if "protected" in {part.lower() for part in cache_root.parts}:
+        raise PermissionError("BrainFusion tensor cache crossed the protected boundary")
     alignment_path = resolve_repo_path(config["alignment_config"])
     alignment, checked_path = load_alignment_config(alignment_path)
     if checked_path != alignment_path:
@@ -209,6 +231,173 @@ def _materialize(
     )
 
 
+def tensor_cache_identity(
+    inventory: PublicInventory,
+    *,
+    alignment: Mapping[str, Any],
+    alignment_path: Path,
+) -> dict[str, Any]:
+    value = {
+        "schema": TENSOR_CACHE_SCHEMA,
+        "task": inventory.task,
+        "sample_count": len(inventory.indices),
+        "dataset_indices_sha256": stable_hash(list(inventory.indices)),
+        "sample_identity_sha256": stable_hash(list(inventory.sample_ids)),
+        "sample_inventory_sha256": inventory.sample_inventory_sha256,
+        "split_fingerprint": inventory.split_fingerprint,
+        "measured_channel_identity_sha256": inventory.measured_channel_identity_sha256,
+        "alignment_config_sha256": sha256_file(alignment_path),
+        "alignment_data_sha256": sha256_file(METHOD_ROOT / "alignment_data.py"),
+        "data_branch_sha256": data_branch_fingerprints(alignment),
+        "tensor_contract": {
+            "dtype": "float32",
+            "eeg_channels": list(inventory.eeg_channels),
+            "fnirs_locations": list(inventory.fnirs_locations),
+            "duration_s": inventory.duration_s,
+            "eeg_sample_rate_hz": float(alignment["data"]["eeg_sample_rate_hz"]),
+            "fnirs_sample_rate_hz": float(alignment["data"]["fnirs_sample_rate_hz"]),
+            "channel_policy": "fixed_measured_inventory_no_copy_no_padding",
+            "time_support_policy": "canonical_interval_only_full_recorded_and_analysis_valid",
+        },
+        "fitted_or_supervised_state_included": False,
+        "protected_test_opened": False,
+    }
+    value["tensor_cache_key"] = stable_hash(value)
+    return value
+
+
+def validate_tensor_cache(
+    payload: Mapping[str, torch.Tensor], inventory: PublicInventory
+) -> None:
+    required = {"eeg", "hbo", "hbr", "targets", "dataset_indices"}
+    if set(payload) != required:
+        raise RuntimeError(f"BrainFusion tensor cache fields differ: {sorted(payload)}")
+    count = len(inventory.indices)
+    eeg_samples = int(round(inventory.duration_s * 200.0))
+    fnirs_samples = int(round(inventory.duration_s * 10.0))
+    expected_shapes = {
+        "eeg": (count, len(inventory.eeg_channels), eeg_samples),
+        "hbo": (count, len(inventory.fnirs_locations), fnirs_samples),
+        "hbr": (count, len(inventory.fnirs_locations), fnirs_samples),
+        "targets": (count,),
+        "dataset_indices": (count,),
+    }
+    for name, shape in expected_shapes.items():
+        if not isinstance(payload[name], torch.Tensor) or tuple(payload[name].shape) != shape:
+            raise RuntimeError(f"BrainFusion tensor cache shape drifted: {name}")
+    if any(payload[name].dtype != torch.float32 for name in ("eeg", "hbo", "hbr")):
+        raise RuntimeError("BrainFusion tensor cache modality dtype drifted")
+    if payload["targets"].dtype != torch.long or payload["dataset_indices"].dtype != torch.long:
+        raise RuntimeError("BrainFusion tensor cache index dtype drifted")
+    if tuple(payload["dataset_indices"].tolist()) != inventory.indices:
+        raise RuntimeError("BrainFusion tensor cache public index order drifted")
+    expected_targets = []
+    for index in inventory.indices:
+        row = inventory.dataset.lightweight_metadata(int(index))
+        expected_targets.append(inventory.dataset.class_to_index[str(row["condition"])])
+    if payload["targets"].tolist() != expected_targets:
+        raise RuntimeError("BrainFusion tensor cache target order drifted")
+    for name in ("eeg", "hbo", "hbr"):
+        values = payload[name]
+        if not bool(torch.isfinite(values).all()):
+            raise RuntimeError(f"BrainFusion tensor cache contains non-finite {name}")
+        flattened = values.reshape(count, -1)
+        if bool((flattened.amax(dim=1) <= flattened.amin(dim=1)).any()):
+            raise RuntimeError(f"BrainFusion tensor cache contains constant {name} trials")
+
+
+def load_tensor_cache_payload(
+    cache_path: Path,
+    manifest_path: Path,
+    *,
+    expected_identity: Mapping[str, Any],
+    inventory: PublicInventory,
+) -> tuple[dict[str, torch.Tensor], dict[str, Any]]:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("identity") != expected_identity:
+        raise RuntimeError("BrainFusion tensor cache manifest identity drifted")
+    if sha256_file(cache_path) != manifest.get("file_sha256"):
+        raise RuntimeError("BrainFusion tensor cache file hash drifted")
+    payload = torch.load(cache_path, map_location="cpu", weights_only=True)
+    if not isinstance(payload, dict):
+        raise TypeError("BrainFusion tensor cache payload must be a mapping")
+    validate_tensor_cache(payload, inventory)
+    return payload, manifest
+
+
+def materialize_or_load_tensor_cache(
+    inventory: PublicInventory,
+    *,
+    alignment: Mapping[str, Any],
+    alignment_path: Path,
+    config: Mapping[str, Any],
+) -> tuple[dict[str, torch.Tensor], dict[str, Any], bool, Path, Path]:
+    identity = tensor_cache_identity(
+        inventory, alignment=alignment, alignment_path=alignment_path
+    )
+    cache_root = resolve_repo_path(config["resources"]["tensor_cache_root"])
+    cache_path = cache_root / inventory.task / f"{identity['tensor_cache_key']}.pt"
+    manifest_path = cache_path.with_suffix(".json")
+    if cache_path.is_file() or manifest_path.is_file():
+        if not cache_path.is_file() or not manifest_path.is_file():
+            raise RuntimeError("BrainFusion tensor cache is only partially present")
+        payload, manifest = load_tensor_cache_payload(
+            cache_path,
+            manifest_path,
+            expected_identity=identity,
+            inventory=inventory,
+        )
+        return payload, manifest, True, cache_path, manifest_path
+
+    view = BrainFusionPublicView(inventory)
+    materialized = _materialize(view, inventory, inventory.indices)
+    if tuple(materialized[4]) != inventory.sample_ids:
+        raise RuntimeError("BrainFusion tensor cache materialization identity drifted")
+    payload = {
+        "eeg": materialized[0],
+        "hbo": materialized[1],
+        "hbr": materialized[2],
+        "targets": materialized[3],
+        "dataset_indices": torch.tensor(inventory.indices, dtype=torch.long),
+    }
+    validate_tensor_cache(payload, inventory)
+    atomic_torch_save(cache_path, payload)
+    manifest = {
+        "schema": TENSOR_CACHE_SCHEMA,
+        "identity": identity,
+        "file_sha256": sha256_file(cache_path),
+        "created_at": utc_now(),
+        "protected_test_opened": False,
+    }
+    write_json(manifest_path, manifest)
+    return payload, manifest, False, cache_path, manifest_path
+
+
+def fold_data_from_cache(
+    payload: Mapping[str, torch.Tensor],
+    inventory: PublicInventory,
+    indices: Sequence[int],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[str], list[str]]:
+    lookup = {int(index): row for row, index in enumerate(inventory.indices)}
+    missing = [int(index) for index in indices if int(index) not in lookup]
+    if missing:
+        raise RuntimeError(f"BrainFusion public fold index is absent from cache: {missing[:5]}")
+    rows = torch.tensor([lookup[int(index)] for index in indices], dtype=torch.long)
+    sample_ids = [sample_id(inventory.dataset, int(index)) for index in indices]
+    groups = [
+        str(inventory.dataset.lightweight_metadata(int(index))["subject"])
+        for index in indices
+    ]
+    return (
+        payload["eeg"].index_select(0, rows),
+        payload["hbo"].index_select(0, rows),
+        payload["hbr"].index_select(0, rows),
+        payload["targets"].index_select(0, rows),
+        sample_ids,
+        groups,
+    )
+
+
 def _pipeline(config: Mapping[str, Any], *, seed: int, smoke: bool) -> BrainFusionFoldPipeline:
     feature = config["features"]
     stack = config["stacking"]
@@ -278,9 +467,33 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             per_class=int(config["smoke"]["validation_samples_per_class"]),
             seed=seed + 1,
         )
-    view = BrainFusionPublicView(inventory)
-    train_data = _materialize(view, inventory, train)
-    validation_data = _materialize(view, inventory, validation)
+    tensor_cache: dict[str, Any] | None = None
+    if args.smoke:
+        view = BrainFusionPublicView(inventory)
+        train_data = _materialize(view, inventory, train)
+        validation_data = _materialize(view, inventory, validation)
+    else:
+        payload, cache_manifest, cache_hit, cache_path, cache_manifest_path = (
+            materialize_or_load_tensor_cache(
+                inventory,
+                alignment=alignment,
+                alignment_path=alignment_path,
+                config=config,
+            )
+        )
+        train_data = fold_data_from_cache(payload, inventory, train)
+        validation_data = fold_data_from_cache(payload, inventory, validation)
+        tensor_cache = {
+            "path": portable_path(cache_path),
+            "manifest_path": portable_path(cache_manifest_path),
+            "file_sha256": cache_manifest["file_sha256"],
+            "manifest_sha256": sha256_file(cache_manifest_path),
+            "identity_sha256": stable_hash(cache_manifest["identity"]),
+            "tensor_cache_key": cache_manifest["identity"]["tensor_cache_key"],
+            "cache_hit": cache_hit,
+            "fitted_or_supervised_state_included": False,
+            "protected_test_opened": False,
+        }
     train_tensors = [value.to(device) for value in train_data[:4]]
     validation_tensors = [value.to(device) for value in validation_data[:3]]
     pipeline = _pipeline(config, seed=seed, smoke=bool(args.smoke)).fit(
@@ -343,6 +556,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "validation_sample_identity_sha256": stable_hash(validation_data[4]),
         "train_validation_overlap": bool(set(train_data[4]) & set(validation_data[4])),
         "fit_state": pipeline.audit_state(),
+        "tensor_cache": tensor_cache,
+        "checkpoint_fit_scope": "outer_training_only_public_validation_held_out",
         "validation_macro_f1": score,
         "predictions_path": str(predictions_path),
         "predictions_sha256": sha256_file(predictions_path),
