@@ -1,0 +1,127 @@
+schema: normwear_adapter_alignment_v2
+protocol_id: normwear_adapter_alignment_v2
+method_id: normwear_eeg_fnirs_adapted
+track: multimodal_official_pretrained_frozen_linear_probe_adapted
+alignment_profile: support_matched_direct
+mode: public_audit_only
+protected_test_default: locked
+
+source:
+  upstream_revision: 07517fcb13def8c89cb586128359cec02f86ec8d
+  checkpoint_artifact_id: normwear_pretrain
+  reporting_name: normwear_eeg_fnirs_adapted
+  original_paper_fnirs_reproduction_claim_allowed: false
+  target_corpus_overlap: none_by_declared_dataset_identity
+
+registry:
+  manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  protocol: strict_cross_subject
+  outer_folds: [0, 1, 2, 3, 4]
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_sample_rate_hz: 200
+  fnirs_sample_rate_hz: 10
+  required_modalities: [eeg, fnirs_hbo, fnirs_hbr]
+  channel_policy: frozen_task_inventory_all_real_measured_channels_no_copy_no_padding
+  delivered_order: eeg_then_fnirs_hbo_then_fnirs_hbr
+  support_policy: full_recorded_and_analysis_valid_support_only
+  signal_coordinate: canonical_recordwise_robust_standard_deviation
+
+observation_budget:
+  alignment_profile: support_matched_direct
+  anchor: canonical_registry_window_start
+  extra_pre_anchor_context_s: 0.0
+  extra_post_interval_context_s: 0.0
+  offline_full_window: true
+  dsr_fnirs_semantics: synchronized_block_anchored_context_not_event_native_response
+
+adapter:
+  model_input_sample_rate_hz: 65
+  resampling:
+    implementation: scipy.signal.resample_poly
+    eeg_ratio_up_down: [13, 40]
+    fnirs_ratio_up_down: [13, 2]
+    window: default_kaiser_beta_5
+    padtype: constant
+    expected_length_rule: ceil_source_samples_times_up_div_down
+    fit_scope: deterministic_stateless_no_target_information
+  upstream_basic_preproc_applied: false
+  cwt:
+    implementation: pinned_upstream_optimized_pytorch_ricker
+    planes: [signal_after_second_difference_alignment, first_difference, second_difference]
+    lowest_scale: 0.1
+    largest_scale: 64.0
+    scale_step: 1.0
+    generated_scale_count: 65
+    maximum_wavelet_length_samples: 640
+  patch_embedding:
+    kernel: [9, 5]
+    stride: [9, 5]
+    pretrained_position_grid: [43, 13]
+    interpolation: bicubic_align_corners_false
+  representation_layer: final_encoder_layer_norm_tokens
+  patch_pooling: mean_including_channel_cls_token
+  channel_pooling: concatenate_in_frozen_delivered_order
+  embedding_dim_per_channel: 768
+  encoder_trainable_parameters: none
+  decoder_used: false
+  optional_msitf_used: false
+  downstream_head: outer_training_only_linear_probe
+
+tasks:
+  motor_imagery:
+    supported: true
+    dataset_id: eeg_fnirs_single_trial
+    duration_s: 8.0
+    task_type: classification
+    primary_endpoint: macro_f1
+  mental_arithmetic:
+    supported: true
+    dataset_id: eeg_fnirs_single_trial
+    duration_s: 8.0
+    task_type: classification
+    primary_endpoint: macro_f1
+  wg:
+    supported: true
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 8.0
+    task_type: classification
+    primary_endpoint: macro_f1
+  nback:
+    supported: true
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 8.0
+    task_type: classification
+    primary_endpoint: macro_f1
+  dsr:
+    supported: true
+    dataset_id: simultaneous_eeg_nirs
+    duration_s: 2.0
+    task_type: classification
+    primary_endpoint: macro_f1
+    fnirs_semantics: synchronized_block_anchored_context_not_event_native_response
+  visual:
+    supported: true
+    dataset_id: visual_cognitive_motivation
+    duration_s: 8.0
+    task_type: classification
+    primary_endpoint: macro_f1
+  refed_regression:
+    supported: false
+    dataset_id: refed
+    duration_s: 20.0
+    task_type: masked_sequence_regression
+    unsupported_reason_code: NORMWEAR_NO_PARTIAL_TIME_MASK_OR_MASKED_SEQUENCE_REGRESSION_CONTRACT
+    unsupported_reason: >-
+      REFED has semantically real partial terminal input and target support.
+      The frozen NormWear encoder has no temporal support-mask argument, and
+      its released downstream path does not define masked sequence regression;
+      padding or deleting those windows would change the direct estimand.
+
+resources:
+  default_device: cuda:1
+  feature_batch_size: 1
+  data_loader_workers: 0
+  gpu_lock_path: /tmp/pid_mcm_normwear_alignment_gpu1.lock

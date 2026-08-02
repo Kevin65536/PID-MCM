@@ -1,8 +1,9 @@
 # NormWear EEG-fNIRS adaptation workspace
 
 This workspace is explicitly an EEG-fNIRS adaptation of NormWear, not an
-original-paper fNIRS reproduction. B0 source fixing and release-asset
-acquisition are complete; the fNIRS-specific B1-B4 work remains pending.
+original-paper fNIRS reproduction. Source fixing, release-asset acquisition,
+safe checkpoint inspection, and A0 cell registration are complete. Public data
+and executable adapter validation remain gated work.
 
 - Official code: `upstream/`, revision
   `07517fcb13def8c89cb586128359cec02f86ec8d`.
@@ -10,6 +11,8 @@ acquisition are complete; the fNIRS-specific B1-B4 work remains pending.
 - Optional official MSiTF module:
   `checkpoints/normwear_msitf_zeroshot_last_checkpoint-5.pth`.
 - Provenance and hashes: `sources/method_manifest.yaml`.
+- Frozen adapter decisions: `configs/alignment_v2.yaml` and
+  `IDENTITY_AND_ADAPTATION_AUDIT.md`.
 - Re-fetch helper: `scripts/fetch_weights.sh`.
 
 All results must use the name `normwear_eeg_fnirs_adapted`. The adapter must

@@ -18,6 +18,42 @@ upstream:
     - modules/normwear.py
     - modules/signal_preprocess.py
     - downstream_pipeline/corrected_linear_prob.py
+source_fidelity:
+  files:
+    - local_path: upstream/LICENSE
+      size_bytes: 11357
+      sha256: c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
+    - local_path: upstream/main_model.py
+      size_bytes: 4986
+      sha256: ead7eae11fa0fae12b0335843d8586e65721756a9a55b8dd1b3639c70bf1d179
+    - local_path: upstream/modules/normwear.py
+      size_bytes: 23552
+      sha256: bb2b6d38b17842ba853bcc7aaca4b2453a9549f343f200d733efdb90e8163936
+    - local_path: upstream/modules/patch_embed.py
+      size_bytes: 3699
+      sha256: ea46e35520d81aa45c5b2d034bfc526ab38a8f86dc31bdd5e3d7102c9fd91e6e
+    - local_path: upstream/modules/signal_preprocess.py
+      size_bytes: 3062
+      sha256: 4362998cc3942054355c744f70c742d1ca48a5ed4baefd1ebfe07d76ce90ce5b
+    - local_path: upstream/downstream_pipeline/model_apis.py
+      size_bytes: 16872
+      sha256: 2dd44b84fda56f872e0af196942cd859abc5877c21e0bba12c1f829e6c150144
+    - local_path: upstream/downstream_pipeline/corrected_linear_prob.py
+      size_bytes: 5315
+      sha256: 6812ef4c086f1085f0d339e3746161e08a6afee2d5e5c5b0f0bf37e74a365623
+  official_readme_example_sampling_rate_hz: 64
+  executable_model_sampling_rate_hz: 65
+  official_helper_resamples_only_above_hz: 256
+  checkpoint_container: direct_ordered_dict
+  checkpoint_tensor_entry_count: 261
+  checkpoint_tensor_element_count: 136116425
+  checkpoint_strict_model_match: pass
+  encoder_only_primary_track: true
+  decoder_excluded_reason: fixed_four_variable_pretraining_reconstruction_only
+  optional_msitf_primary_track: false
+  license_notice: >-
+    Repository root is Apache-2.0. modules/normwear.py retains an All rights
+    reserved header that refers readers to the root LICENSE.
 checkpoint:
   status: official_release_assets_downloaded
   release_tag: v1.0.0-alpha
@@ -66,12 +102,21 @@ input_boundary:
     - cwt_parameters
     - hbo_hbr_representation
     - mask_handling
+  registered_supported_tasks:
+    - motor_imagery
+    - mental_arithmetic
+    - wg
+    - nback
+    - dsr
+    - visual
+  registered_unsupported_tasks:
+    refed_regression: NORMWEAR_NO_PARTIAL_TIME_MASK_OR_MASKED_SEQUENCE_REGRESSION_CONTRACT
 reporting_boundary:
   required_name: normwear_eeg_fnirs_adapted
   original_paper_fnirs_reproduction_claim_allowed: false
 gate_status:
   B0_source_fixed: pass
-  B1_input_contract: pending
+  B1_input_contract: registered_pending_full_public_validation
   B2_software_smoke: pending
   B3_source_fidelity: pending
   B4_protocol_freeze: pending
