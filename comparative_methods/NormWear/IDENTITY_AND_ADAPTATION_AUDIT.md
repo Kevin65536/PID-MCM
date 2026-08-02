@@ -55,6 +55,13 @@ concatenated in the frozen delivered order. The feature width is therefore
 `real_channels * 768`; there is no adaptation-specific cross-modality average.
 Only the outer-training linear probe is trainable.
 
+The implementation chunks the channel-independent attention calls while
+retaining complete cross-channel CLS fusion. The unchunked path is bitwise
+identical to the pinned upstream call. The retained GPU smoke requires token
+maximum/mean absolute differences below 0.01/0.0002, pooled-feature maximum
+absolute difference below 0.0002, and pooled-feature cosine above 0.99999 for
+the chunked float32 path.
+
 ## Cell registration
 
 Motor imagery, mental arithmetic, WG, n-back, DSR, and visual classification

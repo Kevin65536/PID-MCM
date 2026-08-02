@@ -69,6 +69,16 @@ adapter:
   decoder_used: false
   optional_msitf_used: false
   downstream_head: outer_training_only_linear_probe
+  execution:
+    dtype: float32
+    channel_attention_chunk_size: 16
+    chunk_semantics: per_channel_attention_chunked_cross_channel_cls_fusion_complete
+    unchunked_upstream_equivalence: bitwise
+    chunked_numerical_acceptance:
+      maximum_token_absolute_difference: 0.01
+      maximum_mean_token_absolute_difference: 0.0002
+      maximum_pooled_feature_absolute_difference: 0.0002
+      minimum_pooled_feature_cosine_similarity: 0.99999
 
 channel_inventories:
   eeg_fnirs_single_trial:

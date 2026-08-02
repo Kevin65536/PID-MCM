@@ -117,9 +117,17 @@ reporting_boundary:
 gate_status:
   B0_source_fixed: pass
   B1_input_contract: pass_support_matched_full_public
-  B2_software_smoke: pending
-  B3_source_fidelity: pending
+  B2_software_smoke: pass_public_gpu_forward_backward_replay
+  B3_source_fidelity: pass_explicit_eeg_fnirs_adaptation
   B4_protocol_freeze: pending
+adapter_smoke:
+  status: pass_A5_A6
+  evidence: evidence/adapter_smoke_v2/summary.json
+  encoder_parameter_count: 128118528
+  encoder_trainable_parameter_count: 0
+  channel_attention_chunk_size: 16
+  unchunked_upstream_bitwise_exact: true
+  protected_test_opened: false
 public_data_audit:
   status: pass_A0_A4_and_A6_A5_A8_pending
   evidence: evidence/alignment_v2/data_boundary_summary.json

@@ -1,0 +1,71 @@
+{
+  "checkpoint": {
+    "encoder_entry_count": 222,
+    "encoder_parameter_count": 128118528,
+    "excluded_decoder_entry_count": 39,
+    "sha256": "36d0bca18356ccfc8e8916058bf838f26f1212a646f5780b487ad78581a92561"
+  },
+  "completed_at": "2026-08-02T11:40:12.360217+00:00",
+  "device": "cuda:1",
+  "execution": {
+    "channel_attention_chunk_size": 16,
+    "chunked_numerical_metrics": {
+      "maximum_pooled_feature_absolute_difference": 0.00019937753677368164,
+      "maximum_token_absolute_difference": 0.0021611154079437256,
+      "mean_token_absolute_difference": 6.212692096596584e-05,
+      "pooled_feature_cosine_similarity": 0.9999998807907104
+    },
+    "chunked_numerical_thresholds": {
+      "maximum_mean_token_absolute_difference": 0.0002,
+      "maximum_pooled_feature_absolute_difference": 0.0002,
+      "maximum_token_absolute_difference": 0.01,
+      "minimum_pooled_feature_cosine_similarity": 0.99999
+    },
+    "dtype": "torch.float32",
+    "upstream_unchunked_bitwise_exact": true
+  },
+  "linear_probe": {
+    "encoder_gradient_count": 0,
+    "head_updated": true,
+    "trainable_parameters": [
+      "head.weight",
+      "head.bias"
+    ]
+  },
+  "method_id": "normwear_eeg_fnirs_adapted",
+  "protected_test_opened": false,
+  "public_smoke": {
+    "dsr": {
+      "bitwise_replay_exact": true,
+      "expected_cwt_time_samples": 129,
+      "expected_token_count_per_channel": 183,
+      "feature_shape": [
+        1,
+        76800
+      ],
+      "feature_standard_deviation": 0.5348721742630005,
+      "mean_forward_seconds": 0.138570343144238,
+      "model_input_samples": 130,
+      "peak_allocated_mib": 754.029296875,
+      "real_channel_count": 100,
+      "sample_id": "simultaneous_eeg_nirs|VP001|cnt_dsr|event=0|offset_ms=0"
+    },
+    "motor_imagery": {
+      "bitwise_replay_exact": true,
+      "expected_cwt_time_samples": 519,
+      "expected_token_count_per_channel": 742,
+      "feature_shape": [
+        1,
+        78336
+      ],
+      "feature_standard_deviation": 0.5405600666999817,
+      "mean_forward_seconds": 0.4900159374810755,
+      "model_input_samples": 520,
+      "peak_allocated_mib": 1517.96240234375,
+      "real_channel_count": 102,
+      "sample_id": "eeg_fnirs_single_trial|subject_01|session_00|event=0|offset_ms=0"
+    }
+  },
+  "schema": "normwear_adapter_smoke_v2",
+  "status": "pass"
+}

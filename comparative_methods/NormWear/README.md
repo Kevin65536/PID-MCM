@@ -2,8 +2,9 @@
 
 This workspace is explicitly an EEG-fNIRS adaptation of NormWear, not an
 original-paper fNIRS reproduction. Source fixing, release-asset acquisition,
-safe checkpoint inspection, A0 cell registration, and full-public A1-A4 data
-validation are complete. Executable adapter validation remains gated work.
+safe checkpoint inspection, A0 cell registration, full-public A1-A4 data
+validation, and executable A5/A6 adapter smoke are complete. Full-public model
+replay and protocol freeze remain gated work.
 
 - Official code: `upstream/`, revision
   `07517fcb13def8c89cb586128359cec02f86ec8d`.
@@ -14,6 +15,7 @@ validation are complete. Executable adapter validation remains gated work.
 - Frozen adapter decisions: `configs/alignment_v2.yaml` and
   `IDENTITY_AND_ADAPTATION_AUDIT.md`.
 - Full-public data evidence: `evidence/alignment_v2/data_boundary_summary.json`.
+- Executable GPU smoke: `evidence/adapter_smoke_v2/summary.json`.
 - Re-fetch helper: `scripts/fetch_weights.sh`.
 
 All results must use the name `normwear_eeg_fnirs_adapted`. The adapter must

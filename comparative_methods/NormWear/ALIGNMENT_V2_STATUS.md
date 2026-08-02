@@ -2,8 +2,9 @@
 
 NormWear has completed source identity, A0 cell registration, and the full
 public A1-A4 data-boundary audit as an explicitly named EEG-fNIRS adaptation.
-The executable model gates A5/A7 and protocol freeze A8 remain pending;
-protected evaluation is locked.
+The executable model semantics and source-fidelity gates A5/A6 now pass. Full
+public production replay A7 and protocol freeze A8 remain pending; protected
+evaluation is locked.
 
 | Task | Unique public samples | Measured input | Current status |
 | --- | ---: | --- | --- |
@@ -27,7 +28,9 @@ method-neutral comparison fields. DSR is additionally supported here because
 NormWear is a generic signal encoder rather than an HRF/NVC estimator; its two
 seconds of fNIRS remain described only as synchronized block context.
 
-Retained public evidence is in `evidence/alignment_v2`. It records A5 and A7 as
-pending because no checkpoint forward is part of this phase. This distinction
-prevents a validated data loader from being promoted into an executable adapter
-claim.
+Retained public data evidence is in `evidence/alignment_v2`; retained adapter
+smoke evidence is in `evidence/adapter_smoke_v2`. The latter verifies safe
+encoder-only loading, upstream equivalence, bounded chunked numerics, bitwise
+replay on real DSR and 8-second inputs, a trainable linear head, and zero encoder
+gradients. A7 remains pending until this production path covers every unique
+public sample.
