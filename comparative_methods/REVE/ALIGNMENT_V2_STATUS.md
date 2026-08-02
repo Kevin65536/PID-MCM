@@ -1,9 +1,9 @@
 # REVE adapter-alignment v2 status
 
 REVE has completed implementation review and the full-public A0–A7 gate. The
-A8 runner and one public-only connectivity pilot have passed review; the
-candidate 90-job matrix is retained but not launch-authorized. Protected
-evaluation remains locked.
+A8 runner and one public-only connectivity pilot have passed review. The
+candidate 90-job matrix is retained and explicitly authorized only for serial
+public execution. Protected evaluation remains locked.
 
 ## Retained public evidence
 
@@ -49,5 +49,6 @@ subset. Its artifact audit recomputes membership, targets, metrics, feature
 identity and the weights-only checkpoint, and explicitly marks the result as
 non-table-admissible. The candidate 90-job matrix is serial
 (`max_concurrent_jobs=1`), has zero automatic retries, and cannot authorize
-itself. A separate reviewed launch artifact is required, with protected
-evaluation authorization still false.
+itself. The separate launch artifact binds all reviewed commits, source files,
+config, pilot and matrix identities; it authorizes only this serial public
+queue, with protected evaluation and concurrent BrainFusion work still false.
