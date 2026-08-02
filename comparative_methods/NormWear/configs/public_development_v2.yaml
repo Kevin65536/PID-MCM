@@ -1,0 +1,58 @@
+schema: normwear_public_development_v2
+protocol_id: normwear_public_development_v2
+method_id: normwear_eeg_fnirs_adapted
+track: multimodal_synchronous_official_pretrained_adapted_linear_probe
+mode: public_development_only
+protected_test_default: locked
+
+alignment:
+  config: comparative_methods/NormWear/configs/alignment_v2.yaml
+  config_sha256: fb49348dc5248b170622438ee93274b004e33c26c5da01872127ac690c3ef4dc
+  evidence_summary: comparative_methods/NormWear/evidence/alignment_v2/summary.json
+  evidence_summary_sha256: b3f3f9252614a87f5f9e3affecdde855b0dcb8e3673ecb2160261a039dbdc808
+  evidence_root: comparative_methods/NormWear/evidence/alignment_v2
+  required_status: A0_A7_pass_A8_pending_protected_locked
+
+job_matrix:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+  outer_folds: [0, 1, 2, 3, 4]
+  seeds: [17, 42, 73]
+  expected_public_jobs: 90
+  refed_regression: unsupported_NORMWEAR_NO_PARTIAL_TIME_MASK_OR_MASKED_SEQUENCE_REGRESSION
+
+selection:
+  metric: macro_f1
+  mode: max
+  learning_rates: [0.001, 0.0003]
+  weight_decays: [0.0, 0.01]
+  epoch_cap: 40
+  batch_size: 128
+  class_weighting: inverse_frequency
+  feature_standardization: outer_train_coordinate_zscore
+  feature_standardization_epsilon: 1.0e-6
+  tie_break: lower_candidate_index
+
+refit:
+  membership: outer_train_plus_public_validation
+  epochs: selected_best_epoch
+  hyperparameters: selected_public_validation_candidate
+  feature_standardization: refit_membership_coordinate_zscore
+  protected_evaluation: forbidden_until_separate_unlock
+
+smoke:
+  train_samples_per_class: 4
+  validation_samples_per_class: 4
+  epoch_cap: 2
+  learning_rates: [0.001]
+  weight_decays: [0.0]
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  completed_run_overwrite: forbidden
+
+resources:
+  device: cuda:1
+  minimum_free_gpu_gib: 6
+  gpu_lock_path: /tmp/pid_mcm_normwear_public_gpu1.lock
+  run_root: comparative_methods/NormWear/runs/public_development_v2
