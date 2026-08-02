@@ -1,0 +1,112 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-08-02T08:56:08.625255+00:00",
+  "completed_job_count": 90,
+  "failed_job_count": 0,
+  "finalizer_path": "comparative_methods/REVE/finalize_public_matrix_v2.py",
+  "finalizer_sha256": "c030901d42c8b0d38d9d08b0820604e7425c607c306c5590e1ae7aaf3b1e1318",
+  "job_artifact_fingerprint_sha256": "20e312bb9775c995d8f7ec6c22c1bd51baddae68515302740edff518c8fdb96c",
+  "job_count": 90,
+  "local_completed_audit_sha256": "18f0c1a8c140b5e2b57ea35db553a3f2e5ad8e2f0a5882a69750ff4d7aae373a",
+  "local_controller_status_sha256": "7057994d35c2dbb6f1860f9ed23c345f5a92796b97a78b69d8fe8bc4787139bd",
+  "matrix_identity_sha256": "f5d1d0734ee8e000f0f9fac9489a7593db16c01596d737879cec6e5d10eca48f",
+  "max_concurrent_jobs": 1,
+  "method_id": "reve",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "schema": "reve_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.5712337137040854,
+      "public_validation_macro_f1_cell_sd": 0.014827279795805831,
+      "seed_mean_by_outer_fold": [
+        0.5706369846635212,
+        0.5812995834618951,
+        0.5735609689258653,
+        0.5789270600644669,
+        0.551743971404679
+      ],
+      "task": "motor_imagery",
+      "track": "open_world_pretrained_with_target_corpus_overlap"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6013160262587863,
+      "public_validation_macro_f1_cell_sd": 0.018060652978758845,
+      "seed_mean_by_outer_fold": [
+        0.6126390037903681,
+        0.5897071023229818,
+        0.6125054872198433,
+        0.6104683163884896,
+        0.5812602215722493
+      ],
+      "task": "mental_arithmetic",
+      "track": "open_world_pretrained_with_target_corpus_overlap"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.6084022995853274,
+      "public_validation_macro_f1_cell_sd": 0.01544478929363959,
+      "seed_mean_by_outer_fold": [
+        0.6171932972872048,
+        0.6145197806156668,
+        0.5883161243604372,
+        0.6025082304208885,
+        0.6194740652424398
+      ],
+      "task": "wg",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.4169491652306643,
+      "public_validation_macro_f1_cell_sd": 0.02504874648114505,
+      "seed_mean_by_outer_fold": [
+        0.4210907610361623,
+        0.37983575911996637,
+        0.41713004910469476,
+        0.4210372914059113,
+        0.4456519654865867
+      ],
+      "task": "nback",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.664661995395368,
+      "public_validation_macro_f1_cell_sd": 0.014150091142008681,
+      "seed_mean_by_outer_fold": [
+        0.6524864927885926,
+        0.6731148037676083,
+        0.6858841199849266,
+        0.6626558324306844,
+        0.6491687280050277
+      ],
+      "task": "dsr",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "public_validation_macro_f1_cell_mean": 0.27902198952355745,
+      "public_validation_macro_f1_cell_sd": 0.015961458527130018,
+      "seed_mean_by_outer_fold": [
+        0.2974358670457233,
+        0.2931203247722463,
+        0.26703772738583803,
+        0.25901943147442724,
+        0.2784965969395524
+      ],
+      "task": "visual",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    }
+  ]
+}

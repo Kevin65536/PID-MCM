@@ -82,7 +82,7 @@
   },
   "alignment_profile": "support_matched_direct",
   "cell_id": "reve__mental_arithmetic__support_matched_direct__v2",
-  "cell_status": "pending",
+  "cell_status": "pass",
   "comparison_fields": {
     "canonical_signal_branch": {
       "artifact_mask_policy": "disabled_all_false_no_invalid_authority_v1",
@@ -183,9 +183,16 @@
     "A5": "pass",
     "A6": "pass",
     "A7": "pass",
-    "A8": "pending"
+    "A8": "pass"
   },
   "method_id": "reve",
+  "protocol_freeze": {
+    "matrix_identity_sha256": "f5d1d0734ee8e000f0f9fac9489a7593db16c01596d737879cec6e5d10eca48f",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/REVE/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "435f35fb80c012b9494906ca74a4447fbc9a2fcde75d79e601a4b9fe1bce326a"
+  },
   "public_audit": {
     "all_unique_public_samples_audited": true,
     "cache_identity_sha256": "2e231fc99a411ea7204e4b5664a3543baae05f56dc559a876898c6764c7256aa",

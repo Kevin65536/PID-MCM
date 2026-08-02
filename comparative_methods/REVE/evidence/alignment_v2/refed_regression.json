@@ -42,10 +42,16 @@
     "A5": "not_applicable",
     "A6": "pass",
     "A7": "unsupported",
-    "A8": "pending"
+    "A8": "not_applicable"
   },
   "method_id": "reve",
   "protected_test_opened": false,
+  "protocol_freeze": {
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/REVE/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "435f35fb80c012b9494906ca74a4447fbc9a2fcde75d79e601a4b9fe1bce326a"
+  },
   "schema": "adapter_alignment_cell_evidence_v2",
   "task_id": "refed_regression",
   "track": "single_modal_eeg_official_pretrained_linear_probe",

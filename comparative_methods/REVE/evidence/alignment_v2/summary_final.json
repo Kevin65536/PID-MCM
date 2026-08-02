@@ -1,0 +1,494 @@
+{
+  "alignment_contract_path": "comparative_methods/adapter_alignment_gate_contract_v2.yaml",
+  "alignment_contract_sha256": "5a300f6afc049927762e6ed422c63411df844d4ebe87f3b6fe72b4f43b340df9",
+  "config_path": "comparative_methods/REVE/configs/alignment_v2.yaml",
+  "config_sha256": "9174980d1a86d94cadc65ebf3a72730a64f0ec670f93d133924f821642941545",
+  "created_at": "2026-08-02T08:56:08.662582+00:00",
+  "direct_alignment_peers": [
+    "biot",
+    "cbramod"
+  ],
+  "matrix_identity_sha256": "f5d1d0734ee8e000f0f9fac9489a7593db16c01596d737879cec6e5d10eca48f",
+  "method_id": "reve",
+  "peer_cell_paths": [
+    "comparative_methods/BIOT/evidence/alignment_v2/motor_imagery.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/mental_arithmetic.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/wg.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/nback.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/dsr.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/visual.json",
+    "comparative_methods/BIOT/evidence/alignment_v2/refed_regression.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/motor_imagery.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/mental_arithmetic.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/wg.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/nback.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/dsr.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/visual.json",
+    "comparative_methods/CBraMod/evidence/alignment_v2/refed_regression.json"
+  ],
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "public_matrix_completion_path": "comparative_methods/REVE/evidence/public_development_v2/matrix_completion_summary.json",
+  "public_matrix_completion_sha256": "435f35fb80c012b9494906ca74a4447fbc9a2fcde75d79e601a4b9fe1bce326a",
+  "schema": "reve_adapter_alignment_audit_report_v2",
+  "schema_audit": {
+    "cell_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__motor_imagery__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__motor_imagery__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__mental_arithmetic__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__mental_arithmetic__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/mental_arithmetic.json",
+        "task_id": "mental_arithmetic"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__wg__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__wg__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__nback__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__dsr__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__dsr__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__visual__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__visual__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/visual.json",
+        "task_id": "visual"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "biot__refed_regression__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "single_modal_eeg__refed_regression__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "biot",
+        "source": "comparative_methods/BIOT/evidence/alignment_v2/refed_regression.json",
+        "task_id": "refed_regression"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__motor_imagery__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__motor_imagery__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__mental_arithmetic__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__mental_arithmetic__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/mental_arithmetic.json",
+        "task_id": "mental_arithmetic"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__wg__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__wg__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__nback__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__dsr__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__dsr__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__visual__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__visual__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/visual.json",
+        "task_id": "visual"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "cbramod__refed_regression__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "single_modal_eeg__refed_regression__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "cbramod",
+        "source": "comparative_methods/CBraMod/evidence/alignment_v2/refed_regression.json",
+        "task_id": "refed_regression"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__motor_imagery__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__motor_imagery__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__mental_arithmetic__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__mental_arithmetic__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/mental_arithmetic.json",
+        "task_id": "mental_arithmetic"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__wg__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__wg__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__nback__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__dsr__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__dsr__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__visual__support_matched_direct__v2",
+        "cell_status": "pass",
+        "comparison_group_id": "single_modal_eeg__visual__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/visual.json",
+        "task_id": "visual"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "reve__refed_regression__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "single_modal_eeg__refed_regression__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "reve",
+        "source": "comparative_methods/REVE/evidence/alignment_v2/refed_regression.json",
+        "task_id": "refed_regression"
+      }
+    ],
+    "contract": {
+      "contract_version": 2,
+      "gate_ids": [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "profile_count": 3,
+      "schema": "adapter_alignment_gate_contract_v2",
+      "task_count": 7
+    },
+    "direct_group_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__dsr__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__mental_arithmetic__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__motor_imagery__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__nback__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__refed_regression__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__visual__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 3,
+        "comparison_group_id": "single_modal_eeg__wg__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      }
+    ],
+    "protected_test_opened": false,
+    "schema": "adapter_alignment_audit_report_v2",
+    "status": "pass"
+  },
+  "status": "public_development_complete_A0_A8_pass_protected_locked",
+  "tasks": [
+    {
+      "cell_status": "pass",
+      "feature_sha256": "9f6a1f4c221a95a13098d726af6ed15a0796dfa5ca91d27c38bb5575e03147dc",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/motor_imagery.json",
+      "sample_count": 1740,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "motor_imagery",
+      "track": "open_world_pretrained_with_target_corpus_overlap"
+    },
+    {
+      "cell_status": "pass",
+      "feature_sha256": "466d5df40c9809b866603a002f038234ead01fdedf1e80382829a372142d112d",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/mental_arithmetic.json",
+      "sample_count": 1740,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "mental_arithmetic",
+      "track": "open_world_pretrained_with_target_corpus_overlap"
+    },
+    {
+      "cell_status": "pass",
+      "feature_sha256": "6080d609accf49e3d574ebc929e5a9d8ff424c1a110e7faa85810bc4535b8eb5",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/wg.json",
+      "sample_count": 1560,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "wg",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "cell_status": "pass",
+      "feature_sha256": "3dda3767e7780cc7c46dace780e3dfe9d5328f3b9b9dff7a6810b9e91f6d5589",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/nback.json",
+      "sample_count": 702,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "nback",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "cell_status": "pass",
+      "feature_sha256": "03f0cfd7a5ae944d34b724d947184ffeaad8c7616789189d2499030cf3e1ad4a",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/dsr.json",
+      "sample_count": 8980,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "dsr",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "cell_status": "pass",
+      "feature_sha256": "d85a096378bb23e53bbacf33daca1b3ec7799be3ddd0a65f167a00796b57f1ca",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/visual.json",
+      "sample_count": 7720,
+      "status": "A0-A8_pass_public_matrix_complete_protected_locked",
+      "task": "visual",
+      "track": "single_modal_eeg_official_pretrained_linear_probe"
+    },
+    {
+      "path": "comparative_methods/REVE/evidence/alignment_v2/refed_regression.json",
+      "reason_code": "REVE_NO_PARTIAL_TIME_MASK_CONTRACT",
+      "status": "unsupported",
+      "task": "refed_regression"
+    }
+  ]
+}

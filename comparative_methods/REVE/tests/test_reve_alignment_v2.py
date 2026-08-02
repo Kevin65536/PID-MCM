@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -9,7 +10,10 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+import yaml
 
+import comparative_methods.REVE.audit_alignment_v2 as alignment_audit_module
+import comparative_methods.REVE.run_public_development_v2 as public_runner_module
 from comparative_methods.BIOT.alignment_data import load_config as load_biot_config
 from comparative_methods.BIOT.audit_alignment_v2 import comparison_fields as biot_fields
 from comparative_methods.REVE.alignment_data import (
@@ -40,6 +44,22 @@ from comparative_methods.audit_adapter_alignment import validate_cell
 
 METHOD_ROOT = Path(__file__).resolve().parents[1]
 BIOT_CONFIG = METHOD_ROOT.parent / "BIOT/configs/alignment_v2.yaml"
+ALIGNMENT_CONTRACT = METHOD_ROOT.parent / "adapter_alignment_gate_contract_v2.yaml"
+
+
+@pytest.fixture(autouse=True)
+def _review_historical_reve_under_its_frozen_active_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep historical runner tests executable after the queue advances."""
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    historical = copy.deepcopy(contract)
+    historical["execution_policy"]["active_delivery_method"] = "reve"
+    path = tmp_path / "reve_active_contract.yaml"
+    path.write_text(yaml.safe_dump(historical, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(alignment_audit_module, "ALIGNMENT_CONTRACT", path)
+    monkeypatch.setattr(public_runner_module, "ALIGNMENT_CONTRACT", path)
 
 
 def test_alignment_config_is_public_only_support_matched_and_position_covered() -> None:
@@ -197,10 +217,10 @@ def test_task_parser_is_serial_scope_safe() -> None:
         parse_tasks(["wg", "wg"])
 
 
-def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
+def test_retained_full_public_evidence_is_terminal_through_a8() -> None:
     root = METHOD_ROOT / "evidence/alignment_v2"
-    summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
-    assert summary["status"] == "implementation_review_complete_A0_A7_pass_A8_pending"
+    summary = json.loads((root / "summary_final.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "public_development_complete_A0_A8_pass_protected_locked"
     assert summary["protected_test_opened"] is False
     assert len(summary["schema_audit"]["direct_group_reports"]) == 7
     assert summary["schema_audit"]["status"] == "pass"
@@ -209,9 +229,8 @@ def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
     for task in SUPPORTED_TASKS:
         cell = json.loads((root / f"{task}.json").read_text(encoding="utf-8"))
         assert cell["evidence_scope"] == "public_complete"
-        assert cell["cell_status"] == "pending"
-        assert [cell["gate_status"][f"A{index}"] for index in range(8)] == ["pass"] * 8
-        assert cell["gate_status"]["A8"] == "pending"
+        assert cell["cell_status"] == "pass"
+        assert [cell["gate_status"][f"A{index}"] for index in range(9)] == ["pass"] * 9
         assert cell["public_audit"]["all_unique_public_samples_audited"] is True
         assert cell["public_audit"]["deterministic_replay_exact"] is True
         assert cell["public_audit"]["feature_shape"][1] == 512
@@ -222,6 +241,7 @@ def test_retained_full_public_evidence_is_terminal_through_a7() -> None:
 
     refed = json.loads((root / "refed_regression.json").read_text(encoding="utf-8"))
     assert refed["cell_status"] == "unsupported"
+    assert refed["gate_status"]["A8"] == "not_applicable"
     assert refed["unsupported_reason_code"] == "REVE_NO_PARTIAL_TIME_MASK_CONTRACT"
     assert refed["protected_test_opened"] is False
 
@@ -354,3 +374,24 @@ def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
     assert report["public_matrix_launch_authorized"] is True
     assert report["protected_evaluation_authorized"] is False
     assert report["protected_test_opened"] is False
+
+
+def test_completed_public_matrix_is_terminal_and_queue_advanced_to_brainfusion() -> None:
+    completion = json.loads(
+        (METHOD_ROOT / "evidence/public_development_v2/matrix_completion_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert completion["status"] == "pass"
+    assert completion["job_count"] == 90
+    assert completion["completed_job_count"] == 90
+    assert completion["failed_job_count"] == 0
+    assert completion["max_concurrent_jobs"] == 1
+    assert completion["automatic_retry_count"] == 0
+    assert completion["protected_evaluation_authorized"] is False
+    assert completion["protected_test_opened"] is False
+
+    contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
+    assert contract["execution_policy"]["active_delivery_method"] == (
+        "brainfusion_nvc_csp_stacking_reimplementation"
+    )

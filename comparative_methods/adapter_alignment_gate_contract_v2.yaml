@@ -31,7 +31,7 @@ gate_aggregation:
 
 execution_policy:
   mode: strict_serial_new_method_delivery_queue
-  active_delivery_method: reve
+  active_delivery_method: brainfusion_nvc_csp_stacking_reimplementation
   max_active_new_method_implementations: 1
   max_active_new_method_experiment_queues: 1
   serial_scope:
@@ -65,6 +65,9 @@ execution_policy:
       - method_id: cbramod
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
+      - method_id: reve
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
   protected_test_default: locked
   ordered_queue:
@@ -81,12 +84,12 @@ execution_policy:
     - order: 2
       method_id: reve
       state_at_adoption: queued
-      current_state: active
+      current_state: public_development_complete_protected_locked
       scope: complete_identity_chain_then_adapter_v2_full_public_gate
     - order: 3
       method_id: brainfusion_nvc_csp_stacking_reimplementation
       state_at_adoption: queued
-      current_state: queued
+      current_state: active
       scope: freeze_observation_budget_then_complete_fold_local_pipeline
     - order: 4
       method_id: normwear_eeg_fnirs_adapted
@@ -434,13 +437,23 @@ current_repository_assessment:
       task_exceptions:
         refed_regression: unsupported
     cbramod:
-      status: blocked
-      blockers: [A5_OUTPUT_SEMANTICS_MISMATCH, A4_PARTIAL_PUBLIC_COVERAGE]
+      status: public_development_complete_A0_A8_pass_protected_locked
+      evidence_scope: public_complete
+      evidence: comparative_methods/CBraMod/evidence/alignment_v2/summary_final.json
+      audited_unique_public_sample_count: 22442
+      completed_public_job_count: 90
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
+      protected_evaluation_authorized: false
       task_exceptions:
         refed_regression: unsupported
     reve:
-      status: blocked
-      blockers: [A6_ASSET_IDENTITY_INCOMPLETE, A7_CACHE_IDENTITY_INCOMPLETE, A4_PARTIAL_PUBLIC_COVERAGE]
+      status: public_development_complete_A0_A8_pass_protected_locked
+      evidence_scope: public_complete
+      evidence: comparative_methods/REVE/evidence/alignment_v2/summary_final.json
+      audited_unique_public_sample_count: 22442
+      completed_public_job_count: 90
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
+      protected_evaluation_authorized: false
       task_exceptions:
         motor_imagery: open_world_pretrained_with_target_corpus_overlap
         mental_arithmetic: open_world_pretrained_with_target_corpus_overlap
@@ -452,7 +465,7 @@ current_repository_assessment:
       status: pending
       note: existing_frozen_protocol_continues_but_new_direct_tables_require_v2_profile_evidence
     brainfusion_nvc_csp_stacking_reimplementation:
-      status: blocked
+      status: active
       blockers: [A0_UNREGISTERED_CELL, A2_OBSERVATION_BUDGET_MISMATCH]
     sta_net_eeg_fnirs_supervised:
       status: pending

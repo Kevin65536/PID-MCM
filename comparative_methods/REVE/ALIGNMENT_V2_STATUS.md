@@ -1,20 +1,20 @@
 # REVE adapter-alignment v2 status
 
-REVE has completed implementation review and the full-public A0–A7 gate. The
-A8 runner and one public-only connectivity pilot have passed review. The
-candidate 90-job matrix is retained and explicitly authorized only for serial
-public execution. Protected evaluation remains locked.
+REVE has reached its public-development terminal state in the serial queue.
+All six supported classification cells pass A0–A8, REFED remains preregistered
+unsupported, and protected evaluation remains separately locked. The active
+delivery method has advanced to BrainFusion.
 
 ## Retained public evidence
 
 | Task | Unique public samples | Feature shape | Track | Status |
 | --- | ---: | ---: | --- | --- |
-| Motor imagery | 1,740 | `(1740, 512)` | known target-corpus overlap | A0–A7 pass |
-| Mental arithmetic | 1,740 | `(1740, 512)` | known target-corpus overlap | A0–A7 pass |
-| WG | 1,560 | `(1560, 512)` | official pretrained probe | A0–A7 pass |
-| N-back | 702 | `(702, 512)` | official pretrained probe | A0–A7 pass |
-| DSR | 8,980 | `(8980, 512)` | official pretrained probe | A0–A7 pass |
-| Visual | 7,720 | `(7720, 512)` | official pretrained probe | A0–A7 pass |
+| Motor imagery | 1,740 | `(1740, 512)` | known target-corpus overlap | A0–A8 pass; protected locked |
+| Mental arithmetic | 1,740 | `(1740, 512)` | known target-corpus overlap | A0–A8 pass; protected locked |
+| WG | 1,560 | `(1560, 512)` | official pretrained probe | A0–A8 pass; protected locked |
+| N-back | 702 | `(702, 512)` | official pretrained probe | A0–A8 pass; protected locked |
+| DSR | 8,980 | `(8980, 512)` | official pretrained probe | A0–A8 pass; protected locked |
+| Visual | 7,720 | `(7720, 512)` | official pretrained probe | A0–A8 pass; protected locked |
 | REFED regression | n/a | n/a | official pretrained probe | unsupported |
 
 All 22,442 supported public sample identities were covered exactly once. Every
@@ -42,13 +42,18 @@ Unlike the upstream REVE LP implementation, the query token is frozen and only
 the later A8 linear head will be trainable, preserving the equal-capacity probe
 boundary across methods.
 
-## Next serial gate
+## Public-development completion
 
-The A8 pilot uses MI outer fold 0 and seed 17 with a balanced per-class smoke
-subset. Its artifact audit recomputes membership, targets, metrics, feature
-identity and the weights-only checkpoint, and explicitly marks the result as
-non-table-admissible. The candidate 90-job matrix is serial
-(`max_concurrent_jobs=1`), has zero automatic retries, and cannot authorize
-itself. The separate launch artifact binds all reviewed commits, source files,
-config, pilot and matrix identities; it authorizes only this serial public
-queue, with protected evaluation and concurrent BrainFusion work still false.
+The A8 runner performs fold-local public feature caching, train-only
+standardization and selection, then train-plus-public-validation refitting. Its
+weights-only checkpoint and retained predictions are independently audited.
+The authorized matrix completed all 90 fold/seed jobs with zero failures, zero
+automatic retries, and maximum concurrency one. Every result remains public
+development evidence and is explicitly non-table-admissible.
+
+The compact completion evidence is
+[`evidence/public_development_v2/matrix_completion_summary.json`](evidence/public_development_v2/matrix_completion_summary.json),
+and the terminal cell bundle is
+[`evidence/alignment_v2/summary_final.json`](evidence/alignment_v2/summary_final.json).
+No protected manifest or array was opened. REVE protected execution is not
+authorized and may not overlap BrainFusion, now the sole active delivery method.
