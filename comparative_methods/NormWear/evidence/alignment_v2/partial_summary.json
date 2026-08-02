@@ -1,6 +1,6 @@
 {
   "all_supported_tasks_complete": false,
-  "completed_at": "2026-08-02T12:17:08.409455+00:00",
+  "completed_at": "2026-08-02T12:34:49.550108+00:00",
   "method_id": "normwear_eeg_fnirs_adapted",
   "protected_test_opened": false,
   "schema": "normwear_alignment_audit_summary_v2",
@@ -8,14 +8,14 @@
     "cell_reports": [
       {
         "alignment_profile": "support_matched_direct",
-        "cell_id": "normwear__wg__support_matched_direct__v2",
+        "cell_id": "normwear__motor_imagery__support_matched_direct__v2",
         "cell_status": "pending",
-        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
         "direct_ranking_allowed": true,
         "evidence_scope": "public_complete",
         "method_id": "normwear_eeg_fnirs_adapted",
-        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/wg.json",
-        "task_id": "wg"
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
       }
     ],
     "contract": {
@@ -39,7 +39,7 @@
       {
         "alignment_profile": "support_matched_direct",
         "cell_count": 1,
-        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
         "exact_fields_checked": [
           "dataset_id",
           "task_id",
@@ -61,18 +61,18 @@
     "schema": "adapter_alignment_audit_report_v2",
     "status": "pass"
   },
-  "started_at": "2026-08-02T12:02:16.250348+00:00",
+  "started_at": "2026-08-02T12:17:52.936485+00:00",
   "status": "partial_A7_replay_in_serial_progress_protected_locked",
   "task_reports": [
     {
-      "feature_sha256": "442aa1699c54d725d20c6c7616a891b382b25167fc0b1c49e34c2f9f9888635b",
-      "path": "comparative_methods/NormWear/evidence/alignment_v2/wg.json",
-      "sample_count": 1560,
+      "feature_sha256": "62981b3bc03d380720d14dea56cf05c857b6c4b3ed78adc9c8003c77d10e54d6",
+      "path": "comparative_methods/NormWear/evidence/alignment_v2/motor_imagery.json",
+      "sample_count": 1740,
       "status": "A0_A7_pass_A8_pending",
-      "task": "wg"
+      "task": "motor_imagery"
     }
   ],
   "tasks_completed_this_run": [
-    "wg"
+    "motor_imagery"
   ]
 }
