@@ -189,6 +189,7 @@ def feature_cache_identity(
             "feature_dimension": len(inventory.delivered_channel_names) * 768,
             "dtype": str(config["resources"]["feature_cache_dtype"]),
             "format": str(config["resources"]["feature_cache_format"]),
+            "feature_batch_size": int(config["resources"]["feature_batch_size"]),
             "channel_attention_chunk_size": int(
                 config["adapter"]["execution"]["channel_attention_chunk_size"]
             ),
@@ -369,20 +370,23 @@ def extract_or_resume_task(
     if minimum_row_std <= 1e-8 or nonconstant == 0:
         raise RuntimeError("NormWear feature cache is anomalously constant")
 
-    first_item = view[indices[0]]
+    replay_count = min(batch_size, count)
+    replay_batch = _batch_items(view, indices[:replay_count])
     with torch.inference_mode():
         replay = adapter(
-            first_item["eeg"].unsqueeze(0).to(device),
-            first_item["hbo"].unsqueeze(0).to(device),
-            first_item["hbr"].unsqueeze(0).to(device),
+            replay_batch["eeg"].to(device),
+            replay_batch["hbo"].to(device),
+            replay_batch["hbr"].to(device),
             eeg_sampling_rate_hz=200.0,
             fnirs_sampling_rate_hz=10.0,
             eeg_channel_names=inventory.eeg_channels,
             fnirs_location_names=inventory.fnirs_locations,
-        ).float().cpu().numpy()[0]
-    cache_replay_exact = bool(np.array_equal(replay, np.asarray(features[0])))
+        ).float().cpu().numpy()
+    cache_replay_exact = bool(
+        np.array_equal(replay, np.asarray(features[:replay_count]))
+    )
     if not cache_replay_exact:
-        raise RuntimeError("NormWear first public feature does not replay its cache bitwise")
+        raise RuntimeError("NormWear first public batch does not replay its cache bitwise")
 
     cache_report = {
         "feature_cache_key": identity["feature_cache_key"],
@@ -396,6 +400,7 @@ def extract_or_resume_task(
         "maximum_absolute_feature_value": maximum_absolute_value,
         "nonconstant_coordinate_count": nonconstant,
         "cache_replay_exact": cache_replay_exact,
+        "cache_replay_batch_size": replay_count,
         "resumed_from_row": initial_completed,
         "extracted_row_count_this_run": count - initial_completed,
         "protected_test_opened": False,

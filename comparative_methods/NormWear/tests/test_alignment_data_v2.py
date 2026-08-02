@@ -254,6 +254,7 @@ def test_feature_cache_identity_covers_semantic_inputs() -> None:
     assert identity["delivered_channel_order"] == list(inventory.delivered_channel_names)
     assert identity["feature_extraction"]["feature_dimension"] == 6 * 768
     assert identity["feature_extraction"]["dtype"] == "float32"
+    assert identity["feature_extraction"]["feature_batch_size"] == 2
     assert len(identity["feature_cache_key"]) == 64
     changed = feature_cache_identity(
         inventory=inventory,
