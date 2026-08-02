@@ -1,6 +1,6 @@
 {
   "all_supported_tasks_complete": false,
-  "completed_at": "2026-08-02T12:00:51.070542+00:00",
+  "completed_at": "2026-08-02T12:17:08.409455+00:00",
   "method_id": "normwear_eeg_fnirs_adapted",
   "protected_test_opened": false,
   "schema": "normwear_alignment_audit_summary_v2",
@@ -8,14 +8,14 @@
     "cell_reports": [
       {
         "alignment_profile": "support_matched_direct",
-        "cell_id": "normwear__nback__support_matched_direct__v2",
+        "cell_id": "normwear__wg__support_matched_direct__v2",
         "cell_status": "pending",
-        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
         "direct_ranking_allowed": true,
         "evidence_scope": "public_complete",
         "method_id": "normwear_eeg_fnirs_adapted",
-        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/nback.json",
-        "task_id": "nback"
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/NormWear/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
       }
     ],
     "contract": {
@@ -39,7 +39,7 @@
       {
         "alignment_profile": "support_matched_direct",
         "cell_count": 1,
-        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
         "exact_fields_checked": [
           "dataset_id",
           "task_id",
@@ -61,18 +61,18 @@
     "schema": "adapter_alignment_audit_report_v2",
     "status": "pass"
   },
-  "started_at": "2026-08-02T11:54:08.181564+00:00",
+  "started_at": "2026-08-02T12:02:16.250348+00:00",
   "status": "partial_A7_replay_in_serial_progress_protected_locked",
   "task_reports": [
     {
-      "feature_sha256": "cce74f1f574a2b4a7c239f9d79fb3a72a4b8418f63228dc3162858391b23363e",
-      "path": "comparative_methods/NormWear/evidence/alignment_v2/nback.json",
-      "sample_count": 702,
+      "feature_sha256": "442aa1699c54d725d20c6c7616a891b382b25167fc0b1c49e34c2f9f9888635b",
+      "path": "comparative_methods/NormWear/evidence/alignment_v2/wg.json",
+      "sample_count": 1560,
       "status": "A0_A7_pass_A8_pending",
-      "task": "nback"
+      "task": "wg"
     }
   ],
   "tasks_completed_this_run": [
-    "nback"
+    "wg"
   ]
 }
