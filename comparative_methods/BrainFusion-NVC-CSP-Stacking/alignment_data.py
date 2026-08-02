@@ -222,6 +222,25 @@ def _component_base(name: str) -> str:
     return re.sub(r"_(?:HbO|HbR)$", "", str(name), flags=re.IGNORECASE)
 
 
+def data_branch_fingerprints(config: Mapping[str, Any]) -> dict[str, str]:
+    cache_root = resolve_repo_path(config["data"]["cache_root"])
+    paths = {
+        "unified_loader": REPO_ROOT / "src/data/unified_physiology.py",
+        "measurement_adapter": REPO_ROOT / "src/data/physiology_measurement_adapter.py",
+        "task_adapter": EFRM_ROOT / "efrm_pytorch/tasks.py",
+        "cache_manifest": cache_root / "cache_manifest.json",
+        "event_manifest": cache_root / "event_index/event_manifest.json",
+        "geometry_manifest": cache_root / "channel_geometry/geometry_manifest.json",
+        "single_trial_eeg_branch": cache_root / "eeg_artifact_clean_v4/cache_manifest.json",
+        "simultaneous_eeg_branch": cache_root
+        / "simultaneous_eeg_eog_clean_v1/cache_manifest.json",
+    }
+    missing = [str(path) for path in paths.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"BrainFusion data-branch evidence is missing: {missing}")
+    return {name: sha256_file(path) for name, path in paths.items()}
+
+
 class BrainFusionPublicView(Dataset[dict[str, Any]]):
     """Deliver a fixed real synchronized inventory without padding or copying."""
 

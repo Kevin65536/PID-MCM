@@ -1,0 +1,62 @@
+{
+  "adapter_identity": {
+    "disposition": "unsupported_before_target_performance",
+    "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+    "source_revision": "1d9dcf4026f237efed7f0dd44ba44ef0bf87915b"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "brainfusion__dsr__support_matched_direct__v2",
+  "cell_status": "unsupported",
+  "comparison_fields": {
+    "canonical_signal_branch": "not_dereferenced_preregistered_unsupported",
+    "dataset_id": "simultaneous_eeg_nirs",
+    "measured_channel_identity_set": "not_dereferenced_preregistered_unsupported",
+    "modality_identity": [
+      "eeg",
+      "fnirs_hbo",
+      "fnirs_hbr"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        2.0
+      ],
+      "fnirs_hbo": [
+        0.0,
+        2.0
+      ],
+      "fnirs_hbr": [
+        0.0,
+        2.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "macro_f1",
+    "recorded_support_mask": "not_dereferenced_preregistered_unsupported",
+    "sample_inventory_sha256": "not_dereferenced_preregistered_unsupported",
+    "split_fingerprint": "method_neutral_registry_identity_only",
+    "target_schema": "eeg_native_class_index_Go_No_go",
+    "target_valid_mask": "not_dereferenced_preregistered_unsupported",
+    "task_id": "dsr"
+  },
+  "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
+  "evidence_scope": "static",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "not_applicable",
+    "A2": "unsupported",
+    "A3": "not_applicable",
+    "A4": "unsupported",
+    "A5": "unsupported",
+    "A6": "pass",
+    "A7": "unsupported",
+    "A8": "pending"
+  },
+  "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "protected_test_opened": false,
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "task_id": "dsr",
+  "track": "preregistered_unsupported",
+  "unsupported_reason": "The canonical two-second fNIRS interval is block context, is shorter than the frozen NVC support minimum, and cannot be extended in a direct profile.",
+  "unsupported_reason_code": "BRAINFUSION_NVC_TWO_SECOND_CONTEXT_UNSUPPORTED"
+}

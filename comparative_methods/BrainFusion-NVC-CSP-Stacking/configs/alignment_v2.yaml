@@ -3,6 +3,11 @@ method_id: brainfusion_nvc_csp_stacking_reimplementation
 mode: public_audit_only
 protected_test_default: locked
 
+source:
+  upstream_revision: 1d9dcf4026f237efed7f0dd44ba44ef0bf87915b
+  reporting_name: brainfusion_nvc_csp_stacking_reimplementation
+  original_numeric_reproduction_claim_allowed: false
+
 registry:
   manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
   registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106

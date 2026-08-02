@@ -1,0 +1,304 @@
+{
+  "audited_supported_tasks": [
+    "motor_imagery",
+    "mental_arithmetic",
+    "wg",
+    "nback",
+    "visual"
+  ],
+  "config_path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/alignment_v2.yaml",
+  "config_sha256": "ff1cc41e8dacdfa94ae9c4ffab19ae638aea718fc163ae5e93e2936d5a6467d6",
+  "created_at": "2026-08-02T09:31:14.024608+00:00",
+  "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "protected_test_opened": false,
+  "schema": "brainfusion_adapter_alignment_summary_v2",
+  "schema_audit": {
+    "cell_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__motor_imagery__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/motor_imagery.json",
+        "task_id": "motor_imagery"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__mental_arithmetic__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/mental_arithmetic.json",
+        "task_id": "mental_arithmetic"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__wg__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/wg.json",
+        "task_id": "wg"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__nback__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/nback.json",
+        "task_id": "nback"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__visual__support_matched_direct__v2",
+        "cell_status": "pending",
+        "comparison_group_id": "multimodal_synchronous__visual__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "public_complete",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/visual.json",
+        "task_id": "visual"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__dsr__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/dsr.json",
+        "task_id": "dsr"
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_id": "brainfusion__refed_regression__support_matched_direct__v2",
+        "cell_status": "unsupported",
+        "comparison_group_id": "multimodal_synchronous__refed_regression__support_matched_direct__v2",
+        "direct_ranking_allowed": true,
+        "evidence_scope": "static",
+        "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+        "source": "/SSD_2/pid-mcm-implementation/comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/refed_regression.json",
+        "task_id": "refed_regression"
+      }
+    ],
+    "contract": {
+      "contract_version": 2,
+      "gate_ids": [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "profile_count": 3,
+      "schema": "adapter_alignment_gate_contract_v2",
+      "task_count": 7
+    },
+    "direct_group_reports": [
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__dsr__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__mental_arithmetic__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__motor_imagery__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__nback__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__refed_regression__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__visual__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      },
+      {
+        "alignment_profile": "support_matched_direct",
+        "cell_count": 1,
+        "comparison_group_id": "multimodal_synchronous__wg__support_matched_direct__v2",
+        "exact_fields_checked": [
+          "dataset_id",
+          "task_id",
+          "sample_inventory_sha256",
+          "split_fingerprint",
+          "target_schema",
+          "target_valid_mask",
+          "primary_endpoint",
+          "observation_anchor",
+          "modality_intervals_s",
+          "modality_identity",
+          "measured_channel_identity_set",
+          "recorded_support_mask",
+          "canonical_signal_branch"
+        ]
+      }
+    ],
+    "protected_test_opened": false,
+    "schema": "adapter_alignment_audit_report_v2",
+    "status": "pass"
+  },
+  "status": "implementation_review_complete_A0_A7_pass_A8_pending",
+  "supported_unique_public_sample_count": 13462,
+  "tasks": [
+    {
+      "cell_status": "pending",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/motor_imagery.json",
+      "status": "A0-A7_pass_A8_pending",
+      "task": "motor_imagery"
+    },
+    {
+      "cell_status": "pending",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/mental_arithmetic.json",
+      "status": "A0-A7_pass_A8_pending",
+      "task": "mental_arithmetic"
+    },
+    {
+      "cell_status": "pending",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/wg.json",
+      "status": "A0-A7_pass_A8_pending",
+      "task": "wg"
+    },
+    {
+      "cell_status": "pending",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/nback.json",
+      "status": "A0-A7_pass_A8_pending",
+      "task": "nback"
+    },
+    {
+      "cell_status": "pending",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/visual.json",
+      "status": "A0-A7_pass_A8_pending",
+      "task": "visual"
+    },
+    {
+      "cell_status": "unsupported",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/dsr.json",
+      "status": "unsupported",
+      "task": "dsr"
+    },
+    {
+      "cell_status": "unsupported",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/refed_regression.json",
+      "status": "unsupported",
+      "task": "refed_regression"
+    }
+  ]
+}
