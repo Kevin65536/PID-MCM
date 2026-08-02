@@ -143,6 +143,10 @@ tasks:
 
 resources:
   default_device: cuda:1
-  feature_batch_size: 1
+  feature_batch_size: 2
   data_loader_workers: 0
+  feature_cache_root: comparative_methods/NormWear/runs/public_feature_cache_v2
+  feature_cache_dtype: float32
+  feature_cache_format: numpy_open_memmap_v1
+  progress_commit_interval_batches: 20
   gpu_lock_path: /tmp/pid_mcm_normwear_alignment_gpu1.lock

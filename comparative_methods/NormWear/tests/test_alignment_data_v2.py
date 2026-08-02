@@ -21,6 +21,11 @@ from comparative_methods.NormWear.audit_data_boundary_v2 import (
     unsupported_refed_cell,
     write_json,
 )
+from comparative_methods.NormWear.audit_alignment_v2 import (
+    feature_cache_identity,
+    parse_tasks as parse_model_tasks,
+    write_json as write_model_json,
+)
 from comparative_methods.audit_adapter_alignment import validate_cell
 
 
@@ -226,3 +231,33 @@ def test_retained_common_multimodal_fields_match_brainfusion_exactly() -> None:
         )
         for field in fields:
             assert normwear["comparison_fields"][field] == brainfusion["comparison_fields"][field]
+
+
+def test_model_task_parser_and_protected_writer_are_serial_safe(tmp_path: Path) -> None:
+    assert parse_model_tasks([]) == SUPPORTED_TASKS
+    assert parse_model_tasks(["nback"]) == ("nback",)
+    with pytest.raises(ValueError, match="unknown or unsupported"):
+        parse_model_tasks(["refed_regression"])
+    with pytest.raises(ValueError, match="must be unique"):
+        parse_model_tasks(["wg", "wg"])
+    with pytest.raises(PermissionError, match="protected NormWear evidence"):
+        write_model_json(tmp_path / "protected" / "cell.json", {"status": "bad"})
+
+
+def test_feature_cache_identity_covers_semantic_inputs() -> None:
+    config, _ = load_config(CONFIG)
+    inventory = _inventory(_sample())
+    method = {"checkpoint_sha256": "a" * 64, "adapter_sha256": "b" * 64}
+    identity = feature_cache_identity(inventory=inventory, method=method, config=config)
+    assert identity["task"] == "synthetic"
+    assert identity["sample_inventory_sha256"] == inventory.sample_inventory_sha256
+    assert identity["delivered_channel_order"] == list(inventory.delivered_channel_names)
+    assert identity["feature_extraction"]["feature_dimension"] == 6 * 768
+    assert identity["feature_extraction"]["dtype"] == "float32"
+    assert len(identity["feature_cache_key"]) == 64
+    changed = feature_cache_identity(
+        inventory=inventory,
+        method={**method, "checkpoint_sha256": "c" * 64},
+        config=config,
+    )
+    assert changed["feature_cache_key"] != identity["feature_cache_key"]
