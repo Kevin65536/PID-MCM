@@ -21,6 +21,7 @@ from run_public_development_v2 import (
     run,
     validate_tensor_cache,
 )
+from build_public_job_matrix_v2 import build_matrix
 
 
 def test_runner_config_freezes_75_serial_public_jobs() -> None:
@@ -31,6 +32,20 @@ def test_runner_config_freezes_75_serial_public_jobs() -> None:
     assert config["resources"]["tensor_cache_root"].endswith("runs/tensor_cache_v2")
     assert config["reporting"]["protected_evaluation_authorized"] is False
     assert alignment["tasks"]["dsr"]["supported"] is False
+
+
+def test_candidate_matrix_is_serial_public_only_and_not_self_authorizing() -> None:
+    matrix = build_matrix()
+    assert matrix["job_count"] == 75
+    assert matrix["max_concurrent_jobs"] == 1
+    assert matrix["automatic_retry_count"] == 0
+    assert matrix["public_matrix_launch_authorized"] is False
+    assert matrix["protected_evaluation_authorized"] is False
+    assert matrix["protected_test_opened"] is False
+    assert [job["order"] for job in matrix["jobs"]] == list(range(75))
+    assert all(job["initial_status"] == "queued_not_authorized" for job in matrix["jobs"])
+    assert all("protected" not in " ".join(job["command"]).lower() for job in matrix["jobs"])
+    assert all(job["command"][-4:-2] == ["--device", "cuda:1"] for job in matrix["jobs"])
 
 
 class _Dataset:

@@ -1,0 +1,37 @@
+schema: brainfusion_public_job_matrix_candidate_v2
+protocol_id: brainfusion_public_job_matrix_candidate_v2
+method_id: brainfusion_nvc_csp_stacking_reimplementation
+status: candidate_after_full_fold_pilot_before_A8
+mode: public_development_only
+protected_test_default: locked
+
+pilot_evidence:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/full_fold_pilot_audit.json
+  sha256: 209dbcb7bc8e68f1fc9f8c7532ff1a066c2831ba83bf91fadfb9bf5b07be1ad9
+  required_status: pass
+  required_mode: public_development
+
+runner:
+  path: comparative_methods/BrainFusion-NVC-CSP-Stacking/run_public_development_v2.py
+  config: comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/public_development_v2.yaml
+  config_sha256: ecdcede1f3fd64cc47bc26d53a50dfd68506b8c5332d764dc48273ad3a95cea4
+
+matrix:
+  task_order: [motor_imagery, mental_arithmetic, wg, nback, visual]
+  outer_fold_order: [0, 1, 2, 3, 4]
+  seed_order: [17, 42, 73]
+  expected_job_count: 75
+  output_root: comparative_methods/BrainFusion-NVC-CSP-Stacking/runs/public_development_v2/matrix_v2
+  max_concurrent_jobs: 1
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  completed_run_overwrite: forbidden
+  failed_job_replacement: forbidden
+  retry_requires_new_reviewed_matrix_version: true
+
+authorization:
+  public_matrix_launch_authorized: false
+  protected_evaluation_authorized: false
+  note: candidate matrix is retained for review and does not itself launch jobs
