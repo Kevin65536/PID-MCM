@@ -302,7 +302,7 @@ def test_reviewed_launch_authorizes_only_serial_public_matrix() -> None:
     assert report["protected_test_opened"] is False
 
 
-def test_completed_public_matrix_is_terminal_and_queue_advanced_to_reve() -> None:
+def test_completed_public_matrix_remains_terminal_after_queue_completion() -> None:
     completion = json.loads(
         (METHOD_ROOT / "evidence/public_development_v2/matrix_completion_summary.json").read_text(
             encoding="utf-8"
@@ -327,4 +327,9 @@ def test_completed_public_matrix_is_terminal_and_queue_advanced_to_reve() -> Non
     assert final["protected_test_opened"] is False
 
     contract = yaml.safe_load(ALIGNMENT_CONTRACT.read_text(encoding="utf-8"))
-    assert contract["execution_policy"]["active_delivery_method"] == "reve"
+    policy = contract["execution_policy"]
+    assert policy["active_delivery_method"] == "none_public_delivery_queue_complete"
+    queue = {row["method_id"]: row for row in policy["ordered_queue"]}
+    assert queue["cbramod"]["current_state"] == (
+        "public_development_complete_protected_locked"
+    )

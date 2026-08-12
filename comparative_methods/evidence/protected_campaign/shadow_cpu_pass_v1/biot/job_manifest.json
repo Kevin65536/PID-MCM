@@ -1,0 +1,30 @@
+{
+  "artifact_sha256": {
+    "downstream_checkpoint": "bae18e603660566e9ad67c183072baf456373ac3d5d67765fef788ff72e72b48",
+    "feature_cache": "7bfec4dde7f84bbb1aae677a538b3e61e9512311c459760afc84e2fe6c6325c7",
+    "feature_cache_manifest": "c66451ce3398d27535f003a9961a1de649a07056e541e10ebdf2fbe38c293006",
+    "public_run_manifest": "8671dbb678a09563bf8908ffec6c9f450a45b9d5fce02484355f1fc7ba0c3468",
+    "public_split_manifest": "687c256f4b46e4b64aecb6ef3a3c208a7c7a6418a64acd77dab6fbc97f4d816f"
+  },
+  "attempt": 1,
+  "authorization_sha256": "not_applicable_public_shadow",
+  "campaign_id": "joint-comparison-protected-20260812-v1",
+  "candidate_path": "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json",
+  "candidate_sha256": "4de176558d1ae502e2cfdc0a127bfa9f9c71caf5ccfdcfdc7f3cf9f47ac016a9",
+  "determinism_sha256": "cf59c6f22ed2f033092b5d695c952e0eb572b0db530f39527f6ef4bb04d55830",
+  "device": "cpu",
+  "device_uuid": "CPU",
+  "environment_sha256": "6b03262df7eb6025f378b92157793d2648c5edba5f8522b53ea1dcf2a30b65c9",
+  "frozen_inference_contract_sha256": "83de7e3d644692b6e637f3903d21a1acd5310c4e3171d443c1957feaa8d2b42b",
+  "input_contract_sha256": "3a8ea74e0167f9b2ca0fe0ee3933e9ea05576f78aafea2f8af5f915b3fd741bb",
+  "input_manifest_sha256": "687c256f4b46e4b64aecb6ef3a3c208a7c7a6418a64acd77dab6fbc97f4d816f",
+  "job_id": "biot__motor_imagery__outer0__seed17",
+  "method_id": "biot",
+  "outer_fold": 0,
+  "performance_computed": false,
+  "protected_test_opened": false,
+  "schema": "protected_job_manifest_v1",
+  "seed": 17,
+  "surface": "shadow",
+  "task": "motor_imagery"
+}

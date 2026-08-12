@@ -1,0 +1,18 @@
+{
+  "attempt": 1,
+  "authorization_sha256": "not_applicable_public_shadow",
+  "candidate_sha256": "4de176558d1ae502e2cfdc0a127bfa9f9c71caf5ccfdcfdc7f3cf9f47ac016a9",
+  "completed_at": "2026-08-11T19:33:43.968221+00:00",
+  "cuda_peak_allocated_bytes": 0,
+  "cuda_peak_reserved_bytes": 0,
+  "device_uuid": "CPU",
+  "failure_code": null,
+  "job_id": "normwear__motor_imagery__outer0__seed17",
+  "performance_computed": false,
+  "protected_test_opened": false,
+  "schema": "joint_protected_campaign_job_v1",
+  "started_at": "2026-08-11T19:33:43.648013+00:00",
+  "status": "COMPLETED",
+  "surface": "shadow",
+  "wall_seconds": 0.3202073313295841
+}

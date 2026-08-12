@@ -1,0 +1,10 @@
+{
+  "files": {
+    "audit_report.json": "f545157c43eee9c9cd7b1a8ed65b1989b48425d7455703f8e7a3bf04c7518c23",
+    "job_manifest.json": "b906966b6d533b1733e7d2f05c0250adbbe46db4dc2f83448e325e7676d33428",
+    "shadow_predictions.npz": "12cf6bdfbc0a0e552e3ae799a125fe0ad0c018b9b202d2a26f0f668e17f71243",
+    "status.json": "e09da8e190f26ec7eeeccc58aa362825298ba48e29108a4ce651868f9d0a86eb"
+  },
+  "job_id": "cbramod__motor_imagery__outer0__seed17",
+  "schema": "protected_job_artifact_checksums_v1"
+}

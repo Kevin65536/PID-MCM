@@ -43,7 +43,7 @@ execution_policy:
     - formal_execution
   grandfathered_background_execution:
     - method_id: efrm_sync_200_10_variable_channel_v1
-      scope: already_running_frozen_lodo_v2
+      scope: completed_frozen_lodo_v2_public_delivery
       blocks_new_method_delivery_queue: false
       may_be_modified_by_new_method_work: false
     - method_id: sta_net_eeg_fnirs_supervised
@@ -72,6 +72,9 @@ execution_policy:
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
       - method_id: normwear_eeg_fnirs_adapted
+        state: public_development_complete_protected_locked
+        blocks_next_adapter_delivery: false
+      - method_id: efrm_sync_200_10_variable_channel_v1
         state: public_development_complete_protected_locked
         blocks_next_adapter_delivery: false
   blocked_method_policy: pause_queue_for_resolution_do_not_silently_skip
@@ -421,10 +424,18 @@ failure_codes:
   A8_PROTECTED_BOUNDARY_VIOLATION: protected_identity_or_array_was_opened_before_unlock
 
 current_repository_assessment:
-  evidence_scope: repository_static_plus_partial_public
+  evidence_scope: public_complete_for_six_deliveries_sta_context_reference_pending
   new_public_matrix_launch_hold: true
+  joint_protected_unlock_candidate:
+    path: comparative_methods/evidence/joint_protected_unlock_candidate_v2.json
+    status: ready_for_human_unlock_review
+    cell_count: 42
+    pass_cell_count: 36
+    unsupported_cell_count: 6
+    protected_evaluation_authorized: false
+    protected_test_opened: false
   hold_does_not_apply_to:
-    - already_running_frozen_efrm_lodo_v2
+    - completed_frozen_efrm_lodo_v2_public_delivery
     - completed_frozen_sta_net_results
   partial_preflight:
     path: experiments/comparison_reports/20260731_comparison_batch0_v1/public_preflight_stage1.json
@@ -475,8 +486,15 @@ current_repository_assessment:
       task_exceptions:
         refed_regression: unsupported
     efrm_sync_200_10_variable_channel_v1:
-      status: pending
-      note: existing_frozen_protocol_continues_but_new_direct_tables_require_v2_profile_evidence
+      status: public_development_complete_A0_A8_pass_protected_locked
+      evidence_scope: public_complete
+      evidence: comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json
+      audited_unique_public_sample_count: 25162
+      completed_public_job_count: 105
+      completed_gates: [A0, A1, A2, A3, A4, A5, A6, A7, A8]
+      protected_evaluation_authorized: false
+      task_exceptions:
+        refed_regression: retained_partial_support_480_windows_including_32_zero_eeg_support
     brainfusion_nvc_csp_stacking_reimplementation:
       status: public_development_complete_A0_A8_pass_protected_locked
       evidence_scope: public_complete

@@ -42,6 +42,11 @@ def _sample_id(sample: Mapping[str, Any], crop_start_s: float) -> str:
         "dataset": str(sample["dataset_id"]),
         "subject": str(sample["subject"]),
         "record": str(sample["record_id"]),
+        # Downstream sequence datasets can expose several windows from the
+        # same source event.  Their canonical sample_id carries the window
+        # coordinate even when the sanitized event payload intentionally does
+        # not, so it must participate in the EFRM-derived identity.
+        "source_sample_id": str(sample.get("sample_id", "")),
         "event": int(event.get("event_index", -1)),
         "window_offset_s": float(event.get("window_offset_s", 0.0)),
         "crop_start_s": float(crop_start_s),

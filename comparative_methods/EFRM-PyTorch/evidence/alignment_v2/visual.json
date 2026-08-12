@@ -1,0 +1,358 @@
+{
+  "adapter_identity": {
+    "adapter_manifest": {
+      "channel_policy": "variable_measured_channels_no_duplication_v1",
+      "duration_s": 8.0,
+      "mask_policy": "exclude bad channels; zero invalid time; mask reconstruction and pooling",
+      "patch_duration_s": {
+        "eeg": 0.25,
+        "fnirs": 2.0
+      },
+      "patch_samples": {
+        "eeg": 50,
+        "fnirs": 20
+      },
+      "require_full_analysis_support": false,
+      "sample_rates_hz": {
+        "eeg": 200.0,
+        "fnirs": 10.0
+      },
+      "schema": "efrm_sync_unified_adapter_v1"
+    },
+    "checkpoint": {
+      "boundary_path": "comparative_methods/EFRM-PyTorch/runs/pretraining/efrm_lodo_full_target_fivefold_v2__exclude_visual_cognitive_motivation__stage_b_seed42/boundary_manifest.json",
+      "boundary_sha256": "74bae63e1aa9abf4f8451c45a4946a1a5aa00fded2710225651d377b59eea880",
+      "checkpoint_path": "comparative_methods/EFRM-PyTorch/runs/pretraining/efrm_lodo_full_target_fivefold_v2__exclude_visual_cognitive_motivation__stage_b_seed42/checkpoints/terminal.pt",
+      "checkpoint_sha256": "4283aca11540d8be95751217edbdd8d747c1e6b4b62dae9626b05c04b5267cf4",
+      "excluded_target_dataset": "visual_cognitive_motivation",
+      "freeze_path": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/final_refits/exclude_visual_cognitive_motivation.json",
+      "freeze_sha256": "37a7ad7663295ca4357f010a6a01c5de99f77195e32949b67a70fba7de6fc58b",
+      "protected_test_opened": false,
+      "run_manifest_path": "comparative_methods/EFRM-PyTorch/runs/pretraining/efrm_lodo_full_target_fivefold_v2__exclude_visual_cognitive_motivation__stage_b_seed42/manifest.json",
+      "run_manifest_sha256": "1b7839123623796988d66a2829c72c99738823946d08c13e5d5b2a6f80742c0d",
+      "selected_epoch_count": 35,
+      "target_dataset_exposure": false
+    },
+    "data_branch_sha256": {
+      "cache_manifest": "ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500",
+      "event_manifest": "ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031",
+      "geometry_manifest": "e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b",
+      "measurement_adapter": "05ab2c2ddf8d9df7163ed6fc47c6dffb53930933b8f8a42366f6675ec73e1364",
+      "simultaneous_eeg_branch": "27c2b3432c3b1d0e10541f64ce6860d6b8b6e51a9f896834fe3be95891fedd3c",
+      "single_trial_eeg_branch": "7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0"
+    },
+    "downstream_head": "trainable_layernorm_dropout_linear_probe_only",
+    "feature_cache_key": "59eee77716946d6b7dcc1604f878c423c3e59d3d48e4496b54b65265f3e2ee3d",
+    "feature_cache_sha256": "d68e81b2e1c6e928f7276b4ef2b59ee2ef1deddd9f03136c6ee217d43a322a9b",
+    "feature_semantics": {
+      "autocast_dtype": "bfloat16",
+      "batch_size": 4,
+      "eeg_encoder_output": "valid_patch_masked_mean",
+      "embedding_dim": 768,
+      "fnirs_encoder_output": "valid_patch_masked_mean",
+      "paired_fusion": "elementwise_sum_before_trainable_layer_norm"
+    },
+    "method_id": "efrm_sync_200_10_variable_channel_v1",
+    "output_layer": "eeg_and_fnirs_valid_patch_masked_encoder_means",
+    "pooling": "elementwise_sum_before_trainable_layer_norm",
+    "protocol_id": "efrm_lodo_full_target_fivefold_v2",
+    "source_sha256": {
+      "feature_materializer": "437c12ea48bc3cc308edc2204ad0495ce9818b2f47a9050031d3896026bec3ad",
+      "model": "7ad58761d2d79f9660baae0d3d442624945ffc036b6ebe2035f890e1d1730ec3",
+      "paired_adapter": "9c4fd95b0b6572fbe5ce59d53956fe808979a1377951417169e58dbb670b375e",
+      "task_dataset": "df503240ca967e1358ee06809e99eef800f7f916218fc7f3c2162e9c5eb62e39",
+      "unified_loader": "51fe7981f87ae67f2dce89a2c24e81812ad846c258029f9d0a6bb7af12d6b791"
+    },
+    "target_corpus_exposure": "none_target_dataset_excluded",
+    "trainable_parameter_boundary": "target_excluded_backbone_frozen_probe_only"
+  },
+  "alignment_profile": "support_matched_direct",
+  "cell_id": "efrm__visual__support_matched_direct__v2",
+  "cell_status": "pass",
+  "comparison_fields": {
+    "canonical_signal_branch": {
+      "eeg": {
+        "dataset_branch": "raw_with_ocular_artifact",
+        "filter_band_hz": [
+          1.0,
+          45.0
+        ],
+        "sample_rate_hz": 200.0,
+        "unit": "robust_standard_deviation"
+      },
+      "fingerprints": {
+        "cache_manifest": "ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500",
+        "event_manifest": "ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031",
+        "geometry_manifest": "e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b",
+        "measurement_adapter": "05ab2c2ddf8d9df7163ed6fc47c6dffb53930933b8f8a42366f6675ec73e1364",
+        "simultaneous_eeg_branch": "27c2b3432c3b1d0e10541f64ce6860d6b8b6e51a9f896834fe3be95891fedd3c",
+        "single_trial_eeg_branch": "7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0",
+        "task_adapter": "df503240ca967e1358ee06809e99eef800f7f916218fc7f3c2162e9c5eb62e39",
+        "unified_loader": "51fe7981f87ae67f2dce89a2c24e81812ad846c258029f9d0a6bb7af12d6b791"
+      },
+      "fnirs": {
+        "component_roles": [
+          "HbO",
+          "HbR"
+        ],
+        "sample_rate_hz": 10.0,
+        "source_coordinate": "released_oxy_deoxy_export_with_native_unit_provenance",
+        "unit": "robust_standard_deviation"
+      },
+      "schema": "canonical_multimodal_signal_branch_identity_v2"
+    },
+    "dataset_id": "visual_cognitive_motivation",
+    "measured_channel_identity_set": {
+      "eeg": [
+        "AF3",
+        "AF4",
+        "C3",
+        "C4",
+        "CP3",
+        "CP4",
+        "Cz",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "FC3",
+        "FC4",
+        "Fp1",
+        "Fp2",
+        "Fz",
+        "O1",
+        "O2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8",
+        "PO3",
+        "PO4",
+        "T7",
+        "T8"
+      ],
+      "fnirs_hbo": [
+        "CH1",
+        "CH10",
+        "CH11",
+        "CH12",
+        "CH13",
+        "CH14",
+        "CH15",
+        "CH16",
+        "CH17",
+        "CH18",
+        "CH19",
+        "CH2",
+        "CH20",
+        "CH21",
+        "CH22",
+        "CH23",
+        "CH24",
+        "CH3",
+        "CH4",
+        "CH5",
+        "CH6",
+        "CH7",
+        "CH8",
+        "CH9"
+      ],
+      "fnirs_hbr": [
+        "CH1",
+        "CH10",
+        "CH11",
+        "CH12",
+        "CH13",
+        "CH14",
+        "CH15",
+        "CH16",
+        "CH17",
+        "CH18",
+        "CH19",
+        "CH2",
+        "CH20",
+        "CH21",
+        "CH22",
+        "CH23",
+        "CH24",
+        "CH3",
+        "CH4",
+        "CH5",
+        "CH6",
+        "CH7",
+        "CH8",
+        "CH9"
+      ]
+    },
+    "modality_identity": [
+      "eeg",
+      "fnirs_hbo",
+      "fnirs_hbr"
+    ],
+    "modality_intervals_s": {
+      "eeg": [
+        0.0,
+        8.0
+      ],
+      "fnirs_hbo": [
+        0.0,
+        8.0
+      ],
+      "fnirs_hbr": [
+        0.0,
+        8.0
+      ]
+    },
+    "observation_anchor": "canonical_registry_window_start",
+    "primary_endpoint": "macro_f1",
+    "recorded_support_mask": {
+      "mask_semantics": "all_true_recorded_and_analysis_valid_support_no_padding",
+      "measured_channel_identity_set": {
+        "eeg": [
+          "AF3",
+          "AF4",
+          "C3",
+          "C4",
+          "CP3",
+          "CP4",
+          "Cz",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "FC3",
+          "FC4",
+          "Fp1",
+          "Fp2",
+          "Fz",
+          "O1",
+          "O2",
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7",
+          "P8",
+          "PO3",
+          "PO4",
+          "T7",
+          "T8"
+        ],
+        "fnirs_hbo": [
+          "CH1",
+          "CH10",
+          "CH11",
+          "CH12",
+          "CH13",
+          "CH14",
+          "CH15",
+          "CH16",
+          "CH17",
+          "CH18",
+          "CH19",
+          "CH2",
+          "CH20",
+          "CH21",
+          "CH22",
+          "CH23",
+          "CH24",
+          "CH3",
+          "CH4",
+          "CH5",
+          "CH6",
+          "CH7",
+          "CH8",
+          "CH9"
+        ],
+        "fnirs_hbr": [
+          "CH1",
+          "CH10",
+          "CH11",
+          "CH12",
+          "CH13",
+          "CH14",
+          "CH15",
+          "CH16",
+          "CH17",
+          "CH18",
+          "CH19",
+          "CH2",
+          "CH20",
+          "CH21",
+          "CH22",
+          "CH23",
+          "CH24",
+          "CH3",
+          "CH4",
+          "CH5",
+          "CH6",
+          "CH7",
+          "CH8",
+          "CH9"
+        ]
+      },
+      "sample_count": 7720,
+      "sample_inventory_sha256": "aad19c01b01521c797a2b787a56f8946ba090fd9a1c993a3f8d32065888a3749",
+      "samples_per_item": {
+        "eeg": 1600,
+        "fnirs_hbo": 80,
+        "fnirs_hbr": 80
+      },
+      "sha256": "5575203f742e04ebe9fdd25dabe5102e65e823ec2908acd841af7103bae0d000"
+    },
+    "sample_inventory_sha256": "aad19c01b01521c797a2b787a56f8946ba090fd9a1c993a3f8d32065888a3749",
+    "split_fingerprint": "72bf349617dc9b500eef2dced0b58084a54c48f4fdeca95ab02b84a5336fa17a",
+    "target_schema": "class_index_RR_RF_FF_FR",
+    "target_valid_mask": {
+      "semantics": "classification_scalar_all_observed",
+      "sha256": "47aeaa905fd508c7fb712268fa85db6c89312eda7895331507b3ac277939c9ac"
+    },
+    "task_id": "visual"
+  },
+  "comparison_group_id": "multimodal_synchronous__visual__support_matched_direct__v2",
+  "evidence_scope": "public_complete",
+  "gate_status": {
+    "A0": "pass",
+    "A1": "pass",
+    "A2": "pass",
+    "A3": "pass",
+    "A4": "pass",
+    "A5": "pass",
+    "A6": "pass",
+    "A7": "pass",
+    "A8": "pass"
+  },
+  "method_id": "efrm_sync_200_10_variable_channel_v1",
+  "protected_test_opened": false,
+  "protocol_freeze": {
+    "matrix_identity_sha256": "6153b163b0bc4d07870ce7446e7dbca9aae2c7e4ea0191d7c2a5557a3dbec7ef",
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "public_matrix_completion_path": "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json",
+    "public_matrix_completion_sha256": "3d99363db6b76f82c3b41a1cc50feff888eafbe2d801ba218458add32a123bd6"
+  },
+  "public_adapter_audit": {
+    "common_sample_inventory_sha256": "aad19c01b01521c797a2b787a56f8946ba090fd9a1c993a3f8d32065888a3749",
+    "dataset_indices_sha256": "3d4a7b4f85b9f61a84016ecbb670c346a77ce29ecc37fd845d586e3c8abb2a77",
+    "feature_cache_manifest_sha256": "0b27bc87b4018cfd5f3b719e5b7d7077996aeaf55300610e94eb9b278979fd29",
+    "feature_cache_path": "comparative_methods/EFRM-PyTorch/runs/downstream_feature_cache_v2/visual/59eee77716946d6b7dcc1604f878c423c3e59d3d48e4496b54b65265f3e2ee3d.npz",
+    "feature_nonconstant": true,
+    "feature_sha256": "8568838b1d2352501bbf5231fda5848151ef567dee627c8dd03e1fe209b78ad7",
+    "input_support_audit_sha256": "3e6eb3be2fe474113834781f98c8e09758aa381d09a28e5359d21cf29f1ffda4",
+    "source_run_manifest_path": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix/visual/outer0/seed17/manifest.json",
+    "source_run_manifest_sha256": "9c7c8dbae0f062d7a9a3fb6452880ae273927de6cc01a69014d4f049ee10edd0",
+    "target_valid_mask_sha256": "8ef2dfc9792a350454fe55f08187959d4cf0d2f96b4b26f776be4de6cd0ccdac",
+    "unique_sample_count": 7720
+  },
+  "schema": "adapter_alignment_cell_evidence_v2",
+  "table_admissible": false,
+  "target_dataset_exposure": false,
+  "task_id": "visual",
+  "track": "multimodal_target_dataset_excluded_frozen_linear_probe"
+}

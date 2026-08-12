@@ -1,0 +1,37 @@
+{
+  "authorized_window": {
+    "ends_at": "",
+    "starts_at": ""
+  },
+  "campaign_id": "joint-comparison-protected-20260812-v1",
+  "candidate_path": "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json",
+  "candidate_sha256": "4de176558d1ae502e2cfdc0a127bfa9f9c71caf5ccfdcfdc7f3cf9f47ac016a9",
+  "note": "Template only. Fill the window, two distinct identities, GO attestations, and set authorization true without modifying the candidate.",
+  "protected_evaluation_authorized": false,
+  "schema": "joint_protected_campaign_authorization_v1",
+  "scope": {
+    "jobs": 540,
+    "supported_cells": 36
+  },
+  "signatures": [
+    {
+      "attestation": "PENDING",
+      "role": "protocol_owner",
+      "signed_at": "",
+      "signer_id": ""
+    },
+    {
+      "attestation": "PENDING",
+      "role": "run_owner",
+      "signed_at": "",
+      "signer_id": ""
+    }
+  ],
+  "technical_recovery_policy": {
+    "attempt_2_device_policy": "same_frozen_gpu_uuid_only",
+    "maximum_attempts_per_job": 2,
+    "one_technical_recovery_only": true,
+    "performance_based_retry_forbidden": true,
+    "unavailable_assigned_gpu_terminal": "INCOMPLETE_TECHNICAL_requires_new_candidate_and_dual_authorization"
+  }
+}

@@ -23,6 +23,7 @@ reference_repository
 __pycache__/
 *.py[cod]
 .pytest_cache/
+/.tmp/
 
 # virtual environment
 .env
@@ -45,9 +46,28 @@ __pycache__/
 # run artifacts stay local.
 /comparative_methods/*
 !/comparative_methods/comparison_metric_targets_v1.yaml
+!/comparative_methods/README.md
+!/comparative_methods/ROUND_ARTIFACTS_20260812.md
 !/comparative_methods/ASSET_STATUS.md
 !/comparative_methods/audit_assets.py
 !/comparative_methods/audit_public_preflight.py
+!/comparative_methods/ADAPTER_ALIGNMENT_GATES_V2.md
+!/comparative_methods/adapter_alignment_gate_contract_v2.yaml
+!/comparative_methods/audit_adapter_alignment.py
+!/comparative_methods/build_joint_protected_unlock_candidate_v2.py
+!/comparative_methods/build_joint_protected_release_candidate.py
+!/comparative_methods/protected_campaign_common.py
+!/comparative_methods/protected_campaign_worker.py
+!/comparative_methods/protected_campaign_controller.py
+!/comparative_methods/prepare_protected_authorization.py
+!/comparative_methods/benchmark_protected_campaign_shadow.py
+!/comparative_methods/aggregate_protected_campaign.py
+!/comparative_methods/evidence/
+/comparative_methods/evidence/*
+!/comparative_methods/evidence/joint_protected_unlock_candidate_v2.json
+!/comparative_methods/evidence/protected_campaign/
+!/comparative_methods/evidence/protected_campaign/**
+!/comparative_methods/single_modal_eeg/
 !/comparative_methods/BIOT/
 !/comparative_methods/CBraMod/
 !/comparative_methods/REVE/

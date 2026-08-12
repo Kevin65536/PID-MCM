@@ -1,0 +1,10 @@
+{
+  "files": {
+    "audit_report.json": "133e76f395bb1b567badf37943abb8afdb5f98b5ef9e3e2f57496cdc30fd1d19",
+    "job_manifest.json": "ca3d2b28d794516493957f05a6b304db22965b09bde4ed1813e41cca392e42a2",
+    "shadow_predictions.npz": "0702cfc5e568bcfbcf043184f910ac1f102cc46b05b89266ade8b6025f66698b",
+    "status.json": "d1e85e275020c115660dd87774d25ca11b6ef697b81984c34f657cfa8ee4c601"
+  },
+  "job_id": "brainfusion__motor_imagery__outer0__seed17",
+  "schema": "protected_job_artifact_checksums_v1"
+}

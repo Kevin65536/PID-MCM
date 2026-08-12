@@ -1,0 +1,102 @@
+pageType: content
+background:
+  type: solid
+  color: '#F7F3E8'
+elements:
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 56
+  - 23
+  - 430
+  - 20
+  content:
+    text: COMPARATIVE METHOD AUDIT
+    fontSize: 9
+    fontFamily: Noto Sans CJK SC
+    color: '#9C3F17'
+    bold: true
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: title
+  elementType: text
+  bounds:
+  - 56
+  - 46
+  - 840
+  - 48
+  content:
+    text: 所有新增方法的真正瓶颈已从工程实现转移到最终授权
+    fontSize: 21
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: title-rule
+  elementType: line
+  bounds:
+  - 56
+  - 96
+  - 848
+  - 2
+  viewBox:
+  - 1
+  - 1
+  points: 0,0.5 1,0.5
+  curve: sharp
+  arrow:
+  - null
+  - null
+  border:
+    style: solid
+    width: 1
+    color: '#C9C1B3'
+- elementId: page-no
+  elementType: text
+  bounds:
+  - 870
+  - 508
+  - 34
+  - 16
+  content:
+    text: '05'
+    fontSize: 9
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - right
+    - middle
+    lineHeight: 1.15
+- elementId: footer
+  elementType: text
+  bounds:
+  - 56
+  - 505
+  - 520
+  - 18
+  content:
+    text: 证据快照 2026-08-11 · public evidence only
+    fontSize: 8
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: pipeline
+  elementType: image
+  bounds:
+  - 52
+  - 105
+  - 856
+  - 384
+  src: media/evidence_pipeline.png
+  fit:
+    mode: contain

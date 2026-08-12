@@ -1,0 +1,152 @@
+{
+  "method": "brainfusion_nvc_csp_stacking_reimplementation",
+  "display_name": "BrainFusion NVC-CSP Stacking",
+  "audit_date": "2026-08-11",
+  "audit_scope": "read-only public/protocol/evidence audit; no protected dereference, unlock, or high-cost training",
+  "status_label": "public_complete_protected_locked",
+  "scores": {
+    "code_components": 95,
+    "input_adaptation": 98,
+    "output_adaptation": 96,
+    "result_generation": 75,
+    "evidence_reproducibility": 95,
+    "overall": 90.85,
+    "weighting": {
+      "code_components": 0.3,
+      "input_adaptation": 0.2,
+      "output_adaptation": 0.15,
+      "result_generation": 0.25,
+      "evidence_reproducibility": 0.1
+    },
+    "formula": "0.30*95 + 0.20*98 + 0.15*96 + 0.25*75 + 0.10*95"
+  },
+  "public_pipeline_status": {
+    "status": "complete_public_development_A0_A8_pass",
+    "planned_tasks": 7,
+    "public_matrix_tasks": 5,
+    "supported_tasks": 5,
+    "unsupported_tasks": 2,
+    "public_unique_sample_count": 13462,
+    "public_jobs_completed": 75,
+    "public_jobs_planned": 75,
+    "failed_jobs": 0,
+    "automatic_retries": 0,
+    "max_concurrent_jobs": 1,
+    "device": "cuda:1",
+    "evidence": [
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json:2-18",
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/matrix_completion_summary.json:1-20",
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/public_development_v2.yaml:7-13"
+    ]
+  },
+  "protected_status": {
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "status": "locked",
+    "evidence": [
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json:9-18",
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/matrix_completion_summary.json:16-20"
+    ]
+  },
+  "final_result_availability": {
+    "public_validation_diagnostics": "available_not_table_admissible",
+    "protected_final_predictions": "unavailable_locked",
+    "final_table_numeric_cells": "unavailable_C6_metric_admission_not_run",
+    "paper_numeric_reproduction": "not_allowed_official_CSP_and_stacking_case_execution_missing",
+    "evidence": [
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/public_development_v2.yaml:37-41",
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/README.md:14-18",
+      "comparative_methods/BrainFusion-NVC-CSP-Stacking/sources/SOURCE_FIDELITY.md:7-17"
+    ]
+  },
+  "planned_tasks": [
+    {"task": "motor_imagery", "dataset": "eeg_fnirs_single_trial", "duration_s": 8.0, "track": "source_case_corpus_supervised_reimplementation", "planned_jobs": 15, "public_unique_samples": 1740, "status": "supported_public_complete_A0_A8_pass"},
+    {"task": "mental_arithmetic", "dataset": "eeg_fnirs_single_trial", "duration_s": 8.0, "track": "cross_task_supervised_reimplementation", "planned_jobs": 15, "public_unique_samples": 1740, "status": "supported_public_complete_A0_A8_pass"},
+    {"task": "wg", "dataset": "simultaneous_eeg_nirs", "duration_s": 8.0, "track": "cross_task_supervised_reimplementation", "planned_jobs": 15, "public_unique_samples": 1560, "status": "supported_public_complete_A0_A8_pass"},
+    {"task": "nback", "dataset": "simultaneous_eeg_nirs", "duration_s": 8.0, "track": "cross_task_supervised_reimplementation", "planned_jobs": 15, "public_unique_samples": 702, "status": "supported_public_complete_A0_A8_pass"},
+    {"task": "visual", "dataset": "visual_cognitive_motivation", "duration_s": 8.0, "track": "cross_task_supervised_reimplementation", "planned_jobs": 15, "public_unique_samples": 7720, "status": "supported_public_complete_A0_A8_pass"},
+    {"task": "dsr", "dataset": "simultaneous_eeg_nirs", "duration_s": 2.0, "planned_jobs": 0, "status": "preregistered_unsupported", "reason_code": "BRAINFUSION_NVC_TWO_SECOND_CONTEXT_UNSUPPORTED"},
+    {"task": "refed_regression", "dataset": "refed", "duration_s": 20.0, "planned_jobs": 0, "status": "preregistered_unsupported", "reason_code": "BRAINFUSION_CLASSIFICATION_ONLY_AND_NO_PARTIAL_MASK_CONTRACT"}
+  ],
+  "supported_tasks": [
+    {"task": "motor_imagery", "public_unique_samples": 1740, "input_shape": {"eeg": ["batch", 30, 1600], "fnirs_hbo": ["batch", 36, 80], "fnirs_hbr": ["batch", 36, 80]}, "output_shape": {"eeg_csp": ["batch", 4], "hbo_csp": ["batch", 4], "hbr_csp": ["batch", 4], "selected_nvc_csp": ["batch", 4], "stacking_decision": ["batch", 2]}, "public_validation_macro_f1_mean": 0.5268579406899455, "public_validation_macro_f1_sd": 0.013553446010615392, "claim_boundary": "public_development_only_not_table_admissible"},
+    {"task": "mental_arithmetic", "public_unique_samples": 1740, "input_shape": {"eeg": ["batch", 30, 1600], "fnirs_hbo": ["batch", 36, 80], "fnirs_hbr": ["batch", 36, 80]}, "output_shape": {"eeg_csp": ["batch", 4], "hbo_csp": ["batch", 4], "hbr_csp": ["batch", 4], "selected_nvc_csp": ["batch", 4], "stacking_decision": ["batch", 2]}, "public_validation_macro_f1_mean": 0.5269699763613381, "public_validation_macro_f1_sd": 0.027495245743579175, "claim_boundary": "public_development_only_not_table_admissible"},
+    {"task": "wg", "public_unique_samples": 1560, "input_shape": {"eeg": ["batch", 28, 1600], "fnirs_hbo": ["batch", 36, 80], "fnirs_hbr": ["batch", 36, 80]}, "output_shape": {"eeg_csp": ["batch", 4], "hbo_csp": ["batch", 4], "hbr_csp": ["batch", 4], "selected_nvc_csp": ["batch", 4], "stacking_decision": ["batch", 2]}, "public_validation_macro_f1_mean": 0.5315669841104279, "public_validation_macro_f1_sd": 0.030512054784394248, "claim_boundary": "public_development_only_not_table_admissible"},
+    {"task": "nback", "public_unique_samples": 702, "input_shape": {"eeg": ["batch", 28, 1600], "fnirs_hbo": ["batch", 36, 80], "fnirs_hbr": ["batch", 36, 80]}, "output_shape": {"eeg_csp": ["batch", 6], "hbo_csp": ["batch", 6], "hbr_csp": ["batch", 6], "selected_nvc_csp": ["batch", 6], "stacking_decision": ["batch", 3]}, "public_validation_macro_f1_mean": 0.3546698623267072, "public_validation_macro_f1_sd": 0.030655296120620915, "claim_boundary": "public_development_only_not_table_admissible"},
+    {"task": "visual", "public_unique_samples": 7720, "input_shape": {"eeg": ["batch", 30, 1600], "fnirs_hbo": ["batch", 24, 80], "fnirs_hbr": ["batch", 24, 80]}, "output_shape": {"eeg_csp": ["batch", 8], "hbo_csp": ["batch", 8], "hbr_csp": ["batch", 8], "selected_nvc_csp": ["batch", 8], "stacking_decision": ["batch", 4]}, "public_validation_macro_f1_mean": 0.24029050786976255, "public_validation_macro_f1_sd": 0.02362419066523935, "claim_boundary": "public_development_only_not_table_admissible"}
+  ],
+  "unsupported_tasks": [
+    {"task": "dsr", "status": "unsupported", "reason": "2-second context is shorter than the frozen 8-second NVC minimum and cannot be extended in a direct profile", "reason_code": "BRAINFUSION_NVC_TWO_SECOND_CONTEXT_UNSUPPORTED", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/dsr.json"},
+    {"task": "refed_regression", "status": "unsupported", "reason": "classification stack lacks masked continuous regression and partial-terminal-support contract", "reason_code": "BRAINFUSION_CLASSIFICATION_ONLY_AND_NO_PARTIAL_MASK_CONTRACT", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/refed_regression.json"}
+  ],
+  "completed_job_count": 75,
+  "planned_job_count": 75,
+  "code_components": [
+    {"component": "upstream_source_boundary", "status": "complete_component_fidelity_independent_reimplementation", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/sources/method_manifest.yaml:11-41", "exact_count": "pinned revision 1d9dcf4026f237efed7f0dd44ba44ef0bf87915b; NVC source 11140 bytes"},
+    {"component": "public_data_identity_adapter", "status": "complete", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/alignment_data.py", "line_count": 378, "evidence": "alignment_data.py:66-124,165-218,244-378"},
+    {"component": "nvc_cpu_reference_gpu_dynamic_contributions", "status": "complete", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters/brainfusion_gpu/nvc.py", "line_count": 215, "evidence": "nvc.py:30-146,149-215"},
+    {"component": "fold_local_nvc_selection_and_csp", "status": "complete", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters/brainfusion_gpu/features.py", "line_count": 352, "evidence": "features.py:35-194,197-346"},
+    {"component": "grouped_oof_base_selection_and_linear_svm_stack", "status": "complete", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters/brainfusion_gpu/stacking.py", "line_count": 340, "evidence": "stacking.py:110-343"},
+    {"component": "serializable_fold_pipeline", "status": "complete", "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters/brainfusion_gpu/pipeline.py", "line_count": 154, "evidence": "pipeline.py:32-154"},
+    {"component": "public_runner_cache_matrix_finalizer", "status": "complete_public_scope", "evidence": ["run_public_development_v2.py:234-373,401-573", "build_public_job_matrix_v2.py:92-165", "finalize_public_matrix_v2.py:54-269"], "artifact_counts": {"run_reports": 75, "checkpoint_manifests": 75, "public_validation_prediction_files": 75}},
+    {"component": "tests", "status": "passed", "test_file_count": 7, "test_result": "38 passed in 8.96 s", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/tests/"}
+  ],
+  "input_contract": {
+    "alignment_profile": "support_matched_direct",
+    "protocol": "strict_cross_subject",
+    "outer_folds": [0, 1, 2, 3, 4],
+    "anchor": "canonical_registry_window_start",
+    "intervals_s": {"eeg": [0.0, 8.0], "fnirs_hbo": [0.0, 8.0], "fnirs_hbr": [0.0, 8.0]},
+    "extra_context_s": {"pre_anchor": 0.0, "post_interval": 0.0},
+    "sample_rates_hz": {"eeg": 200, "fnirs": 10},
+    "required_modalities": ["eeg", "fnirs_hbo", "fnirs_hbr"],
+    "channel_policy": "frozen_task_inventory_real_measured_channels_no_copy_no_padding",
+    "mask_policy": "full_recorded_and_analysis_valid_support_only",
+    "fit_boundary": "NVC pair selection, CSP, feature standardizers, base estimators and stacking meta-estimator outer-training-only",
+    "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/configs/alignment_v2.yaml:11-49; OBSERVATION_BUDGET_AUDIT.md:8-55"
+  },
+  "output_contract": {
+    "architecture": "four CSP views (EEG/HbO/HbR/selected NVC) -> selected per-view SVM/RF scores -> grouped-OOF linear SVM stack",
+    "nvc_selected_pair_count": 32,
+    "pooling": "csp_log_normalized_variance",
+    "serialization": "feature_state.pt + stacking.joblib + hash-bound manifest.json",
+    "prediction_artifact_schema": "brainfusion_public_predictions_v2",
+    "per_job_artifacts": {"run_report": 75, "checkpoint_manifest": 75, "public_validation_predictions": 75},
+    "reload_exact_all_public_jobs": true,
+    "protected_test_opened": false,
+    "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters/brainfusion_gpu/pipeline.py:90-154"
+  },
+  "result_stages": [
+    {"stage": "smoke_pilot", "status": "pass", "counts": {"train_samples": 36, "validation_samples": 16}, "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/pilot_audit.json"},
+    {"stage": "full_fold_public_pilot", "status": "pass", "counts": {"train_samples": 900, "validation_samples": 480}, "checks": ["cache_matches_raw_adapter", "targets_recomputed", "metric_recomputed", "checkpoint_reload_exact"], "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/full_fold_pilot_audit.json"},
+    {"stage": "terminal_public_matrix", "status": "pass", "planned_jobs": 75, "completed_jobs": 75, "failed_jobs": 0, "retries": 0, "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/public_development_v2/matrix_completion_summary.json"},
+    {"stage": "alignment_freeze_A8", "status": "pass_protected_locked", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json"},
+    {"stage": "protected_evaluation", "status": "not_authorized_not_started", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json:9-18"},
+    {"stage": "final_number_C6_admission", "status": "missing", "reason": "public diagnostics explicitly table_admissible=false; no protected aggregate or baseline/target/decision record"}
+  ],
+  "blockers": [
+    {"type": "protected_lock", "status": "blocking_final_result", "detail": "protected evaluation authorization is false and protected_test_opened is false", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json:9-18"},
+    {"type": "unsupported_task", "status": "terminal_preregistered_disposition", "detail": "DSR and REFED regression are unsupported before target performance", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/dsr.json; refed_regression.json"},
+    {"type": "source_fidelity_boundary", "status": "claim_boundary", "detail": "official source lacks paper-case CSP and stacking execution; only component fidelity is supportable", "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/sources/SOURCE_FIDELITY.md:7-17"},
+    {"type": "metric_admission", "status": "missing", "detail": "C6 final-number fields (B0, targets, relation, decision) are absent", "evidence": "comparative_methods/comparison_metric_targets_v1.yaml; configs/public_development_v2.yaml:37-41"}
+  ],
+  "risks": [
+    {"severity": "medium", "type": "metadata_count_label", "status": "verified", "detail": "audit_alignment_v2.py:225-230 labels total EEG*fNIRS*2 pairs as nvc_unselected_pair_count; displayed totals are MI/MA=2160, WG/nback=2016, Visual=1440, while true unselected after 32 selected are 2128/1984/1408", "impact": "pair-count visualizations can mislead; selector remains train-local"},
+    {"severity": "low", "type": "run_device_field", "status": "verified", "detail": "matrix summary records cuda:1, but individual run_report.json artifacts lack an explicit device field", "impact": "run replay metadata relies on controller summary"},
+    {"severity": "medium", "type": "claim_overreach", "status": "inference", "detail": "public validation means/SD cannot be read as protected new-subject generalization or original-paper reproduction", "impact": "would violate metric-admission and source-fidelity boundaries"},
+    {"severity": "low", "type": "documentation_drift", "status": "verified", "detail": "tests/README.md says full-public A0-A8 pending while summary_final.json is A8 pass", "impact": "reader confusion only; retained final evidence is authoritative"}
+  ],
+  "tests_run": [
+    {"command": "targeted BrainFusion pytest suite (7 files)", "result": "38 passed in 8.96 s"},
+    {"command": "comparative_methods/audit_adapter_alignment.py against 7 retained cell JSON files", "result": "status=pass; 5 public_complete pass cells; 2 static unsupported cells; protected_test_opened=false"},
+    {"artifact_replay": "evidence/public_development_v2/full_fold_pilot_audit.json", "result": "status=pass; cache/raw match; targets and metric recomputed; checkpoint reload exact"}
+  ],
+  "evidence_quality": {
+    "rating": "high_public_scope_medium_final_result_scope",
+    "verified": ["A0-A8 evidence for 7 planned cells", "13,462 unique public samples", "75/75 jobs, 0 failures, 0 retries", "75 run audits", "38 local tests", "source/config/manifest/checkpoint/prediction hashes"],
+    "declared": ["independent reimplementation source boundary", "DSR/REFED unsupported reasons", "all learned transforms outer-training-only"],
+    "missing": ["protected predictions and aggregate", "C6 metric-admission records", "official complete paper-case CSP/stacking source", "explicit per-run device field"],
+    "evidence": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json; evidence/public_development_v2/matrix_completion_summary.json; runs/public_development_v2/matrix_v2/completed_public_audit.json"
+  },
+  "executive_summary": "[已验证] BrainFusion 独立 NVC-CSP stacking 重实现已完成 v2 public delivery：五个 8 秒 support-matched direct 分类 cell A0-A8 全通过，13,462 个 public identity、75/75 serial jobs 和 75 个可 reload artifact 均通过审计；DSR/REFED 在 target performance 前声明 unsupported。[已验证] 输入、fold-local NVC/CSP/feature selection/stacking 与输出适配完整。[缺失/阻断] protected evaluation 未授权且未打开，public metrics 明确 table_admissible=false，尚无 C6 final-number 或 protected final result；当前可交付的是 public pipeline/evidence，不是最终论文数字或原论文 numerical reproduction。"
+}

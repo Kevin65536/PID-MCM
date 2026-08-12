@@ -1,0 +1,414 @@
+{
+  "method": "efrm_sync_200_10_variable_channel_v1_lodo_v2",
+  "display_name": "EFRM-PyTorch LODO v2",
+  "audit_date": "2026-08-11",
+  "audit_scope": "read-only formal EFRM progress audit; no protected dereference, gate unlock, training, or method-code edits",
+  "status_label": "public_complete_protected_locked_final_unavailable",
+  "scores": {
+    "code_components": 94,
+    "input_adaptation": 98,
+    "output_adaptation": 94,
+    "result_generation": 60,
+    "evidence_reproducibility": 82,
+    "overall": 84.8,
+    "weighting": {
+      "code_components": 0.30,
+      "input_adaptation": 0.20,
+      "output_adaptation": 0.15,
+      "result_generation": 0.25,
+      "evidence_reproducibility": 0.10
+    },
+    "formula": "0.30*94 + 0.20*98 + 0.15*94 + 0.25*60 + 0.10*82"
+  },
+  "public_pipeline_status": {
+    "status": "complete_public_development_A0_A8_pass",
+    "stage_a_selection_completed": 4,
+    "stage_a_selection_planned": 4,
+    "stage_b_refit_completed": 4,
+    "stage_b_refit_planned": 4,
+    "alignment_cells_completed": 7,
+    "alignment_cells_planned": 7,
+    "alignment_gates": "A0-A8_pass",
+    "planned_tasks": 7,
+    "supported_tasks": 7,
+    "unsupported_tasks": 0,
+    "completed_job_count": 105,
+    "planned_job_count": 105,
+    "failed_job_count": 0,
+    "automatic_retry_count": 0,
+    "max_concurrent_jobs": 1,
+    "target_dataset_exposure": false,
+    "table_admissible": false,
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix/completed_public_audit.json",
+      "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json"
+    ]
+  },
+  "protected_status": {
+    "protected_evaluation_authorized": false,
+    "protected_test_opened": false,
+    "status": "locked",
+    "protected_outputs_read": false,
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json",
+      "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json"
+    ]
+  },
+  "final_result_availability": {
+    "public_validation_diagnostics": "available_not_table_admissible",
+    "protected_final_predictions": "unavailable_locked",
+    "protected_final_aggregate": "unavailable_no_v2_aggregate",
+    "v2_oof_aggregate": "missing",
+    "final_table_numeric_cells": "unavailable_metric_admission_not_run",
+    "historical_v1": "completed_70_public_plus_70_protected_but_non_comparable",
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_resource_bounded_dual_protocol_v1/status.json"
+    ]
+  },
+  "planned_tasks": [
+    {
+      "task": "motor_imagery",
+      "dataset": "eeg_fnirs_single_trial",
+      "duration_s": 8.0,
+      "public_unique_samples": 1740,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 45
+    },
+    {
+      "task": "mental_arithmetic",
+      "dataset": "eeg_fnirs_single_trial",
+      "duration_s": 8.0,
+      "public_unique_samples": 1740,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 45
+    },
+    {
+      "task": "wg",
+      "dataset": "simultaneous_eeg_nirs",
+      "duration_s": 8.0,
+      "public_unique_samples": 1560,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 89
+    },
+    {
+      "task": "nback",
+      "dataset": "simultaneous_eeg_nirs",
+      "duration_s": 8.0,
+      "public_unique_samples": 702,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 89
+    },
+    {
+      "task": "dsr",
+      "dataset": "simultaneous_eeg_nirs",
+      "duration_s": 2.0,
+      "public_unique_samples": 8980,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 89
+    },
+    {
+      "task": "visual",
+      "dataset": "visual_cognitive_motivation",
+      "duration_s": 8.0,
+      "public_unique_samples": 7720,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 35
+    },
+    {
+      "task": "refed_regression",
+      "dataset": "refed",
+      "duration_s": 20.0,
+      "public_unique_samples": 2720,
+      "planned_jobs": 15,
+      "status": "supported_public_complete_A0_A8_pass",
+      "lodo_refit_epoch": 90,
+      "mask_semantics": "partial_input_and_valence_arousal_coordinate_mask"
+    }
+  ],
+  "supported_tasks": [
+    "motor_imagery",
+    "mental_arithmetic",
+    "wg",
+    "nback",
+    "dsr",
+    "visual",
+    "refed_regression"
+  ],
+  "unsupported_tasks": [],
+  "completed_job_count": 105,
+  "planned_job_count": 105,
+  "code_components": [
+    {
+      "component": "upstream_source_boundary",
+      "status": "complete_bounded_independent_retraining",
+      "path": "comparative_methods/EFRM-PyTorch/sources/method_manifest.yaml",
+      "exact_count": "upstream revision a62bf3d4c092ac3022b6c0bad90ec3993d5a5720; upstream checkout 11 tracked files; no LICENSE file observed; official checkpoint unavailable"
+    },
+    {
+      "component": "data_identity_adapter",
+      "status": "complete",
+      "path": "comparative_methods/EFRM-PyTorch/efrm_pytorch/data.py",
+      "line_count": 672,
+      "evidence": "variable-channel loading, 200/10 rate contract, patching, masks and canonical identity checks"
+    },
+    {
+      "component": "model_encoder_and_transfer",
+      "status": "complete",
+      "path": "comparative_methods/EFRM-PyTorch/efrm_pytorch/model.py",
+      "line_count": 447,
+      "evidence": "dynamic MAE/CLIP/transfer; embedding dimension 768"
+    },
+    {
+      "component": "tasks_and_metrics",
+      "status": "complete",
+      "path": "comparative_methods/EFRM-PyTorch/efrm_pytorch/tasks.py; comparative_methods/EFRM-PyTorch/efrm_pytorch/metrics.py",
+      "line_count": 489,
+      "exact_count": "7 task adapters; 310 task lines + 179 metric lines"
+    },
+    {
+      "component": "protocol_and_boundary_guards",
+      "status": "complete",
+      "path": "comparative_methods/EFRM-PyTorch/efrm_pytorch/protocol.py",
+      "line_count": 547,
+      "evidence": "public/protected boundary, target exposure and fold guards"
+    },
+    {
+      "component": "lodo_pretraining",
+      "status": "complete",
+      "path": "comparative_methods/EFRM-PyTorch/run_lodo_pretraining.py; comparative_methods/EFRM-PyTorch/train_pretrain.py",
+      "line_count": 1028,
+      "exact_count": "4 Stage-A selections + 4 Stage-B refits; all formal manifests completed"
+    },
+    {
+      "component": "downstream_public_runner",
+      "status": "complete_public_scope",
+      "path": "comparative_methods/EFRM-PyTorch/run_downstream_public_v2.py",
+      "line_count": 1489,
+      "evidence": "frozen checkpoint, fold-local adaptation, linear probe/refit and masked REFED output"
+    },
+    {
+      "component": "matrix_controller_and_audit",
+      "status": "complete_public_scope",
+      "path": "comparative_methods/EFRM-PyTorch/build_downstream_public_matrix_v2.py; comparative_methods/EFRM-PyTorch/run_downstream_public_matrix_v2.py; comparative_methods/EFRM-PyTorch/finalize_downstream_public_matrix_v2.py; comparative_methods/EFRM-PyTorch/audit_downstream_public_run_v2.py",
+      "exact_count": "116 + 329 + 202 + 242 lines",
+      "evidence": "105 public manifests/statuses and completed_public_audit.json"
+    },
+    {
+      "component": "package_and_test_inventory",
+      "status": "present",
+      "exact_count": "22 top-level Python scripts; 9 package modules; 3 test files; approximately 13,459 total lines"
+    }
+  ],
+  "input_contract": {
+    "sample_rates_hz": {
+      "eeg": 200,
+      "fnirs": 10
+    },
+    "pretraining_window_s": 8.0,
+    "physical_patch_samples": {
+      "eeg": 50,
+      "fnirs": 20
+    },
+    "channel_policy": "variable_real_channels_no_copy_or_mirror",
+    "mask_policy": "invalid_support_mask_propagated; REFED partial-input and coordinate masks retained",
+    "modalities": [
+      "eeg",
+      "fnirs_hbo",
+      "fnirs_hbr"
+    ],
+    "downstream_tasks": 7,
+    "outer_folds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "seeds": [
+      17,
+      42,
+      73
+    ],
+    "target_exposure": false,
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/configs/pretrain_sync.yaml",
+      "comparative_methods/EFRM-PyTorch/configs/downstream_public_v2.yaml",
+      "comparative_methods/EFRM-PyTorch/README.md",
+      "comparative_methods/EFRM-PyTorch/efrm_pytorch/data.py"
+    ]
+  },
+  "output_contract": {
+    "embedding_dim": 768,
+    "fusion": "elementwise_sum_before_trainable_layer_norm",
+    "head": "trainable_layernorm_dropout_linear_probe_only",
+    "refed_metric": "masked_native_coordinate_ccc",
+    "nonconstant_features": true,
+    "per_cell_artifacts": "selection report + checkpoint/manifest + prediction NPZ + status/manifest",
+    "public_table_admissible": false,
+    "protected_predictions": false,
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix"
+    ]
+  },
+  "result_stages": [
+    {
+      "stage": "stage_a_target_excluded_selection",
+      "status": "complete",
+      "completed": 4,
+      "planned": 4,
+      "selected_epochs": {
+        "exclude_single_trial": 45,
+        "exclude_refed": 90,
+        "exclude_simultaneous": 89,
+        "exclude_visual": 35
+      },
+      "evidence": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/selections/"
+    },
+    {
+      "stage": "stage_b_full_non_target_refit",
+      "status": "complete",
+      "completed": 4,
+      "planned": 4,
+      "evidence": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/final_refits/"
+    },
+    {
+      "stage": "downstream_public_matrix",
+      "status": "complete_public_development_only",
+      "completed_jobs": 105,
+      "planned_jobs": 105,
+      "failed_jobs": 0,
+      "retries": 0,
+      "evidence": "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json"
+    },
+    {
+      "stage": "alignment_A0_A8",
+      "status": "pass_public_complete_protected_locked",
+      "cells_completed": 7,
+      "cells_planned": 7,
+      "evidence": "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json"
+    },
+    {
+      "stage": "protected_evaluation",
+      "status": "not_authorized_not_started",
+      "protected_test_opened": false,
+      "evidence": "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json"
+    },
+    {
+      "stage": "v2_final_aggregate_and_metric_admission",
+      "status": "missing",
+      "table_admissible": false,
+      "reason": "no protected final predictions or v2 aggregate/OOF output"
+    }
+  ],
+  "blockers": [
+    {
+      "type": "protected_gate",
+      "status": "blocking_final_result",
+      "detail": "protected_evaluation_authorized=false and protected_test_opened=false; separate reviewed unlock is required",
+      "evidence": "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json"
+    },
+    {
+      "type": "missing_v2_aggregate",
+      "status": "blocking_final_result",
+      "detail": "v2 formal tree has no aggregate or protected final output; historical aggregate_formal_results.py is v1-specific",
+      "evidence": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2"
+    },
+    {
+      "type": "source_checkpoint_boundary",
+      "status": "claim_boundary",
+      "detail": "official checkpoint unavailable; this is independent source-faithful retraining, not original-checkpoint reproduction",
+      "evidence": "comparative_methods/EFRM-PyTorch/sources/method_manifest.yaml"
+    }
+  ],
+  "risks": [
+    {
+      "severity": "medium",
+      "type": "stale_run_status",
+      "status": "verified",
+      "detail": "8 run-level status.json files still report running while queue, formal status and run manifests report completed",
+      "impact": "progress dashboards can under-report completion; reconcile telemetry before final presentation"
+    },
+    {
+      "severity": "medium",
+      "type": "incomplete_pretraining_quality_comparison",
+      "status": "verified",
+      "detail": "pretraining_quality_audit_20260729/comparison_summary.json contains only 2 Stage-A runs",
+      "impact": "quality evidence is not a uniform four-target comparison"
+    },
+    {
+      "severity": "high",
+      "type": "claim_overreach",
+      "status": "inference",
+      "detail": "public validation diagnostics cannot be treated as protected new-subject generalization or final table numbers",
+      "impact": "would violate metric acceptance and protected boundary"
+    },
+    {
+      "severity": "low",
+      "type": "upstream_license_boundary",
+      "status": "declared",
+      "detail": "upstream checkout has no observed LICENSE file",
+      "impact": "retain redistribution/source-fidelity limitation"
+    }
+  ],
+  "tests_run": [
+    {
+      "command": "PYTHONPATH=.:comparative_methods/EFRM-PyTorch .venv/bin/pytest -q comparative_methods/EFRM-PyTorch/tests/test_efrm_pytorch.py comparative_methods/EFRM-PyTorch/tests/test_efrm_formal_protocol.py comparative_methods/EFRM-PyTorch/tests/test_efrm_downstream_public_v2.py",
+      "result": "34 passed in 14.13 s",
+      "scope": "targeted EFRM tests"
+    },
+    {
+      "command": "PYTHONPATH=.:comparative_methods/EFRM-PyTorch .venv/bin/python -m compileall -q comparative_methods/EFRM-PyTorch/efrm_pytorch comparative_methods/EFRM-PyTorch/*.py",
+      "result": "PASS",
+      "scope": "EFRM package and scripts"
+    },
+    {
+      "command": "PYTHONPATH=. .venv/bin/python comparative_methods/audit_adapter_alignment.py",
+      "result": "PASS; adapter_alignment_audit_report_v2; A0-A8; protected=false",
+      "scope": "read-only shared alignment audit"
+    },
+    {
+      "command": "initial targeted pytest invocation with PYTHONPATH=comparative_methods/EFRM-PyTorch",
+      "result": "collection failed with ModuleNotFoundError: src",
+      "scope": "environment invocation only; corrected PYTHONPATH run passed"
+    }
+  ],
+  "evidence_quality": {
+    "rating": "high_public_scope_medium_low_final_result_scope",
+    "verified": [
+      "4/4 Stage-A selections",
+      "4/4 Stage-B full non-target refits",
+      "7/7 A0-A8 alignment cells",
+      "105/105 public jobs with 0 failures and 0 retries",
+      "8 completed run manifests and queue completion state",
+      "targeted 34-test pass, compileall pass and alignment audit pass"
+    ],
+    "declared": [
+      "source-faithful independent retraining",
+      "output adapter identity and REFED mask semantics",
+      "protected gate remains locked"
+    ],
+    "missing": [
+      "protected arrays and predictions",
+      "v2 aggregate/OOF and C6 metric-admission decision",
+      "uniform quality comparison for all four Stage-A runs",
+      "final table numeric cells"
+    ],
+    "evidence": [
+      "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json",
+      "comparative_methods/EFRM-PyTorch/evidence/public_development_v2/matrix_completion_summary.json",
+      "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json"
+    ]
+  },
+  "executive_summary": "[已验证] EFRM-PyTorch LODO v2 已完成必要代码组件、输入/输出适配、Stage A 4/4、Stage B 4/4、7/7 A0-A8 cells 和 105/105 public jobs，0 failure/0 retry。[已验证] 所有 public outputs 均 target exposure false、protected false、table_admissible=false；protected_test_opened=false，v2 没有最终 protected aggregate。[缺失/阻断] 当前可交付的是 public pipeline/evidence，不是最终比较表数字；下一步需经统一 review 授权 protected evaluation，再生成 v2 aggregate/OOF 并通过指标准入。"
+}

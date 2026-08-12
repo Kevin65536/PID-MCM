@@ -35,14 +35,43 @@ The completed source/target dual-protocol v1 remains historical development
 evidence. It is not the protocol for future EFRM-versus-mainline ranking and
 its checkpoint must not be reused in v2.
 
-The v2 protocol was materialized and execution started on 2026-07-27. The
-detached queue runs all four Stage-A target-excluded selection jobs first,
-freezes each selected epoch, and then runs the four Stage-B full non-target
-refits. Inspect it with:
+The v2 protocol was materialized on 2026-07-27. All four Stage-A
+target-excluded selection jobs and all four Stage-B full non-target refits
+completed on 2026-08-03. Inspect the retained status with:
 
 ```bash
 .venv/bin/python comparative_methods/EFRM-PyTorch/run_lodo_pretraining.py status
 ```
+
+The comparison-aligned public downstream phase is implemented by
+[`run_downstream_public_v2.py`](run_downstream_public_v2.py). It unions only
+the five public manifests, verifies and freezes the checkpoint that excluded
+the target dataset, caches full-public paired embeddings, and trains only a
+fresh LayerNorm/Dropout/Linear probe. REFED retains its input and target masks
+and fits target scaling on the allowed training membership only. A smoke run
+can be launched with:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/run_downstream_public_v2.py \
+  --config comparative_methods/EFRM-PyTorch/configs/downstream_public_v2.yaml \
+  --task motor_imagery --outer-fold 0 --seed 17 --smoke \
+  --output-dir comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/smoke/motor_imagery_outer0_seed17
+```
+
+The non-self-authorizing public matrix completed 105/105 serial jobs with no
+failures or retries. Its retained completion and A0-A8 summaries are
+[`matrix_completion_summary.json`](evidence/public_development_v2/matrix_completion_summary.json)
+and [`summary_final.json`](evidence/alignment_v2/summary_final.json). To
+re-materialize the same candidate definition, use:
+
+```bash
+.venv/bin/python comparative_methods/EFRM-PyTorch/build_downstream_public_matrix_v2.py \
+  --output comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/downstream_public_job_matrix_candidate_v2.json
+```
+
+Neither command can open protected data. Every retained public result is
+marked `table_admissible=false`; a separate reviewed unlock is required before
+the one-time protected evaluation.
 
 ## Frozen scientific and data contract
 

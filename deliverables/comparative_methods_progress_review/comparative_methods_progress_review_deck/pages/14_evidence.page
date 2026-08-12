@@ -1,0 +1,231 @@
+pageType: final
+background:
+  type: solid
+  color: '#F7F3E8'
+elements:
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 56
+  - 23
+  - 430
+  - 20
+  content:
+    text: COMPARATIVE METHOD AUDIT
+    fontSize: 9
+    fontFamily: Noto Sans CJK SC
+    color: '#9C3F17'
+    bold: true
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: title
+  elementType: text
+  bounds:
+  - 56
+  - 46
+  - 840
+  - 48
+  content:
+    text: 复核结果支持“工程后期、数字未解锁”的统一判断
+    fontSize: 21
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: title-rule
+  elementType: line
+  bounds:
+  - 56
+  - 96
+  - 848
+  - 2
+  viewBox:
+  - 1
+  - 1
+  points: 0,0.5 1,0.5
+  curve: sharp
+  arrow:
+  - null
+  - null
+  border:
+    style: solid
+    width: 1
+    color: '#C9C1B3'
+- elementId: page-no
+  elementType: text
+  bounds:
+  - 870
+  - 508
+  - 34
+  - 16
+  content:
+    text: '14'
+    fontSize: 9
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - right
+    - middle
+    lineHeight: 1.15
+- elementId: footer
+  elementType: text
+  bounds:
+  - 56
+  - 505
+  - 520
+  - 18
+  content:
+    text: 证据快照 2026-08-11 · public evidence only
+    fontSize: 8
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: verdict
+  elementType: text
+  bounds:
+  - 56
+  - 122
+  - 840
+  - 72
+  content:
+    text: '结论：7 个方法均已有可审计实现与结果链证据；
+
+      六个新增/适配方法尚无可发布的 protected 主表数字。'
+    fontSize: 28
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: final-rule
+  elementType: line
+  bounds:
+  - 56
+  - 218
+  - 844
+  - 2
+  viewBox:
+  - 1
+  - 1
+  points: 0,0.5 1,0.5
+  curve: sharp
+  arrow:
+  - null
+  - null
+  border:
+    style: solid
+    width: 1.2
+    color: '#C9C1B3'
+- elementId: checks-head
+  elementType: text
+  bounds:
+  - 56
+  - 246
+  - 300
+  - 30
+  content:
+    text: 本次独立复核
+    fontSize: 18
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: checks
+  elementType: text
+  bounds:
+  - 56
+  - 288
+  - 420
+  - 112
+  content:
+    text: '✓ joint candidate --check：42 cells / 36 pass / 6 unsupported
+
+      ✓ protected_evaluation_authorized=false
+
+      ✓ protected_test_opened=false
+
+      ✓ 联合候选与 adapter evidence hashes 一致
+
+      ✓ 每个方法均由独立 subagent 审查'
+    fontSize: 13
+    fontFamily: Noto Sans CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: src-head
+  elementType: text
+  bounds:
+  - 550
+  - 246
+  - 300
+  - 30
+  content:
+    text: 主要证据入口
+    fontSize: 18
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: srcs
+  elementType: text
+  bounds:
+  - 550
+  - 288
+  - 345
+  - 135
+  content:
+    text: 'docs/comparisons/STATUS.md
+
+      docs/comparisons/ADAPTER_PROGRESS_20260811.md
+
+      comparative_methods/EXPERIMENT_PLAN.md
+
+      comparative_methods/evidence/joint_protected_unlock_candidate_v2.json
+
+      agent_reports/*.md + *.json'
+    fontSize: 11
+    fontFamily: Noto Sans Mono CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: handoff
+  elementType: text
+  bounds:
+  - 56
+  - 445
+  - 840
+  - 42
+  content:
+    text: 建议下一动作：先完成人工 unlock review；若获授权，再按冻结协议进行一次性 protected evaluation。
+    fontSize: 16
+    fontFamily: Noto Sans CJK SC
+    color: '#9C3F17'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15

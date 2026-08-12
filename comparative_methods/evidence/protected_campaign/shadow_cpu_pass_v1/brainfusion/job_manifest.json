@@ -1,0 +1,32 @@
+{
+  "artifact_sha256": {
+    "feature_cache": "0f6c229da5ade4cb83bd59d312b2e0cbee740681822ef3ecacad0295e5930674",
+    "feature_cache_manifest": "e7c214f4c61dd4dda0e035f09c540b77b75f8036d83303fcab22e1ba96df9d51",
+    "pipeline_feature_state": "1c3f9a7e8139f234728377178eca9dcf8e32aed2e6e02bf83dbb4b9b9352db22",
+    "pipeline_manifest": "05a15a6ccc12fd842a432add41df5d7229c39678a8747a6b2470ef0369f5a371",
+    "pipeline_stacking": "9491919c0f7fc4d67cd8dc7fcfb3ed58435bd6c16d21908ff02edc10bf186a48",
+    "public_run_manifest": "0f0f063e4e710aec6b3b4ab330fc6e545d02c31277fcb97b5a69c866b7c7442c",
+    "public_split_manifest": "687c256f4b46e4b64aecb6ef3a3c208a7c7a6418a64acd77dab6fbc97f4d816f"
+  },
+  "attempt": 1,
+  "authorization_sha256": "not_applicable_public_shadow",
+  "campaign_id": "joint-comparison-protected-20260812-v1",
+  "candidate_path": "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json",
+  "candidate_sha256": "4de176558d1ae502e2cfdc0a127bfa9f9c71caf5ccfdcfdc7f3cf9f47ac016a9",
+  "determinism_sha256": "cf59c6f22ed2f033092b5d695c952e0eb572b0db530f39527f6ef4bb04d55830",
+  "device": "cpu",
+  "device_uuid": "CPU",
+  "environment_sha256": "6b03262df7eb6025f378b92157793d2648c5edba5f8522b53ea1dcf2a30b65c9",
+  "frozen_inference_contract_sha256": "ae53e9a6b13ae4f8d238db7c474a09f108df942d9d72b05736f62ca5a2537942",
+  "input_contract_sha256": "3a8ea74e0167f9b2ca0fe0ee3933e9ea05576f78aafea2f8af5f915b3fd741bb",
+  "input_manifest_sha256": "687c256f4b46e4b64aecb6ef3a3c208a7c7a6418a64acd77dab6fbc97f4d816f",
+  "job_id": "brainfusion__motor_imagery__outer0__seed17",
+  "method_id": "brainfusion_nvc_csp_stacking_reimplementation",
+  "outer_fold": 0,
+  "performance_computed": false,
+  "protected_test_opened": false,
+  "schema": "protected_job_manifest_v1",
+  "seed": 17,
+  "surface": "shadow",
+  "task": "motor_imagery"
+}

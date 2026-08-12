@@ -1,0 +1,10 @@
+{
+  "files": {
+    "audit_report.json": "79370eb5a73cb65c8b55bd764c1ffc4f7d12d7e7e2021f3e98d60858bcfc3e06",
+    "job_manifest.json": "99739490e15decd03bd8adc0e38c4deed5e9dfd2f60356db10dff4238f935691",
+    "shadow_predictions.npz": "f1e8f16aa6b4916e962373081422b43cfeadbeaa89eb62278cdc5508f5e35cde",
+    "status.json": "d459b647e8e713f98ae51de75d905fb46ebff412dd5447cdf969274e953548fa"
+  },
+  "job_id": "reve__motor_imagery__outer0__seed17",
+  "schema": "protected_job_artifact_checksums_v1"
+}

@@ -1,7 +1,8 @@
 # BIOT comparison workspace
 
 This isolated workspace prepares BIOT for the EEG-only official-pretrained
-linear-probe track. B0 source fixing is complete; B1-B4 remain pending.
+linear-probe track. A0–A8 alignment and the 90-job public-development matrix
+are complete; protected evaluation remains separately locked.
 
 - Official code: `upstream/`, revision
   `d138e32634e52ae9fa6ec98ac9c4087b14ca869a`.
@@ -13,5 +14,8 @@ linear-probe track. B0 source fixing is complete; B1-B4 remain pending.
 
 The adapter may consume EEG only, resampled under the shared data contract. It
 must not consume fNIRS, derived teacher features, or synthetic channel copies.
-No formal run is authorized until the adapter, smoke, source-fidelity, and
-protocol gates are frozen.
+The current frozen public status is recorded in
+`evidence/alignment_v2/summary_final.json` and
+`evidence/public_development_v2/matrix_completion_summary.json`. Public
+validation results are not table-admissible and do not authorize protected
+evaluation.

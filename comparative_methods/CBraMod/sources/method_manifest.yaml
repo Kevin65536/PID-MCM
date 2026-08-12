@@ -43,10 +43,10 @@ input_boundary:
   fnirs_allowed: false
 gate_status:
   B0_source_fixed: pass
-  B1_input_contract: pending
-  B2_software_smoke: pass_gpu_frozen_probe_checkpoint_reload
-  B3_source_fidelity: pending
-  B4_protocol_freeze: pending
+  B1_input_contract: pass_public_v1_six_classification_tasks_refed_unsupported
+  B2_software_smoke: pass_gpu_public_sample_feature_probe_checkpoint_reload
+  B3_source_fidelity: pass_documented_mean_token_transfer_boundary
+  B4_protocol_freeze: pending_formal_unlock_and_full_matrix_freeze
 software_smoke:
   test: tests/test_cbramod_smoke.py
   checkpoint_loading: weights_only_true_hash_verified_strict_state_dict
@@ -58,4 +58,5 @@ software_smoke:
     - optimizer_step
     - frozen_encoder_no_gradients
     - strict_checkpoint_reload
-  limitations: token_pooling_and_shared_eeg_support_not_yet_frozen
+  public_performance_smoke: comparative_methods/single_modal_eeg/runs/20260731_cbramod_mi_outer0_seed17_smoke_v1
+  limitations: mean_token_pooling_is_project_transfer_adapter; refed_unsupported

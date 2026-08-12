@@ -220,6 +220,20 @@ def test_adapter_keeps_measured_channels_and_pairs_components_without_duplicatio
     assert result["admitted"] is True
 
 
+def test_adapter_sample_identity_retains_source_window_coordinate() -> None:
+    adapter = EFRMPairedWindowAdapter(duration_s=2.0)
+    first = _fake_unified_sample()
+    second = _fake_unified_sample()
+    first["sample_id"] = "fake|event=2|start_ms=0"
+    second["sample_id"] = "fake|event=2|start_ms=2000"
+
+    first_id = adapter.adapt(first)["sample_id"]
+    second_id = adapter.adapt(second)["sample_id"]
+
+    assert first_id != second_id
+    assert first_id == adapter.adapt(first)["sample_id"]
+
+
 def test_collate_requires_one_record_inventory() -> None:
     adapter = EFRMPairedWindowAdapter(duration_s=2.0)
     first = adapter.adapt(_fake_unified_sample())

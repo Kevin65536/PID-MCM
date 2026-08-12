@@ -1,0 +1,145 @@
+{
+  "automatic_retry_count": 0,
+  "completed_at": "2026-08-11T13:46:38.359383+00:00",
+  "completed_audit_path": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix/completed_public_audit.json",
+  "completed_audit_sha256": "f0ec62128527de55d1be2ef3e0d27fb81e17488ecb7a532be652558a9089484d",
+  "completed_job_count": 105,
+  "controller_status_path": "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix/controller_status.json",
+  "controller_status_sha256": "9c5704207fb482e63703e6b514ac1c8b97b356e7a067d2ce85de938a7a5e98ce",
+  "failed_job_count": 0,
+  "job_artifact_fingerprint_sha256": "d180da674b230054d29bbc74c6c975ceaf3d576d58dbf9ec86c6bce2736b868b",
+  "job_count": 105,
+  "matrix_identity_sha256": "6153b163b0bc4d07870ce7446e7dbca9aae2c7e4ea0191d7c2a5557a3dbec7ef",
+  "max_concurrent_jobs": 1,
+  "method_id": "efrm_sync_200_10_variable_channel_v1",
+  "protected_evaluation_authorized": false,
+  "protected_test_opened": false,
+  "protocol_id": "efrm_lodo_full_target_fivefold_v2",
+  "runner_config_path": "comparative_methods/EFRM-PyTorch/configs/downstream_public_v2.yaml",
+  "runner_config_sha256": "ffb8b9259bf7fb28b2b5a52317a3654e0ed25c133e85813422224a048c8318a6",
+  "schema": "efrm_lodo_downstream_public_matrix_completion_summary_v2",
+  "status": "pass",
+  "table_admissible": false,
+  "target_dataset_exposure": false,
+  "tasks": [
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.5170422516257516,
+      "public_validation_outer_fold_sample_sd": 0.014735919956596392,
+      "public_validation_primary_cell_mean": 0.5170422516257516,
+      "public_validation_primary_cell_sd": 0.016167968053135855,
+      "seed_mean_by_outer_fold": [
+        0.5052447923984734,
+        0.5067839196626199,
+        0.5419321245995227,
+        0.5150533092758134,
+        0.5161971121923288
+      ],
+      "task": "motor_imagery"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.627200259605418,
+      "public_validation_outer_fold_sample_sd": 0.017422916241094325,
+      "public_validation_primary_cell_mean": 0.6272002596054181,
+      "public_validation_primary_cell_sd": 0.01726111020269742,
+      "seed_mean_by_outer_fold": [
+        0.5982205939429032,
+        0.6380839557092837,
+        0.6238218330636657,
+        0.6352947725866194,
+        0.6405801427246182
+      ],
+      "task": "mental_arithmetic"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.5829630802026692,
+      "public_validation_outer_fold_sample_sd": 0.02252596175018639,
+      "public_validation_primary_cell_mean": 0.5829630802026692,
+      "public_validation_primary_cell_sd": 0.023556352185516848,
+      "seed_mean_by_outer_fold": [
+        0.5722620912084987,
+        0.5994056938745908,
+        0.5674954778330317,
+        0.561765936113713,
+        0.613886201983512
+      ],
+      "task": "wg"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.3720735648972569,
+      "public_validation_outer_fold_sample_sd": 0.02699793669234208,
+      "public_validation_primary_cell_mean": 0.37207356489725696,
+      "public_validation_primary_cell_sd": 0.032444591344121074,
+      "seed_mean_by_outer_fold": [
+        0.3950242585095503,
+        0.35952919290656166,
+        0.4066977274946104,
+        0.3526204990224169,
+        0.34649614655314526
+      ],
+      "task": "nback"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.459015311501697,
+      "public_validation_outer_fold_sample_sd": 0.02183551194533539,
+      "public_validation_primary_cell_mean": 0.459015311501697,
+      "public_validation_primary_cell_sd": 0.03956243655892647,
+      "seed_mean_by_outer_fold": [
+        0.48986355633719025,
+        0.46062602927836266,
+        0.457848756589069,
+        0.4585674869453287,
+        0.42817072835853437
+      ],
+      "task": "dsr"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "macro_f1",
+      "public_validation_outer_fold_mean": 0.2129502071501924,
+      "public_validation_outer_fold_sample_sd": 0.002555854062564767,
+      "public_validation_primary_cell_mean": 0.21295020715019236,
+      "public_validation_primary_cell_sd": 0.004883092577290342,
+      "seed_mean_by_outer_fold": [
+        0.2156803053936369,
+        0.21174567914656736,
+        0.21171916918614664,
+        0.21000415496059652,
+        0.21560172706401448
+      ],
+      "task": "visual"
+    },
+    {
+      "claim_boundary": "public_development_only_not_table_admissible",
+      "job_count": 15,
+      "primary_metric": "ccc",
+      "public_validation_outer_fold_mean": 0.0738992390110736,
+      "public_validation_outer_fold_sample_sd": 0.020894790944079037,
+      "public_validation_primary_cell_mean": 0.07389923901107359,
+      "public_validation_primary_cell_sd": 0.020027716254046157,
+      "seed_mean_by_outer_fold": [
+        0.07330044009920565,
+        0.07754965262268748,
+        0.10496787290710265,
+        0.047212864653320336,
+        0.06646536477305189
+      ],
+      "task": "refed_regression"
+    }
+  ]
+}

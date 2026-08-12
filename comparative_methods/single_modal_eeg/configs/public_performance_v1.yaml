@@ -1,0 +1,92 @@
+schema: single_modal_eeg_public_performance_v1
+protocol_id: single_modal_eeg_public_performance_v1
+track: single_modal_eeg_official_pretrained_linear_probe
+mode: public_development_only
+protected_test_default: locked
+
+registry:
+  manifest: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  protocol: strict_cross_subject
+  outer_seed: 42
+  inner_seed: 43_plus_outer_index
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_sample_rate_hz: 200
+  panel_size: 16
+  channel_policy: frozen_task_panel_real_channels_reordered_no_copy_or_padding
+  invalid_time_policy: fail_closed_no_padding
+  normalization: train_feature_coordinate_zscore
+
+methods:
+  biot:
+    artifact_id: eeg_prest_16
+    embedding_dim: 256
+    source_input_note: positional_transfer_from_upstream_prest_bipolar_montage_to_frozen_native_electrode_panel
+  cbramod:
+    artifact_id: cbramod_pretrained
+    embedding_dim: 200
+    token_pooling: mean
+    source_input_note: project_mean_token_pooling_transfer_adapter
+  reve:
+    artifact_id: reve_base
+    embedding_dim: 512
+    position_source: official_reve_positions_bank
+    source_input_note: official_position_bank_names_with_project_geometry_provenance_audited_separately
+
+tasks:
+  motor_imagery:
+    supported: true
+    duration_s: 8
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  mental_arithmetic:
+    supported: true
+    duration_s: 8
+    panel: [F7, AFF5h, F3, AFp1, AFp2, AFF6h, F4, F8, AFF1h, AFF2h, Cz, Pz, FCC5h, FCC3h, CCP5h, CCP3h]
+  wg:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  nback:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  dsr:
+    supported: true
+    duration_s: 2
+    panel: [Fp1, AFF5h, AFz, F1, FC5, FC1, T7, C3, Cz, CP5, CP1, P7, P3, Pz, POz, O1]
+  visual:
+    supported: true
+    duration_s: 8
+    panel: [Fp1, Fp2, AF3, AF4, F3, F4, FC3, FC4, C3, C4, PO3, PO4, O1, O2, F5, F6]
+  refed_regression:
+    supported: false
+    duration_s: 20
+    reason: partial_terminal_windows_require_time_mask_support_not_available_in_v1_frozen_encoders
+    panel: [FP1, FPZ, FP2, AF3, AF4, F7, F5, F3, F1, FZ, F2, F4, F6, F8, FT7, FC5]
+
+probe:
+  selection_metric: macro_f1
+  selection_mode: max
+  learning_rates: [0.001, 0.0003]
+  weight_decays: [0.0, 0.01]
+  epochs: 40
+  batch_size: 128
+  class_weighting: inverse_frequency
+  seed_set: [17, 42, 73]
+  feature_standardization_epsilon: 1.0e-6
+
+smoke:
+  train_samples_per_class: 4
+  validation_samples_per_class: 4
+  epochs: 2
+  learning_rates: [0.001]
+  weight_decays: [0.0]
+
+resources:
+  default_device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  minimum_free_gpu_gib: 6
+  gpu_lock_path: /tmp/pid_mcm_comparison_gpu1.lock

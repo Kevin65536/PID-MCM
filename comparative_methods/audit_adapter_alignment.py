@@ -165,7 +165,13 @@ def validate_direct_groups(
     for cell in cells:
         profile_name = str(cell["alignment_profile"])
         profile = contract["alignment_profiles"][profile_name]
-        if not profile["direct_ranking_allowed"]:
+        # ``unsupported`` is a terminal, preregistered disposition rather than
+        # a delivered comparison surface. Such cells deliberately may retain
+        # non-dereferenced sentinels for inventory/support fields, so comparing
+        # them with a peer's fully materialized public cell would manufacture
+        # an alignment failure. Exact equality is meaningful only among cells
+        # that actually passed the direct-profile gates and can be ranked.
+        if not profile["direct_ranking_allowed"] or cell["cell_status"] != "pass":
             continue
         key = (str(cell["comparison_group_id"]), profile_name)
         groups.setdefault(key, []).append(cell)

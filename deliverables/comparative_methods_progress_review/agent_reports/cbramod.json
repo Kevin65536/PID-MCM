@@ -1,0 +1,266 @@
+{
+  "method": "CBraMod",
+  "audit_date": "2026-08-11",
+  "scores": {
+    "code_components": 97,
+    "input_adaptation": 97,
+    "output_adaptation": 88,
+    "result_generation": 52,
+    "evidence_reproducibility": 88,
+    "overall": 83.5,
+    "weights": {
+      "code_components": 30,
+      "input_adaptation": 20,
+      "output_adaptation": 15,
+      "result_generation": 25,
+      "evidence_reproducibility": 10
+    },
+    "calculation": "0.30*97 + 0.20*97 + 0.15*88 + 0.25*52 + 0.10*88 = 83.5"
+  },
+  "status_label": "public_development_complete_A0_A8_pass_protected_locked_final_unavailable",
+  "public_pipeline_status": "complete",
+  "protected_status": "locked_not_authorized",
+  "final_result_availability": "unavailable_no_protected_or_metric_accepted_aggregate",
+  "planned_tasks": [
+    "motor_imagery",
+    "mental_arithmetic",
+    "wg",
+    "nback",
+    "dsr",
+    "visual",
+    "refed_regression"
+  ],
+  "supported_tasks": [
+    "motor_imagery",
+    "mental_arithmetic",
+    "wg",
+    "nback",
+    "dsr",
+    "visual"
+  ],
+  "unsupported_tasks": [
+    {
+      "task": "refed_regression",
+      "status": "unsupported",
+      "reason_code": "CBRAMOD_NO_PARTIAL_TIME_MASK_CONTRACT",
+      "reason": "REFED has semantically real partial terminal windows; frozen CBraMod adapter accepts only fully recorded 200-sample patches.",
+      "evidence": "comparative_methods/CBraMod/evidence/alignment_v2/refed_regression.json"
+    }
+  ],
+  "completed_job_count": 90,
+  "planned_job_count": 90,
+  "planned_job_definition": "6 supported tasks x 5 outer folds x 3 seeds; generic 7-task ceiling is 105 with REFED's 15 cells predeclared unsupported.",
+  "public_unique_sample_count": 22442,
+  "code_components": [
+    {
+      "component": "official_upstream_and_license",
+      "status": "verified_pinned",
+      "evidence": "comparative_methods/CBraMod/sources/method_manifest.yaml; comparative_methods/CBraMod/upstream/models/cbramod.py; comparative_methods/CBraMod/upstream/models/criss_cross_transformer.py; upstream revision 0ff6be918985689e7df679bc731ffb70e6c6224f"
+    },
+    {
+      "component": "official_checkpoint_hash_and_strict_loader",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/adapters/cbramod.py:83-146; weights_only=True, strict state-dict; manifest size 19775842 and SHA-256 0792cb808c14e6b7a2bb2ce1dff379bc47bc54c49a779825bdfeb33bf8157178"
+    },
+    {
+      "component": "representation_layer",
+      "status": "verified_source_faithful_boundary",
+      "evidence": "comparative_methods/CBraMod/REPRESENTATION_LAYER_AUDIT.md; proj_out=Identity after strict load; encoder latent before pretraining reconstruction projection"
+    },
+    {
+      "component": "frozen_eeg_adapter",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/adapters/cbramod.py:149-227; 200 Hz, 200-sample patches, all-real masks, finite checks, channel/patch mean pooling"
+    },
+    {
+      "component": "public_linear_probe_runner",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/run_public_development_v2.py:535-745; outer-train standardization, macro-F1 selection, refit, weights-only reload"
+    },
+    {
+      "component": "alignment_and_public_auditors",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/audit_alignment_v2.py; comparative_methods/CBraMod/audit_public_run_v2.py; comparative_methods/CBraMod/finalize_public_matrix_v2.py"
+    },
+    {
+      "component": "method_tests",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/tests/test_cbramod_smoke.py; comparative_methods/CBraMod/tests/test_cbramod_alignment_v2.py; local run 17 passed"
+    }
+  ],
+  "input_contract": [
+    {
+      "item": "modality",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/configs/alignment_v2.yaml: data/adapter; EEG-only, fNIRS forbidden"
+    },
+    {
+      "item": "sampling_window_patch",
+      "status": "verified",
+      "evidence": "200 Hz; 8 s/1600 samples for MI, MA, WG, N-back, Visual; 2 s/400 samples for DSR; 200-sample contiguous non-overlapping patches; adapters/cbramod.py:193-203"
+    },
+    {
+      "item": "measured_channel_support",
+      "status": "verified",
+      "evidence": "Six task panels each contain 16 unique measured channels; delivered order and hash retained per cell; no copy/padding"
+    },
+    {
+      "item": "recorded_masks_and_geometry",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/alignment_data.py:189-223; valid_mask all true, bad-channel rejection, finite EEG, registered geometry required"
+    },
+    {
+      "item": "canonical_signal_branch",
+      "status": "verified_with_documented_deviation",
+      "evidence": "Each cell comparison_fields records robust-standard-deviation coordinate, 1-45 Hz branch and source fingerprints; REPRESENTATION_LAYER_AUDIT.md documents omission of upstream raw-array /100"
+    },
+    {
+      "item": "shared_split_and_identity",
+      "status": "verified",
+      "evidence": "alignment_data.py:115-166; registry SHA and five outer folds; summary_final cell reports exact BIOT comparison fields"
+    },
+    {
+      "item": "full_public_inventory",
+      "status": "verified",
+      "evidence": "MI 1740, MA 1740, WG 1560, N-back 702, DSR 8980, Visual 7720 = 22442; six task evidence public_audit unique_sample_count and all_unique_public_samples_audited=true"
+    },
+    {
+      "item": "refed_partial_time_mask",
+      "status": "predeclared_unsupported",
+      "evidence": "comparative_methods/CBraMod/evidence/alignment_v2/refed_regression.json; A4/A7 unsupported, no sample deletion"
+    }
+  ],
+  "output_contract": [
+    {
+      "item": "representation_output",
+      "status": "verified",
+      "evidence": "latent (B,C,patch_count,200) pooled to finite (B,200); output_layer encoder_latent_before_pretraining_proj_out; pooling official_avgpooling_patch_reps"
+    },
+    {
+      "item": "linear_probe_head",
+      "status": "verified",
+      "evidence": "comparative_methods/CBraMod/adapters/cbramod.py:230-239; nn.Linear(200, output_dim), frozen encoder"
+    },
+    {
+      "item": "prediction_schema",
+      "status": "verified",
+      "evidence": "audit_public_run_v2.py:156-193; exact arrays logits,target,dataset_index,subject,sample_id and metric recomputation"
+    },
+    {
+      "item": "task_metric_and_baseline",
+      "status": "verified_development_only",
+      "evidence": "run_public_development_v2.py:535-553,709-744; macro-F1, majority/train-prior baselines, candidate history and train/refit standardizer hashes"
+    },
+    {
+      "item": "failure_and_aggregation",
+      "status": "partial_no_final_acceptance",
+      "evidence": "90 run statuses retained with no retry; matrix_completion_summary has six development means/SD but table_admissible=false and no CBraMod runs/aggregate or acceptance artifact"
+    }
+  ],
+  "result_stages": [
+    {
+      "stage": "software_smoke",
+      "status": "pass",
+      "count": "2 retained pilot runs; 17 method tests passed",
+      "evidence": "comparative_methods/CBraMod/evidence/public_development_v2/pilot_audit.json; comparative_methods/CBraMod/tests/"
+    },
+    {
+      "stage": "alignment_A0_A8",
+      "status": "pass",
+      "count": "6/6 supported cells; 22442 unique public samples; 9/9 gates each",
+      "evidence": "comparative_methods/CBraMod/evidence/alignment_v2/summary_final.json and six supported task JSON files"
+    },
+    {
+      "stage": "public_selection_refit_matrix",
+      "status": "pass",
+      "count": "90/90 jobs = 6 tasks x 5 folds x 3 seeds; 0 failures; 0 retries; concurrency 1",
+      "evidence": "comparative_methods/CBraMod/evidence/public_development_v2/matrix_completion_summary.json; comparative_methods/CBraMod/runs/public_development_v2/matrix_v2/completed_public_audit.json"
+    },
+    {
+      "stage": "public_development_aggregate",
+      "status": "complete_but_not_table_admissible",
+      "count": "6 task summaries, 15 jobs/task; means and SDs retained",
+      "evidence": "comparative_methods/CBraMod/evidence/public_development_v2/matrix_completion_summary.json; claim_boundary=public_development_only_not_table_admissible"
+    },
+    {
+      "stage": "metric_acceptance",
+      "status": "missing_not_run",
+      "count": "0 accepted final cells",
+      "evidence": "No CBraMod metric-acceptance/target-check output; docs/comparisons/METRIC_ACCEPTANCE.md remains governing rule"
+    },
+    {
+      "stage": "protected_final",
+      "status": "locked_not_authorized",
+      "count": "0 protected jobs; 0 arrays opened",
+      "evidence": "summary_final.json, matrix_completion_summary.json and all 90 run manifests protected_test_opened=false"
+    }
+  ],
+  "blockers": [
+    {
+      "severity": "critical",
+      "item": "protected final evaluation is unavailable",
+      "evidence": "summary_final.json has protected_evaluation_authorized=false and protected_test_opened=false",
+      "next_action": "Obtain the separate protocol unlock manifest; then execute the frozen protected evaluation without changing input, checkpoint, or selection rules."
+    },
+    {
+      "severity": "high",
+      "item": "formal aggregate and metric acceptance are absent",
+      "evidence": "No comparative_methods/CBraMod/runs/aggregate/; completion summary table_admissible=false",
+      "next_action": "After authorized protected execution, generate fold/seed/OOF aggregates and apply comparison_metric_targets/METRIC_ACCEPTANCE; do not promote public validation means."
+    },
+    {
+      "severity": "medium",
+      "item": "historical replay CLI is blocked after queue completion",
+      "evidence": "audit_public_run_v2.py on a completed motor_imagery/outer0/seed17 run raised PermissionError because active_delivery_method=none_public_delivery_queue_complete",
+      "next_action": "Retain current completion hashes; add a read-only historical replay contract/entrypoint only if reproducibility review requires it, without reactivating CBraMod."
+    },
+    {
+      "severity": "medium",
+      "item": "README and historical config status drift",
+      "evidence": "README says B1-B4 pending and public_development_v2.yaml requires old A0-A7-pending summary while summary_final is A0-A8 complete",
+      "next_action": "Update documentation/provenance or label the old config as historical before release."
+    }
+  ],
+  "risks": [
+    "Public validation macro-F1 is development-only and may be optimistic; it is not protected generalization evidence.",
+    "REFED is unsupported, so CBraMod covers six of seven unified tasks; preserve the explicit unsupported cell in comparisons.",
+    "Omitting upstream raw-array /100 is a documented project canonical-coordinate decision, but must be footnoted as an adaptation.",
+    "Run artifacts contain manifests, predictions, reports, checkpoints and histories but no independent complete training-log directory.",
+    "Upstream code revision 0ff6be9 and Hugging Face checkpoint revision 500543c are separately pinned and should both be reported.",
+    "Queue advancement makes direct rerun of old audit CLI unavailable unless a historical read-only contract is added."
+  ],
+  "tests_run": [
+    {
+      "command": ".venv/bin/python -m pytest -q comparative_methods/CBraMod/tests/test_cbramod_smoke.py comparative_methods/CBraMod/tests/test_cbramod_alignment_v2.py",
+      "status": "pass",
+      "result": "17 passed in 7.71s",
+      "scope": "method-level tests only; no full repository tests"
+    },
+    {
+      "command": ".venv/bin/python comparative_methods/CBraMod/audit_public_run_v2.py comparative_methods/CBraMod/runs/public_development_v2/matrix_v2/motor_imagery/outer0/seed17",
+      "status": "blocked_by_historical_lane_guard",
+      "result": "PermissionError: active_delivery_method=none_public_delivery_queue_complete",
+      "scope": "no protected reads and no writes; guard prevents replay after queue completion"
+    }
+  ],
+  "evidence_quality": {
+    "rating": "strong_public_machine_evidence_with_final_gap",
+    "verified": [
+      "checkpoint SHA/size and weights_only strict load",
+      "adapter input/output rejection and finite feature checks",
+      "A0-A8 per-cell statuses",
+      "full public sample counts and deterministic replay",
+      "90/90 run artifacts and protected=false invariants"
+    ],
+    "documentary_or_inferred": [
+      "A0-A8 final status is retained in summary_final and task bundles; README/config contains older historical status",
+      "No final aggregate is concluded from the absence of runs/aggregate and metric acceptance artifacts"
+    ],
+    "missing": [
+      "protected predictions/metrics",
+      "formal aggregate and acceptance decisions",
+      "independent complete run logs"
+    ]
+  },
+  "executive_summary": "CBraMod 已完成官方上游/权重固定、200 Hz EEG 输入适配、pre-proj_out 200-d latent 平均池化、冻结 linear-probe head、A0-A8 alignment 和 90/90 public development jobs。六个支持分类任务的 22442 个唯一公开样本均完成 full coverage，90 个 job 全部通过且无重试；REFED 按 CBRAMOD_NO_PARTIAL_TIME_MASK_CONTRACT 事前 unsupported。当前 protected evaluation 仍锁定，public validation 与六任务开发均值明确 table_admissible=false，且没有正式 runs/aggregate 或 metric-acceptance 结果。因此工程/public 进度评分 83.5，但最终可用性能结果仍 unavailable；下一步只能在独立授权后执行冻结 protected 评估并生成正式聚合/准入。"
+}

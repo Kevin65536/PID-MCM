@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
+import pytest
 import yaml
+
+from comparative_methods.audit_adapter_alignment import (
+    AlignmentAuditError,
+    validate_direct_groups,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,14 +53,12 @@ def test_alignment_contract_has_complete_versioned_surface() -> None:
     assert contract["current_repository_assessment"]["new_public_matrix_launch_hold"] is True
     policy = contract["execution_policy"]
     assert policy["mode"] == "strict_serial_new_method_delivery_queue"
-    assert policy["active_delivery_method"] == (
-        "brainfusion_nvc_csp_stacking_reimplementation"
-    )
+    assert policy["active_delivery_method"] == "none_public_delivery_queue_complete"
     assert policy["max_active_new_method_implementations"] == 1
     assert policy["max_active_new_method_experiment_queues"] == 1
     assert policy["grandfathered_background_execution"][0] == {
         "method_id": "efrm_sync_200_10_variable_channel_v1",
-        "scope": "already_running_frozen_lodo_v2",
+        "scope": "completed_frozen_lodo_v2_public_delivery",
         "blocks_new_method_delivery_queue": False,
         "may_be_modified_by_new_method_work": False,
     }
@@ -66,7 +70,11 @@ def test_alignment_contract_has_complete_versioned_surface() -> None:
         "normwear_eeg_fnirs_adapted",
     ]
     active = [row for row in policy["ordered_queue"] if row["current_state"] == "active"]
-    assert [row["method_id"] for row in active] == [policy["active_delivery_method"]]
+    assert active == []
+    assert all(
+        row["current_state"] == "public_development_complete_protected_locked"
+        for row in policy["ordered_queue"]
+    )
 
 
 def test_direct_profile_aligns_information_not_internal_tensorization() -> None:
@@ -166,3 +174,47 @@ def test_alignment_auditor_validates_the_contract_without_touching_data() -> Non
     assert report["contract"]["gate_ids"] == [f"A{index}" for index in range(9)]
     assert report["cell_reports"] == []
     assert report["protected_test_opened"] is False
+
+
+def test_direct_group_alignment_compares_only_delivered_pass_cells() -> None:
+    contract = _contract()
+    fields = {
+        name: f"shared-{name}"
+        for name in contract["alignment_profiles"]["support_matched_direct"][
+            "exact_equal_fields"
+        ]
+    }
+    fields["dataset_id"] = "simultaneous_eeg_nirs"
+    fields["task_id"] = "dsr"
+    delivered = {
+        "cell_id": "delivered",
+        "cell_status": "pass",
+        "comparison_group_id": "group",
+        "alignment_profile": "support_matched_direct",
+        "comparison_fields": fields,
+    }
+    unsupported = {
+        **delivered,
+        "cell_id": "unsupported",
+        "cell_status": "unsupported",
+        "comparison_fields": {**fields, "sample_inventory_sha256": "not_dereferenced"},
+    }
+    reports = validate_direct_groups([unsupported, delivered], contract)
+    assert reports == [
+        {
+            "comparison_group_id": "group",
+            "alignment_profile": "support_matched_direct",
+            "cell_count": 1,
+            "exact_fields_checked": contract["alignment_profiles"][
+                "support_matched_direct"
+            ]["exact_equal_fields"],
+        }
+    ]
+
+    mismatched_pass = {
+        **delivered,
+        "cell_id": "mismatched-pass",
+        "comparison_fields": {**fields, "sample_inventory_sha256": "different"},
+    }
+    with pytest.raises(AlignmentAuditError, match="sample_inventory_sha256"):
+        validate_direct_groups([delivered, mismatched_pass], contract)

@@ -1,0 +1,86 @@
+{
+  "checks": [
+    {
+      "actual": "PNG",
+      "detail": "File format is compared with the explicit allow-list.",
+      "expected": [
+        "PNG"
+      ],
+      "name": "format",
+      "status": "pass"
+    },
+    {
+      "actual": "RGB",
+      "detail": "Vector containers generally do not expose one image mode.",
+      "expected": [
+        "RGB"
+      ],
+      "name": "mode",
+      "status": "pass"
+    },
+    {
+      "actual": 2880,
+      "detail": "Pixel dimensions are available for raster inputs.",
+      "expected": {
+        "max": null,
+        "min": 2400
+      },
+      "name": "width_px",
+      "status": "pass"
+    },
+    {
+      "actual": 1620,
+      "detail": "Pixel dimensions are available for raster inputs.",
+      "expected": {
+        "max": null,
+        "min": 1200
+      },
+      "name": "height_px",
+      "status": "pass"
+    },
+    {
+      "actual": false,
+      "detail": "Alpha is detected for raster modes/transparency metadata. Vector transparency requires rendered-content inspection.",
+      "expected": "forbid",
+      "name": "alpha",
+      "status": "pass"
+    }
+  ],
+  "input": {
+    "name": "method_brainfusion.png",
+    "path": "/SSD_2/pid-mcm-implementation/deliverables/comparative_methods_progress_review/comparative_methods_progress_review_deck/media/method_brainfusion.png",
+    "size_bytes": 253776,
+    "suffix": ".png"
+  },
+  "metadata": {
+    "bands": [
+      "R",
+      "G",
+      "B"
+    ],
+    "compression": null,
+    "dpi_x": 180.00979999999998,
+    "dpi_y": 180.00979999999998,
+    "exif_present": false,
+    "format": "PNG",
+    "frames": 1,
+    "has_alpha": false,
+    "height_mm_from_metadata": 228.58755467757868,
+    "height_px": 1620,
+    "icc_profile_bytes": 0,
+    "icc_profile_present": false,
+    "kind": "raster",
+    "mode": "RGB",
+    "pixel_count": 4665600,
+    "width_mm_from_metadata": 406.3778749823621,
+    "width_px": 2880
+  },
+  "notice": "This deterministic metadata screen checks only the supplied constraints. It does not verify visual quality, scientific integrity, accessibility, embedded-raster resolution in vector files, or journal compliance.",
+  "schema_version": "1.0",
+  "screening_summary": {
+    "fail": 0,
+    "pass": 5,
+    "unknown": 0,
+    "warning": 0
+  }
+}

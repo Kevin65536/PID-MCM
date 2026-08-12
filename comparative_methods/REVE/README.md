@@ -1,7 +1,8 @@
 # REVE comparison workspace
 
 This isolated workspace prepares REVE for coordinate-aware EEG-only transfer.
-B0 source identity and corpus overlap are fixed; B1-B4 remain pending.
+A0–A8 alignment and the 90-job public-development matrix are complete;
+protected evaluation remains separately locked.
 
 - Official code: `upstream/`, revision
   `06a7059a07c3dabd80aee60c3dbc1eca4bdbe1c7`.
@@ -16,3 +17,9 @@ Single-Trial dataset. That cell must remain in the
 `open_world_pretrained_with_target_corpus_overlap` track. Encoder weights and
 derivatives must not be redistributed. Only registry-backed electrode
 coordinates may enter the model.
+
+The current frozen public status is recorded in
+`evidence/alignment_v2/summary_final.json` and
+`evidence/public_development_v2/matrix_completion_summary.json`. Public
+validation results are not table-admissible. Single-Trial MI/MA remain in the
+target-corpus-overlap track and do not enter the support-matched direct table.

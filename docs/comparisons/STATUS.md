@@ -1,33 +1,48 @@
 # Comparison experiment status
 
-_Snapshot: 2026-07-31; live EFRM state must be read from its status file_
+_Snapshot: 2026-08-12; retained run manifests and final alignment summaries are
+the source of truth_
 
 ## Current decision surface
 
 | Method / track | State | Evidence and next action |
 | --- | --- | --- |
-| STA-Net strict five-fold | **Complete** | 70/70 fold trainings completed under the frozen convergence rule. Retain the aggregate and current formal checkpoints. |
-| EFRM LODO v2 Stage A | **Complete** | 4/4 target-excluded selection jobs completed and selected epochs were frozen. |
-| EFRM LODO v2 Stage B | **Running** | 0/4 full non-target refits completed in the latest status manifest; the Single-Trial-excluded refit is currently running on GPU0. |
-| EFRM v2 downstream matrix | **Queued** | After Stage B: feature cache, strict `7 tasks × 5 folds × 3 seeds` linear probes, gates, one-time protected evaluation, aggregate, then separately labeled sample-random results. |
+| STA-Net strict five-fold | **Complete; context reference** | 70/70 fold trainings completed. The retained scores use STA-Net's method-native observation budget and are not yet support-matched direct-table evidence. |
+| EFRM LODO v2 Stage A | **Complete** | 4/4 target-dataset-excluded selection jobs completed and selected epochs were frozen. |
+| EFRM LODO v2 Stage B | **Complete** | 4/4 full non-target refits completed on 2026-08-03; checkpoint, boundary, config, and run-manifest identities are frozen. |
+| EFRM v2 downstream matrix | **Public A0-A8 complete; protected locked** | All 105/105 public frozen-feature probe jobs completed serially with 0 failures and 0 retries. The seven retained cells passed independent full-public replay and alignment audits; all public summaries remain `table_admissible=false`. |
 | EFRM v2 full fine-tuning | **Conditional** | Resource-contingent secondary track; cannot replace the frozen linear-probe matrix. |
-| BIOT / CBraMod | **B0/B2 complete** | Official weights strict-load with `weights_only=True`; GPU frozen-probe forward/backward, optimizer, and reload smoke pass. Next: shared EEG support and B3 fidelity before B4. |
-| REVE | **B0/B2 complete** | Base encoder, executable snapshot code, and position bank are hash-verified; coordinate-aware GPU frozen-probe smoke passes. Next: dataset coordinate coverage and B3 fidelity. |
-| BrainFusion NVC-CSP Stacking | **B0 complete; B2 partial** | GPU `avg_raw` NVC matches the pinned public CPU formula at `1e-12` tolerance. GPU CSP/stacking and fold-local reload remain required for full B2. |
-| NormWear EEG-fNIRS adapted | **B0 complete** | Backbone and optional MSiTF assets are pinned. Next: EEG/HbO/HbR input contract and adapted source-fidelity checks. |
+| BIOT / CBraMod | **Public A0-A8 complete; protected locked** | Each method completed 90/90 public jobs over six classification tasks. REFED v1 is preregistered unsupported. The retained public-validation summaries are explicitly not table-admissible. |
+| REVE | **Public A0-A8 complete; protected locked** | 90/90 public jobs completed. Single-Trial MI/MA remain in the declared target-corpus-overlap track; REFED v1 is unsupported. The retained public-validation summaries are not table-admissible. |
+| BrainFusion NVC-CSP Stacking | **Public A0-A8 complete; protected locked** | 75/75 public jobs completed over MI, MA, WG, n-back, and Visual. DSR and REFED are preregistered unsupported. |
+| NormWear EEG-fNIRS adapted | **Public A0-A8 complete; protected locked** | 90/90 public jobs completed over the six classification tasks. REFED is preregistered unsupported because a truthful partial-time-mask regression contract is absent. |
 | UMAP | **Retired from active queue** | No formal rerun is planned; prior repeatedly viewed test results remain historical Git context only. |
-| Cross-method final table | **Blocked on B1-B6** | Complete the new-method gates and EFRM v2 before running cell-level metric acceptance. |
+| Cross-method final table | **ORR NO-GO; protected closed** | The 42-cell eligibility review and 540-job release candidate are frozen. Two complete CPU shadow passes succeeded, but only one GPU was healthy and idle, so no lane manifest exists; the authorization template is false/pending and unsigned. |
 
-EFRM v2 protected data remain closed:
+All new-method and EFRM v2 protected data remain closed:
 `protected_test_opened=false`, `target_dataset_exposure=false`. Its live source
 of truth is
 [`status.json`](../../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json).
 
-The new methods' B0 state is reproducibly checked by
-[`audit_assets.py`](../../comparative_methods/audit_assets.py). B0 does not
-authorize adapters, formal training, or protected evaluation. Their executable
-batch order and unlock prerequisites are defined in
+The canonical adapter evidence is method-specific and is jointly checked by
+[`audit_adapter_alignment.py`](../../comparative_methods/audit_adapter_alignment.py).
+Across BIOT, CBraMod, REVE, BrainFusion, NormWear, and EFRM it currently
+registers 42 method-task cells: 36 direct-profile passes and 6 preregistered
+unsupported cells. No protected identity or array is dereferenced by this
+audit. Execution order and unlock prerequisites are defined in
 [`EXPERIMENT_PLAN.md`](../../comparative_methods/EXPERIMENT_PLAN.md).
+The candidate is adapter eligibility evidence only and retains
+`protected_evaluation_authorized=false`.
+
+The current protected-campaign source of truth is the
+[`joint_release_candidate_v1.json`](../../comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json)
+plus the latest
+[`orr_preflight_v1.json`](../../comparative_methods/evidence/protected_campaign/orr_preflight_v1.json).
+The candidate contains 540 unique jobs over 36 supported cells; six unsupported
+cells have zero jobs and STA-Net has zero new jobs. The ORR is deliberately
+`NO_GO`: candidate state `DRAFT`, lane missing, fewer than two healthy idle
+GPUs, and no valid dual-signature authorization. No formal protected campaign
+directory exists and `protected_test_opened=false`.
 
 ## Completed STA-Net reference
 

@@ -87,10 +87,10 @@ reporting_boundary:
   target_excluded_claim_allowed: false
 gate_status:
   B0_source_fixed: pass_with_gated_weight_access
-  B1_input_contract: pending
-  B2_software_smoke: pass_gpu_coordinate_aware_frozen_probe_reload
-  B3_source_fidelity: pending
-  B4_protocol_freeze: pending
+  B1_input_contract: pass_public_v1_six_classification_tasks_refed_unsupported
+  B2_software_smoke: pass_gpu_public_sample_feature_probe_checkpoint_reload
+  B3_source_fidelity: pass_official_position_bank_linear_probe_boundary
+  B4_protocol_freeze: pending_formal_unlock_and_full_matrix_freeze
 software_smoke:
   test: tests/test_reve_smoke.py
   checkpoint_loading: local_safetensors_with_trusted_code_hash_verification
@@ -104,4 +104,5 @@ software_smoke:
     - frozen_encoder_no_gradients
     - strict_checkpoint_reload
     - unknown_coordinate_rejection
-  limitations: dataset_coordinate_coverage_and_source_parity_not_yet_frozen
+  public_performance_smoke: comparative_methods/single_modal_eeg/runs/20260731_reve_mi_outer0_seed17_smoke_v1
+  limitations: single_trial_known_overlap_track; refed_unsupported; full_public_coordinate_coverage_pending

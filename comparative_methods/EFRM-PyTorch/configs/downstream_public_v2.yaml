@@ -1,0 +1,91 @@
+schema: efrm_lodo_downstream_public_v2
+protocol_id: efrm_lodo_full_target_fivefold_v2
+method_id: efrm_sync_200_10_variable_channel_v1
+track: multimodal_target_dataset_excluded_frozen_linear_probe
+mode: public_development_only
+protected_test_default: locked
+
+protocol:
+  root: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2
+  registry: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/shared_full_target_fold_registry/registry_manifest.json
+  registry_sha256: 2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106
+  checkpoint_policy: target_dataset_excluded_stage_b_terminal_checkpoint
+  target_dataset_exposure_allowed: false
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  modalities: [eeg, fnirs_hbo, fnirs_hbr]
+  paired_fusion: elementwise_sum_before_trainable_layer_norm
+  target_scaling: outer_train_only_for_selection_refit_membership_only_for_refit
+
+model:
+  embedding_dim: 768
+  encoder_depth: 12
+  encoder_heads: 12
+  decoder_embedding_dim: 512
+  decoder_depth: 8
+  decoder_heads: 16
+  mlp_ratio: 4.0
+  mask_ratio: 0.5
+  eeg_patch_samples: 50
+  fnirs_patch_samples: 20
+  clip_logit_multiplier: 0.1
+
+job_matrix:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual, refed_regression]
+  outer_folds: [0, 1, 2, 3, 4]
+  seeds: [17, 42, 73]
+  expected_public_jobs: 105
+
+feature_extraction:
+  scope: union_of_five_public_manifests_only
+  batch_size: 8
+  task_batch_sizes:
+    visual: 4
+    refed_regression: 2
+  num_workers: 0
+  amp: true
+  amp_dtype: bfloat16
+  fitted_target_wide_transform: none
+
+selection:
+  metric_by_task_type:
+    classification: macro_f1
+    regression: masked_rmse_scaled
+  mode_by_task_type:
+    classification: max
+    regression: min
+  epoch_cap: 20
+  batch_size: 128
+  learning_rate: 0.001
+  minimum_learning_rate: 0.000001
+  weight_decay: 0.01
+  dropout: 0.5
+  class_weighting: none
+  regression_loss: smooth_l1
+  tie_break: earliest_epoch
+
+refit:
+  membership: outer_train_plus_public_validation
+  epoch_count: selected_public_epoch
+  validation_stopping: false
+  initialization: same_downstream_seed_as_selection
+  target_scaler: fit_on_refit_membership_only
+  protected_evaluation: forbidden_until_separate_unlock
+
+smoke:
+  samples_per_class: 4
+  regression_samples: 8
+  epoch_cap: 2
+
+failure_policy:
+  retain_failed_status: true
+  automatic_retry_count: 0
+  completed_run_overwrite: forbidden
+
+resources:
+  device: cuda:0
+  minimum_free_gpu_gib: 12
+  gpu_lock_path: comparative_methods/EFRM-PyTorch/runs/locks/downstream_public_v2_gpu0.lock
+  feature_cache_root: comparative_methods/EFRM-PyTorch/runs/downstream_feature_cache_v2
+  run_root: comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/downstream_public_v2/a7_complete_matrix

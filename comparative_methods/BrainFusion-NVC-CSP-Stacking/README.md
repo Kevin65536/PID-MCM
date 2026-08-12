@@ -1,8 +1,10 @@
 # BrainFusion NVC-CSP stacking comparison workspace
 
-This workspace prepares the traditional paired EEG-fNIRS fusion baseline.
-There is no pretrained checkpoint: NVC features, CSP filters, base learners,
-and the stacking learner must all be fitted inside each outer-training fold.
+This workspace contains the traditional paired EEG-fNIRS fusion baseline.
+A0–A8 alignment and the 75-job public-development matrix are complete;
+protected evaluation remains separately locked. There is no pretrained
+checkpoint: NVC features, CSP filters, base learners, and the stacking learner
+must all be fitted inside each outer-training fold.
 
 - Official framework checkout: `upstream/`, revision
   `1d9dcf4026f237efed7f0dd44ba44ef0bf87915b`.
@@ -16,3 +18,9 @@ The checkout exposes NVC calculation, but the UI's `NVC CSP` and
 release the complete paper-case pipeline, project results must be named
 `brainfusion_nvc_csp_stacking_reimplementation` and must not be described as a
 numerical reproduction of the source paper.
+
+The frozen public status is recorded in
+`evidence/alignment_v2/summary_final.json` and
+`evidence/public_development_v2/matrix_completion_summary.json`. DSR and REFED
+are preregistered unsupported; public validation results are not
+table-admissible and do not authorize protected evaluation.

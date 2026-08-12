@@ -1,0 +1,230 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F7F3E8'
+elements:
+- elementId: cover-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 18
+  shapeName: rect
+  fill:
+    type: solid
+    color: '#9C3F17'
+- elementId: cover-kicker
+  elementType: text
+  bounds:
+  - 60
+  - 58
+  - 520
+  - 22
+  content:
+    text: ENGINEERING READINESS / EVIDENCE REVIEW
+    fontSize: 11
+    fontFamily: Noto Sans CJK SC
+    color: '#9C3F17'
+    bold: true
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: cover-title
+  elementType: text
+  bounds:
+  - 60
+  - 104
+  - 820
+  - 108
+  content:
+    text: '对比方法工程面已基本就绪，
+
+      最终跨方法数字仍等待联合解锁'
+    fontSize: 39
+    fontFamily: Noto Sans CJK SC
+    color: '#16283C'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: cover-sub
+  elementType: text
+  bounds:
+  - 60
+  - 230
+  - 760
+  - 52
+  content:
+    text: 7 个正式方法 · 42 个 method–task cells · 36 pass / 6 unsupported · protected evaluation 未授权
+    fontSize: 17
+    fontFamily: Noto Sans CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: cover-rule
+  elementType: line
+  bounds:
+  - 60
+  - 305
+  - 836
+  - 2
+  viewBox:
+  - 1
+  - 1
+  points: 0,0.5 1,0.5
+  curve: sharp
+  arrow:
+  - null
+  - null
+  border:
+    style: solid
+    width: 1.2
+    color: '#C9C1B3'
+- elementId: n1
+  elementType: text
+  bounds:
+  - 60
+  - 330
+  - 180
+  - 52
+  content:
+    text: '6'
+    fontSize: 42
+    fontFamily: Noto Sans CJK SC
+    color: '#2F6F62'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: n1l
+  elementType: text
+  bounds:
+  - 60
+  - 384
+  - 220
+  - 38
+  content:
+    text: '新增/适配方法
+
+      public A0–A8 完成'
+    fontSize: 12
+    fontFamily: Noto Sans CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: n2
+  elementType: text
+  bounds:
+  - 325
+  - 330
+  - 180
+  - 52
+  content:
+    text: '42'
+    fontSize: 42
+    fontFamily: Noto Sans CJK SC
+    color: '#9C3F17'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: n2l
+  elementType: text
+  bounds:
+  - 325
+  - 384
+  - 220
+  - 38
+  content:
+    text: '联合审查 cells
+
+      证据候选已冻结'
+    fontSize: 12
+    fontFamily: Noto Sans CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: n3
+  elementType: text
+  bounds:
+  - 590
+  - 330
+  - 180
+  - 52
+  content:
+    text: '0'
+    fontSize: 42
+    fontFamily: Noto Sans CJK SC
+    color: '#9B3A3A'
+    bold: true
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: n3l
+  elementType: text
+  bounds:
+  - 590
+  - 384
+  - 260
+  - 38
+  content:
+    text: '新增方法 paper-ready
+
+      protected 数字尚不可用'
+    fontSize: 12
+    fontFamily: Noto Sans CJK SC
+    color: '#35475A'
+    bold: false
+    align:
+    - left
+    - top
+    lineHeight: 1.15
+- elementId: cover-date
+  elementType: text
+  bounds:
+  - 60
+  - 478
+  - 420
+  - 24
+  content:
+    text: 进度审查报告 · 2026-08-11
+    fontSize: 11
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - left
+    - middle
+    lineHeight: 1.15
+- elementId: cover-page
+  elementType: text
+  bounds:
+  - 870
+  - 478
+  - 28
+  - 24
+  content:
+    text: '01'
+    fontSize: 10
+    fontFamily: Noto Sans CJK SC
+    color: '#5F6662'
+    bold: false
+    align:
+    - right
+    - middle
+    lineHeight: 1.15
