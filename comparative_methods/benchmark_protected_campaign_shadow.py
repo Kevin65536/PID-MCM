@@ -130,6 +130,7 @@ def _validate_shadow_directory(
         "cudnn_deterministic": True,
         "cudnn_benchmark": False,
         "cublas_workspace_config": ":4096:8",
+        "float32_matmul_precision": "high",
     }
     identity = {
         "job_id": job["job_id"],

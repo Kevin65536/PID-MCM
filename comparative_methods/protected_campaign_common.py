@@ -74,6 +74,37 @@ EXPECTED_OUTPUTS = frozenset(
     }
 )
 ARTIFACT_ROLES = {
+    "biot_live_eeg": frozenset(
+        {
+            "public_run_manifest",
+            "public_split_manifest",
+            "downstream_checkpoint",
+            "feature_cache",
+            "feature_cache_manifest",
+            "encoder_checkpoint",
+        }
+    ),
+    "cbramod_live_eeg": frozenset(
+        {
+            "public_run_manifest",
+            "public_split_manifest",
+            "downstream_checkpoint",
+            "feature_cache",
+            "feature_cache_manifest",
+            "encoder_checkpoint",
+        }
+    ),
+    "reve_live_eeg": frozenset(
+        {
+            "public_run_manifest",
+            "public_split_manifest",
+            "downstream_checkpoint",
+            "feature_cache",
+            "feature_cache_manifest",
+            "encoder_checkpoint",
+            "position_bank",
+        }
+    ),
     "linear_npz": frozenset(
         {
             "public_run_manifest",
@@ -353,6 +384,7 @@ def _validate_lane_manifest(
             "cudnn_deterministic": True,
             "cudnn_benchmark": False,
             "cublas_workspace_config": ":4096:8",
+            "float32_matmul_precision": "high",
         }
         for manifest_path in manifests:
             manifest = read_json(manifest_path)

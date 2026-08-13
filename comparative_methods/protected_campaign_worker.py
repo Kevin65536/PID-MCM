@@ -18,6 +18,8 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -156,6 +158,195 @@ def _linear_inference(
         "logits": logits.float().cpu().numpy(),
         "prediction": prediction.cpu().numpy().astype(np.int64, copy=False),
         "target": targets.astype(np.int64, copy=False),
+    }
+
+
+def _live_eeg_features(
+    job: Mapping[str, Any],
+    artifacts: Mapping[str, Mapping[str, Any]],
+    indices: Sequence[int],
+    device: torch.device,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract frozen EEG features for the exact authorized/public view.
+
+    The public-refit caches for the three single-modal methods intentionally
+    exclude protected rows.  CUDA shadows and formal inference therefore run
+    the hash-pinned encoder over the requested view instead of assuming that a
+    public-only cache contains protected features.
+    """
+
+    method = str(job["method_slug"])
+    report = read_json(repo_path(str(artifacts["public_run_manifest"]["path"])))
+    alignment_path = repo_path(str(report["alignment_config_path"]))
+    alignment = yaml.safe_load(alignment_path.read_text(encoding="utf-8"))
+    if not isinstance(alignment, dict) or alignment.get("method_id") != method:
+        raise CampaignError("live EEG alignment identity differs")
+    sample_rate_hz = float(alignment["data"]["eeg_sample_rate_hz"])
+    batch_size = int(alignment["resources"]["feature_batch_size"])
+
+    if method == "biot":
+        from comparative_methods.BIOT.adapters.biot import (
+            BIOTFrozenEncoder,
+            load_verified_biot_encoder,
+        )
+        from comparative_methods.BIOT.alignment_data import (
+            BIOTPublicView,
+            RecordGroupedBatchSampler,
+            load_public_inventory,
+        )
+
+        inventory = load_public_inventory(alignment, task=str(job["task"]))
+        view = BIOTPublicView(inventory, sample_rate_hz=sample_rate_hz)
+        encoder, metadata = load_verified_biot_encoder(
+            str(alignment["adapter"]["artifact_id"]), device=device
+        )
+        model = BIOTFrozenEncoder(encoder).to(device).eval()
+        expected_dim = 256
+    elif method == "cbramod":
+        from comparative_methods.CBraMod.adapters.cbramod import (
+            CBraModFrozenEncoder,
+            load_verified_cbramod_encoder,
+        )
+        from comparative_methods.CBraMod.alignment_data import (
+            CBraModPublicView,
+            RecordGroupedBatchSampler,
+            load_public_inventory,
+        )
+
+        inventory = load_public_inventory(alignment, task=str(job["task"]))
+        view = CBraModPublicView(inventory, sample_rate_hz=sample_rate_hz)
+        encoder, metadata = load_verified_cbramod_encoder(
+            str(alignment["adapter"]["artifact_id"]), device=device
+        )
+        model = CBraModFrozenEncoder(
+            encoder,
+            sampling_rate_hz=sample_rate_hz,
+            patch_samples=int(alignment["adapter"]["patch_samples"]),
+            token_pooling=str(alignment["adapter"]["pooling"]),
+        ).to(device).eval()
+        expected_dim = 200
+    elif method == "reve":
+        from comparative_methods.REVE.adapters.reve import (
+            REVEFrozenEncoder,
+            load_verified_reve_base,
+        )
+        from comparative_methods.REVE.alignment_data import (
+            REVEPublicView,
+            RecordGroupedBatchSampler,
+            load_public_inventory,
+        )
+
+        inventory = load_public_inventory(alignment, task=str(job["task"]))
+        view = REVEPublicView(inventory, sample_rate_hz=sample_rate_hz)
+        encoder, position_bank, metadata = load_verified_reve_base(device=device)
+        model = REVEFrozenEncoder(
+            encoder,
+            position_bank,
+            sampling_rate_hz=sample_rate_hz,
+            pooling=str(alignment["adapter"]["pooling"]),
+        ).to(device).eval()
+        expected_dim = 512
+        position_artifact = artifacts["position_bank"]
+        if (
+            Path(metadata.position_path).resolve()
+            != repo_path(str(position_artifact["path"]))
+            or metadata.position_sha256 != position_artifact["sha256"]
+        ):
+            raise CampaignError("loaded REVE position bank differs from the candidate")
+    else:
+        raise CampaignError(f"unsupported live EEG method: {method}")
+
+    encoder_artifact = artifacts["encoder_checkpoint"]
+    if (
+        Path(metadata.path).resolve() != repo_path(str(encoder_artifact["path"]))
+        or metadata.sha256 != encoder_artifact["sha256"]
+        or any(parameter.requires_grad for parameter in model.parameters())
+    ):
+        raise CampaignError("loaded EEG encoder differs from the frozen candidate")
+    sampler = RecordGroupedBatchSampler(
+        view.dataset, indices, batch_size=batch_size, seed=42
+    )
+    loader = DataLoader(
+        view,
+        batch_sampler=sampler,
+        num_workers=0,
+        pin_memory=device.type == "cuda",
+    )
+    feature_parts: list[np.ndarray] = []
+    index_parts: list[np.ndarray] = []
+    with torch.inference_mode():
+        for batch in loader:
+            eeg = batch["eeg"].to(device, non_blocking=device.type == "cuda")
+            batch_count, channels, samples = eeg.shape
+            embedding = model(
+                eeg,
+                sampling_rate_hz=sample_rate_hz,
+                channel_names=inventory.panel,
+                channel_valid=torch.ones(
+                    (batch_count, channels), dtype=torch.bool, device=device
+                ),
+                sample_valid=torch.ones(
+                    (batch_count, samples), dtype=torch.bool, device=device
+                ),
+            )
+            if embedding.shape != (batch_count, expected_dim) or not bool(
+                torch.isfinite(embedding).all()
+            ):
+                raise CampaignError("live EEG encoder returned invalid features")
+            feature_parts.append(embedding.float().cpu().numpy())
+            index_parts.append(batch["dataset_index"].numpy())
+    extracted_indices = np.concatenate(index_parts).astype(np.int64, copy=False)
+    extracted_features = np.concatenate(feature_parts).astype(np.float32, copy=False)
+    selected_rows = _rows(extracted_indices, indices)
+    features = extracted_features[selected_rows]
+    targets = np.asarray(
+        [
+            inventory.dataset.class_to_index[
+                str(inventory.dataset.lightweight_metadata(int(index))["condition"])
+            ]
+            for index in indices
+        ],
+        dtype=np.int64,
+    )
+    del model, encoder
+    if method == "reve":
+        del position_bank
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return features, targets
+
+
+def _live_eeg_linear_inference(
+    job: Mapping[str, Any],
+    artifacts: Mapping[str, Mapping[str, Any]],
+    indices: Sequence[int],
+    device: torch.device,
+) -> dict[str, np.ndarray]:
+    checkpoint = torch.load(
+        repo_path(str(artifacts["downstream_checkpoint"]["path"])),
+        map_location="cpu",
+        weights_only=True,
+    )
+    features, targets = _live_eeg_features(job, artifacts, indices, device)
+    mean = checkpoint["feature_mean"].numpy().astype(np.float32, copy=False)
+    scale = checkpoint["feature_scale"].numpy().astype(np.float32, copy=False)
+    standardized = (features - mean) / scale
+    if not np.isfinite(standardized).all():
+        raise CampaignError("frozen live EEG standardization produced non-finite values")
+    with torch.inference_mode():
+        logits = F.linear(
+            torch.from_numpy(standardized).to(device),
+            checkpoint["head_state"]["weight"].to(device),
+            checkpoint["head_state"]["bias"].to(device),
+        )
+    return {
+        "dataset_index": np.asarray(indices, dtype=np.int64),
+        "identity": np.asarray(
+            [f"{job['task']}|dataset_index={value}" for value in indices], dtype=str
+        ),
+        "logits": logits.float().cpu().numpy(),
+        "prediction": logits.argmax(dim=1).cpu().numpy().astype(np.int64, copy=False),
+        "target": targets,
     }
 
 
@@ -313,6 +504,10 @@ def _infer(
 ) -> dict[str, np.ndarray]:
     artifacts = artifact_map(job)
     kind = str(job["worker_kind"])
+    if kind in {"biot_live_eeg", "cbramod_live_eeg", "reve_live_eeg"}:
+        if device.type == "cuda":
+            return _live_eeg_linear_inference(job, artifacts, indices, device)
+        return _linear_inference(job, artifacts, indices, device)
     if kind == "linear_npz":
         return _linear_inference(job, artifacts, indices, device)
     if kind == "normwear_memmap":
@@ -332,6 +527,7 @@ def _configure_determinism(seed: int) -> dict[str, Any]:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     torch.use_deterministic_algorithms(True)
+    torch.set_float32_matmul_precision("high")
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     return {
@@ -340,6 +536,7 @@ def _configure_determinism(seed: int) -> dict[str, Any]:
         "cudnn_deterministic": True,
         "cudnn_benchmark": False,
         "cublas_workspace_config": os.environ["CUBLAS_WORKSPACE_CONFIG"],
+        "float32_matmul_precision": "high",
     }
 
 

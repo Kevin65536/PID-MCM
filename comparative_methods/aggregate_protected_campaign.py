@@ -264,6 +264,7 @@ def _verify_job(
         "cudnn_deterministic": True,
         "cudnn_benchmark": False,
         "cublas_workspace_config": ":4096:8",
+        "float32_matmul_precision": "high",
     }
     if (
         manifest.get("determinism_sha256") != stable_hash(determinism)

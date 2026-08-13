@@ -64,7 +64,7 @@ METHODS: dict[str, dict[str, Any]] = {
         "method_id": "biot",
         "audit": "comparative_methods/BIOT/runs/public_development_v2/matrix_v2/completed_public_audit.json",
         "tasks": ("motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual"),
-        "kind": "linear_npz",
+        "kind": "biot_live_eeg",
         "runner": "comparative_methods/BIOT/run_public_development_v2.py",
         "alignment": "comparative_methods/BIOT/configs/alignment_v2.yaml",
     },
@@ -72,7 +72,7 @@ METHODS: dict[str, dict[str, Any]] = {
         "method_id": "cbramod",
         "audit": "comparative_methods/CBraMod/runs/public_development_v2/matrix_v2/completed_public_audit.json",
         "tasks": ("motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual"),
-        "kind": "linear_npz",
+        "kind": "cbramod_live_eeg",
         "runner": "comparative_methods/CBraMod/run_public_development_v2.py",
         "alignment": "comparative_methods/CBraMod/configs/alignment_v2.yaml",
     },
@@ -80,7 +80,7 @@ METHODS: dict[str, dict[str, Any]] = {
         "method_id": "reve",
         "audit": "comparative_methods/REVE/runs/public_development_v2/matrix_v2/completed_public_audit.json",
         "tasks": ("motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual"),
-        "kind": "linear_npz",
+        "kind": "reve_live_eeg",
         "runner": "comparative_methods/REVE/run_public_development_v2.py",
         "alignment": "comparative_methods/REVE/configs/alignment_v2.yaml",
     },
@@ -181,9 +181,12 @@ def _tensor_digest(values: Mapping[str, Any]) -> str:
     return stable_hash(payload)
 
 
+LIVE_EEG_KINDS = {"biot_live_eeg", "cbramod_live_eeg", "reve_live_eeg"}
+
+
 def _checkpoint_contract(path: Path, kind: str) -> dict[str, Any]:
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    if kind in {"linear_npz", "normwear_memmap"}:
+    if kind in {"linear_npz", "normwear_memmap", *LIVE_EEG_KINDS}:
         return {
             "schema": checkpoint.get("schema"),
             "method_id": checkpoint.get("method_id"),
@@ -317,6 +320,32 @@ def _artifacts_for_job(
             _file_descriptor(manifest_path, "feature_cache_manifest", digest_cache)
         )
         cache_identity = read_json(manifest_path)
+    if kind in LIVE_EEG_KINDS:
+        method_identity = report.get("method_identity", {})
+        encoder = _file_descriptor(
+            repo_path(str(method_identity.get("path", ""))),
+            "encoder_checkpoint",
+            digest_cache,
+        )
+        if (
+            encoder["sha256"] != method_identity.get("sha256")
+            or encoder["size_bytes"] != int(method_identity.get("size_bytes", -1))
+        ):
+            raise CampaignError("live EEG encoder identity differs from its public run")
+        artifacts.append(encoder)
+        if kind == "reve_live_eeg":
+            position = _file_descriptor(
+                repo_path(str(method_identity.get("position_path", ""))),
+                "position_bank",
+                digest_cache,
+            )
+            if (
+                position["sha256"] != method_identity.get("position_sha256")
+                or position["size_bytes"]
+                != int(method_identity.get("position_size_bytes", -1))
+            ):
+                raise CampaignError("REVE position identity differs from its public run")
+            artifacts.append(position)
     contract = _checkpoint_contract(checkpoint_path, kind)
     for field, expected in expected_identity.items():
         if contract.get(field) != expected:
@@ -324,6 +353,13 @@ def _artifacts_for_job(
                 f"checkpoint {field} differs from its public run: {checkpoint_path}"
             )
     contract["cache_contract_sha256"] = stable_hash(cache_identity)
+    if kind in LIVE_EEG_KINDS:
+        contract["protected_feature_source"] = (
+            "hash_pinned_frozen_encoder_over_exact_authorized_indices"
+        )
+        contract["encoder_checkpoint_sha256"] = encoder["sha256"]
+        if kind == "reve_live_eeg":
+            contract["position_bank_sha256"] = position["sha256"]
     return artifacts, contract
 
 
@@ -393,6 +429,35 @@ def _source_snapshot() -> list[dict[str, str]]:
     for spec in METHODS.values():
         paths.add(repo_path(spec["runner"]))
         paths.add(repo_path(spec["alignment"]))
+    for method_root, extra in (
+        (
+            REPO_ROOT / "comparative_methods/BIOT",
+            ("alignment_data.py", "adapters/biot.py", "upstream/model/biot.py", "sources/method_manifest.yaml"),
+        ),
+        (
+            REPO_ROOT / "comparative_methods/CBraMod",
+            (
+                "alignment_data.py",
+                "adapters/cbramod.py",
+                "upstream/models/cbramod.py",
+                "upstream/models/criss_cross_transformer.py",
+                "sources/method_manifest.yaml",
+            ),
+        ),
+        (
+            REPO_ROOT / "comparative_methods/REVE",
+            (
+                "alignment_data.py",
+                "adapters/reve.py",
+                "checkpoints/reve-base/configuration_reve.py",
+                "checkpoints/reve-base/modeling_reve.py",
+                "checkpoints/reve-positions/configuration_bank.py",
+                "checkpoints/reve-positions/position_bank.py",
+                "sources/method_manifest.yaml",
+            ),
+        ),
+    ):
+        paths.update(method_root / value for value in extra)
     brainfusion_adapters = (
         REPO_ROOT / "comparative_methods/BrainFusion-NVC-CSP-Stacking/adapters"
     )

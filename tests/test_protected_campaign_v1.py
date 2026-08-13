@@ -192,7 +192,8 @@ def test_gpu_uuid_failure_is_not_silently_recovered(monkeypatch: pytest.MonkeyPa
 
 
 def test_two_retained_cpu_shadow_passes_are_bitwise_identical_and_redacted() -> None:
-    candidate_sha256 = sha256_file(CANDIDATE)
+    candidate = read_json(CANDIDATE)
+    pre_lane_candidate_sha256 = candidate["pre_lane_candidate_sha256"]
     roots = (
         REPO_ROOT
         / "comparative_methods/evidence/protected_campaign/shadow_cpu_pass_v1",
@@ -203,7 +204,7 @@ def test_two_retained_cpu_shadow_passes_are_bitwise_identical_and_redacted() -> 
         directories = [root / method for root in roots]
         for directory in directories:
             manifest = read_json(directory / "job_manifest.json")
-            assert manifest["candidate_sha256"] == candidate_sha256
+            assert manifest["candidate_sha256"] == pre_lane_candidate_sha256
             assert manifest["protected_test_opened"] is False
             assert manifest["performance_computed"] is False
             for json_path in directory.glob("*.json"):
@@ -222,6 +223,26 @@ def test_two_retained_cpu_shadow_passes_are_bitwise_identical_and_redacted() -> 
                 assert left[name].dtype == right[name].dtype
                 assert left[name].shape == right[name].shape
                 assert np.array_equal(left[name], right[name])
+
+
+def test_single_modal_formal_jobs_freeze_live_encoder_artifacts() -> None:
+    candidate = read_json(CANDIDATE)
+    expected = {
+        "biot": ("biot_live_eeg", {"encoder_checkpoint"}),
+        "cbramod": ("cbramod_live_eeg", {"encoder_checkpoint"}),
+        "reve": ("reve_live_eeg", {"encoder_checkpoint", "position_bank"}),
+    }
+    for method, (worker_kind, live_roles) in expected.items():
+        jobs = [row for row in candidate["jobs"] if row["method_slug"] == method]
+        assert jobs
+        assert {row["worker_kind"] for row in jobs} == {worker_kind}
+        for job in jobs:
+            roles = {artifact["role"] for artifact in job["artifacts"]}
+            assert live_roles <= roles
+            assert (
+                job["frozen_inference_contract"]["protected_feature_source"]
+                == "hash_pinned_frozen_encoder_over_exact_authorized_indices"
+            )
 
 
 def test_quarantine_is_a_durable_incomplete_terminal(tmp_path: Path) -> None:
