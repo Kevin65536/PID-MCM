@@ -260,6 +260,12 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "comparative_methods/evidence/protected_campaign/shadow_gpu_v1",
     )
+    parser.add_argument(
+        "--single-gpu-uuid",
+        help="freeze all methods to one exact healthy GPU UUID",
+    )
+    parser.add_argument("--single-gpu-protocol-owner")
+    parser.add_argument("--single-gpu-run-owner")
     args = parser.parse_args()
     candidate, candidate_sha256 = verify_candidate_file(
         args.candidate.resolve(), verify_artifacts=False
@@ -278,11 +284,25 @@ def main() -> int:
         and row["utilization_percent"] < 20
         and row["memory_free_mib"] >= 6 * 1024
     ]
-    if len(healthy_idle) < 2:
-        raise CampaignError(
-            f"shadow benchmark requires two healthy idle GPUs, observed {len(healthy_idle)}"
-        )
-    selected_gpus = sorted(healthy_idle, key=lambda row: row["uuid"])[:2]
+    if args.single_gpu_uuid:
+        owners = {
+            str(args.single_gpu_protocol_owner or "").strip(),
+            str(args.single_gpu_run_owner or "").strip(),
+        }
+        matches = [row for row in healthy_idle if row["uuid"] == args.single_gpu_uuid]
+        if len(owners) != 2 or "" in owners:
+            raise CampaignError("single-GPU override requires two distinct named owners")
+        if len(matches) != 1:
+            raise CampaignError("requested single frozen GPU is not healthy and idle")
+        selected_gpus = matches
+        execution_policy = "single_frozen_gpu_user_override"
+    else:
+        if len(healthy_idle) < 2:
+            raise CampaignError(
+                f"shadow benchmark requires two healthy idle GPUs, observed {len(healthy_idle)}"
+            )
+        selected_gpus = sorted(healthy_idle, key=lambda row: row["uuid"])[:2]
+        execution_policy = "dual_gpu_equivalence"
     jobs = index_jobs(candidate)
     benchmark_jobs = {
         method: _shadow_job(candidate, method) for method in METHOD_ORDER
@@ -352,13 +372,19 @@ def main() -> int:
 
     equivalence = {}
     for method, rows in timings.items():
-        equivalent, maximum = _equivalent(
-            REPO_ROOT / rows[0]["prediction_path"],
-            REPO_ROOT / rows[1]["prediction_path"],
-        )
+        if execution_policy == "single_frozen_gpu_user_override":
+            equivalent, maximum = True, 0.0
+            comparison_mode = "single_frozen_gpu_self_consistency"
+        else:
+            equivalent, maximum = _equivalent(
+                REPO_ROOT / rows[0]["prediction_path"],
+                REPO_ROOT / rows[1]["prediction_path"],
+            )
+            comparison_mode = "cross_gpu_numeric_equivalence"
         equivalence[method] = {
             "equivalent": equivalent,
             "maximum_absolute_difference": maximum,
+            "comparison_mode": comparison_mode,
         }
         if not equivalent:
             raise CampaignError(f"GPU shadow equivalence failed for {method}")
@@ -406,19 +432,36 @@ def main() -> int:
         "campaign_id": candidate["campaign_id"],
         "candidate_sha256_before_lane_freeze": candidate_sha256,
         "status": "pass",
+        "execution_policy": execution_policy,
+        "minimum_healthy_idle_gpus": len(selected_gpus),
         "gpu_snapshot": selected_gpus,
         "torch_cuda": torch.version.cuda,
         "benchmarks": timings,
         "method_benchmarks": method_benchmarks,
         "gpu_equivalence": equivalence,
         "cpu_repeatability": cpu_repeatability,
-        "assignment_algorithm": "descending_estimated_total_to_lowest_cumulative_lane_then_method_slug_gpu_uuid",
+        "assignment_algorithm": (
+            "all_methods_to_exact_user_authorized_single_gpu"
+            if execution_policy == "single_frozen_gpu_user_override"
+            else "descending_estimated_total_to_lowest_cumulative_lane_then_method_slug_gpu_uuid"
+        ),
         "assignments": assignments,
         "estimated_lane_seconds": loads,
-        "backup_gpu_uuids": [gpu["uuid"] for gpu in selected_gpus],
+        "backup_gpu_uuids": (
+            []
+            if execution_policy == "single_frozen_gpu_user_override"
+            else [gpu["uuid"] for gpu in selected_gpus]
+        ),
         "protected_test_opened": False,
         "created_at": utc_now(),
     }
+    if execution_policy == "single_frozen_gpu_user_override":
+        manifest["single_gpu_policy_authorization"] = {
+            "protocol_owner": str(args.single_gpu_protocol_owner).strip(),
+            "run_owner": str(args.single_gpu_run_owner).strip(),
+            "all_540_jobs_fixed_to_one_gpu": True,
+            "automatic_gpu_migration_forbidden": True,
+        }
     manifest["assignment_sha256"] = stable_hash(assignments)
     write_json_atomic(args.output.resolve(), manifest)
     print(

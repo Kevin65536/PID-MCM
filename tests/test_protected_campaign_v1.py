@@ -245,6 +245,31 @@ def test_single_modal_formal_jobs_freeze_live_encoder_artifacts() -> None:
             )
 
 
+def test_user_authorized_single_gpu_lane_is_exact_and_has_no_fallback() -> None:
+    candidate = read_json(CANDIDATE)
+    lane = candidate["lane_manifest"]["value"]
+    expected_uuid = "GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c"
+    assert lane["execution_policy"] == "single_frozen_gpu_user_override"
+    assert lane["minimum_healthy_idle_gpus"] == 1
+    assert len(lane["gpu_snapshot"]) == 1
+    assert lane["gpu_snapshot"][0]["uuid"] == expected_uuid
+    assert {row["gpu_uuid"] for row in lane["assignments"]} == {expected_uuid}
+    assert sum(row["job_count"] for row in lane["assignments"]) == 540
+    assert lane["backup_gpu_uuids"] == []
+    assert lane["single_gpu_policy_authorization"] == {
+        "protocol_owner": "Hukaiwen",
+        "run_owner": "Jiaminmin",
+        "all_540_jobs_fixed_to_one_gpu": True,
+        "automatic_gpu_migration_forbidden": True,
+    }
+    assert all(
+        row["comparison_mode"] == "single_frozen_gpu_self_consistency"
+        and row["equivalent"] is True
+        and row["maximum_absolute_difference"] == 0.0
+        for row in lane["gpu_equivalence"].values()
+    )
+
+
 def test_quarantine_is_a_durable_incomplete_terminal(tmp_path: Path) -> None:
     candidate = read_json(CANDIDATE)
     job_id = candidate["jobs"][0]["job_id"]

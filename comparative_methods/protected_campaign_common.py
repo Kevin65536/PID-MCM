@@ -32,7 +32,7 @@ SEEDS = frozenset({17, 42, 73})
 METHOD_SLUGS = frozenset(
     {"biot", "cbramod", "reve", "efrm", "normwear", "brainfusion"}
 )
-CAMPAIGN_ID = "joint-comparison-protected-20260813-v2"
+CAMPAIGN_ID = "joint-comparison-protected-20260813-v3-single-gpu"
 METHOD_IDENTITIES = {
     "biot": "biot",
     "cbramod": "cbramod",
@@ -322,9 +322,18 @@ def _validate_lane_manifest(
     assignment_methods = [str(row.get("method_slug")) for row in assignments]
     if methods != METHOD_SLUGS or set(assignment_methods) != methods or len(assignment_methods) != len(methods):
         raise CampaignError("frozen lanes must cover each campaign method exactly once")
+    execution_policy = value.get("execution_policy")
+    if execution_policy not in {
+        "dual_gpu_equivalence",
+        "single_frozen_gpu_user_override",
+    }:
+        raise CampaignError("frozen lane execution policy is not recognized")
+    minimum_gpus = 1 if execution_policy == "single_frozen_gpu_user_override" else 2
+    if value.get("minimum_healthy_idle_gpus") != minimum_gpus:
+        raise CampaignError("frozen lane minimum healthy GPU count drifted")
     snapshots = value.get("gpu_snapshot", [])
-    if not isinstance(snapshots, list) or len(snapshots) < 2:
-        raise CampaignError("frozen lanes require at least two benchmarked GPUs")
+    if not isinstance(snapshots, list) or len(snapshots) != minimum_gpus:
+        raise CampaignError("frozen lane GPU snapshot count differs from its policy")
     if value.get("torch_cuda") != campaign.get("environment", {}).get("torch_cuda"):
         raise CampaignError("frozen GPU lane CUDA runtime differs from candidate")
     by_uuid = {str(row.get("uuid")): row for row in snapshots}
@@ -344,9 +353,24 @@ def _validate_lane_manifest(
             raise CampaignError("lane GPU index/UUID does not match its frozen snapshot")
         if int(row.get("job_count", -1)) != expected_counts[str(row["method_slug"])]:
             raise CampaignError("frozen lane job count differs from the candidate")
+    if execution_policy == "single_frozen_gpu_user_override":
+        authorization = value.get("single_gpu_policy_authorization", {})
+        signers = {
+            str(authorization.get("protocol_owner", "")).strip(),
+            str(authorization.get("run_owner", "")).strip(),
+        }
+        if (
+            len(signers) != 2
+            or "" in signers
+            or authorization.get("all_540_jobs_fixed_to_one_gpu") is not True
+            or authorization.get("automatic_gpu_migration_forbidden") is not True
+            or {str(row.get("gpu_uuid")) for row in assignments} != set(by_uuid)
+        ):
+            raise CampaignError("single-GPU override authorization is incomplete")
     backup = value.get("backup_gpu_uuids", [])
-    if set(map(str, backup)) != set(by_uuid) or len(backup) != len(by_uuid):
-        raise CampaignError("backup GPU list differs from equivalence-tested GPUs")
+    expected_backup = [] if execution_policy == "single_frozen_gpu_user_override" else list(by_uuid)
+    if set(map(str, backup)) != set(expected_backup) or len(backup) != len(expected_backup):
+        raise CampaignError("backup GPU list differs from the frozen execution policy")
     equivalence = value.get("gpu_equivalence", {})
     if set(equivalence) != methods or any(
         row.get("equivalent") is not True for row in equivalence.values()
@@ -514,22 +538,32 @@ def _validate_lane_manifest(
                 method=method,
                 expected_device_uuid=str(row["gpu_uuid"]),
             )
-        with np.load(predictions[0], allow_pickle=False) as left, np.load(
-            predictions[1], allow_pickle=False
-        ) as right:
-            if left.files != right.files:
-                raise CampaignError("GPU shadow fields differ")
-            for name in left.files:
-                if left[name].dtype != right[name].dtype or left[name].shape != right[name].shape:
-                    raise CampaignError("GPU shadow array contract differs")
-                if left[name].dtype.kind in "f":
-                    equivalent = np.allclose(
-                        left[name], right[name], rtol=1e-5, atol=1e-6
-                    )
-                else:
-                    equivalent = np.array_equal(left[name], right[name])
-                if not equivalent:
-                    raise CampaignError("retained GPU shadow evidence is not equivalent")
+        if execution_policy == "single_frozen_gpu_user_override":
+            equivalence_row = equivalence[method]
+            if (
+                len(predictions) != 1
+                or equivalence_row.get("comparison_mode")
+                != "single_frozen_gpu_self_consistency"
+                or float(equivalence_row.get("maximum_absolute_difference", -1.0)) != 0.0
+            ):
+                raise CampaignError("single-GPU shadow evidence contract drifted")
+        else:
+            with np.load(predictions[0], allow_pickle=False) as left, np.load(
+                predictions[1], allow_pickle=False
+            ) as right:
+                if left.files != right.files:
+                    raise CampaignError("GPU shadow fields differ")
+                for name in left.files:
+                    if left[name].dtype != right[name].dtype or left[name].shape != right[name].shape:
+                        raise CampaignError("GPU shadow array contract differs")
+                    if left[name].dtype.kind in "f":
+                        equivalent_value = np.allclose(
+                            left[name], right[name], rtol=1e-5, atol=1e-6
+                        )
+                    else:
+                        equivalent_value = np.array_equal(left[name], right[name])
+                    if not equivalent_value:
+                        raise CampaignError("retained GPU shadow evidence is not equivalent")
     method_benchmarks = value.get("method_benchmarks", {})
     if set(method_benchmarks) != methods or any(
         float(row.get("median_wall_seconds", 0.0)) <= 0.0

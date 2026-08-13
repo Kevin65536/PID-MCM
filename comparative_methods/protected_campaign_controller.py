@@ -193,8 +193,6 @@ def preflight(args: argparse.Namespace, *, require_authorization: bool) -> dict[
     if not lane_wrapper or lane_wrapper.get("value", {}).get("status") != "pass":
         reasons.append("frozen_lane_manifest_missing_or_not_pass")
     gpus = _gpu_snapshot()
-    if len(gpus) < 2:
-        reasons.append("fewer_than_two_visible_gpus")
     healthy_idle_gpus = [
         row
         for row in gpus
@@ -202,21 +200,33 @@ def preflight(args: argparse.Namespace, *, require_authorization: bool) -> dict[
         and row["utilization_percent"] < 20
         and row["memory_free_mib"] >= 6 * 1024
     ]
-    if len(healthy_idle_gpus) < 2:
-        reasons.append("fewer_than_two_healthy_idle_gpus")
     lane_assignments = (lane_wrapper or {}).get("value", {}).get("assignments", [])
+    required_healthy = int(
+        (lane_wrapper or {}).get("value", {}).get("minimum_healthy_idle_gpus", 2)
+    )
     available = {row["uuid"]: row for row in gpus}
     frozen_gpus = {
         str(row["uuid"]): row
         for row in (lane_wrapper or {}).get("value", {}).get("gpu_snapshot", [])
     }
-    for assignment in lane_assignments:
-        gpu = available.get(assignment.get("gpu_uuid"))
+    assigned = {
+        str(row.get("gpu_uuid")): int(row.get("gpu_index", -1))
+        for row in lane_assignments
+    }
+    visible_assigned = set(assigned).intersection(available)
+    if len(visible_assigned) < required_healthy:
+        reasons.append("fewer_than_required_assigned_gpus_visible")
+    healthy_uuids = {str(row["uuid"]) for row in healthy_idle_gpus}
+    healthy_assigned = visible_assigned.intersection(healthy_uuids)
+    if len(healthy_assigned) < required_healthy:
+        reasons.append("fewer_than_required_assigned_gpus_healthy_idle")
+    for uuid, expected_index in sorted(assigned.items()):
+        gpu = available.get(uuid)
         if gpu is None:
-            reasons.append(f"assigned_gpu_missing:{assignment.get('gpu_uuid')}")
+            reasons.append(f"assigned_gpu_missing:{uuid}")
             continue
         frozen = frozen_gpus.get(str(gpu["uuid"]), {})
-        if int(assignment.get("gpu_index", -1)) != int(gpu["index"]):
+        if expected_index != int(gpu["index"]):
             reasons.append(f"assigned_gpu_index_drift:{gpu['uuid']}")
         for field in ("name", "memory_total_mib", "driver_version", "ecc_mode"):
             if frozen.get(field) != gpu.get(field):
@@ -257,6 +267,8 @@ def preflight(args: argparse.Namespace, *, require_authorization: bool) -> dict[
         "job_count": len(candidate["jobs"]),
         "gpu_snapshot": gpus,
         "healthy_idle_gpu_count": len(healthy_idle_gpus),
+        "required_healthy_idle_gpu_count": required_healthy,
+        "healthy_idle_assigned_gpu_count": len(healthy_assigned),
         "estimated_output_bytes": estimated,
         "free_storage_bytes": usage.free,
         "protected_test_opened": False,
