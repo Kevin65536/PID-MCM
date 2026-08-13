@@ -32,7 +32,7 @@ SEEDS = frozenset({17, 42, 73})
 METHOD_SLUGS = frozenset(
     {"biot", "cbramod", "reve", "efrm", "normwear", "brainfusion"}
 )
-CAMPAIGN_ID = "joint-comparison-protected-20260812-v1"
+CAMPAIGN_ID = "joint-comparison-protected-20260813-v2"
 METHOD_IDENTITIES = {
     "biot": "biot",
     "cbramod": "cbramod",

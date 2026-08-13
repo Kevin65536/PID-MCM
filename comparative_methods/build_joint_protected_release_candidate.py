@@ -36,7 +36,7 @@ from comparative_methods.protected_campaign_common import (  # noqa: E402
 )
 
 
-CAMPAIGN_ID = "joint-comparison-protected-20260812-v1"
+CAMPAIGN_ID = "joint-comparison-protected-20260813-v2"
 DEFAULT_OUTPUT = (
     REPO_ROOT
     / "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json"
