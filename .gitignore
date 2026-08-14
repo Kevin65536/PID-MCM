@@ -67,6 +67,16 @@ __pycache__/
 !/comparative_methods/evidence/joint_protected_unlock_candidate_v2.json
 !/comparative_methods/evidence/protected_campaign/
 !/comparative_methods/evidence/protected_campaign/**
+
+# Keep experiment outputs private until an explicit public release is prepared.
+# Release candidates and protocol source remain tracked; run payloads, shadow
+# predictions, lane benchmarks, unblinding records, and aggregates stay local.
+/comparative_methods/runs/
+/comparative_methods/evidence/protected_campaign/shadow_*/
+/comparative_methods/evidence/protected_campaign/lane_manifest_v*.json
+/comparative_methods/evidence/protected_campaign/unblind_manifest_v*.json
+/comparative_methods/evidence/protected_campaign/*aggregate*
+/comparative_methods/evidence/protected_campaign/**/*.npz
 !/comparative_methods/single_modal_eeg/
 !/comparative_methods/BIOT/
 !/comparative_methods/CBraMod/
