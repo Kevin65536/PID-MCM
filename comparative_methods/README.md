@@ -5,9 +5,10 @@ protected campaign 控制面。它不是一个可直接遍历全部文件的普�
 `upstream/`、`checkpoints/` 和大部分 `runs/` 是本地资产，Git 中保留的是可审计合同、
 必要代码、摘要证据和小型 shadow 工件。
 
-本指南对应 2026-08-12 冻结状态。当前正式 campaign 为 **NO-GO**：候选和 CPU
-shadow 已完成，但第二张健康空闲 GPU、双 GPU lane manifest 和双人 GO 授权尚未满足；
-所有 protected 状态仍为 `false`，正式 540 jobs 尚未启动。
+本指南的当前状态更新至 2026-08-14。正式单 GPU campaign 已完成 540/540 jobs，
+零失败、零无效输出、零缺失和零技术失败；随后完成双签揭盲与聚合，并为全部
+42 个注册 cell 生成数值准入终态。完整主指标、fold SD、终态和证据哈希见
+[`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
 
 ## 一、推荐阅读顺序
 
@@ -17,14 +18,16 @@ shadow 已完成，但第二张健康空闲 GPU、双 GPU lane manifest 和双�
 
 1. 本文件：了解目录分层和事实优先级。
 2. [`docs/comparisons/STATUS.md`](../docs/comparisons/STATUS.md)：当前方法状态和
-   campaign NO-GO 原因。
-3. [`evidence/protected_campaign/orr_preflight_v1.json`](evidence/protected_campaign/orr_preflight_v1.json)：
-   最新机器可读 ORR 判定。
-4. [`ROUND_ARTIFACTS_20260812.md`](ROUND_ARTIFACTS_20260812.md)：本轮新增或整理的
-   代码、证据、测试和交付物。
+   campaign 完成状态。
+3. 本地忽略的 `evidence/protected_campaign/orr_preflight_v1.json`：正式执行前的
+   机器可读 `GO` 快照；共享仓库以结果报告中的哈希和结论为准。
+4. [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)：
+   完整 42-cell 结果、准入终态和证据绑定。
+5. [`ROUND_ARTIFACTS_20260812.md`](ROUND_ARTIFACTS_20260812.md)：正式运行前的历史
+   `NO-GO` 快照；它保留原始时间语义，不再代表当前状态。
 
-不要从某个方法的旧 README 单独推断全局状态；运行 manifest、最终 alignment
-summary、联合 candidate 和 ORR 才是当前事实。
+不要从某个方法的旧 README、历史 ORR 或单一结果文件推断全局状态；冻结 candidate、
+sealed campaign status、unblind、aggregate 和 cell-level acceptance 必须联合解释。
 
 ### 2. 三十分钟理解科学比较口径
 
@@ -220,21 +223,24 @@ predictions；只把冻结 aggregate 作为 `method_native_context_reference`。
 
 1. `protected_campaign_worker.py --surface shadow` 走完整 public 推理路径。
 2. 两次 CPU shadow 必须逐字段、dtype、shape bitwise 相同。
-3. 两张健康空闲 GPU 必须各跑六方法，浮点输出按冻结 tolerance 数值等价。
-4. benchmark 记录 UUID、driver、CUDA/ECC、显存峰值和中位耗时，随后确定性冻结 lane。
+3. 原双 GPU 等价路线曾 fail-closed；随后经具名双负责人明确授权，切换为固定单 GPU
+   self-consistency 路线。
+4. benchmark 记录 UUID、driver、CUDA/ECC、显存峰值和中位耗时，并把全部 540 jobs
+   固定到同一 GPU UUID，禁止自动迁移。
 
-当前仅步骤 1–2 完成。GPU1 高温且繁忙，因此 benchmark fail-closed，尚无
-`lane_manifest_v1.json`。
+上述 shadow、单 GPU lane freeze 和正式运行均已完成。旧的双 GPU `NO-GO` 是
+2026-08-12 的历史状态，不应再作为当前 campaign 状态。
 
 ### 授权、运行和揭盲层
 
-1. lane 冻结后重新构建 release candidate。
-2. 两名不同负责人在单独 authorization 文件中签署 GO。
-3. controller `preflight` 只有零 reasons 才能 `execute`。
-4. worker 只写 prediction、identity、必要 target/mask、状态和 checksums，不计算指标。
-5. 540 jobs 全部 sealed 后，由相同责任角色生成双签 unblind。
+1. lane 冻结后重新构建 release candidate；已完成。
+2. 两名不同负责人在独立 authorization 记录中签署 GO；已完成。
+3. controller `preflight` 零 reasons 后执行正式队列；已完成。
+4. worker 只写 prediction、identity、必要 target/mask、状态和 checksums，不计算指标；
+   540/540 jobs 已 sealed complete。
+5. 相同责任角色生成双签 unblind；已完成。
 6. aggregator 复核每个 job 的 candidate/auth/input/artifact/device/determinism/checksum/
-   coverage 绑定后，才计算 seed、fold、OOF companion 和 cell 终态。
+   coverage 绑定后，计算 seed、fold、OOF companion 和 cell 终态；已完成。
 
 attempt-2 只允许在同一冻结 GPU UUID 上作一次技术恢复。assigned GPU 不可用时进入
 `INCOMPLETE_TECHNICAL`，必须生成新 candidate 并重新双签，不能隐式迁移 lane。
@@ -242,23 +248,28 @@ attempt-2 只允许在同一冻结 GPU UUID 上作一次技术恢复。assigned 
 ## 七、当前冻结证据
 
 - Release candidate：`evidence/protected_campaign/joint_release_candidate_v1.json`
-- Authorization template：`evidence/protected_campaign/authorization_template_v1.json`
-- ORR：`evidence/protected_campaign/orr_preflight_v1.json`
+- Authorization：`evidence/protected_campaign/authorization_template_v1.json`（文件名沿用
+  template，但当前工作区内容是已签署执行记录）
+- Pre-run ORR：`evidence/protected_campaign/orr_preflight_v1.json`
 - CPU shadow：`evidence/protected_campaign/shadow_cpu_pass_v1/` 和
   `shadow_cpu_pass_v1_repeat/`
+- Local sealed status：`runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/`
+- Local unblind：`evidence/protected_campaign/unblind_manifest_v1.json`
+- Tracked result report：
+  [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)
 
-最新 SHA 和验证结果见 [`ROUND_ARTIFACTS_20260812.md`](ROUND_ARTIFACTS_20260812.md)。
-这些 CPU shadow 是 public validation 工件，不是 protected 性能数字。
+`ROUND_ARTIFACTS_20260812.md` 只记录运行前历史快照。当前 SHA、完成计数和结果来源
+见新结果报告。CPU shadow 仍只是 public validation 工件，不是 protected 性能数字。
 
 ## 八、安全阅读规则
 
-- 在正式双签揭盲前，不打开 candidate 中 `protected_manifest_path` 指向的内容。
-- 不人工打开未来 formal run 的 `protected_predictions.npz`；由 checker/aggregator 在授权
-  边界内验证。
+- 已完成的双签揭盲只授权 aggregator 在冻结范围内处理结果，不意味着应人工逐个打开
+  `protected_predictions.npz`。
+- 后续任何新 candidate 或新协议重新从 protected closed 状态开始，不能继承本轮授权。
 - 可以读取 candidate 中已登记的 path、hash、sample count 和 split fingerprint。
 - 可以读取本轮两个 `shadow_cpu_*` 目录，因为它们明确为 public surface。
-- 不从 worker/controller stdout、status 或 audit log 搜索性能；这些渠道按合同不得包含
-  target、logits、metric、confusion 或 sample-level payload。
+- 性能阅读以聚合报告为准，不从 worker/controller stdout、单 job status 或 audit log
+  搜索 sample-level payload。
 
 ## 九、常用只读验证命令
 
@@ -279,22 +290,25 @@ for suite in BIOT CBraMod REVE EFRM-PyTorch NormWear BrainFusion-NVC-CSP-Stackin
 done
 ```
 
-查看 ORR 时使用 controller，不要手工把 authorization template 改成 true：
+查看已完成 campaign 的 sealed 状态时使用 controller 的只读 `status`：
 
 ```bash
-.venv/bin/python comparative_methods/protected_campaign_controller.py preflight \
+.venv/bin/python comparative_methods/protected_campaign_controller.py status \
   --candidate comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json \
-  --authorization comparative_methods/evidence/protected_campaign/authorization_template_v1.json
+  --output-root comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu
 ```
 
-当前该命令预期返回非零和 `NO_GO`；这表示保护边界正常工作，不是测试失败。
+不应为复现文档状态而再次调用 `execute`。`orr_preflight_v1.json` 是执行前快照，
+`campaign_status.json` 和 aggregate 才描述执行后终态。
 
 ## 十、Git 与本地资产边界
 
 Git 应包含：合同、受控源码、测试、source-fidelity 文档、alignment/public completion
-摘要、联合 candidates、ORR、authorization template 和小型 public shadow 证据。
+摘要，以及不含 sample-level payload 的汇总结果报告。正式 campaign 的精确身份由
+tracked 报告中的哈希绑定，不要求把执行控制文件本身提交到 Git。
 
 Git 默认不包含：上游 checkout、模型权重、完整 feature cache、训练 checkpoint、大型
-public/formal runs、protected manifests 和 protected predictions。任何需要长期保存的大型
-正式工件应先生成 checksum/manifest，并按项目归档策略保存，而不是通过取消 `.gitignore`
-直接塞入提交。
+public/formal runs、protected manifests、protected predictions、run-specific candidate、
+authorization、ORR、具名签署/揭盲记录和完整 aggregate/traceability。任何需要长期保存
+的正式工件应先生成 checksum/manifest，并按项目归档策略保存，而不是通过取消
+`.gitignore` 直接塞入提交。

@@ -104,7 +104,7 @@ def test_experiment_plan_svg_preserves_scientific_status_and_accessibility():
 def test_experiment_plan_outputs_match_source_manifest():
     source = json.loads(SOURCE_PATH.read_text(encoding="utf-8"))
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    efrm = source["live_status"]["efrm_v2"]
+    campaign = source["live_status"]["comparison_campaign"]
 
     assert source["schema"] == "experiment_plan_source_v1"
     assert manifest["schema"] == "experiment_plan_figure_manifest_v1"
@@ -127,10 +127,11 @@ def test_experiment_plan_outputs_match_source_manifest():
         "R1-P and R2-D failed",
         "blocks R2-P through R7",
         (
-            "EFRM v2 Stage A running "
-            f"{efrm['selection_completed']}/{efrm['selection_total']} "
-            f"at epoch {efrm['current_epoch']}"
+            "joint campaign completed "
+            f"{campaign['completed_job_count']}/"
+            f"{campaign['expected_job_count']} protected jobs with zero failures"
         ),
+        "22 ready-with-note, 12 rejected, 2 overlap-only, and 6 unsupported terminals",
     ):
         assert phrase in alt_text
 
@@ -142,5 +143,18 @@ def test_experiment_plan_outputs_match_source_manifest():
         node.attrib["data-stage"]: node
         for node in root.findall(".//*[@data-stage]")
     }
-    assert nodes["UMAP"].attrib["data-status"] == "conditional"
-    assert nodes["UMAP"].attrib["data-authorized"] == "false"
+    assert campaign["protected_test_opened"] is True
+    assert campaign["unblind_authorized"] is True
+    assert campaign["cell_count"] == 42
+    assert sum(campaign["terminal_counts"].values()) == campaign["cell_count"]
+
+    for stage in (
+        "MATRIX",
+        "PUBLIC",
+        "CAMPAIGN",
+        "UNBLIND",
+        "ACCEPTANCE",
+        "FINAL-TABLE",
+    ):
+        assert nodes[stage].attrib["data-status"] == "completed"
+        assert nodes[stage].attrib["data-authorized"] == "true"

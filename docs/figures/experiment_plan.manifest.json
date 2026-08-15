@@ -15,35 +15,39 @@
     "comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json",
     "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json",
     "comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md",
-    "comparative_methods/UMAP/EXPERIMENT_SUMMARY.md",
+    "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json",
+    "comparative_methods/evidence/protected_campaign/unblind_manifest_v1.json",
+    "comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/campaign_status.json",
+    "comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/aggregate/aggregate.json",
+    "docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md",
     "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md"
   ],
   "created_from": "docs/figures/experiment_plan_status.json",
   "outputs": {
     "docs/figures/experiment_plan.alt.txt": {
-      "bytes": 904,
+      "bytes": 955,
       "format": "plain_text_alt",
-      "sha256": "573812d661d829f9cc8572f3c8d56c6729400bdd798e9d975c4d5089860b4095"
+      "sha256": "4dc6786230d89e502c5e2842a80c7689d8254e1f5ecf55be9bbe0c2456c34d0c"
     },
     "docs/figures/experiment_plan.png": {
-      "bytes": 1103007,
+      "bytes": 1032560,
       "dpi": 300,
       "format": "png",
-      "sha256": "f99ecbf61a4151386bd8f761896d7a404589a7a403e0f73ab8303aaf92215b4a"
+      "sha256": "1897934a90303fc56d0cc259b4af79590b8a27004e47c99be8abf81b888deead"
     },
     "docs/figures/experiment_plan.svg": {
-      "bytes": 152094,
+      "bytes": 149612,
       "format": "svg",
-      "sha256": "69493b13d4227dff323f430e5cd6322123ca6d473eb309181f3d29bd78820e26"
+      "sha256": "fc78d985dd31fb65ae6f401bd2752001b2c01d26779fe56c6dc0cd4b642c0d20"
     }
   },
   "schema": "experiment_plan_figure_manifest_v1",
-  "snapshot_at": "2026-07-30T23:00:47+08:00",
+  "snapshot_at": "2026-08-14T09:29:44+08:00",
   "software": {
     "font": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "matplotlib": "3.10.8",
     "platform": "Linux-6.8.0-45-generic-x86_64-with-glibc2.35",
     "python": "3.12.4"
   },
-  "source_sha256": "9c88a9ffc7595801f6f6b3c9202a921d7e1e0776cab8493fd9872db7d5bce40f"
+  "source_sha256": "7cd5e81fba0a7dc85151e8f69159b287de5a8d6c8660694e941b2a36ff30b551"
 }

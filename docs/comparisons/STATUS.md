@@ -1,48 +1,55 @@
 # Comparison experiment status
 
-_Snapshot: 2026-08-12; retained run manifests and final alignment summaries are
-the source of truth_
+_Snapshot: 2026-08-14; the frozen candidate, sealed campaign status, dual-signature
+unblind record, aggregate, and cell-level acceptance output are the source of truth_
 
 ## Current decision surface
 
 | Method / track | State | Evidence and next action |
 | --- | --- | --- |
-| STA-Net strict five-fold | **Complete; context reference** | 70/70 fold trainings completed. The retained scores use STA-Net's method-native observation budget and are not yet support-matched direct-table evidence. |
+| STA-Net strict five-fold | **Complete; context reference** | 70/70 fold trainings completed. The retained scores use STA-Net's method-native observation budget and remain separate from the support-matched direct surface. |
 | EFRM LODO v2 Stage A | **Complete** | 4/4 target-dataset-excluded selection jobs completed and selected epochs were frozen. |
 | EFRM LODO v2 Stage B | **Complete** | 4/4 full non-target refits completed on 2026-08-03; checkpoint, boundary, config, and run-manifest identities are frozen. |
-| EFRM v2 downstream matrix | **Public A0-A8 complete; protected locked** | All 105/105 public frozen-feature probe jobs completed serially with 0 failures and 0 retries. The seven retained cells passed independent full-public replay and alignment audits; all public summaries remain `table_admissible=false`. |
+| EFRM v2 downstream matrix | **Protected complete; aggregated** | 105/105 protected jobs completed. Four cells are `TABLE_READY_WITH_NOTE`; three are `REJECTED_VALUE`. |
 | EFRM v2 full fine-tuning | **Conditional** | Resource-contingent secondary track; cannot replace the frozen linear-probe matrix. |
-| BIOT / CBraMod | **Public A0-A8 complete; protected locked** | Each method completed 90/90 public jobs over six classification tasks. REFED v1 is preregistered unsupported. The retained public-validation summaries are explicitly not table-admissible. |
-| REVE | **Public A0-A8 complete; protected locked** | 90/90 public jobs completed. Single-Trial MI/MA remain in the declared target-corpus-overlap track; REFED v1 is unsupported. The retained public-validation summaries are not table-admissible. |
-| BrainFusion NVC-CSP Stacking | **Public A0-A8 complete; protected locked** | 75/75 public jobs completed over MI, MA, WG, n-back, and Visual. DSR and REFED are preregistered unsupported. |
-| NormWear EEG-fNIRS adapted | **Public A0-A8 complete; protected locked** | 90/90 public jobs completed over the six classification tasks. REFED is preregistered unsupported because a truthful partial-time-mask regression contract is absent. |
+| BIOT | **Protected complete; aggregated** | 90/90 protected jobs completed. Three cells are `TABLE_READY_WITH_NOTE`, three are `REJECTED_VALUE`, and REFED is preregistered unsupported. |
+| CBraMod | **Protected complete; aggregated** | 90/90 protected jobs completed. Four cells are `TABLE_READY_WITH_NOTE`, two are `REJECTED_VALUE`, and REFED is preregistered unsupported. |
+| REVE | **Protected complete; aggregated** | 90/90 protected jobs completed. Three cells are `TABLE_READY_WITH_NOTE`, one is `REJECTED_VALUE`, MI/MA remain `OVERLAP_TRACK_ONLY`, and REFED is unsupported. |
+| BrainFusion NVC-CSP Stacking | **Protected complete; aggregated** | 75/75 protected jobs completed. Three cells are `TABLE_READY_WITH_NOTE`, two are `REJECTED_VALUE`, and DSR/REFED are preregistered unsupported. |
+| NormWear EEG-fNIRS adapted | **Protected complete; aggregated** | 90/90 protected jobs completed. Five cells are `TABLE_READY_WITH_NOTE`, one is `REJECTED_VALUE`, and REFED is preregistered unsupported. |
 | UMAP | **Retired from active queue** | No formal rerun is planned; prior repeatedly viewed test results remain historical Git context only. |
-| Cross-method final table | **ORR NO-GO; protected closed** | The 42-cell eligibility review and 540-job release candidate are frozen. Two complete CPU shadow passes succeeded, but only one GPU was healthy and idle, so no lane manifest exists; the authorization template is false/pending and unsigned. |
+| Cross-method final table | **Complete; acceptance assigned** | The single-GPU campaign completed 540/540 jobs with zero failures, was dual-signature unblinded, and produced all 42 cell terminals: 22 `TABLE_READY_WITH_NOTE`, 12 `REJECTED_VALUE`, 2 `OVERLAP_TRACK_ONLY`, and 6 `UNSUPPORTED`. |
 
-All new-method and EFRM v2 protected data remain closed:
-`protected_test_opened=false`, `target_dataset_exposure=false`. Its live source
-of truth is
-[`status.json`](../../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json).
+The completed campaign opened the authorized protected evaluation exactly for
+the frozen 540-job scope: its retained status reports
+`protected_test_opened=true`, `completed_job_count=540`, and
+`state=SEALED_COMPLETE`, with zero failed, invalid-output, missing, or technical
+failure jobs. This comparison-campaign access does not alter the separate main-method
+decision that protected subjects 24–29 remain closed.
 
 The canonical adapter evidence is method-specific and is jointly checked by
 [`audit_adapter_alignment.py`](../../comparative_methods/audit_adapter_alignment.py).
-Across BIOT, CBraMod, REVE, BrainFusion, NormWear, and EFRM it currently
-registers 42 method-task cells: 36 direct-profile passes and 6 preregistered
-unsupported cells. No protected identity or array is dereferenced by this
-audit. Execution order and unlock prerequisites are defined in
+Across BIOT, CBraMod, REVE, BrainFusion, NormWear, and EFRM it registers 42
+method-task cells: 36 supported and 6 preregistered unsupported cells. The
+alignment audit itself does not dereference protected identity or arrays;
+protected execution and aggregation occurred later under the frozen campaign.
+Execution order and unlock prerequisites are defined in
 [`EXPERIMENT_PLAN.md`](../../comparative_methods/EXPERIMENT_PLAN.md).
-The candidate is adapter eligibility evidence only and retains
-`protected_evaluation_authorized=false`.
+The release candidate intentionally remains a non-authorizing immutable contract
+with `protected_evaluation_authorized=false`; authorization, execution, and
+unblinding are separate records.
 
-The current protected-campaign source of truth is the
-[`joint_release_candidate_v1.json`](../../comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json)
-plus the latest
-[`orr_preflight_v1.json`](../../comparative_methods/evidence/protected_campaign/orr_preflight_v1.json).
+The frozen pre-execution identity is the locally retained, Git-ignored
+`comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json`
+plus its authorization and
+`comparative_methods/evidence/protected_campaign/orr_preflight_v1.json`.
 The candidate contains 540 unique jobs over 36 supported cells; six unsupported
-cells have zero jobs and STA-Net has zero new jobs. The ORR is deliberately
-`NO_GO`: candidate state `DRAFT`, lane missing, fewer than two healthy idle
-GPUs, and no valid dual-signature authorization. No formal protected campaign
-directory exists and `protected_test_opened=false`.
+cells have zero jobs and STA-Net has zero new jobs. The retained ORR is the
+successful pre-run `GO` snapshot, not a live completion record. Post-run status,
+unblinding, aggregate, and 540-row traceability remain in the ignored local run
+tree. Their hashes, terminal counts, and the complete primary-result table are
+recorded in
+[`PROTECTED_CAMPAIGN_RESULTS_20260814.md`](PROTECTED_CAMPAIGN_RESULTS_20260814.md).
 
 ## Completed STA-Net reference
 

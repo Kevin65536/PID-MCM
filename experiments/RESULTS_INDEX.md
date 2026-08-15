@@ -1,6 +1,7 @@
 # Retained result index
 
-_Evidence surface and payload-pruning record, 2026-07-30_
+_Evidence surface updated 2026-08-14; payload-pruning record retained from
+2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
 comparison, and scientific audit. A retained result is defined by its
@@ -46,7 +47,10 @@ should reuse this frozen checkpoint/cache identity.
 | Method | Retained surface | Policy |
 | --- | --- | --- |
 | STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 current formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | recurring seven-task reference |
-| EFRM v2 | entire [`efrm_lodo_full_target_fivefold_v2`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/) run/protocol/status plus all method runs and caches | live; excluded from cleanup |
+| Joint protected campaign | tracked [`42-cell result report`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md), sealed local 540-job status, dual-unblind record, aggregate, and traceability manifest | complete; 22 ready-with-note, 12 rejected, 2 overlap-only, 6 unsupported; run payload remains ignored |
+| EFRM v2 | entire [`efrm_lodo_full_target_fivefold_v2`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/) run/protocol/status plus method runs and caches | complete; retained as frozen campaign evidence |
+| BIOT / CBraMod / REVE | source-fidelity and alignment evidence plus frozen public/protected campaign identities | complete; protected payload remains ignored |
+| BrainFusion / NormWear | reimplementation/adaptation evidence plus frozen public/protected campaign identities | complete; labels and track boundaries remain mandatory |
 | EFRM v1 | aggregate/status and lightweight tables/figures | historical different-estimand context |
 | UMAP | code, configs, README, design, and [`EXPERIMENT_SUMMARY.md`](../comparative_methods/UMAP/EXPERIMENT_SUMMARY.md) | diagnostic only; no old run directory retained |
 

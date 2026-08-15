@@ -138,43 +138,40 @@ def _style_key(node: dict[str, Any]) -> str:
     return "completed"
 
 
-def _efrm_status(source: dict[str, Any]) -> dict[str, Any]:
+def _comparison_status(source: dict[str, Any]) -> dict[str, Any]:
     try:
-        status = source["live_status"]["efrm_v2"]
+        status = source["live_status"]["comparison_campaign"]
     except KeyError as exc:
-        raise ValueError("Missing live_status.efrm_v2") from exc
+        raise ValueError("Missing live_status.comparison_campaign") from exc
     required = {
-        "selection_completed",
-        "selection_total",
-        "current_target",
-        "current_epoch",
-        "final_refit_completed",
-        "final_refit_total",
+        "campaign_id",
+        "completed_job_count",
+        "expected_job_count",
+        "failed_job_count",
         "protected_test_opened",
+        "unblind_authorized",
+        "aggregate_created_at",
+        "cell_count",
+        "terminal_counts",
     }
     missing = required - status.keys()
     if missing:
-        raise ValueError(f"Incomplete EFRM live status: {sorted(missing)}")
+        raise ValueError(f"Incomplete comparison campaign status: {sorted(missing)}")
+    if (
+        status["completed_job_count"] != status["expected_job_count"]
+        or status["expected_job_count"] != 540
+        or status["failed_job_count"] != 0
+        or status["protected_test_opened"] is not True
+        or status["unblind_authorized"] is not True
+        or status["cell_count"] != 42
+        or sum(status["terminal_counts"].values()) != 42
+    ):
+        raise ValueError("Comparison campaign terminal status is inconsistent")
     return status
 
 
 def _node_detail(source: dict[str, Any], node: dict[str, Any]) -> str:
-    live_key = node.get("detail_from_live_status")
-    if live_key is None:
-        return node["detail"]
-
-    status = _efrm_status(source)
-    if live_key == "efrm_stage_a":
-        return (
-            f"RUNNING {status['selection_completed']}/{status['selection_total']}"
-            f" · epoch {status['current_epoch']}"
-        )
-    if live_key == "efrm_stage_b":
-        return (
-            f"NEXT · {status['final_refit_completed']}/"
-            f"{status['final_refit_total']}"
-        )
-    raise ValueError(f"Unknown live-status detail key: {live_key}")
+    return node["detail"]
 
 
 def _validate(source: dict[str, Any]) -> None:
@@ -202,6 +199,7 @@ def _validate(source: dict[str, Any]) -> None:
     }
     if source.get("decision") != expected_decision:
         raise ValueError("Main-method decision metadata changed unexpectedly")
+    _comparison_status(source)
 
 
 def _install_font() -> str:
@@ -441,7 +439,7 @@ def _draw(source: dict[str, Any], svg_path: Path, png_path: Path) -> None:
 
 
 def _augment_svg(source: dict[str, Any], svg_path: Path) -> None:
-    efrm = _efrm_status(source)
+    comparison = _comparison_status(source)
     ET.register_namespace("", SVG_NS)
     ET.register_namespace("xlink", XLINK_NS)
     tree = ET.parse(svg_path)
@@ -456,11 +454,11 @@ def _augment_svg(source: dict[str, Any], svg_path: Path) -> None:
         "Four-lane experiment plan. The main tokenizer completed E0 through E2 "
         "and the R-series prerequisites but stopped after R1-P and R2-D failed. "
         "Future R2-P through R7 are blocked. The T0 Atlas Core run and STA-Net "
-        "formal benchmark are complete. EFRM v2 Stage A is running "
-        f"{efrm['selection_completed']} of {efrm['selection_total']} at epoch "
-        f"{efrm['current_epoch']}. Atlas Statistical tier, EFRM Stage B/probes, "
-        "and Croce Synthetic Phase 1 are next; a formal UMAP rerun is "
-        "conditional on freezing its protocol."
+        "formal benchmark are complete. The joint comparison campaign completed "
+        f"{comparison['completed_job_count']} of {comparison['expected_job_count']} "
+        "protected jobs with zero failures, followed by dual-signature unblinding, "
+        "aggregation, and terminal assignment for all 42 cells. Atlas Statistical "
+        "tier and Croce Synthetic Phase 1 remain next."
     )
 
     metadata_payload = {
@@ -515,7 +513,8 @@ def _write_sidecars(
     alt_path: Path,
     manifest_path: Path,
 ) -> None:
-    efrm = _efrm_status(source)
+    comparison = _comparison_status(source)
+    terminals = comparison["terminal_counts"]
     alt_text = (
         "EEG–fNIRS full experiment plan, status frozen "
         f"{source['snapshot_at']}. The main-method lane shows the unified data "
@@ -524,12 +523,14 @@ def _write_sidecars(
         "undetermined. A stop decision blocks R2-P through R7 and keeps subjects "
         "24–29 closed. The Token Atlas lane shows T0 Core complete, Statistical "
         "tier next, Full coupling-null conditional, and a new-VQ Atlas blocked. "
-        "The comparison lane shows STA-Net 70/70 complete, EFRM v2 Stage A "
-        f"running {efrm['selection_completed']}/{efrm['selection_total']} at "
-        f"epoch {efrm['current_epoch']} on target {efrm['current_target']}, "
-        f"Stage B {efrm['final_refit_completed']}/"
-        f"{efrm['final_refit_total']} and strict probes next, a UMAP formal rerun "
-        "conditional on protocol freeze, and the final table conditional. The "
+        "The comparison lane shows STA-Net 70/70 complete as a context reference; "
+        f"the joint campaign completed {comparison['completed_job_count']}/"
+        f"{comparison['expected_job_count']} protected jobs with zero failures; "
+        "dual-signature unblinding and aggregation complete; and all 42 cells "
+        f"assigned {terminals['TABLE_READY_WITH_NOTE']} ready-with-note, "
+        f"{terminals['REJECTED_VALUE']} rejected, "
+        f"{terminals['OVERLAP_TRACK_ONLY']} overlap-only, and "
+        f"{terminals['UNSUPPORTED']} unsupported terminals. The "
         "Croce lane shows legacy diagnostics complete, redesigned Synthetic "
         "Phase 1 next, Real Phase 2 conditional, and main-method requalification "
         "requiring a new independent contract."

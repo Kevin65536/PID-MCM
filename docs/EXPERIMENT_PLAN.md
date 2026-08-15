@@ -1,8 +1,9 @@
 # 全实验计划与当前进度
 
-_状态快照：2026-07-30 23:00 CST；运行中任务以其 live status 为准_
+_状态汇总：主方法与 Token Atlas 沿用 2026-07-30 冻结结论；对比方法更新至
+2026-08-14 聚合终态_
 
-![EEG–fNIRS 全实验计划图，主方法已停止，EFRM Stage A 正在运行](figures/experiment_plan.svg)
+![EEG–fNIRS 全实验计划图，主方法保持停止，对比方法正式 campaign 已完成](figures/experiment_plan.svg)
 
 [PNG 版本](figures/experiment_plan.png) ·
 [无障碍长描述](figures/experiment_plan.alt.txt) ·
@@ -76,7 +77,7 @@ posterior normalized entropy 接近 1，hard assignment 不应写成清晰生理
 
 ## 3. 对比方法
 
-### 已完成
+### 已完成的正式比较面
 
 STA-Net 正式五折已完成 `70/70` 个训练。严格 cross-subject 主端点：
 
@@ -87,39 +88,26 @@ STA-Net 正式五折已完成 `70/70` 个训练。严格 cross-subject 主端点
 该 aggregate 和 140 个最新 formal checkpoints 保留为常用比较面。原论文
 subject-specific 数值只作为背景，不能与新 strict protocol 做同协议声明。
 
-### 正在运行与自动后继
-
-EFRM LODO v2 在快照时为：
+六个联合方法的 public development、A0–A8、lane freeze、双签授权、protected
+execution、双签揭盲和 aggregate 也已完成。正式 campaign 终态为：
 
 ```text
-Stage A target-excluded selection: 3/4
-current target: Visual
-observed epoch: 45
-Stage B full non-target refit: 0/4
-protected_test_opened: false
+campaign: joint-comparison-protected-20260813-v3-single-gpu
+protected jobs: 540/540 complete
+failed / invalid / missing / technical failure: 0 / 0 / 0 / 0
+registered cells: 42
+TABLE_READY_WITH_NOTE / REJECTED_VALUE / OVERLAP_TRACK_ONLY / UNSUPPORTED:
+22 / 12 / 2 / 6
 ```
 
-冻结协议内的后继顺序：
+完整 42-cell 主指标、fold SD、准入状态、证据路径和 SHA-256 见
+[`comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
+其中 12 个 `REJECTED_VALUE` 必须保留为真实观察结果，不能因为正式运行已经完成
+就提升为正常可用数值；REVE MI/MA 仍只属于 overlap 表。STA-Net 继续作为
+method-native context reference，不并入 support-matched direct 排名。
 
-1. 完成第四个 Stage-A selection 并冻结 selected epoch；
-2. 运行四个 Stage-B non-target full refit；
-3. 构建 feature cache；
-4. 运行七任务、五 outer folds、三 seeds 的严格 linear probes；
-5. 检查 public gates，满足后只开放一次 protected evaluation；
-6. 汇总 strict aggregate，再单独报告 sample-random matrix；
-7. full fine-tuning 仅作为资源条件二级轨，不能替代 linear-probe 主矩阵。
-
-live 状态读取
-[`status.json`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json)。
-
-### 可以准备的独立下一步
-
-- **UMAP protocol freeze**：冻结新的 shared-fold、多 seed、cross-subject
-  协议；正式重跑只有在合同通过后才启动。历史 `55.83% / macro-F1 0.558`
-  经反复查看 test，只是诊断结果。
-- **最终表**：等待 EFRM v2 和任何获准的 UMAP formal run 完成后，逐
-  `method × task × track × metric` 执行准入；不可用“已有 aggregate”代替
-  cell-level audit。
+UMAP 正式重跑已退出当前队列；EFRM full fine-tuning、few-shot 和其他二级轨均未
+纳入本轮联合 campaign，若未来启动必须创建新版本协议和新授权，不能复用本轮揭盲。
 
 共享协议、实时状态和数字准入分别见
 [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md)、
@@ -143,16 +131,15 @@ live 状态读取
 
 ## 可并行的近期工作
 
-在不开放新 protected 数据、也不启动新 VQ 的前提下，可并行推进：
+在不开放新主方法 protected 数据、也不启动新 VQ 的前提下，可并行推进：
 
-- 让正在运行的 EFRM v2 按其冻结队列完成；
+- 整理已完成对比 campaign 的公开汇总、审计哈希和论文表脚注；
 - 运行 retained E2 T0 的 Atlas Statistical tier；
-- 冻结 UMAP formal rerun 的 shared-fold/seed 合同；
 - 开始 Croce redesigned Synthetic Phase 1。
 
-其中只有 EFRM 已经在执行；Atlas Statistical tier 与 Croce Synthetic
-Phase 1 标为“下一步”，UMAP 的正式重跑标为“条件后运行”。三者都不是
-“已启动”。
+对比 campaign 已无待运行 job。Atlas Statistical tier 与 Croce Synthetic
+Phase 1 仍标为“下一步”，都不是“已启动”；它们的授权边界与本轮 comparison
+protected evaluation 相互独立。
 
 ## 图的更新规则
 

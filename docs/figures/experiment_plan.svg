@@ -1,16 +1,16 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ns2="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" width="1728pt" height="756pt" viewBox="0 0 1728 756" version="1.1" role="img" aria-labelledby="experiment-plan-title experiment-plan-desc">
   <title id="experiment-plan-title">EEG–fNIRS 全实验计划与当前进度</title>
-  <desc id="experiment-plan-desc">Four-lane experiment plan. The main tokenizer completed E0 through E2 and the R-series prerequisites but stopped after R1-P and R2-D failed. Future R2-P through R7 are blocked. The T0 Atlas Core run and STA-Net formal benchmark are complete. EFRM v2 Stage A is running 3 of 4 at epoch 45. Atlas Statistical tier, EFRM Stage B/probes, and Croce Synthetic Phase 1 are next; a formal UMAP rerun is conditional on freezing its protocol.</desc>
-  <metadata>{"authoritative_sources":["docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md","docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/summary.json","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/stability.json","comparative_methods/comparison_metric_targets_v1.yaml","comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md","comparative_methods/UMAP/EXPERIMENT_SUMMARY.md","croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md"],"decision":{"next_action":"do_not_enter_r2_p","promotion_eligible":false,"protected_subjects_24_29":"closed"},"live_status":{"efrm_v2":{"current_epoch":45,"current_target":"visual_cognitive_motivation","final_refit_completed":0,"final_refit_total":4,"observed_at":"2026-07-30T22:57:28.277976169+08:00","protected_test_opened":false,"selection_completed":3,"selection_total":4,"status":"stage_a_selection_running","trainer_pid":2187859,"worker_pid":316966}},"schema":"experiment-plan-v1","snapshot_at":"2026-07-30T23:00:47+08:00","source_schema":"experiment_plan_source_v1","timezone":"Asia/Shanghai"}</metadata>
+  <desc id="experiment-plan-desc">Four-lane experiment plan. The main tokenizer completed E0 through E2 and the R-series prerequisites but stopped after R1-P and R2-D failed. Future R2-P through R7 are blocked. The T0 Atlas Core run and STA-Net formal benchmark are complete. The joint comparison campaign completed 540 of 540 protected jobs with zero failures, followed by dual-signature unblinding, aggregation, and terminal assignment for all 42 cells. Atlas Statistical tier and Croce Synthetic Phase 1 remain next.</desc>
+  <metadata>{"authoritative_sources":["docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md","docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/summary.json","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/stability.json","comparative_methods/comparison_metric_targets_v1.yaml","comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md","comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json","comparative_methods/evidence/protected_campaign/unblind_manifest_v1.json","comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/campaign_status.json","comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/aggregate/aggregate.json","docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md","croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md"],"decision":{"next_action":"do_not_enter_r2_p","promotion_eligible":false,"protected_subjects_24_29":"closed"},"live_status":{"comparison_campaign":{"aggregate_created_at":"2026-08-14T09:29:44.165567+08:00","campaign_id":"joint-comparison-protected-20260813-v3-single-gpu","cell_count":42,"completed_job_count":540,"expected_job_count":540,"failed_job_count":0,"protected_test_opened":true,"status":"aggregated","terminal_counts":{"OVERLAP_TRACK_ONLY":2,"REJECTED_VALUE":12,"TABLE_READY_WITH_NOTE":22,"UNSUPPORTED":6},"unblind_authorized":true}},"schema":"experiment-plan-v1","snapshot_at":"2026-08-14T09:29:44+08:00","source_schema":"experiment_plan_source_v1","timezone":"Asia/Shanghai"}</metadata>
   <title>EEG–fNIRS 全实验计划与当前进度</title>
   <metadata>
     <rdf:RDF>
       <ns2:Work>
         <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
         <dc:title>EEG–fNIRS 全实验计划与当前进度</dc:title>
-        <dc:date>2026-07-30T23:00:47+08:00</dc:date>
-        <dc:description>执行完成不等于科学通过；状态冻结于 2026-07-30 23:00 CST</dc:description>
+        <dc:date>2026-08-14T09:29:44+08:00</dc:date>
+        <dc:description>主方法结论沿用 2026-07-30 冻结；对比方法更新至 2026-08-14 聚合终态</dc:description>
         <dc:format>image/svg+xml</dc:format>
         <dc:creator>
           <ns2:Agent>
@@ -172,51 +172,43 @@
         <path d="M 254.837785 489.060679  Q 290.692378 472.457208 325.380256 456.394016  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 320.910129 456.259999  L 325.380256 456.394016  L 322.590967 459.889708  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-24" data-from="METRIC" data-to="EFRM-A" data-kind="normal">
+      <g id="edge-24" data-from="METRIC" data-to="MATRIX" data-kind="normal">
         <path d="M 254.837785 489.060679  Q 290.692378 508.431396 325.415764 527.19097  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 322.84717 523.530051  L 325.415764 527.19097  L 320.945873 527.049294  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-25" data-from="METRIC" data-to="UMAP" data-kind="normal">
-        <path d="M 254.837785 489.060679  Q 540.295505 472.457208 824.469655 455.928394  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
-        <path d="M 820.360272 454.164033  L 824.469655 455.928394  L 820.592537 458.157284  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
-      </g>
-      <g id="edge-26" data-from="EFRM-A" data-to="EFRM-B" data-kind="normal">
+      <g id="edge-25" data-from="MATRIX" data-to="PUBLIC" data-kind="normal">
         <path d="M 497.545798 527.802113  Q 537.537459 527.802113 576.243381 527.802113  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 572.243381 525.802113  L 576.243381 527.802113  L 572.243381 529.802113  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-27" data-from="EFRM-B" data-to="EFRM-PROBES" data-kind="normal">
+      <g id="edge-26" data-from="PUBLIC" data-to="CAMPAIGN" data-kind="normal">
         <path d="M 748.527948 527.802113  Q 787.140586 527.802113 824.467486 527.802113  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 820.467486 525.802113  L 824.467486 527.802113  L 820.467486 529.802113  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-28" data-from="EFRM-PROBES" data-to="EFRM-AGG" data-kind="conditional">
-        <path d="M 1002.268143 527.802113  Q 1040.880782 513.965887 1078.283043 500.56338  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
-        <path d="M 1073.842837 500.029931  L 1078.283043 500.56338  L 1075.19216 503.795475  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
+      <g id="edge-27" data-from="CAMPAIGN" data-to="UNBLIND" data-kind="normal">
+        <path d="M 1002.268143 527.802113  Q 1040.880782 527.802113 1078.207681 527.802113  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
+        <path d="M 1074.207681 525.802113  L 1078.207681 527.802113  L 1074.207681 529.802113  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-29" data-from="EFRM-PROBES" data-to="EFRM-FT" data-kind="conditional">
-        <path d="M 1002.268143 527.802113  Q 1040.880782 536.934023 1078.242197 545.770017  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
-        <path d="M 1074.809881 542.903101  L 1078.242197 545.770017  L 1073.889275 546.79572  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
+      <g id="edge-28" data-from="UNBLIND" data-to="ACCEPTANCE" data-kind="normal">
+        <path d="M 1184.299153 504.557253  Q 1184.299153 491.827925 1184.299153 480.384335  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
+        <path d="M 1182.299153 484.384335  L 1184.299153 480.384335  L 1186.299153 484.384335  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-30" data-from="STA" data-to="FINAL-TABLE" data-kind="normal">
+      <g id="edge-29" data-from="STA" data-to="FINAL-TABLE" data-kind="normal">
         <path d="M 497.545798 455.853736  Q 962.479462 622.936176 1436.801715 489.409087  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 1432.409416 488.567831  L 1436.801715 489.409087  L 1433.493331 492.418173  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-31" data-from="UMAP" data-to="FINAL-TABLE" data-kind="conditional">
-        <path d="M 1002.268143 455.853736  Q 1224.138579 420.164663 1436.815525 488.666494  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
-        <path d="M 1433.621315 485.536475  L 1436.815525 488.666494  L 1432.394984 489.343851  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
+      <g id="edge-30" data-from="ACCEPTANCE" data-to="FINAL-TABLE" data-kind="normal">
+        <path d="M 1289.104886 455.853736  Q 1363.572117 472.457208 1436.784424 488.780877  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
+        <path d="M 1433.315529 485.95833  L 1436.784424 488.780877  L 1432.44505 489.862465  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-32" data-from="EFRM-AGG" data-to="FINAL-TABLE" data-kind="conditional">
-        <path d="M 1289.104886 500.12966  Q 1363.572117 494.59517 1436.757146 489.155974  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
-        <path d="M 1432.619914 487.457942  L 1436.757146 489.155974  L 1432.916381 491.44694  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
-      </g>
-      <g id="edge-33" data-from="CROCE-LEGACY" data-to="CROCE-P1" data-kind="normal">
+      <g id="edge-31" data-from="CROCE-LEGACY" data-to="CROCE-P1" data-kind="normal">
         <path d="M 348.611336 655.095396  Q 418.941498 655.095396 487.985922 655.095396  " clip-path="url(#pc864857289)" style="fill: none; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 483.985922 653.095396  L 487.985922 655.095396  L 483.985922 657.095396  z " clip-path="url(#pc864857289)" style="fill: #98a2b3; stroke: #98a2b3; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-34" data-from="CROCE-P1" data-to="CROCE-P2" data-kind="conditional">
+      <g id="edge-32" data-from="CROCE-P1" data-to="CROCE-P2" data-kind="conditional">
         <path d="M 709.915309 655.095396  Q 781.624495 655.095396 852.047942 655.095396  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 848.047942 653.095396  L 852.047942 655.095396  L 848.047942 657.095396  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
       </g>
-      <g id="edge-35" data-from="CROCE-P2" data-to="REQUALIFY" data-kind="conditional">
+      <g id="edge-33" data-from="CROCE-P2" data-to="REQUALIFY" data-kind="conditional">
         <path d="M 1073.977329 655.095396  Q 1156.718697 655.095396 1238.174326 655.095396  " clip-path="url(#pc864857289)" style="fill: none; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
         <path d="M 1234.174326 653.095396  L 1238.174326 655.095396  L 1234.174326 657.095396  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
       </g>
@@ -224,7 +216,7 @@
         <text style="font-weight: 700; font-size: 18px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #101828" x="45.226319" y="39.080358" transform="rotate(-0 45.226319 39.080358)">EEG–fNIRS 全实验计划与当前进度</text>
       </g>
       <g id="text_6">
-        <text style="font-size: 9.3px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #475467" x="46.329537" y="57.024347" transform="rotate(-0 46.329537 57.024347)">执行完成不等于科学通过；状态冻结于 2026-07-30 23:00 CST</text>
+        <text style="font-size: 9.3px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #475467" x="46.329537" y="57.024347" transform="rotate(-0 46.329537 57.024347)">主方法结论沿用 2026-07-30 冻结；对比方法更新至 2026-08-14 聚合终态</text>
       </g>
       <g id="text_7">
         <text style="font-weight: 700; font-size: 9.2px; font-family: 'Noto Sans CJK JP'; text-anchor: end; fill: #a61b1b" x="1700.053681" y="34.778029" transform="rotate(-0 1700.053681 34.778029)">当前主线：promotion_eligible = false  ·  protected 24–29 = closed</text>
@@ -322,26 +314,23 @@
       <g id="stage-STA" role="group" aria-labelledby="label-STA" data-stage="STA" data-status="completed" data-outcome="formal_aggregate_complete" data-authorized="true">
         <path d="M 329.580821 481.589117  L 494.511948 481.589117  Q 499.47643 481.589117 499.47643 476.608075  L 499.47643 435.099396  Q 499.47643 430.118355 494.511948 430.118355  L 329.580821 430.118355  Q 324.616339 430.118355 324.616339 435.099396  L 324.616339 476.608075  Q 324.616339 481.589117 329.580821 481.589117  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-EFRM-A" role="group" aria-labelledby="label-EFRM-A" data-stage="EFRM-A" data-status="running" data-outcome="in_progress" data-authorized="true">
-        <path d="M 329.580821 553.537494  L 494.511948 553.537494  Q 499.47643 553.537494 499.47643 548.556453  L 499.47643 507.047774  Q 499.47643 502.066732 494.511948 502.066732  L 329.580821 502.066732  Q 324.616339 502.066732 324.616339 507.047774  L 324.616339 548.556453  Q 324.616339 553.537494 329.580821 553.537494  z " clip-path="url(#pc864857289)" style="fill: #e4f0fa; stroke: #0072b2; stroke-width: 2; stroke-linejoin: miter" />
+      <g id="stage-MATRIX" role="group" aria-labelledby="label-MATRIX" data-stage="MATRIX" data-status="completed" data-outcome="matrix_frozen" data-authorized="true">
+        <path d="M 329.580821 553.537494  L 494.511948 553.537494  Q 499.47643 553.537494 499.47643 548.556453  L 499.47643 507.047774  Q 499.47643 502.066732 494.511948 502.066732  L 329.580821 502.066732  Q 324.616339 502.066732 324.616339 507.047774  L 324.616339 548.556453  Q 324.616339 553.537494 329.580821 553.537494  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-EFRM-B" role="group" aria-labelledby="label-EFRM-B" data-stage="EFRM-B" data-status="next" data-outcome="queued" data-authorized="true">
-        <path d="M 580.562971 553.537494  L 745.494098 553.537494  Q 750.45858 553.537494 750.45858 548.556453  L 750.45858 507.047774  Q 750.45858 502.066732 745.494098 502.066732  L 580.562971 502.066732  Q 575.598489 502.066732 575.598489 507.047774  L 575.598489 548.556453  Q 575.598489 553.537494 580.562971 553.537494  z " clip-path="url(#pc864857289)" style="fill: #f4eaf2; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #9b4f96; stroke-width: 1.45; stroke-linejoin: miter" />
+      <g id="stage-PUBLIC" role="group" aria-labelledby="label-PUBLIC" data-stage="PUBLIC" data-status="completed" data-outcome="public_complete" data-authorized="true">
+        <path d="M 580.562971 553.537494  L 745.494098 553.537494  Q 750.45858 553.537494 750.45858 548.556453  L 750.45858 507.047774  Q 750.45858 502.066732 745.494098 502.066732  L 580.562971 502.066732  Q 575.598489 502.066732 575.598489 507.047774  L 575.598489 548.556453  Q 575.598489 553.537494 580.562971 553.537494  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-EFRM-PROBES" role="group" aria-labelledby="label-EFRM-PROBES" data-stage="EFRM-PROBES" data-status="next" data-outcome="queued_after_refit" data-authorized="true">
-        <path d="M 828.787075 553.537494  L 999.234293 553.537494  Q 1004.198775 553.537494 1004.198775 548.556453  L 1004.198775 507.047774  Q 1004.198775 502.066732 999.234293 502.066732  L 828.787075 502.066732  Q 823.822593 502.066732 823.822593 507.047774  L 823.822593 548.556453  Q 823.822593 553.537494 828.787075 553.537494  z " clip-path="url(#pc864857289)" style="fill: #f4eaf2; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #9b4f96; stroke-width: 1.45; stroke-linejoin: miter" />
+      <g id="stage-CAMPAIGN" role="group" aria-labelledby="label-CAMPAIGN" data-stage="CAMPAIGN" data-status="completed" data-outcome="sealed_complete" data-authorized="true">
+        <path d="M 828.787075 553.537494  L 999.234293 553.537494  Q 1004.198775 553.537494 1004.198775 548.556453  L 1004.198775 507.047774  Q 1004.198775 502.066732 999.234293 502.066732  L 828.787075 502.066732  Q 823.822593 502.066732 823.822593 507.047774  L 823.822593 548.556453  Q 823.822593 553.537494 828.787075 553.537494  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-UMAP" role="group" aria-labelledby="label-UMAP" data-stage="UMAP" data-status="conditional" data-outcome="protocol_freeze_required" data-authorized="false">
-        <path d="M 828.787075 481.589117  L 999.234293 481.589117  Q 1004.198775 481.589117 1004.198775 476.608075  L 1004.198775 435.099396  Q 1004.198775 430.118355 999.234293 430.118355  L 828.787075 430.118355  Q 823.822593 430.118355 823.822593 435.099396  L 823.822593 476.608075  Q 823.822593 481.589117 828.787075 481.589117  z " clip-path="url(#pc864857289)" style="fill: #f1f3f5; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #667085; stroke-width: 1.45; stroke-linejoin: miter" />
+      <g id="stage-UNBLIND" role="group" aria-labelledby="label-UNBLIND" data-stage="UNBLIND" data-status="completed" data-outcome="aggregated" data-authorized="true">
+        <path d="M 1082.52727 553.537494  L 1286.071036 553.537494  Q 1291.035518 553.537494 1291.035518 548.556453  L 1291.035518 507.047774  Q 1291.035518 502.066732 1286.071036 502.066732  L 1082.52727 502.066732  Q 1077.562788 502.066732 1077.562788 507.047774  L 1077.562788 548.556453  Q 1077.562788 553.537494 1082.52727 553.537494  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-EFRM-AGG" role="group" aria-labelledby="label-EFRM-AGG" data-stage="EFRM-AGG" data-status="conditional" data-outcome="waiting_for_public_gates" data-authorized="false">
-        <path d="M 1082.52727 525.865042  L 1286.071036 525.865042  Q 1291.035518 525.865042 1291.035518 520.884  L 1291.035518 479.375321  Q 1291.035518 474.394279 1286.071036 474.394279  L 1082.52727 474.394279  Q 1077.562788 474.394279 1077.562788 479.375321  L 1077.562788 520.884  Q 1077.562788 525.865042 1082.52727 525.865042  z " clip-path="url(#pc864857289)" style="fill: #f1f3f5; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #667085; stroke-width: 1.45; stroke-linejoin: miter" />
+      <g id="stage-ACCEPTANCE" role="group" aria-labelledby="label-ACCEPTANCE" data-stage="ACCEPTANCE" data-status="completed" data-outcome="cell_terminals_assigned" data-authorized="true">
+        <path d="M 1082.52727 481.589117  L 1286.071036 481.589117  Q 1291.035518 481.589117 1291.035518 476.608075  L 1291.035518 435.099396  Q 1291.035518 430.118355 1286.071036 430.118355  L 1082.52727 430.118355  Q 1077.562788 430.118355 1077.562788 435.099396  L 1077.562788 476.608075  Q 1077.562788 481.589117 1082.52727 481.589117  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
-      <g id="stage-EFRM-FT" role="group" aria-labelledby="label-EFRM-FT" data-stage="EFRM-FT" data-status="conditional" data-outcome="not_started" data-authorized="false">
-        <path d="M 1082.52727 571.801313  L 1286.071036 571.801313  Q 1291.035518 571.801313 1291.035518 566.820272  L 1291.035518 525.311592  Q 1291.035518 520.330551 1286.071036 520.330551  L 1082.52727 520.330551  Q 1077.562788 520.330551 1077.562788 525.311592  L 1077.562788 566.820272  Q 1077.562788 571.801313 1082.52727 571.801313  z " clip-path="url(#pc864857289)" style="fill: #f1f3f5; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #667085; stroke-width: 1.45; stroke-linejoin: miter" />
-      </g>
-      <g id="stage-FINAL-TABLE" role="group" aria-labelledby="label-FINAL-TABLE" data-stage="FINAL-TABLE" data-status="conditional" data-outcome="waiting_for_comparable_formal_values" data-authorized="false">
-        <path d="M 1441.073199 514.79606  L 1633.584782 514.79606  Q 1638.549264 514.79606 1638.549264 509.815019  L 1638.549264 468.30634  Q 1638.549264 463.325298 1633.584782 463.325298  L 1441.073199 463.325298  Q 1436.108717 463.325298 1436.108717 468.30634  L 1436.108717 509.815019  Q 1436.108717 514.79606 1441.073199 514.79606  z " clip-path="url(#pc864857289)" style="fill: #f1f3f5; stroke-dasharray: 5.365,2.32; stroke-dashoffset: 0; stroke: #667085; stroke-width: 1.45; stroke-linejoin: miter" />
+      <g id="stage-FINAL-TABLE" role="group" aria-labelledby="label-FINAL-TABLE" data-stage="FINAL-TABLE" data-status="completed" data-outcome="result_surface_complete" data-authorized="true">
+        <path d="M 1441.073199 514.79606  L 1633.584782 514.79606  Q 1638.549264 514.79606 1638.549264 509.815019  L 1638.549264 468.30634  Q 1638.549264 463.325298 1633.584782 463.325298  L 1441.073199 463.325298  Q 1436.108717 463.325298 1436.108717 468.30634  L 1436.108717 509.815019  Q 1436.108717 514.79606 1441.073199 514.79606  z " clip-path="url(#pc864857289)" style="fill: #e7f4ee; stroke: #007f5f; stroke-width: 1.45; stroke-linejoin: miter" />
       </g>
       <g id="stage-CROCE-LEGACY" role="group" aria-labelledby="label-CROCE-LEGACY" data-stage="CROCE-LEGACY" data-status="completed" data-outcome="exploratory" data-authorized="true">
         <path d="M 147.549811 680.830777  L 345.577485 680.830777  Q 350.541967 680.830777 350.541967 675.849736  L 350.541967 634.341057  Q 350.541967 629.360015 345.577485 629.360015  L 147.549811 629.360015  Q 142.585329 629.360015 142.585329 634.341057  L 142.585329 675.849736  Q 142.585329 680.830777 147.549811 680.830777  z " clip-path="url(#pc864857289)" style="fill: #fff4d6; stroke: #b77900; stroke-width: 1.45; stroke-linejoin: miter" />
@@ -565,102 +554,93 @@
         <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="412.046384" y="468.452534" transform="rotate(-0 412.046384 468.452534)">70/70 完成</text>
       </g>
       <g id="text_62">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #0072b2" x="333.16628" y="516.385578" transform="rotate(-0 333.16628 516.385578)">▶</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="333.16628" y="516.385578" transform="rotate(-0 333.16628 516.385578)">✓</text>
       </g>
-      <g id="label-EFRM-A">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="412.046384" y="521.173635" transform="rotate(-0 412.046384 521.173635)">EFRM v2 Stage A</text>
+      <g id="label-MATRIX">
+        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="412.046384" y="521.409971" transform="rotate(-0 412.046384 521.409971)">六方法联合矩阵</text>
       </g>
       <g id="text_63">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="412.046384" y="540.400911" transform="rotate(-0 412.046384 540.400911)">RUNNING 3/4 · epoch 45</text>
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="412.046384" y="540.400911" transform="rotate(-0 412.046384 540.400911)">42 cells · 36 supported</text>
       </g>
       <g id="text_64">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #9b4f96" x="584.14843" y="516.385578" transform="rotate(-0 584.14843 516.385578)">◇</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="584.14843" y="516.385578" transform="rotate(-0 584.14843 516.385578)">✓</text>
       </g>
-      <g id="label-EFRM-B">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="663.028534" y="521.524178" transform="rotate(-0 663.028534 521.524178)">Stage B 全量 refit</text>
+      <g id="label-PUBLIC">
+        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="663.028534" y="521.409971" transform="rotate(-0 663.028534 521.409971)">Public A0–A8</text>
       </g>
       <g id="text_65">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="663.028534" y="540.400911" transform="rotate(-0 663.028534 540.400911)">NEXT · 0/4</text>
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="663.028534" y="540.400911" transform="rotate(-0 663.028534 540.400911)">540/540 完成</text>
       </g>
       <g id="text_66">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #9b4f96" x="832.372534" y="516.385578" transform="rotate(-0 832.372534 516.385578)">◇</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="832.372534" y="516.385578" transform="rotate(-0 832.372534 516.385578)">✓</text>
       </g>
-      <g id="label-EFRM-PROBES">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="914.010684" y="521.633764" transform="rotate(-0 914.010684 521.633764)">七任务严格 probes</text>
+      <g id="label-CAMPAIGN">
+        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="914.010684" y="521.346596" transform="rotate(-0 914.010684 521.346596)">Protected campaign</text>
       </g>
       <g id="text_67">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="914.010684" y="540.400911" transform="rotate(-0 914.010684 540.400911)">5 folds × 3 seeds</text>
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="914.010684" y="540.400911" transform="rotate(-0 914.010684 540.400911)">540/540 · 0 failures</text>
       </g>
       <g id="text_68">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="832.372534" y="444.437201" transform="rotate(-0 832.372534 444.437201)">△</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="1086.11273" y="516.385578" transform="rotate(-0 1086.11273 516.385578)">✓</text>
       </g>
-      <g id="label-UMAP">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="914.010684" y="449.461594" transform="rotate(-0 914.010684 449.461594)">UMAP 正式重跑</text>
+      <g id="label-UNBLIND">
+        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1184.299153" y="521.409971" transform="rotate(-0 1184.299153 521.409971)">双签揭盲与聚合</text>
       </g>
       <g id="text_69">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="914.010684" y="468.452534" transform="rotate(-0 914.010684 468.452534)">先冻结 shared-fold 多 seed</text>
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1184.299153" y="540.382536" transform="rotate(-0 1184.299153 540.382536)">traceability 540 rows</text>
       </g>
       <g id="text_70">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="1086.11273" y="488.713126" transform="rotate(-0 1086.11273 488.713126)">△</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="1086.11273" y="444.437201" transform="rotate(-0 1086.11273 444.437201)">✓</text>
       </g>
-      <g id="label-EFRM-AGG">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1184.299153" y="493.653018" transform="rotate(-0 1184.299153 493.653018)">EFRM gates / protected / aggregate</text>
+      <g id="label-ACCEPTANCE">
+        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1184.299153" y="449.461594" transform="rotate(-0 1184.299153 449.461594)">Cell 数值准入</text>
       </g>
       <g id="text_71">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1184.299153" y="512.908763" transform="rotate(-0 1184.299153 512.908763)">protected 当前关闭</text>
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1184.299153" y="468.404873" transform="rotate(-0 1184.299153 468.404873)">22 ready · 12 rejected</text>
       </g>
       <g id="text_72">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="1086.11273" y="534.649397" transform="rotate(-0 1086.11273 534.649397)">△</text>
-      </g>
-      <g id="label-EFRM-FT">
-        <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1184.299153" y="539.67379" transform="rotate(-0 1184.299153 539.67379)">EFRM full fine-tune</text>
-      </g>
-      <g id="text_73">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1184.299153" y="558.66473" transform="rotate(-0 1184.299153 558.66473)">资源条件二级轨</text>
-      </g>
-      <g id="text_74">
-        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="1444.658658" y="477.644144" transform="rotate(-0 1444.658658 477.644144)">△</text>
+        <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #007f5f" x="1444.658658" y="477.644144" transform="rotate(-0 1444.658658 477.644144)">✓</text>
       </g>
       <g id="label-FINAL-TABLE">
         <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1537.32899" y="482.668537" transform="rotate(-0 1537.32899 482.668537)">跨方法最终表</text>
       </g>
-      <g id="text_75">
-        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1537.32899" y="501.659477" transform="rotate(-0 1537.32899 501.659477)">逐 cell 准入审计</text>
+      <g id="text_73">
+        <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1537.32899" y="501.659477" transform="rotate(-0 1537.32899 501.659477)">34 direct · 2 overlap · 6 unsupported</text>
       </g>
-      <g id="text_76">
+      <g id="text_74">
         <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #b77900" x="151.13527" y="643.678861" transform="rotate(-0 151.13527 643.678861)">●</text>
       </g>
       <g id="label-CROCE-LEGACY">
         <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="246.563648" y="648.703254" transform="rotate(-0 246.563648 648.703254)">旧 Croce solver / simulation</text>
       </g>
-      <g id="text_77">
+      <g id="text_75">
         <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="246.563648" y="667.694194" transform="rotate(-0 246.563648 667.694194)">完成 · 诊断证据</text>
       </g>
-      <g id="text_78">
+      <g id="text_76">
         <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #9b4f96" x="495.890971" y="643.678861" transform="rotate(-0 495.890971 643.678861)">◇</text>
       </g>
       <g id="label-CROCE-P1">
         <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="599.593485" y="648.884797" transform="rotate(-0 599.593485 648.884797)">新版 Synthetic Phase 1</text>
       </g>
-      <g id="text_79">
+      <g id="text_77">
         <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="599.593485" y="667.694194" transform="rotate(-0 599.593485 667.694194)">NEXT · 尚未开始</text>
       </g>
-      <g id="text_80">
+      <g id="text_78">
         <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="859.95299" y="643.678861" transform="rotate(-0 859.95299 643.678861)">△</text>
       </g>
       <g id="label-CROCE-P2">
         <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="963.655505" y="648.703254" transform="rotate(-0 963.655505 648.703254)">新版 Real Phase 2</text>
       </g>
-      <g id="text_81">
+      <g id="text_79">
         <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="963.655505" y="667.841194" transform="rotate(-0 963.655505 667.841194)">依赖 Synthetic 资格门</text>
       </g>
-      <g id="text_82">
+      <g id="text_80">
         <text style="font-weight: 700; font-size: 10.2px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #667085" x="1246.079375" y="643.678861" transform="rotate(-0 1246.079375 643.678861)">△</text>
       </g>
       <g id="label-REQUALIFY">
         <text style="font-weight: 700; font-size: 8.45px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #101828" x="1377.362345" y="648.703254" transform="rotate(-0 1377.362345 648.703254)">主方法重新资格</text>
       </g>
-      <g id="text_83">
+      <g id="text_81">
         <text style="font-size: 7.35px; font-family: 'Noto Sans CJK JP'; text-anchor: middle; fill: #475467" x="1377.362345" y="667.694194" transform="rotate(-0 1377.362345 667.694194)">新 holdout + 新 estimator/null/threshold</text>
       </g>
     </g>

@@ -1,7 +1,7 @@
-# 对比方法未来实验计划
+# 对比方法实验计划与完成记录
 
-_计划快照：2026-07-31；本文只规定对比方法，不授权开启新的 protected
-evaluation 或高成本训练。_
+_原计划冻结于 2026-07-31；执行终态更新至 2026-08-14。本文记录已执行的
+comparison campaign，但不授权任何新的 protected evaluation 或高成本训练。_
 
 本文是 `comparative_methods/` 下对比实验的规划入口。现阶段正式方法集合固定为：
 
@@ -22,12 +22,10 @@ protected-test 边界继续服从
 `B1_input_contract: pass...` 不自动提升为 v2 通过；v2 按
 `method × task × track × alignment_profile` 判定，而不是按整个方法判定。
 
-新方法落地严格串行：同一时刻只允许一个 active delivery method，其 adapter 实现
-与审核、public preflight/development、freeze 和该方法的 formal execution 完成或
-形成事前 unsupported 处置后，才显式晋级下一方法。既有 EFRM LODO v2 冻结训练可
-继续后台执行，但不阻塞且不得被新方法工作修改。新方法依次为 BIOT、CBraMod、
-REVE、BrainFusion、NormWear，当前 active method 为 BIOT；STA-Net 只保留既有
-冻结结果。blocked 方法暂停新方法队列，不自动跳过。
+新方法按 BIOT、CBraMod、REVE、BrainFusion、NormWear 的冻结顺序完成了 adapter
+实现与审核、public preflight/development、freeze 和正式执行；事前 unsupported
+处置也已保留。当前没有 active delivery method。EFRM LODO v2 与上述五种方法共同
+进入完成的联合 protected campaign；STA-Net 仍只引用既有冻结结果。
 
 ## 1. 固定方法队列
 
@@ -35,9 +33,9 @@ REVE、BrainFusion、NormWear，当前 active method 为 BIOT；STA-Net 只保�
 
 | 方法 | 在本项目中的作用 | 计划输入 | 计划主评测轨 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| BIOT | 通用生理信号 foundation model 代表；检验跨数据预训练的 EEG 表征迁移 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；v2 full-public gate blocked；REFED v1 unsupported |
-| CBraMod | EEG foundation model 代表；检验通道–时间结构化预训练表征 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；representation layer 与 v2 full-public gate blocked；REFED v1 unsupported |
-| REVE | 几何感知 EEG foundation model 代表；检验真实电极坐标编码的跨布局迁移 | EEG + 已登记电极坐标 | 官方预训练权重 + 冻结编码器 linear probe | legacy public mini smoke 通过；identity/coverage gate blocked；Single-Trial 单列 overlap，REFED v1 unsupported |
+| BIOT | 通用生理信号 foundation model 代表；检验跨数据预训练的 EEG 表征迁移 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | 90/90 protected jobs 完成；3 ready-with-note、3 rejected；REFED unsupported |
+| CBraMod | EEG foundation model 代表；检验通道–时间结构化预训练表征 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | 90/90 protected jobs 完成；4 ready-with-note、2 rejected；REFED unsupported |
+| REVE | 几何感知 EEG foundation model 代表；检验真实电极坐标编码的跨布局迁移 | EEG + 已登记电极坐标 | 官方预训练权重 + 冻结编码器 linear probe | 90/90 protected jobs 完成；3 ready-with-note、1 rejected、MI/MA overlap-only；REFED unsupported |
 
 本轨只回答“EEG 单模态表征能达到什么水平”。不得把 fNIRS、EEG–fNIRS
 融合或本项目的 derived teacher 特征输入这三个模型，也不得据此声称
@@ -55,9 +53,9 @@ checkpoint，才增加独立的 clean target-excluded track。BIOT 和 CBraMod �
 
 | 方法 | 方法角色 | 计划输入 | 计划主评测轨 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| NormWear | 通用多变量生理信号 foundation model；检验统一时频 token 化能否迁移到 EEG–fNIRS | 同步 EEG + HbO/HbR | 项目适配版、冻结编码器 linear probe | 六任务 90/90 public jobs 与 A0–A8 完成；REFED unsupported；protected locked |
-| EFRM | 直接面向 EEG–fNIRS 的多模态表示学习基线 | 同步 EEG + HbO/HbR | target-dataset-excluded LODO 预训练 + linear probe | Stage A/B 各 4/4、七任务 105/105 public jobs 与 A0–A8 完成；protected locked |
-| BrainFusion NVC–CSP Stacking | 传统显式融合基线；检验 NVC/CSP 手工结构与 stacking 的竞争力 | 同步 EEG + HbO/HbR | fold 内特征拟合 + 监督分类/回归 | 五任务 75/75 public jobs 与 A0–A8 完成；DSR/REFED unsupported；protected locked |
+| NormWear | 通用多变量生理信号 foundation model；检验统一时频 token 化能否迁移到 EEG–fNIRS | 同步 EEG + HbO/HbR | 项目适配版、冻结编码器 linear probe | 90/90 protected jobs 完成；5 ready-with-note、1 rejected；REFED unsupported |
+| EFRM | 直接面向 EEG–fNIRS 的多模态表示学习基线 | 同步 EEG + HbO/HbR | target-dataset-excluded LODO 预训练 + linear probe | 105/105 protected jobs 完成；4 ready-with-note、3 rejected |
+| BrainFusion NVC–CSP Stacking | 传统显式融合基线；检验 NVC/CSP 手工结构与 stacking 的竞争力 | 同步 EEG + HbO/HbR | fold 内特征拟合 + 监督分类/回归 | 75/75 protected jobs 完成；3 ready-with-note、2 rejected；DSR/REFED unsupported |
 | STA-Net | 任务监督式深度时空融合基线 | 同步 EEG + HbO/HbR | strict cross-subject 五折端到端训练 | 正式五折已完成，保留为固定参考 |
 
 NormWear 原始方法面向更广泛的可穿戴生理信号，而不是原生 EEG–fNIRS
@@ -184,7 +182,9 @@ full-public A4/A7 结论。
 `reimplementation`，且 B3 不得宣称数值复现。若许可证不允许所需使用或发布，
 该方法保持 blocked。
 
-## 5. 实施顺序
+## 5. 已执行的实施顺序
+
+以下顺序保留为本轮实际执行记录。它不构成再次运行或新协议的授权。
 
 ### 第一批：复用已完成或正在执行的多模态基线
 
@@ -219,22 +219,23 @@ full-public A4/A7 结论。
 | 方法集合 | **已固定** |
 | STA-Net 正式五折 | **已完成** |
 | B0 资产审计 | **7/7 方法通过；可获取的本地权重已做非反序列化哈希核验** |
-| EFRM LODO v2 | **Stage A/B 各 4/4，105/105 public downstream jobs 与 A0–A8 完成；protected locked** |
-| BIOT / CBraMod | **各 90/90 public jobs 与 A0–A8 完成；REFED unsupported；protected locked** |
-| REVE | **90/90 public jobs 与 A0–A8 完成；MI/MA overlap track；REFED unsupported；protected locked** |
-| BrainFusion NVC–CSP Stacking | **五任务 75/75 public jobs 与 A0–A8 完成；DSR/REFED unsupported；protected locked** |
-| NormWear EEG–fNIRS adaptation | **六任务 90/90 public jobs 与 A0–A8 完成；REFED unsupported；protected locked** |
+| EFRM LODO v2 | **105/105 protected jobs 完成；4 ready-with-note、3 rejected** |
+| BIOT / CBraMod | **各 90/90 protected jobs 完成；REFED unsupported** |
+| REVE | **90/90 protected jobs 完成；MI/MA overlap-only；REFED unsupported** |
+| BrainFusion NVC–CSP Stacking | **75/75 protected jobs 完成；DSR/REFED unsupported** |
+| NormWear EEG–fNIRS adaptation | **90/90 protected jobs 完成；REFED unsupported** |
 | fNIRS Few-Shot Foundation Model | **不单列，等待足以证明独立性的材料** |
 | UMAP 新正式实验 | **不再计划** |
-| 新 protected evaluation | **未由本文授权** |
+| 联合 protected campaign | **540/540 完成；双签揭盲和聚合完成；42-cell 终态已生成** |
+| 新 protected evaluation | **未由本文授权；必须新建协议和授权** |
 
 实现时，每个新方法在 `comparative_methods/<method>/` 下独立保存上游
 revision、adapter、config、tests、source-fidelity 说明和运行工件，不向主方法
 的 `experiments/runs/` 写入结果。
 
-## 7. 实际运行合同草案
+## 7. 已执行的运行合同
 
-以下字段在 v2 A8 / B4 冻结前不得留作运行时自由选择：
+以下字段在 v2 A8 / B4 冻结并用于本轮正式执行，现作为完成记录保留：
 
 - 主协议为 strict cross-subject five-fold；outer seed 为 `42`，inner seed 为
   `43 + outer_fold`，下游 seeds 为 `[17, 42, 73]`；
@@ -272,7 +273,7 @@ Use Agreement 和禁止再分发边界约束。
 
 ## 8. 分批实施与退出条件
 
-### Batch 0 — 共享 preflight（当前优先）
+### Batch 0 — 共享 preflight（已完成）
 
 本批只做 CPU/小显存工作，不触碰 protected data：
 
@@ -293,7 +294,7 @@ Use Agreement 和禁止再分发边界约束。
 `max_records_per_task` 或 `max_samples_per_record` 截断的报告只能是
 `public_mini`，不得宣称退出 Batch 0。
 
-### Batch 1 — B1/B2/B3 adapter 与 smoke
+### Batch 1 — B1/B2/B3 adapter 与 smoke（已完成）
 
 按依赖顺序实施：
 
@@ -315,7 +316,7 @@ Use Agreement 和禁止再分发边界约束。
 Smoke 只证明连通性。不得用 smoke 分数决定 checkpoint、task support 或正式
 超参数。
 
-### Batch 2 — public development 与 B4 freeze
+### Batch 2 — public development 与 B4 freeze（已完成）
 
 对每种方法使用统一规模的、事前列出的轻量搜索空间。允许 inner validation
 选择 learning rate、weight decay、batch size、epoch 数和 class weighting，但
@@ -334,7 +335,7 @@ linear probe 不得解冻 backbone，也不得搜索输入通道、数据分支�
 任何影响 estimand、输入支持或模型容量的修改都创建新 protocol version，不能
 作为同一 frozen run 的“修复”。
 
-### Batch 3 — 单模态正式主矩阵
+### Batch 3 — 单模态正式主矩阵（已完成）
 
 BIOT、CBraMod、REVE-base 共同通过 adapter v2 并冻结后再启动。v1 因 REFED 对三种方法均事前
 unsupported，上限为 270 个结果单元；冻结 encoder feature 应在不做 target-wide
@@ -345,19 +346,18 @@ unsupported，上限为 270 个结果单元；冻结 encoder feature 应在不�
 两种方法提前查看 protected 结果。REVE 的 Single-Trial 两项任务进入 overlap
 表，其余可用任务保留 open-world checkpoint 身份但不标为已知目标语料重叠。
 
-### Batch 4 — 多模态补齐
+### Batch 4 — 多模态补齐（已完成）
 
-BrainFusion 只有在 EFRM、BIOT、CBraMod 和 REVE 依序到达各自冻结 scope 的终态后
-才能晋级为 active method，正式结果仍等待 B4。NVC、CSP 和 stacking 的 GPU 实现必须先与可审计的小型 CPU
-reference 做数值等价性测试；计算后端变更不允许改变方法定义。NormWear 也使用
-GPU lane，但必须等待 BrainFusion 到达终态，且任何方法都不得与另一个 comparison
-method 同时运行。
+BrainFusion 在 EFRM、BIOT、CBraMod 和 REVE 依序到达各自冻结 scope 的终态后
+晋级。NVC、CSP 和 stacking 的 GPU 实现先与可审计的小型 CPU reference 完成数值
+等价性检查；NormWear 随后完成。两者均进入同一个冻结单 GPU campaign，没有因
+前序方法结果改变方法定义。
 
 两种新方法上限为 210 个结果单元、420 个 public selection/refit job。它们完成
 后，与 frozen STA-Net 和完成后的 EFRM v2 按各自 track 汇总；BrainFusion 与
 NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文原域复现。
 
-### Batch 5 — 聚合和数字准入
+### Batch 5 — 聚合和数字准入（已完成）
 
 1. 先核对 expected 105-cell support 或事前冻结的 unsupported cells；
 2. 生成 fold mean、fold SD、pooled OOF、seed dispersion、per-subject companion
@@ -369,13 +369,13 @@ NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文�
 5. classification 与 REFED、frozen probe 与 supervised/adapted、overlap 与
    target-excluded 分表，不生成跨指标总排名。
 
-## 9. 当前资源调度
+## 9. 历史资源调度
 
 2026-07-31 的以下只读资源快照仅保留为历史调度记录：
 
 - GPU0 正在运行 EFRM Stage-B Single-Trial final refit，项目进程约占
   16.6 GiB；在该队列结束前不向 GPU0 加入新方法任务；
-- GPU1 约有 23.4 GiB 可用，可供当前 active delivery method BIOT 的 public
+- GPU1 约有 23.4 GiB 可用，当时可供 active delivery method BIOT 的 public
   audit/development 使用；不得借空闲资源提前启动 CBraMod 或更后方法；
 - `/SSD_2` 约有 1.5 TiB 可用。运行目录继续忽略，不复制 raw data、upstream
   checkout 或相同 checkpoint；feature cache 在生成前必须先给出体积估计。
@@ -396,7 +396,7 @@ EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新�
 - 任一正式单元缺失且无事前 unsupported 声明：整格 aggregate 为
   `INVALID_VALUE`，不得缩小分母。
 
-## 11. 立即开始的实现清单
+## 11. 完成清单
 
 当前代码进度如下：
 
@@ -407,12 +407,17 @@ EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新�
 3. BrainFusion 完成五个支持任务的 75 个 public jobs 和 A0-A8，DSR 与 REFED
    为事前 unsupported；NormWear 完成六任务 90 个 public jobs 和 A0-A8，
    REFED 为事前 unsupported；
-4. 上述 435 个 public jobs 的汇总均明确为 `table_admissible=false`，且所有
-   protected evaluation 仍锁定；
+4. 上述 435 个 public jobs 的汇总均明确为 `table_admissible=false`；随后只在联合
+   candidate、lane 和双签授权通过后开放一次 protected evaluation；
 5. EFRM LODO v2 的 4/4 selection、4/4 final refit、七任务 full-public replay、
    `7 tasks × 5 folds × 3 seeds = 105` 矩阵与 A0-A8 已全部完成并独立审计；
-6. 42-cell、36 pass/6 unsupported 的非授权 joint protected unlock candidate 已生成；
-   当前下一步是人工审核并另行签发授权 manifest。REVE MI/MA overlap track 与
-   STA-Net method-native context track 必须保持单独标签。
+6. 42-cell、36 supported/6 unsupported 的 release candidate、单 GPU lane、双签
+   authorization 和 ORR `GO` 已冻结；
+7. 540/540 protected jobs sealed complete，零失败、零无效、零缺失和零技术失败；
+8. 双签 unblind 与 aggregate 已完成，得到 22 ready-with-note、12 rejected、
+   2 overlap-only 和 6 unsupported 终态。REVE MI/MA overlap track 与 STA-Net
+   method-native context track 仍保持单独标签。
 
-在第 6 步明确批准之前，不启动任何新的 formal/protected run。
+完整数值和证据哈希见
+[`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
+本轮完成不授权再次执行；任何新 formal/protected run 必须使用新 candidate 和新双签。
