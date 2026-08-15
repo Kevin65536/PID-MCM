@@ -1,8 +1,0 @@
-﻿method,MI,MA,WG,n-back,DSR,Visual,REFED
-BIOT,supported,supported,supported,supported,supported,supported,unsupported
-CBraMod,supported,supported,supported,supported,supported,supported,unsupported
-REVE-base,overlap_track,overlap_track,supported,supported,supported,supported,unsupported
-EFRM LODO v2,supported,supported,supported,supported,supported,supported,supported
-NormWear adapted,supported,supported,supported,supported,supported,supported,unsupported
-BrainFusion NVC–CSP,supported,supported,supported,supported,unsupported,supported,unsupported
-STA-Net,context_reference,context_reference,context_reference,context_reference,context_reference,context_reference,context_reference
