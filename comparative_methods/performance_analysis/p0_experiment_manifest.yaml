@@ -1,0 +1,110 @@
+schema: comparator_performance_degradation_p0_v1
+frozen_on: "2026-08-16"
+plan: docs/comparisons/PERFORMANCE_DEGRADATION_ANALYSIS_PLAN_20260816.md
+output_root: comparative_methods/runs/performance_analysis/20260816_p0
+
+purpose:
+  primary: explain_valid_low_comparator_results_under_strict_cross_subject_evaluation
+  excludes:
+    - replacing_the_frozen_primary_comparison
+    - selecting_variants_against_protected_test_results
+    - numerical_reproduction_claims_without_source_anchor
+
+data_governance:
+  protected_aggregate:
+    permitted_use: frozen_descriptive_global_surface_only
+    forbidden_use:
+      - hyperparameter_selection
+      - window_or_layer_selection
+      - checkpoint_selection
+      - repeated_test_inference
+  mechanism_development:
+    permitted_partitions:
+      - public_development
+      - outer_train_only_nested_resampling
+      - complete_public_validation_exports
+    protected_predictions_or_labels: prohibited
+  final_new_test_claims:
+    require_new_frozen_decisions_and_separate_authorization: true
+
+analysis_status:
+  global_diagnostics: descriptive_post_hoc
+  efrm_hierarchical_alignment: exploratory_mechanistic
+  efrm_checkpoint_trajectory: exploratory_mechanistic
+  efrm_lag_alignment: exploratory_mechanistic
+  data_window_audit: quality_control
+  classical_baselines: exploratory_benchmark_diagnostic
+  identity_label_probes: exploratory_mechanistic
+  cbramod_adaptation_ladder: exploratory_public_pilot
+  stanet_protocol_bridge: descriptive_existing_evidence
+  brainfusion_protocol_bridge: descriptive_or_exploratory_by_artifact
+  source_anchor_inventory: evidence_capability_audit
+
+common_requirements:
+  statistical_unit:
+    cross_subject: subject
+    repeated_window: record_or_subject_block
+    random_seed: averaged_within_fold_before_between_fold_summary
+  uncertainty:
+    preferred: subject_blocked_hierarchical_bootstrap_95ci
+    alternative: paired_subject_or_fold_distribution_when_subject_values_unavailable
+    bootstrap_seed: 20260816
+  plots:
+    provisional_destination: internal_scientific_report
+    target_journal: unresolved
+    require:
+      - source_data
+      - transformation_code
+      - figure_manifest
+      - alt_text
+      - color_redundancy_when_multiple_series
+      - explicit_missing_values
+    formats: [png, pdf]
+  fail_closed:
+    missing_required_metadata: capability_report_not_numeric_result
+    incompatible_metrics_or_support: separate_panels_or_not_comparable
+    simulated_or_interpolated_results: prohibited
+
+primary_p0_questions:
+  - id: P0Q1
+    question: Are low results clustered by task rather than method?
+    inputs: frozen_protected_aggregate
+    primary_outputs:
+      - value_minus_cell_specific_B0_heatmap
+      - method_task_two_way_descriptive_decomposition
+  - id: P0Q2
+    question: Is EFRM alignment instance-level, or explained by subject/dataset shortcuts and low-rank geometry?
+    inputs: complete_public_validation_exports
+    primary_outputs:
+      - hierarchical_bidirectional_retrieval
+      - positive_minus_hardest_negative_margin
+      - centered_effective_rank
+      - subject_or_record_block_permutation
+  - id: P0Q3
+    question: Do Visual, n-back, and motor-imagery contain cross-subject signal detectable by a simple non-foundation baseline?
+    inputs: public_development_or_outer_train_only
+    primary_outputs:
+      - group_safe_bandpower_baseline_macro_f1
+      - support_and_split_audit
+  - id: P0Q4
+    question: Can existing metadata support subject, dataset, or session shortcut probes without leakage?
+    inputs: public_feature_caches
+    primary_outputs:
+      - capability_and_support_report
+      - group_safe_identity_and_label_probe_results_when_estimands_are_valid
+
+method_priority:
+  CBraMod:
+    first_test: frozen_linear_to_task_adaptation_ladder
+  EFRM:
+    first_test: reuse_existing_public_embeddings_before_retraining
+  STA-Net:
+    first_test: existing_protocol_bridge_and_comparability_audit
+  BrainFusion:
+    first_test: split_window_component_capability_decomposition
+  BIOT:
+    next_phase: pretrained_random_and_channel_semantics
+  REVE:
+    next_phase: trainable_query_and_coordinate_intervention
+  NormWear:
+    next_phase: modality_and_cwt_ablation

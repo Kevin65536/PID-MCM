@@ -197,18 +197,48 @@ def analyze_alignment_evidence(path: Path) -> tuple[dict[str, Any], dict[str, np
         f"{row.get('dataset_id', 'unknown')}:{row.get('subject', 'unknown')}"
         for row in metadata
     })
+    sample_ids = [str(row.get("sample_id", "")) for row in metadata]
+    sample_id_available = bool(sample_ids) and all(sample_ids)
+    unique_sample_count = len(set(sample_ids)) if sample_id_available else None
+    duplicate_row_count = (
+        size - unique_sample_count if unique_sample_count is not None else None
+    )
+    contains_repeated_samples = bool(
+        duplicate_row_count is not None and duplicate_row_count > 0
+    )
+    positive_pair_mask = np.asarray(arrays.get("positive_pair_mask", np.eye(size)), dtype=bool)
+    off_diagonal_positive_count = int(
+        np.count_nonzero(positive_pair_mask & ~np.eye(size, dtype=bool))
+    )
     full_validation = "full_validation" in path.name
     base.update({
         "evidence_scope": {
             "kind": (
-                "full_public_validation"
-                if full_validation else "single_exported_validation_batch"
+                "balanced_public_validation_epoch_with_repeated_samples"
+                if full_validation and contains_repeated_samples
+                else (
+                    "full_public_validation"
+                    if full_validation else "single_exported_validation_batch"
+                )
             ),
             "dataset_ids": datasets,
             "dataset_count": len(datasets),
             "subject_ids": subjects,
             "subject_count": len(subjects),
-            "representative_of_full_validation": full_validation,
+            "row_count": size,
+            "sample_id_available": sample_id_available,
+            "unique_sample_count": unique_sample_count,
+            "duplicate_row_count": duplicate_row_count,
+            "duplicate_row_fraction": (
+                None if duplicate_row_count is None else duplicate_row_count / size
+            ),
+            "contains_repeated_sample_rows": contains_repeated_samples,
+            "off_diagonal_positive_count": off_diagonal_positive_count,
+            "diagonal_only_positive_mask": off_diagonal_positive_count == 0,
+            "representative_of_full_validation": (
+                full_validation and not contains_repeated_samples
+            ),
+            "deduplicated_metrics_required": contains_repeated_samples,
         },
         "chance": {
             "top1": 1.0 / size,

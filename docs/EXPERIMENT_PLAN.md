@@ -100,6 +100,15 @@ TABLE_READY_WITH_NOTE / REJECTED_VALUE / OVERLAP_TRACK_ONLY / UNSUPPORTED:
 22 / 12 / 2 / 6
 ```
 
+2026-08-16 已完成对有效低结果的 P0 首轮性能劣化机制分析。范围包括冻结
+aggregate 的描述性图表、完整 public-validation/outer-train 产物上的 alignment、
+identity、经典基线、适配/组件 pilot 与协议可比性诊断。分析依据为
+[`PERFORMANCE_DEGRADATION_ANALYSIS_PLAN_20260816.md`](comparisons/PERFORMANCE_DEGRADATION_ANALYSIS_PLAN_20260816.md)
+和结果报告
+[`PERFORMANCE_DEGRADATION_P0_RESULTS_20260816.md`](comparisons/PERFORMANCE_DEGRADATION_P0_RESULTS_20260816.md)，
+以及 `comparative_methods/performance_analysis/p0_experiment_manifest.yaml`。该工作不授权
+依据 protected 结果选择模型、窗口、层或超参数，也不创建新的 protected 主端点。
+
 完整 42-cell 主指标、fold SD、准入状态、证据路径和 SHA-256 见
 [`comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
 其中 12 个 `REJECTED_VALUE` 必须保留为真实观察结果，不能因为正式运行已经完成

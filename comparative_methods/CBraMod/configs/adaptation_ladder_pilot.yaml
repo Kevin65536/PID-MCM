@@ -1,0 +1,47 @@
+schema: cbramod_adaptation_ladder_pilot_v1
+method_id: cbramod
+mode: public_development_only
+protected_test_default: locked
+
+# This is a pre-declared, public-only pilot.  The task/fold are intentionally
+# fixed before the run; no protected result is read by this experiment.
+task: motor_imagery
+outer_fold: 0
+seed: 17
+
+data:
+  alignment_config: comparative_methods/CBraMod/configs/alignment_v2.yaml
+  feature_cache_root: comparative_methods/CBraMod/runs/feature_cache_v2
+  train_samples_per_class: 64
+  validation_samples_per_class: 64
+  sample_order: canonical_dataset_index_ascending
+  sampling_rate_hz: 200.0
+  patch_samples: 200
+
+ladder:
+  # The same fixed number of optimizer epochs and the same memberships are
+  # used for every capacity.  Validation is recorded, never used for early
+  # stopping or candidate selection in this pilot.
+  epochs: 5
+  batch_size: 16
+  learning_rate: 0.001
+  weight_decay: 0.0
+  capacities:
+    - frozen_linear
+    - frozen_mlp
+    - last_block_linear
+    - full_finetune_linear
+    - random_linear
+    - random_mlp
+  mlp_hidden_dim: 128
+  mlp_activation: gelu
+
+resources:
+  device: cuda:1
+  feature_batch_size: 16
+  data_loader_workers: 0
+  gpu_lock_path: /tmp/pid_mcm_cbramod_adaptation_ladder_gpu1.lock
+
+output:
+  default_root: comparative_methods/runs/performance_analysis/20260816_p0/cbramod_ladder
+

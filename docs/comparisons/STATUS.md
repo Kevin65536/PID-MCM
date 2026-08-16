@@ -1,7 +1,8 @@
 # Comparison experiment status
 
-_Snapshot: 2026-08-14; the frozen candidate, sealed campaign status, dual-signature
-unblind record, aggregate, and cell-level acceptance output are the source of truth_
+_Snapshot: 2026-08-16; the frozen candidate, sealed campaign status, dual-signature
+unblind record, aggregate, and cell-level acceptance output remain the source of truth
+for primary results; the first post-campaign P0 mechanism-analysis round is complete_
 
 ## Current decision surface
 
@@ -19,6 +20,7 @@ unblind record, aggregate, and cell-level acceptance output are the source of tr
 | NormWear EEG-fNIRS adapted | **Protected complete; aggregated** | 90/90 protected jobs completed. Five cells are `TABLE_READY_WITH_NOTE`, one is `REJECTED_VALUE`, and REFED is preregistered unsupported. |
 | UMAP | **Retired from active queue** | No formal rerun is planned; prior repeatedly viewed test results remain historical Git context only. |
 | Cross-method final table | **Complete; acceptance assigned** | The single-GPU campaign completed 540/540 jobs with zero failures, was dual-signature unblinded, and produced all 42 cell terminals: 22 `TABLE_READY_WITH_NOTE`, 12 `REJECTED_VALUE`, 2 `OVERLAP_TRACK_ONLY`, and 6 `UNSUPPORTED`. |
+| Performance-degradation P0 | **First round complete; exploratory** | Frozen descriptive global diagnostics, public EFRM alignment/trajectory/lag analyses, data/window audits, classical EEG baselines, identity probes, CBraMod/BrainFusion pilots, source-anchor inventory, and STA-Net protocol bridge are synthesized in `PERFORMANCE_DEGRADATION_P0_RESULTS_20260816.md`. No protected retuning or new protected endpoint was authorized. |
 
 The completed campaign opened the authorized protected evaluation exactly for
 the frozen 540-job scope: its retained status reports
