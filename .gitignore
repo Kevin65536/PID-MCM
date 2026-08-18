@@ -29,8 +29,10 @@ __pycache__/
 .env
 .venv
 
-# dataset
-/data
+# Dataset payloads stay local; retain only the compatibility pointer that sends
+# readers to the maintained documentation under docs/.
+/data/*
+!/data/DATASETS_DESCRIPTION.md
 
 /.serena
 
@@ -135,3 +137,6 @@ __pycache__/
 # Claude Code — personal overrides and auto-generated cache 
 .claude
 CLAUDE.md
+
+# Codex — local MCP configuration and helper processes
+/.codex/

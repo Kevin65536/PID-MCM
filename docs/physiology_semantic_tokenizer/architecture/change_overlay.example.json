@@ -1,9 +1,9 @@
 {
   "schema": "physiology_semantic_architecture_changes_v2",
   "plan_id": "example_plan",
-  "title": "Proposed After-State · Example Plan",
+  "title": "Template Overlay · Example Plan",
   "subtitle": "Example only · copy this file and replace every placeholder",
-  "banner": "PLAN, not runtime · this example has no implementation or evidence standing.",
+  "banner": "TEMPLATE ONLY, not runtime · this example has no implementation or evidence standing.",
   "summary": "Example only: compose an explicit proposed after-state without modifying the canonical runtime specification.",
   "changes": [
     {

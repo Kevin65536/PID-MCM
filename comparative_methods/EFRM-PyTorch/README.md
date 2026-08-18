@@ -1,5 +1,9 @@
 # EFRM synchronous-data reproduction
 
+_Project-level execution and scientific verdicts are generated in
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Protocol and implementation
+details here describe the frozen EFRM evidence layer._
+
 This directory is the isolated project adaptation of EFRM for the four
 synchronously acquired EEG-fNIRS datasets in this repository. The untouched
 upstream checkout remains in
@@ -12,17 +16,17 @@ reproduction: the original checkpoint and processed pretraining arrays were
 not released, all project data are paired, the sampling rates are changed to
 the repository-wide 200/10 Hz contract, and channels are not duplicated.
 
-## Active performance-testing protocol
+## Frozen v2 performance-testing protocol
 
-Future comparison-grade experiments follow
+The completed v2 experiment followed
 [`sources/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md`](sources/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md)
 and its machine contract
 [`sources/lodo_full_target_fivefold_v2.yaml`](sources/lodo_full_target_fivefold_v2.yaml).
-The active design pretrains four leave-one-dataset-out checkpoints and performs
+The frozen design pretrained four leave-one-dataset-out checkpoints and performed
 downstream five-fold evaluation on every eligible subject in the complete
 target dataset. Inner validation selects the downstream training epoch, after
 which the head is reinitialized and refitted on the complete outer-training
-partition before protected evaluation.
+partition before the frozen formal evaluation.
 
 Final paper-table numbers additionally follow the lightweight
 [final-number acceptance rules](../../docs/comparisons/METRIC_ACCEPTANCE.md)
@@ -69,9 +73,9 @@ re-materialize the same candidate definition, use:
   --output comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/downstream_public_job_matrix_candidate_v2.json
 ```
 
-Neither command can open protected data. Every retained public result is
-marked `table_admissible=false`; a separate reviewed unlock is required before
-the one-time protected evaluation.
+Neither replay command can open measured evaluation data. Every retained public
+result is marked `table_admissible=false`; final cell verdicts come from the tracked
+joint-campaign result report.
 
 ## Frozen scientific and data contract
 

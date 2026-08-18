@@ -2,6 +2,11 @@
 
 _Evidence snapshot: 2026-08-11_
 
+_Historical pre-campaign snapshot; it is not a current status source. The later
+campaign completed on 2026-08-14. Use the generated
+[`PROJECT_STATUS.md`](../PROJECT_STATUS.md#对比实验) for current execution and
+scientific verdicts._
+
 ## What is complete, and what is not
 
 Three states must not be conflated:
@@ -16,13 +21,13 @@ Three states must not be conflated:
    has been evaluated exactly once on the protected outer-test identities, and
    has been aggregated into the frozen mean/standard-deviation estimand.
 
-No newly added method is at state 3 yet. STA-Net has a completed formal
+At this snapshot, no newly added method was at state 3 yet. STA-Net had a completed formal
 aggregate, but its observation budget is method-native and is therefore kept as
 a context reference rather than silently ranked in a support-matched table.
 
 ## Four-dataset coverage
 
-| Method | Single-Trial: MI / MA | Simultaneous: WG / n-back / DSR | Visual | REFED regression | Current result state |
+| Method | Single-Trial: MI / MA | Simultaneous: WG / n-back / DSR | Visual | REFED regression | Snapshot result state |
 | --- | --- | --- | --- | --- | --- |
 | STA-Net | Context reference | Context reference | Context reference | Context reference | Formal aggregate retained; not support-matched direct evidence |
 | EFRM LODO v2 | Pass / pass | Pass / pass / pass | Pass | Pass with input/target masks | 105/105 public jobs and A0-A8 complete; protected locked |

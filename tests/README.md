@@ -11,7 +11,8 @@ tests. Historical tests below `tests/archive/` are excluded by `pytest.ini`.
 | Token Atlas | `test_physiological_patch_features.py`, `test_token_physiology*.py`, `test_token_sequence.py` | Reproduce the development-only descriptive analysis |
 | Croce/solver | `test_croce_*`, `test_benchmark_solver_optimizations.py` | Preserve physical-model and cache validation |
 | Infrastructure | `test_archive_isolation.py`, `test_experiment_logger.py`, `test_run_metrics_comparison.py` | Protect storage, logging, and comparison behavior |
-| Documentation figures | `test_physiology_semantic_architecture_svg.py`, `test_experiment_plan_svg.py` | Detect status/figure drift |
+| Unified project state | `test_project_state.py` | Keep execution and scientific verdict separate, render readable evidence links, optionally audit hashes, and detect stale generated views |
+| Documentation figures | `test_physiology_semantic_architecture_svg.py`, `test_experiment_plan_svg.py` | Preserve generated-figure provenance; the experiment-plan figure is a frozen snapshot |
 
 Collection baseline at the 2026-07-30 consolidation (recheck after edits):
 

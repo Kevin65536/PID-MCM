@@ -3,6 +3,11 @@
 _Created: 2026-07-08_
 _Unified: 2026-07-18_
 
+_Dated data-engineering audit. “当前” below is local to this snapshot, not a live
+project execution/scientific status. Use [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md)
+for project state and [`../DATA_CONTRACT.md`](../DATA_CONTRACT.md) for active data
+rules._
+
 ## 当前结论
 
 `data/cache/physiology_semantic_clean_v1` 与原始 EEG bridge 已推进到四数据集

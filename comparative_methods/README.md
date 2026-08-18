@@ -5,9 +5,9 @@ protected campaign 控制面。它不是一个可直接遍历全部文件的普�
 `upstream/`、`checkpoints/` 和大部分 `runs/` 是本地资产，Git 中保留的是可审计合同、
 必要代码、摘要证据和小型 shadow 工件。
 
-本指南的当前状态更新至 2026-08-14。正式单 GPU campaign 已完成 540/540 jobs，
-零失败、零无效输出、零缺失和零技术失败；随后完成双签揭盲与聚合，并为全部
-42 个注册 cell 生成数值准入终态。完整主指标、fold SD、终态和证据哈希见
+本指南不再维护当前状态。统一的 execution/scientific-verdict 投影见
+[`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md)；本目录中的日期、计数和表格
+属于相应协议或历史执行记录。2026-08-14 campaign 的完整主指标、fold SD、终态和证据哈希见
 [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
 
 ## 一、推荐阅读顺序
@@ -17,8 +17,8 @@ protected campaign 控制面。它不是一个可直接遍历全部文件的普�
 依次阅读：
 
 1. 本文件：了解目录分层和事实优先级。
-2. [`docs/comparisons/STATUS.md`](../docs/comparisons/STATUS.md)：当前方法状态和
-   campaign 完成状态。
+2. [`docs/PROJECT_STATUS.md#对比实验`](../docs/PROJECT_STATUS.md#对比实验)：由统一
+   registry 生成的当前执行状态和科研判定。
 3. 本地忽略的 `evidence/protected_campaign/orr_preflight_v1.json`：正式执行前的
    机器可读 `GO` 快照；共享仓库以结果报告中的哈希和结论为准。
 4. [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)：
@@ -76,7 +76,7 @@ Git 未保存完整 public feature cache 或 checkpoint；release candidate 保�
 路径、大小、角色和 SHA-256。缺少本地资产时应重新获取或重建并核对 hash，不应修改
 candidate 迁就当前机器。
 
-## 三、当前方法与任务矩阵
+## 三、2026-08-14 冻结方法与任务矩阵
 
 统一任务为 MI、MA、WG、n-back、DSR、Visual 和 REFED。正式候选共 42 cells，
 36 supported、6 unsupported；每个 supported cell 为 5 folds × 3 seeds，即 15 jobs。
@@ -196,7 +196,7 @@ adapter smoke、data boundary、identity 和 final alignment evidence → public
 ### STA-Net
 
 `STA-Net-PyTorch/` 是既有独立重实现。先读 README，再读 active protocol freeze、
-模型/adapter、five-fold aggregate 和 tests。当前 campaign 不重新运行、不打开历史
+模型/adapter、five-fold aggregate 和 tests。2026 campaign 未重新运行 STA-Net，也未打开历史
 predictions；只把冻结 aggregate 作为 `method_native_context_reference`。
 
 `STA-Net/` 和 EFRM 的原始上游 checkout 含嵌套 `.git`，属于本地来源镜像，不是本仓库
@@ -205,17 +205,17 @@ predictions；只把冻结 aggregate 作为 `method_native_context_reference`。
 ### `single_modal_eeg/`
 
 这是 BIOT、CBraMod、REVE 的共享早期 public runner。它只接受 public manifest，不能
-接受 protected manifest。当前六方法正式 public matrix 的权威实现仍以各方法 v2 runner
+接受 protected manifest。冻结六方法正式 public matrix 的权威实现仍以各方法 v2 runner
 及 release candidate 冻结 artifact 为准；阅读它主要用于理解共享 EEG-only 输入合同和
 早期 270-job 队列设计。
 
 ## 六、protected campaign 阅读与执行链
 
-### 非授权审查层
+### 执行前审查层
 
 1. `audit_adapter_alignment.py` 汇总方法证据。
 2. `build_joint_protected_unlock_candidate_v2.py` 生成 42-cell eligibility candidate；
-   它不授权 protected evaluation。
+   它不包含 measured-data 执行状态。
 3. `build_joint_protected_release_candidate.py` 冻结 540 jobs、source/config/environment、
    split fingerprint、checkpoint/pipeline/cache/input-contract hashes 和失败策略。
 
@@ -229,9 +229,9 @@ predictions；只把冻结 aggregate 作为 `method_native_context_reference`。
    固定到同一 GPU UUID，禁止自动迁移。
 
 上述 shadow、单 GPU lane freeze 和正式运行均已完成。旧的双 GPU `NO-GO` 是
-2026-08-12 的历史状态，不应再作为当前 campaign 状态。
+2026-08-12 的历史状态，不应再作为统一 registry 的当前状态。
 
-### 授权、运行和揭盲层
+### 历史签署、运行和揭盲层
 
 1. lane 冻结后重新构建 release candidate；已完成。
 2. 两名不同负责人在独立 authorization 记录中签署 GO；已完成。
@@ -245,11 +245,11 @@ predictions；只把冻结 aggregate 作为 `method_native_context_reference`。
 attempt-2 只允许在同一冻结 GPU UUID 上作一次技术恢复。assigned GPU 不可用时进入
 `INCOMPLETE_TECHNICAL`，必须生成新 candidate 并重新双签，不能隐式迁移 lane。
 
-## 七、当前冻结证据
+## 七、2026 campaign 保留证据
 
 - Release candidate：`evidence/protected_campaign/joint_release_candidate_v1.json`
-- Authorization：`evidence/protected_campaign/authorization_template_v1.json`（文件名沿用
-  template，但当前工作区内容是已签署执行记录）
+- 历史签署记录：`evidence/protected_campaign/authorization_template_v1.json`（保留旧文件名，
+  工作区内容是该 campaign 的已签署执行记录）
 - Pre-run ORR：`evidence/protected_campaign/orr_preflight_v1.json`
 - CPU shadow：`evidence/protected_campaign/shadow_cpu_pass_v1/` 和
   `shadow_cpu_pass_v1_repeat/`
@@ -258,14 +258,14 @@ attempt-2 只允许在同一冻结 GPU UUID 上作一次技术恢复。assigned 
 - Tracked result report：
   [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)
 
-`ROUND_ARTIFACTS_20260812.md` 只记录运行前历史快照。当前 SHA、完成计数和结果来源
+`ROUND_ARTIFACTS_20260812.md` 只记录运行前历史快照。最终 SHA、完成计数和结果来源
 见新结果报告。CPU shadow 仍只是 public validation 工件，不是 protected 性能数字。
 
 ## 八、安全阅读规则
 
-- 已完成的双签揭盲只授权 aggregator 在冻结范围内处理结果，不意味着应人工逐个打开
+- 已完成的双签揭盲只记录 aggregator 在冻结范围内的历史处理边界，不意味着应人工逐个打开
   `protected_predictions.npz`。
-- 后续任何新 candidate 或新协议重新从 protected closed 状态开始，不能继承本轮授权。
+- 后续任何新 candidate 或新协议重新从 protected closed 状态开始，不能继承本轮签署记录。
 - 可以读取 candidate 中已登记的 path、hash、sample count 和 split fingerprint。
 - 可以读取本轮两个 `shadow_cpu_*` 目录，因为它们明确为 public surface。
 - 性能阅读以聚合报告为准，不从 worker/controller stdout、单 job status 或 audit log

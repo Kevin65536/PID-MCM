@@ -4,8 +4,8 @@ _Frozen benchmark contract; execution-status note updated 2026-08-14_
 
 This document defines the common comparison surface. Method-specific frozen
 protocols may be stricter, but may not weaken the data, split, metric, or
-protected-evaluation boundaries below. Current execution state is reported in
-[`STATUS.md`](STATUS.md); admission of a number to a paper table is governed by
+protected-evaluation boundaries below. Current execution and scientific verdicts are
+generated in [`PROJECT_STATUS.md`](../PROJECT_STATUS.md#对比实验); admission of a number to a paper table is governed by
 [`METRIC_ACCEPTANCE.md`](METRIC_ACCEPTANCE.md) and the
 [machine-readable targets](../../comparative_methods/comparison_metric_targets_v1.yaml).
 New or not-yet-frozen adapters are additionally governed by the
@@ -15,9 +15,9 @@ The completed campaign was governed by a strict serial new-method delivery
 queue: only one new method could be active across adapter
 implementation/review, public development, freeze, and formal execution.
 Frozen EFRM work was allowed to continue in the background without being
-modified. Idle hardware did not authorize starting the next queued method.
-There is no active delivery method after the 2026-08-14 aggregate; any new
-experiment requires a new frozen scope and authorization.
+modified. Idle hardware did not advance the frozen queue. At the 2026-08-14
+aggregate there was no active delivery method; any new experiment requires a new
+frozen scope and protocol version.
 
 ## Benchmark matrix
 

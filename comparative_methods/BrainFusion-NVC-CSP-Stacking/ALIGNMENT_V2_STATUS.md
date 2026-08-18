@@ -1,5 +1,9 @@
 # BrainFusion adapter-alignment v2 status
 
+_Historical public-development snapshot. It is not a current status source; use
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
+statements below retain their time-local meaning._
+
 BrainFusion has completed implementation review and the full-public A0–A7
 gate and A8 freeze as an explicitly independent NVC-CSP-stacking reimplementation. Five
 8-second classification cells are supported; DSR and REFED are preregistered

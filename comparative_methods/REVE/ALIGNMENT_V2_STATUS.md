@@ -1,5 +1,9 @@
 # REVE adapter-alignment v2 status
 
+_Historical public-development snapshot. It is not a current status source; use
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
+statements below retain their time-local meaning._
+
 REVE has reached its public-development terminal state in the serial queue.
 All six supported classification cells pass A0–A8, REFED remains preregistered
 unsupported, and protected evaluation remains separately locked. The active

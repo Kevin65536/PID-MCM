@@ -1,30 +1,36 @@
-# Current software architecture
+# Software architecture
 
-_Runnable surfaces and scientific state, updated 2026-07-30_
+_Runnable surfaces and package ownership. Current execution and scientific verdicts
+are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md)._
 
-## Status
+## Runtime scope
 
 The production tokenizer runtime remains the E2-compatible
 `PhysiologySemanticTokenizer`. R0-P, R1-D/R1-P, D1B, and R2-D added diagnostic
-and qualification components around it; they did not promote the proposed
-Shared-Driver Semantic VQ architecture.
+and qualification components around it. Their execution outcomes and scientific
+interpretation are intentionally absent from this architecture document.
 
-| Surface | Software state | Scientific state |
-| --- | --- | --- |
-| E2 tokenizer and K128 EMA VQ | implemented and tested | no semantic row admitted; retain T0 |
-| R0-P raw-lag baseline | implemented and complete | registered endpoint negative |
-| R1-D full-trajectory teacher analysis | implemented and complete | exploratory only |
-| R1-P population-frozen teacher | sealed, implemented, evaluated | structure pass; physical gate G2 failed |
-| D1B perturbation diagnostic | implemented; validation publication aborted | scientifically undetermined |
-| R2-D continuous observability | implemented and complete | bilateral criterion failed |
-| SD-SVQ / R2-P–R7 | selected components exist, full generation not promoted | blocked and unauthorized |
+There are three reading levels for the runtime. The short Mermaid flow below is
+the quick project summary; the canonical JSON/SVG pair is the implementation
+detail; and the Draw.io file is a human-readable presentation draft.
 
 The canonical current-runtime artifacts remain
 [`physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json)
 and
 [`physiology_semantic_architecture.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg).
-The proposed SD-SVQ diagram is historical plan evidence, not an implemented
-after-state.
+The shared-driver/SD-SVQ diagrams are pre-gate historical plan evidence, not an
+implemented or active after-state.
+
+The review-oriented Draw.io overview is available as a
+**quick overview / paper-figure candidate**:
+[`physiology_semantic_runtime_overview.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg),
+with its editable
+[`drawio` source](physiology_semantic_tokenizer/architecture/physiology_semantic_runtime_overview.drawio).
+It is a current-or-snapshot presentation projection of the same E2 runtime, not a
+timestamped registry view, second source of truth, or scientific-admission figure.
+The JSON and deterministic renderer above remain the implementation authority.
+
+![Quick runtime overview (presentation draft)](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
 
 ## Current E2 dataflow
 
@@ -43,7 +49,7 @@ flowchart LR
     er --> recon
     fq --> recon
     fr --> recon
-    sidecar["optional E0 teacher sidecar"] --> routed["named training-only objectives"]
+    sidecar["E2 target sidecar<br/>(training only; no semantic row admitted)"] --> routed["training-only objective probes"]
     eq --> routed
     fq --> routed
     eq --> export["IDs, posterior, vectors, residual, masks, provenance"]
@@ -79,16 +85,9 @@ Executable training, qualification, evaluation, and rendering workflows live
 under `experiments/`. Comparison methods remain isolated below
 `comparative_methods/`.
 
-## Promotion boundary
+## Scientific boundary
 
-The current decision is fixed by the R-series evidence:
-
-```text
-promotion_eligible = false
-next_action = do_not_enter_r2_p
-protected_subjects_24_29 = closed
-```
-
-R2-P or a new VQ generation requires a new independent holdout and a newly
-frozen target/estimator/null/threshold contract. Existing code presence cannot
-be used to bypass that scientific requalification.
+Code presence is not experiment state and does not imply scientific support. Query
+the unified project status before using a runnable component. A future method
+generation requires a new independent holdout and a newly frozen
+target/estimator/null/threshold contract.

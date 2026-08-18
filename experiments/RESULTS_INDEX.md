@@ -4,9 +4,19 @@ _Evidence surface updated 2026-08-14; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
-comparison, and scientific audit. A retained result is defined by its
+comparison, and paper review. A retained result is defined by its
 conclusion and provenance package, not by keeping every intermediate tensor or
 checkpoint.
+
+This file owns retention and evidence locations, not current project state. Status
+terms in its tables describe the retained artifact at its recorded snapshot. Use the
+generated [`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) for current execution and
+scientific verdicts.
+
+Some run and checkpoint paths below point to local Git-ignored artifacts that remain
+useful in this workspace but are not part of the tracked paper record. For manuscript
+Methods/Results, start with the linked human-readable reports and campaign tables;
+use local payloads only when a report explicitly requires them.
 
 ## Main-method evidence
 
@@ -25,15 +35,15 @@ checkpoint.
 | R2-D formal | [`20260728_r2d_cj_seed20260728_formal_v1`](runs/physiology_semantic_tokenizer/r2_continuous_observability/20260728_r2d_cj_seed20260728_formal_v1/summary.json) | bilateral observability failure |
 | R2-D statistical audit | [`20260728_r1d_cj_seed20260728_v2_stat_audit`](runs/physiology_semantic_tokenizer/r2_continuous_observability_analysis/20260728_r1d_cj_seed20260728_v2_stat_audit/diagnostic_summary.json) | uncertainty and diagnostic reference |
 
-The compact decision registry is
+The compact decision snapshot is
 [`06_EXPERIMENT_LOG.md`](../docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md);
 the integrated report is
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
-All R1-P sealed source/config/test paths and hashes remain untouched.
+The R1-P source/config/test package remains together as a dated result surface.
 
 ## Token Atlas
 
-Keep the full current E2 T0 Core artifact:
+Keep the frozen 2026-07-30 E2 T0 Core artifact:
 
 [`token_physiology_atlas_standard_loader_core_20260730`](runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/)
 
@@ -46,22 +56,22 @@ should reuse this frozen checkpoint/cache identity.
 
 | Method | Retained surface | Policy |
 | --- | --- | --- |
-| STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 current formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | recurring seven-task reference |
-| Joint protected campaign | tracked [`42-cell result report`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md), sealed local 540-job status, dual-unblind record, aggregate, and traceability manifest | complete; 22 ready-with-note, 12 rejected, 2 overlap-only, 6 unsupported; run payload remains ignored |
+| STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 retained formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | recurring seven-task reference |
+| Joint protected campaign | tracked [`42-cell result report`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md), dated local (Git-ignored) 540-job status, unblind record, aggregate, and traceability manifest | complete; 22 ready-with-note, 12 rejected, 2 overlap-only, 6 unsupported; run payload remains ignored |
 | EFRM v2 | entire [`efrm_lodo_full_target_fivefold_v2`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/) run/protocol/status plus method runs and caches | complete; retained as frozen campaign evidence |
 | BIOT / CBraMod / REVE | source-fidelity and alignment evidence plus frozen public/protected campaign identities | complete; protected payload remains ignored |
 | BrainFusion / NormWear | reimplementation/adaptation evidence plus frozen public/protected campaign identities | complete; labels and track boundaries remain mandatory |
 | EFRM v1 | aggregate/status and lightweight tables/figures | historical different-estimand context |
-| UMAP | code, configs, README, design, and [`EXPERIMENT_SUMMARY.md`](../comparative_methods/UMAP/EXPERIMENT_SUMMARY.md) | diagnostic only; no old run directory retained |
+| UMAP | code, configs, README, design, and [historical UMAP note](../comparative_methods/EXPERIMENT_PLAN.md#umap) | diagnostic only; no old run directory retained |
 
-The STA-Net checkpoints outside the latest formal run were superseded tuning,
+The STA-Net checkpoints outside the latest formal run were older tuning,
 smoke, personalized, or earlier formal payloads. Their configs, manifests,
 metrics, aggregates, logs, and figures remain.
 
 ## Croce validation
 
 Keep `croce_validation` design documents, scripts, reports, manifests,
-figures, and the expensive current
+figures, and the expensive retained
 `cache/croce_local/highwl_v2/` surface. Historical archive NPZ payloads are
 rebuildable from the retained manifests/configuration and measured data. The
 redesigned Synthetic Phase 1 and Real Phase 2 have not started.

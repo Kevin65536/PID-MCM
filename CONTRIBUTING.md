@@ -3,9 +3,9 @@
 _Active repository conventions, consolidated 2026-07-30_
 
 This is the operational guide for code, tests, experiment launches, results,
-and documentation. Scientific status and experiment ordering live in
-[`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md); this file does not
-authorize a blocked experiment.
+and documentation. Current execution and scientific verdicts are generated in
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md); stable experiment ordering lives
+in [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md).
 
 ## Repository boundaries
 
@@ -30,9 +30,10 @@ methods write only below their owning package. Archive discovery is always
 explicit: active tools do not recursively search `experiments/archive/`, and
 compatibility code/configuration remains in its dated namespace.
 
-The R1-P qualification seal fixes exact paths and hashes for its model,
-scripts, registries, configuration, and tests. Those files must not be moved or
-edited as ordinary cleanup. A scientific seal revision is required first.
+The R1-P qualification surface is a dated evidence package. Keep its model,
+scripts, registries, configuration, and tests together when revisiting that
+historical result; ordinary cleanup should not silently mix it with a new
+experiment generation.
 
 ## Environment
 
@@ -54,15 +55,15 @@ Before using a dataset:
 2. read the original dataset documentation named there;
 3. use the central registry and unified loader rather than a new ad hoc parser;
 4. preserve dataset-native units, task semantics, masks, channel identities,
-   timing anchors, and source hashes;
+   timing anchors, and source provenance;
 5. fit normalization or target transforms on the permitted training partition
    only;
-6. keep protected samples closed until the owning frozen protocol explicitly
-   opens them.
+6. keep the train/validation/test split and any protected-sample boundary
+   declared by the owning protocol.
 
-Raw datasets are immutable. Derived caches must carry a schema/version,
-source identity, transformation record, and manifest. A cached artifact mask
-is audit metadata, not an automatic signal-validity mask.
+Raw datasets are reference inputs. Derived caches should carry a schema/version,
+source identity, transformation record, and a small manifest. A cached artifact
+mask is audit metadata, not an automatic signal-validity mask.
 
 ## Configuration and launch
 
@@ -85,9 +86,9 @@ bash experiments/scripts/launch_training_nohup.sh \
   --dry-run
 ```
 
-This launcher can replay the E0–E2-compatible runtime. It does not override the
-current `do_not_enter_r2_p` decision and is not permission to start a new VQ
-generation.
+This launcher can replay the E0–E2-compatible runtime. Launcher availability does
+not change the execution state or scientific verdict in the unified registry;
+inspect the generated status before defining a new VQ generation.
 
 ## Evidence ladder
 
@@ -111,21 +112,21 @@ scientifically undetermined outcomes remain part of the record.
 Keep the smallest package that preserves the scientific conclusion and normal
 comparison use:
 
-- immutable configuration, split/registry identities, manifests, summaries,
+- resolved configuration, split/registry identities, manifests, summaries,
   tables, figures, alt text, and decision records;
 - a checkpoint only when it is still needed for an active run, a recurring
   analysis, a consumer interface, or an irreplaceable reference;
 - raw predictions or arrays only when the reported result cannot be audited or
   regenerated from retained material at acceptable cost.
 
-Routine smoke checkpoints, superseded tuning checkpoints, duplicated token
+Routine smoke checkpoints, older tuning checkpoints, duplicated token
 exports, and rebuildable caches do not belong in the long-term result surface.
 The retained evidence map is
 [`experiments/RESULTS_INDEX.md`](experiments/RESULTS_INDEX.md).
 
-Never clean a directory used by a live process. At the 2026-07-30
-consolidation snapshot, EFRM LODO v2 was running and its entire `runs/` and
-cache surface was excluded from cleanup.
+Never clean a directory used by a live process. Query the unified project state and
+inspect the owning process/controller immediately before cleanup; dated prose is not
+a live-process detector.
 
 ## Tests
 
@@ -144,10 +145,22 @@ green; introduce a separate small fixture or revise the seal explicitly.
 ## Documentation
 
 [`docs/README.md`](docs/README.md) is the only documentation authority map.
-Update [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md) when an experiment
-changes state. Dated reports preserve what was known at the time; later
-corrections must be new records, not silent edits to an immutable run or
-preregistration.
+Current execution and scientific verdicts live in
+[`research_state/registry.json`](research_state/registry.json), which has exactly
+those two status axes. Do not copy current state, job counts, or next actions into
+hand-written README files.
+
+When an experiment changes state, edit the corresponding current item in
+`research_state/registry.json`, then run:
+
+```bash
+.venv/bin/python experiments/scripts/project_state.py validate
+.venv/bin/python experiments/scripts/project_state.py render
+```
+
+Dated reports preserve what was known at the time. Extra evidence and audit checks
+are optional when preparing a paper-ready frozen result; they are not required for
+ordinary progress updates.
 
 Generated reports, manuscript exports, and literature PDFs are communication
 or reference assets, not active implementation authority.

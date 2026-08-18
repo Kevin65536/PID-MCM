@@ -44,6 +44,7 @@ experiment source-snapshot tests rely on several current paths. See
 [`../tests/README.md`](../tests/README.md) before reorganizing packages.
 
 Executable workflows belong under `experiments/` or the comparison package
-that owns them, not under `src/`. Current scientific status is documented in
-[`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md); implemented code
-does not imply an authorized experiment.
+that owns them, not under `src/`. Current execution and scientific verdicts are
+generated in [`../docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md); dependency
+order is in [`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md). Implemented
+code does not imply scientific support.

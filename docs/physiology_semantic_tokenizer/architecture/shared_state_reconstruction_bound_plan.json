@@ -1,6 +1,9 @@
 {
   "schema": "physiology_semantic_architecture_changes_v1",
   "plan_id": "shared_state_reconstruction_bound_plan",
+  "title": "Diagnostic-Only Historical Overlay · Shared-State Reconstruction Bound",
+  "subtitle": "Bounded shared/private-state diagnostic; no promotion gate",
+  "banner": "DIAGNOSTIC-ONLY HISTORICAL OVERLAY, not runtime · non-gate diagnostic from 2026-07-06.",
   "summary": "Bound-derived plan: narrow the shared semantic contract and make modality-private observation state plus measurement adaptation explicit.",
   "changes": [
     {
@@ -55,4 +58,3 @@
     {"from": "observation_adapter", "to": "reconstruction"}
   ]
 }
-

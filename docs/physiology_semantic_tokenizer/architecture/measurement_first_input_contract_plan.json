@@ -1,6 +1,9 @@
 {
   "schema": "physiology_semantic_architecture_changes_v1",
   "plan_id": "measurement_first_input_contract_plan",
+  "title": "Merged Historical Overlay · Measurement-First Input Contract",
+  "subtitle": "Measured-input contract retained in the current runtime",
+  "banner": "MERGED HISTORICAL OVERLAY, not a separate runtime · retained as change evidence; the measured-input contract is part of the current runtime.",
   "summary": "Replace the Croce-constrained entrance with the four-dataset unified measurement loader and make all teacher families optional sidecars.",
   "changes": [
     {

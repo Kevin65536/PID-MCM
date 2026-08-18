@@ -1,5 +1,9 @@
 # NormWear adapter-alignment v2 status
 
+_Historical public-development snapshot. It is not a current status source; use
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
+statements below retain their time-local meaning._
+
 NormWear has completed source identity, A0 cell registration, and the full
 public A1-A4 data-boundary audit as an explicitly named EEG-fNIRS adaptation.
 The executable model semantics and source-fidelity gates A5/A6 pass. Full
@@ -8,7 +12,7 @@ public production replay A7 and the A8 public-development freeze now pass. All
 controller and passed independent artifact audit; failures and automatic
 retries were both zero. Protected evaluation remains locked.
 
-| Task | Unique public samples | Measured input | Current status |
+| Task | Unique public samples | Measured input | Historical status |
 | --- | ---: | --- | --- |
 | Motor imagery | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A8 pass; protected locked |
 | Mental arithmetic | 1,740 | EEG 30; HbO/HbR 36 locations | A0-A8 pass; protected locked |

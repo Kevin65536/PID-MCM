@@ -1,8 +1,12 @@
 # BrainFusion NVC-CSP stacking comparison workspace
 
+_Project-level execution and scientific verdicts are generated in
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Public-development and
+data-boundary statements here describe the frozen implementation/evidence layer._
+
 This workspace contains the traditional paired EEG-fNIRS fusion baseline.
-A0–A8 alignment and the 75-job public-development matrix are complete;
-protected evaluation remains separately locked. There is no pretrained
+A0–A8 alignment and the 75-job public-development matrix completed before the later
+joint campaign. There is no pretrained
 checkpoint: NVC features, CSP filters, base learners, and the stacking learner
 must all be fitted inside each outer-training fold.
 
@@ -19,8 +23,8 @@ release the complete paper-case pipeline, project results must be named
 `brainfusion_nvc_csp_stacking_reimplementation` and must not be described as a
 numerical reproduction of the source paper.
 
-The frozen public status is recorded in
+The frozen public-development snapshot is recorded in
 `evidence/alignment_v2/summary_final.json` and
 `evidence/public_development_v2/matrix_completion_summary.json`. DSR and REFED
-are preregistered unsupported; public validation results are not
-table-admissible and do not authorize protected evaluation.
+are preregistered unsupported; public validation results alone are not
+table-admissible.

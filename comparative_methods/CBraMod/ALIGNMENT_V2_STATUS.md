@@ -1,5 +1,9 @@
 # CBraMod adapter-alignment v2 status
 
+_Historical public-development snapshot. It is not a current status source; use
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
+statements below retain their time-local meaning._
+
 CBraMod has reached its public-development terminal state in the serial queue.
 Its representation layer is fixed at the official downstream latent-token
 boundary, and all six supported classification cells pass A0–A8. REFED remains

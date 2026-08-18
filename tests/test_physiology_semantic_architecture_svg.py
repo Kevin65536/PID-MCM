@@ -142,6 +142,36 @@ def test_existing_v1_plan_gets_dynamic_callouts_without_source_changes():
     assert int(root.attrib["height"]) > int(_spec()["height"])
 
 
+def test_registered_plan_labels_keep_historical_roles_visible():
+    expected = {
+        "measurement_first_input_contract_plan": (
+            "Merged Historical Overlay · Measurement-First Input Contract",
+            "MERGED HISTORICAL OVERLAY",
+        ),
+        "physical_teacher_gradient_entry_plan": (
+            "Superseded Historical Plan · Coupling-Aware Foundation Pipeline",
+            "SUPERSEDED HISTORICAL PLAN",
+        ),
+        "shared_driver_semantic_return_plan": (
+            "Historical Pre-Gate Plan · Shared-Driver Semantic VQ",
+            "HISTORICAL PRE-GATE PLAN",
+        ),
+        "shared_state_reconstruction_bound_plan": (
+            "Diagnostic-Only Historical Overlay · Shared-State Reconstruction Bound",
+            "DIAGNOSTIC-ONLY HISTORICAL OVERLAY",
+        ),
+    }
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    for plan_id, (title, banner_prefix) in expected.items():
+        changes_path = PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
+        changes = _load(changes_path)
+        root = _xml(render_svg(_spec(), changes))
+        assert root.find("svg:title", namespace).text == title
+        boundary = root.find(".//*[@id='evidence-boundary']")
+        assert boundary is not None
+        assert "".join(boundary.itertext()).startswith(banner_prefix)
+
+
 def test_physical_teacher_plan_keeps_preservation_discovery_and_certificate_distinct():
     plan_id = "physical_teacher_gradient_entry_plan"
     changes = _load(
@@ -150,7 +180,7 @@ def test_physical_teacher_plan_keeps_preservation_discovery_and_certificate_dist
     root = _xml(render_svg(_spec(), changes))
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     assert root.find("svg:title", namespace).text == (
-        "Proposed After-State · Coupling-Aware Foundation Pipeline"
+        "Superseded Historical Plan · Coupling-Aware Foundation Pipeline"
     )
     assert root.find(".//*[@id='evidence-boundary']") is not None
     assert root.find(".//*[@id='node-coupling_shaper']").attrib["data-implementation"] == "planned"
@@ -171,7 +201,7 @@ def test_shared_driver_return_plan_keeps_independent_k128_and_scoped_external_ev
     root = _xml(render_svg(_spec(), changes))
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     assert root.find("svg:title", namespace).text == (
-        "Proposed After-State · Shared-Driver Semantic VQ"
+        "Historical Pre-Gate Plan · Shared-Driver Semantic VQ"
     )
     assert root.find(".//*[@id='node-eeg_quantizer']").attrib["data-implementation"] == (
         "implemented"

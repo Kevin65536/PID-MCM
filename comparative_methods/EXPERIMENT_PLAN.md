@@ -1,7 +1,8 @@
-# 对比方法实验计划与完成记录
+# 对比方法实验计划与历史完成记录
 
-_原计划冻结于 2026-07-31；执行终态更新至 2026-08-14。本文记录已执行的
-comparison campaign，但不授权任何新的 protected evaluation 或高成本训练。_
+_原计划冻结于 2026-07-31；本文的完成计数是 2026-08-14 历史执行记录，不是
+当前状态源。当前 execution/scientific verdict 由
+[`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) 生成。_
 
 本文是 `comparative_methods/` 下对比实验的规划入口。现阶段正式方法集合固定为：
 
@@ -22,16 +23,16 @@ protected-test 边界继续服从
 `B1_input_contract: pass...` 不自动提升为 v2 通过；v2 按
 `method × task × track × alignment_profile` 判定，而不是按整个方法判定。
 
-新方法按 BIOT、CBraMod、REVE、BrainFusion、NormWear 的冻结顺序完成了 adapter
+截至该历史快照，新方法按 BIOT、CBraMod、REVE、BrainFusion、NormWear 的冻结顺序完成了 adapter
 实现与审核、public preflight/development、freeze 和正式执行；事前 unsupported
-处置也已保留。当前没有 active delivery method。EFRM LODO v2 与上述五种方法共同
-进入完成的联合 protected campaign；STA-Net 仍只引用既有冻结结果。
+处置也已保留。该快照中没有 active delivery method。EFRM LODO v2 与上述五种方法共同
+进入完成的联合 protected campaign；STA-Net 只引用当时已有的冻结结果。
 
 ## 1. 固定方法队列
 
 ### 1.1 单模态：EEG-only
 
-| 方法 | 在本项目中的作用 | 计划输入 | 计划主评测轨 | 当前状态 |
+| 方法 | 在本项目中的作用 | 计划输入 | 计划主评测轨 | 2026-08-14 历史终态 |
 | --- | --- | --- | --- | --- |
 | BIOT | 通用生理信号 foundation model 代表；检验跨数据预训练的 EEG 表征迁移 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | 90/90 protected jobs 完成；3 ready-with-note、3 rejected；REFED unsupported |
 | CBraMod | EEG foundation model 代表；检验通道–时间结构化预训练表征 | 仅 EEG | 官方预训练权重 + 冻结编码器 linear probe | 90/90 protected jobs 完成；4 ready-with-note、2 rejected；REFED unsupported |
@@ -51,7 +52,7 @@ checkpoint，才增加独立的 clean target-excluded track。BIOT 和 CBraMod �
 
 ### 1.2 多模态：EEG–fNIRS
 
-| 方法 | 方法角色 | 计划输入 | 计划主评测轨 | 当前状态 |
+| 方法 | 方法角色 | 计划输入 | 计划主评测轨 | 2026-08-14 历史终态 |
 | --- | --- | --- | --- | --- |
 | NormWear | 通用多变量生理信号 foundation model；检验统一时频 token 化能否迁移到 EEG–fNIRS | 同步 EEG + HbO/HbR | 项目适配版、冻结编码器 linear probe | 90/90 protected jobs 完成；5 ready-with-note、1 rejected；REFED unsupported |
 | EFRM | 直接面向 EEG–fNIRS 的多模态表示学习基线 | 同步 EEG + HbO/HbR | target-dataset-excluded LODO 预训练 + linear probe | 105/105 protected jobs 完成；4 ready-with-note、3 rejected |
@@ -184,7 +185,7 @@ full-public A4/A7 结论。
 
 ## 5. 已执行的实施顺序
 
-以下顺序保留为本轮实际执行记录。它不构成再次运行或新协议的授权。
+以下顺序保留为本轮实际执行记录。它不是再次运行或新协议的状态记录。
 
 ### 第一批：复用已完成或正在执行的多模态基线
 
@@ -212,7 +213,7 @@ full-public A4/A7 结论。
    `foundation/generalist`、`direct EEG–fNIRS representation`、
    `traditional fusion`、`supervised deep fusion` 四类对照。
 
-## 6. 计划状态
+## 6. 历史计划终态（2026-08-14）
 
 | 项目 | 状态 |
 | --- | --- |
@@ -227,7 +228,7 @@ full-public A4/A7 结论。
 | fNIRS Few-Shot Foundation Model | **不单列，等待足以证明独立性的材料** |
 | UMAP 新正式实验 | **不再计划** |
 | 联合 protected campaign | **540/540 完成；双签揭盲和聚合完成；42-cell 终态已生成** |
-| 新 protected evaluation | **未由本文授权；必须新建协议和授权** |
+| 新 measured-data evaluation | **不属于这份冻结记录；必须建立新版本协议** |
 
 实现时，每个新方法在 `comparative_methods/<method>/` 下独立保存上游
 revision、adapter、config、tests、source-fidelity 说明和运行工件，不向主方法
@@ -239,7 +240,7 @@ revision、adapter、config、tests、source-fidelity 说明和运行工件，�
 
 - 主协议为 strict cross-subject five-fold；outer seed 为 `42`，inner seed 为
   `43 + outer_fold`，下游 seeds 为 `[17, 42, 73]`；
-- 复用当前 method-neutral registry，其 manifest SHA-256 为
+- 复用该冻结协议的 method-neutral registry，其 manifest SHA-256 为
   `2a10b36db85dba6ec5543edc7810ff85d978ea5af8c79fda3d38a1e5cfd11106`；
 - 每个方法最多产生 `7 tasks × 5 outer folds × 3 seeds = 105` 个正式结果单元；
   inner selection 和 full-outer refit 是每个单元的两个训练阶段，不是额外结果；
@@ -380,9 +381,9 @@ NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文�
 - `/SSD_2` 约有 1.5 TiB 可用。运行目录继续忽略，不复制 raw data、upstream
   checkout 或相同 checkpoint；feature cache 在生成前必须先给出体积估计。
 
-REVE-large、full fine-tuning、sample-random 和 few-shot 不进入当前资源队列。
+REVE-large、full fine-tuning、sample-random 和 few-shot 未进入该历史资源队列。
 EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新方法侧每次只晋级
-一个 method；GPU0/GPU1 的物理空闲不构成提前启动下一 delivery method 的授权。
+一个 method；GPU0/GPU1 的物理空闲不改变冻结的执行顺序。
 
 ## 10. 失败、重试与停止规则
 
@@ -398,7 +399,7 @@ EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新�
 
 ## 11. 完成清单
 
-当前代码进度如下：
+截至 2026-08-14 的代码进度如下：
 
 1. 共享 public split/input/metric contract、adapter-alignment v2 contract 与
    preflight tests 已完成；
@@ -420,4 +421,5 @@ EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新�
 
 完整数值和证据哈希见
 [`docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)。
-本轮完成不授权再次执行；任何新 formal/protected run 必须使用新 candidate 和新双签。
+本轮完成记录不能作为再次执行的状态；任何新 formal/protected run 必须使用新 candidate
+和新版本协议记录。

@@ -1,8 +1,9 @@
 # Physiology-semantic tokenizer experiment log
 
-_Current decision registry; detailed historical reports remain under `analysis/`_
+_Dated decision snapshot (2026-07-29); detailed historical reports remain under
+`analysis/`_
 
-## Current state
+## Snapshot state
 
 E0–E2 is a closed historical generation. Its final development decision was
 `no_semantic_row_admitted_retain_T0`, followed by an architecture return to a
@@ -16,7 +17,7 @@ decodable population-frozen coordinate, but failed the preregistered physical
 reconstruction consistency gate. D1B validation terminated before endpoint
 evaluation because of a serializer defect and is scientifically undetermined.
 
-The active decision is:
+The snapshot decision is:
 
 ```text
 promotion_eligible = false
@@ -34,7 +35,7 @@ interpretation and lessons are consolidated in
 | --- | --- | --- | --- |
 | 2026-07-28 | `R0-P` | Raw EEG bandpower–fNIRS lag baseline, subjects 01–23 | Registered alpha–HbO endpoint negative; no 30-family FWER discovery |
 | 2026-07-28 | `R1-D` | Subject-fitted teacher geometry | Exploratory correction geometry only |
-| 2026-07-28 | `R2-D` | One-seed continuous raw-only trajectory prediction | Bilateral endpoint failed; VQ not authorized |
+| 2026-07-28 | `R2-D` | One-seed continuous raw-only trajectory prediction | Bilateral endpoint failed; this result does not support a new VQ generation |
 | 2026-07-28 | `R1-P-STRUCTURE` | Population-frozen bundle structure and leakage | Passed; 1,080 fit and 300 pure-apply windows |
 | 2026-07-28 | `R1-P-FORMAL-V3` | Frozen six-gate teacher qualification | G2 failed; G3–G6 passed; G1 invalid due dtype contract |
 | 2026-07-28 | `R1-P-POSTFORMAL` | Failure localization and adaptation diagnostics | Subject/chromophore heterogeneity; no stable common correction phase |
@@ -44,7 +45,7 @@ interpretation and lessons are consolidated in
 ## Historical generation
 
 The earlier generation remains reproducible through its tracked configs and
-reports, but none of its intermediate statuses supersedes the R-series stop
+reports, but none of its intermediate statuses changes the R-series stop
 decision.
 
 | Period | Scope | Final interpretation |
@@ -59,4 +60,4 @@ analysis files and local run manifests. This log intentionally records only
 generation-level decisions so it cannot drift into a second, competing
 technical report.
 
-_Last updated: 2026-07-29_
+_Snapshot date: 2026-07-29_

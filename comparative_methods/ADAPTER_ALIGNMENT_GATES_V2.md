@@ -2,7 +2,9 @@
 
 _生效日期：2026-07-31。适用于尚未冻结的新对比单元；不回开已经完成的
 protected evaluation，也不改变正在执行的冻结协议。机器合同见
-[`adapter_alignment_gate_contract_v2.yaml`](adapter_alignment_gate_contract_v2.yaml)。_
+[`adapter_alignment_gate_contract_v2.yaml`](adapter_alignment_gate_contract_v2.yaml)。
+本文定义门控，不维护当前方法状态；当前 execution/scientific verdict 见
+[`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md)。_
 
 ## 结论
 
@@ -18,16 +20,15 @@ patch/token、通道顺序、几何编码、池化和源方法声明的固定变
 
 ## 新方法严格串行落地
 
-从本版本开始只允许一个 active delivery method。串行范围包括 adapter 实现与审核、
-public preflight/development、协议冻结和该新方法的正式执行；当前方法未完成前，不
-提前实现或试跑队列中的下一种方法。
+每个采用本合同的协议版本只允许一个 active delivery method。串行范围包括 adapter
+实现与审核、public preflight/development、协议冻结和该新方法的正式执行；前一方法
+未形成终态前，不提前实现或试跑队列中的下一种方法。
 
 协议生效前已经运行的 EFRM LODO v2 冻结训练可以继续，但它是不可修改的后台协议，
-不阻塞新方法代码落地。STA-Net 同样只保留已完成结果。新的实现顺序为 BIOT、
-CBraMod、REVE、BrainFusion、NormWear。BIOT、CBraMod、REVE 和 BrainFusion 均已
-完成各自 public delivery，NormWear 也已完成，protected 仍分别锁定；当前没有
-active delivery method。若当前方法 blocked，则暂停新方法队列处理 blocker，不能静默跳过。任何延后的
-protected 执行都不得与 active delivery method 并发。
+不阻塞新方法代码落地。STA-Net 同样只保留已完成结果。2026 队列采用的冻结顺序为
+BIOT、CBraMod、REVE、BrainFusion、NormWear；其完成记录已迁入统一 registry。若某一
+方法 blocked，则暂停该版本队列处理 blocker，不能静默跳过。任何延后的正式执行都
+不得与 active delivery method 并发。
 
 ## 数据集特征对门控的约束
 
@@ -106,9 +107,10 @@ foundation-model 排名。
 合法终态；`blocked` 表示证据或实现仍缺失；`fail` 表示已观察到合同违规。synthetic
 或 public mini 只能证明连通性，不能提升 A4/A7 的 full-coverage 结论。
 
-## 当前 adapter 的迁移判定
+## 2026-08-02 public-development 迁移快照
 
-这是基于仓库代码和现有 public 证据的审计结论，不是新的正式结果。
+这是正式联合 campaign 之前、基于当时仓库代码和 public 证据的历史审计结论，不是
+当前状态源。后续 execution 与 scientific verdict 以统一 registry 为准。
 
 | 方法 | v2 判定 | 需要先处理的事项 |
 | --- | --- | --- |

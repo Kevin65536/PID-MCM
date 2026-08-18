@@ -1,16 +1,16 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ns2="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" width="1728pt" height="756pt" viewBox="0 0 1728 756" version="1.1" role="img" aria-labelledby="experiment-plan-title experiment-plan-desc">
-  <title id="experiment-plan-title">EEG–fNIRS 全实验计划与当前进度</title>
+  <title id="experiment-plan-title">EEG–fNIRS 全实验计划与进度快照（历史）</title>
   <desc id="experiment-plan-desc">Four-lane experiment plan. The main tokenizer completed E0 through E2 and the R-series prerequisites but stopped after R1-P and R2-D failed. Future R2-P through R7 are blocked. The T0 Atlas Core run and STA-Net formal benchmark are complete. The joint comparison campaign completed 540 of 540 protected jobs with zero failures, followed by dual-signature unblinding, aggregation, and terminal assignment for all 42 cells. Atlas Statistical tier and Croce Synthetic Phase 1 remain next.</desc>
   <metadata>{"authoritative_sources":["docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md","docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/summary.json","experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/stability.json","comparative_methods/comparison_metric_targets_v1.yaml","comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/status.json","comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/protocol/20260727_LODO_FULL_TARGET_FIVEFOLD_PROTOCOL_FREEZE.md","comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json","comparative_methods/evidence/protected_campaign/unblind_manifest_v1.json","comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/campaign_status.json","comparative_methods/runs/protected_campaign/joint-comparison-protected-20260813-v3-single-gpu/joint-comparison-protected-20260813-v3-single-gpu/aggregate/aggregate.json","docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md","croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md"],"decision":{"next_action":"do_not_enter_r2_p","promotion_eligible":false,"protected_subjects_24_29":"closed"},"live_status":{"comparison_campaign":{"aggregate_created_at":"2026-08-14T09:29:44.165567+08:00","campaign_id":"joint-comparison-protected-20260813-v3-single-gpu","cell_count":42,"completed_job_count":540,"expected_job_count":540,"failed_job_count":0,"protected_test_opened":true,"status":"aggregated","terminal_counts":{"OVERLAP_TRACK_ONLY":2,"REJECTED_VALUE":12,"TABLE_READY_WITH_NOTE":22,"UNSUPPORTED":6},"unblind_authorized":true}},"schema":"experiment-plan-v1","snapshot_at":"2026-08-14T09:29:44+08:00","source_schema":"experiment_plan_source_v1","timezone":"Asia/Shanghai"}</metadata>
-  <title>EEG–fNIRS 全实验计划与当前进度</title>
+  <title>EEG–fNIRS 全实验计划与进度快照（历史）</title>
   <metadata>
     <rdf:RDF>
       <ns2:Work>
         <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title>EEG–fNIRS 全实验计划与当前进度</dc:title>
+        <dc:title>EEG–fNIRS 全实验计划与进度快照（历史）</dc:title>
         <dc:date>2026-08-14T09:29:44+08:00</dc:date>
-        <dc:description>主方法结论沿用 2026-07-30 冻结；对比方法更新至 2026-08-14 聚合终态</dc:description>
+        <dc:description>Historical snapshot · 2026-08-14 · 主方法结论沿用 2026-07-30 冻结；对比方法更新至该日聚合终态</dc:description>
         <dc:format>image/svg+xml</dc:format>
         <dc:creator>
           <ns2:Agent>
@@ -213,10 +213,10 @@
         <path d="M 1234.174326 653.095396  L 1238.174326 655.095396  L 1234.174326 657.095396  z " clip-path="url(#pc864857289)" style="fill: #7b8190; stroke-dasharray: 4.255,1.84; stroke-dashoffset: 0; stroke: #7b8190; stroke-width: 1.15; stroke-linecap: round" />
       </g>
       <g id="text_5">
-        <text style="font-weight: 700; font-size: 18px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #101828" x="45.226319" y="39.080358" transform="rotate(-0 45.226319 39.080358)">EEG–fNIRS 全实验计划与当前进度</text>
+        <text style="font-weight: 700; font-size: 18px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #101828" x="45.226319" y="39.080358" transform="rotate(-0 45.226319 39.080358)">EEG–fNIRS 全实验计划与进度快照（历史）</text>
       </g>
       <g id="text_6">
-        <text style="font-size: 9.3px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #475467" x="46.329537" y="57.024347" transform="rotate(-0 46.329537 57.024347)">主方法结论沿用 2026-07-30 冻结；对比方法更新至 2026-08-14 聚合终态</text>
+        <text style="font-size: 9.3px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #475467" x="46.329537" y="57.499519" transform="rotate(-0 46.329537 57.499519)">Historical snapshot · 2026-08-14 · 主方法结论沿用 2026-07-30 冻结；对比方法更新至该日聚合终态</text>
       </g>
       <g id="text_7">
         <text style="font-weight: 700; font-size: 9.2px; font-family: 'Noto Sans CJK JP'; text-anchor: end; fill: #a61b1b" x="1700.053681" y="34.778029" transform="rotate(-0 1700.053681 34.778029)">当前主线：promotion_eligible = false  ·  protected 24–29 = closed</text>

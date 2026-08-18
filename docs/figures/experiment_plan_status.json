@@ -2,8 +2,8 @@
   "schema": "experiment_plan_source_v1",
   "snapshot_at": "2026-08-14T09:29:44+08:00",
   "timezone": "Asia/Shanghai",
-  "title": "EEG–fNIRS 全实验计划与当前进度",
-  "subtitle": "主方法结论沿用 2026-07-30 冻结；对比方法更新至 2026-08-14 聚合终态",
+  "title": "EEG–fNIRS 全实验计划与进度快照（历史）",
+  "subtitle": "Historical snapshot · 2026-08-14 · 主方法结论沿用 2026-07-30 冻结；对比方法更新至该日聚合终态",
   "decision": {
     "promotion_eligible": false,
     "next_action": "do_not_enter_r2_p",

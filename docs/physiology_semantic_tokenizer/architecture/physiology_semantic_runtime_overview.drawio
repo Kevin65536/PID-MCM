@@ -1,0 +1,110 @@
+<mxfile host="app.diagrams.net" modified="2026-08-18T00:00:00.000Z" agent="Codex headless Draw.io MCP" version="24.7.17">
+  <diagram id="runtime-overview" name="Current runtime">
+    <mxGraphModel dx="1700" dy="1020" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1020" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="canvas" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="1700" height="1020" as="geometry"/>
+        </mxCell>
+        <mxCell id="title" value="Physiology-Semantic Tokenizer" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#1F2937;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="360" y="22" width="980" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Current E2-compatible runtime · measured inputs · independent K128 codebooks · privileged training evidence" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=14;fontColor=#5F6B7A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="250" y="66" width="1200" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="status" value="IMPLEMENTED RUNTIME  ·  E2: 0 semantic rows admitted  ·  historical P6 not implemented" style="rounded=1;whiteSpace=wrap;html=1;arcSize=28;fillColor=#F1F5F9;strokeColor=#CBD5E1;fontColor=#475569;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="525" y="99" width="650" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="teacher-zone" value="TRAINING-ONLY EVIDENCE LANE" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FCFAFF;strokeColor=#C4B5D5;dashed=1;dashPattern=5 5;strokeWidth=1.5;fontColor=#76558F;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=13;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="145" width="1620" height="205" as="geometry"/>
+        </mxCell>
+        <mxCell id="runtime-zone" value="MEASURED INFERENCE + EXPORT LANE" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FBFCFE;strokeColor=#B9C9D8;dashed=1;dashPattern=5 5;strokeWidth=1.5;fontColor=#51687D;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=13;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="1620" height="560" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sidecar" value="&lt;b&gt;E2 adaptive target sidecar&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;named · versioned · detached&lt;br&gt;development supervision only&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F3E8FF;strokeColor=#A578C7;strokeWidth=2;fontColor=#2F2540;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="85" y="205" width="230" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="adapter" value="&lt;b&gt;Entry-aware adapter&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;local · prototype · context&lt;br&gt;coupling masks · stop-gradient&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F3E8FF;strokeColor=#A578C7;strokeWidth=2;fontColor=#2F2540;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="390" y="205" width="230" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="targets" value="&lt;b&gt;Routed targets + masks&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;EEG [B,10,6] · fNIRS [B,10,9]&lt;br&gt;boundary + entry validity&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F3E8FF;strokeColor=#A578C7;strokeWidth=2;fontColor=#2F2540;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="695" y="205" width="230" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="objectives" value="&lt;b&gt;Training-only objectives&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;routed semantic losses&lt;br&gt;semantic + residual reconstructions&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="205" width="250" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="lifecycle" value="&lt;b&gt;Training lifecycle&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;dry → smoke → formal E2&lt;br&gt;9/9 dev jobs · frozen checkpoint&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="1335" y="205" width="270" height="98" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="loader" value="&lt;b&gt;Unified measured local view&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;20 s crop · 10 boundary patches&lt;br&gt;recorded valid_mask is authority&lt;br&gt;artifact flag = QC annotation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="75" y="550" width="210" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="eeg-input" value="&lt;b&gt;Measured EEG&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;[B, 6, 4000]&lt;br&gt;inference input&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="330" y="445" width="190" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="eeg-encoder" value="&lt;b&gt;EEG patch-local encoder&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;patch + FFT [B,10,6,400]&lt;br&gt;local MLP feature 256&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="575" y="445" width="215" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="eeg-latents" value="&lt;b&gt;EEG continuous latents&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;semantic D64 · state head 6&lt;br&gt;residual D64&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F1ECFA;strokeColor=#9482C4;strokeWidth=2;fontColor=#352B52;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="850" y="445" width="215" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="eeg-vq" value="&lt;b&gt;Independent EEG EMA VQ&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;K=128 · D=64 · count/sum&lt;br&gt;previous 5-token context&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E5F6EF;strokeColor=#63A58B;strokeWidth=2;fontColor=#214C3D;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="1125" y="445" width="215" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fnirs-input" value="&lt;b&gt;Measured fNIRS&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;HbO / HbR [B, 2, 200]&lt;br&gt;paired anchor input&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="330" y="755" width="190" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="fnirs-encoder" value="&lt;b&gt;fNIRS patch-local encoder&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;patch + FFT [B,10,2,20]&lt;br&gt;local MLP feature 160&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="575" y="755" width="215" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="fnirs-latents" value="&lt;b&gt;fNIRS continuous latents&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;semantic D64 · state head 9&lt;br&gt;residual D32&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F1ECFA;strokeColor=#9482C4;strokeWidth=2;fontColor=#352B52;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="850" y="755" width="215" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="fnirs-vq" value="&lt;b&gt;Independent fNIRS EMA VQ&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;K=128 · D=64 · count/sum&lt;br&gt;previous 5-token context&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E5F6EF;strokeColor=#63A58B;strokeWidth=2;fontColor=#214C3D;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="1125" y="755" width="215" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="export" value="&lt;b&gt;P5 token export v1&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;IDs · posterior · vectors&lt;br&gt;residual · masks · provenance&lt;br&gt;→ whole-brain consumers&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#DDF7EE;strokeColor=#55A68A;strokeWidth=2.2;fontColor=#1E4B3D;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="590" width="225" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="blocked" value="&lt;b&gt;Historical P6 proposal&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#6B7280&quot;&gt;never implemented · superseded&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF1F2;strokeColor=#D47C8A;strokeWidth=2;dashed=1;dashPattern=4 4;fontColor=#733A44;fontSize=14;align=left;verticalAlign=middle;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="795" width="225" height="74" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e-loader-sidecar" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;" edge="1" parent="1" source="loader" target="sidecar">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="180" y="365"/><mxPoint x="200" y="365"/></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e-sidecar-adapter" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;" edge="1" parent="1" source="sidecar" target="adapter"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-adapter-targets" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;" edge="1" parent="1" source="adapter" target="targets"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-targets-objectives" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;" edge="1" parent="1" source="targets" target="objectives"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-objectives-lifecycle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#C69236;dashed=1;dashPattern=7 6;flowAnimation=1;" edge="1" parent="1" source="objectives" target="lifecycle"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="e-loader-eeg" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="loader" target="eeg-input"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eeg-input-encoder" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="eeg-input" target="eeg-encoder"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eeg-encoder-latents" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="eeg-encoder" target="eeg-latents"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eeg-latents-vq" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="eeg-latents" target="eeg-vq"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eeg-vq-export" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="eeg-vq" target="export"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1365" y="495"/><mxPoint x="1365" y="635"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="e-loader-fnirs" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="loader" target="fnirs-input"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-fnirs-input-encoder" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="fnirs-input" target="fnirs-encoder"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-fnirs-encoder-latents" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="fnirs-encoder" target="fnirs-latents"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-fnirs-latents-vq" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="fnirs-latents" target="fnirs-vq"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-fnirs-vq-export" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;" edge="1" parent="1" source="fnirs-vq" target="export"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1365" y="805"/><mxPoint x="1365" y="680"/></Array></mxGeometry></mxCell>
+
+        <mxCell id="e-eeg-vq-objectives" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;strokeWidth=1.8;strokeColor=#9A70B7;dashed=1;dashPattern=4 5;flowAnimation=1;" edge="1" parent="1" source="eeg-vq" target="objectives"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1090" y="400"/><mxPoint x="1125" y="400"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-fnirs-vq-objectives" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;strokeWidth=1.8;strokeColor=#9A70B7;dashed=1;dashPattern=4 5;flowAnimation=1;" edge="1" parent="1" source="fnirs-vq" target="objectives"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1080" y="900"/><mxPoint x="1080" y="335"/></Array></mxGeometry></mxCell>
+        <mxCell id="e-lifecycle-export" value="freeze + export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#7B8794;dashed=1;dashPattern=10 6;fontColor=#5F6B7A;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="lifecycle" target="export"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-export-blocked" value="blocked" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=0;strokeWidth=1.8;strokeColor=#9CA3AF;dashed=1;dashPattern=3 5;fontColor=#6B7280;fontSize=11;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="export" target="blocked"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="legend-data" value="animated measured/export flow" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#E9F2FF;strokeColor=#7AA6D8;fontColor=#43566B;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="440" y="960" width="225" height="30" as="geometry"/></mxCell>
+        <mxCell id="legend-training" value="animated training-only route" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#F3E8FF;strokeColor=#A578C7;fontColor=#5A456C;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="700" y="960" width="225" height="30" as="geometry"/></mxCell>
+        <mxCell id="legend-blocked" value="static guarded / blocked route" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#F3F4F6;strokeColor=#9CA3AF;dashed=1;fontColor=#5F6772;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="960" y="960" width="225" height="30" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

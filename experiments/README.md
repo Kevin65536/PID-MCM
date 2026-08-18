@@ -17,15 +17,18 @@ Comparison methods own their code, configs, runs, and caches below
 `comparative_methods/<method>/`. Croce validation owns
 `croce_validation/`. Do not create a second generic results root.
 
-## Current authorization
+## Current state
 
-The E2-compatible launcher remains runnable, but the main method is stopped at
-`do_not_enter_r2_p`. The presence of R-series scripts/configs is evidence of
-completed diagnostics, not authorization for R2-P or a new VQ run.
+This workspace does not maintain a second status summary. Query the generated
+[`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) or run:
 
-At the 2026-07-30 cleanup snapshot, EFRM LODO v2 is live. Its entire
-`comparative_methods/EFRM-PyTorch/runs/` tree, method caches, and the clean
-physiology cache it consumes are excluded from cleanup.
+```bash
+.venv/bin/python experiments/scripts/project_state.py show --format agent
+```
+
+Launcher availability is an implementation fact, not evidence that a scientific
+prerequisite has passed. Live-process checks must still be performed immediately
+before touching generated run or cache directories.
 
 ## Run contract
 

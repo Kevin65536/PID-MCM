@@ -30,15 +30,15 @@
       "sha256": "4dc6786230d89e502c5e2842a80c7689d8254e1f5ecf55be9bbe0c2456c34d0c"
     },
     "docs/figures/experiment_plan.png": {
-      "bytes": 1032560,
+      "bytes": 1053613,
       "dpi": 300,
       "format": "png",
-      "sha256": "1897934a90303fc56d0cc259b4af79590b8a27004e47c99be8abf81b888deead"
+      "sha256": "90696477a632ad38869c6fef3b5c772d15f8c62dcf6d775dfa2437ce8d37475d"
     },
     "docs/figures/experiment_plan.svg": {
-      "bytes": 149612,
+      "bytes": 149722,
       "format": "svg",
-      "sha256": "fc78d985dd31fb65ae6f401bd2752001b2c01d26779fe56c6dc0cd4b642c0d20"
+      "sha256": "982bee6385fdf0a1d0ff8f1973a32a7ce8dc0c261baad2f9bb3d7bd57f177a8d"
     }
   },
   "schema": "experiment_plan_figure_manifest_v1",
@@ -49,5 +49,5 @@
     "platform": "Linux-6.8.0-45-generic-x86_64-with-glibc2.35",
     "python": "3.12.4"
   },
-  "source_sha256": "7cd5e81fba0a7dc85151e8f69159b287de5a8d6c8660694e941b2a36ff30b551"
+  "source_sha256": "9a5a9930df53934b45eae9212048c984e02fcb29a92aa456ad18db102c850afb"
 }

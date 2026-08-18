@@ -1,12 +1,16 @@
 # BIOT adapter-alignment v2 status
 
-BIOT remains the only active new comparison method. Its six supported
+_Historical public-development chronology ending 2026-07-31. It is not a current
+status source; use [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and
+data-boundary statements below retain their time-local meaning._
+
+At the pre-A8 checkpoint, BIOT was the only active new comparison method. Its six supported
 classification cells have completed full-public adapter replay and pass A0–A7.
 REFED regression is preregistered as unsupported because the frozen BIOT
 adapter cannot preserve its semantically real partial terminal time support.
 No protected manifest or array was opened.
 
-| Task | Unique public samples | Disposition |
+| Task | Unique public samples | Pre-A8 disposition |
 | --- | ---: | --- |
 | Motor imagery | 1,740 | A0–A7 pass; A8 pending |
 | Mental arithmetic | 1,740 | A0–A7 pass; A8 pending |
@@ -23,7 +27,7 @@ and can be regenerated with:
 .venv/bin/python comparative_methods/BIOT/audit_alignment_v2.py
 ```
 
-A8 now passes for all six supported cells after the frozen 90-job public matrix
+In the subsequent update, A8 passed for all six supported cells after the frozen 90-job public matrix
 completed with zero failures and zero retries. REFED remains unsupported.
 Protected evaluation is still locked and requires a separate decision.
 

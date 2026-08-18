@@ -1,7 +1,7 @@
 # Method rationale and claim boundary
 
 _Consolidated from the legacy postmortem, theoretical foundations, and
-architecture-return review; current as of 2026-07-30_
+architecture-return review; dated snapshot 2026-07-30_
 
 ## Research question
 
@@ -85,7 +85,7 @@ The R series tested the prerequisite for quantization rather than assuming it.
 | R1-P jointness/observability/nulls | G3–G6 passed | positive necessary properties did not compensate for G2 |
 | D1B validation | serializer stopped before endpoint calculation and atomic publication | scientifically undetermined, not pass or fail |
 
-The current decision is:
+The snapshot decision is:
 
 ```text
 promotion_eligible = false
@@ -116,7 +116,7 @@ R-series stop decision blocks promotion to levels 3–4.
 
 ## If the main method is restarted
 
-There is no immediately authorized next SD-SVQ run. A restart requires:
+No next SD-SVQ run is supported by this snapshot. A restart would require:
 
 - a genuinely new independent holdout;
 - a newly frozen estimator, null family, threshold, and stopping contract;
@@ -129,9 +129,9 @@ There is no immediately authorized next SD-SVQ run. A restart requires:
 
 Only a newly qualified continuous target may reopen the decision about VQ.
 
-## Authorized statements
+## Evidence-supported statements
 
-The evidence currently supports:
+This evidence supports:
 
 - the tested K128 quantizer can be software-healthy;
 - the E2 weak auxiliary teacher objectives did not improve the registered
@@ -141,7 +141,9 @@ The evidence currently supports:
 - the R2-D bilateral continuous prerequisite failed;
 - SD-SVQ/R2-P/R3–R7 are blocked under the frozen generation.
 
-It does not support:
+## Claims not supported by this evidence
+
+This evidence does not support:
 
 - calling the shared driver physiological ground truth;
 - treating teacher reconstruction as coupling discovery;

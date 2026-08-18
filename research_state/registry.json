@@ -1,0 +1,798 @@
+{
+  "schema": "research_state_registry_v1",
+  "updated_at": "2026-08-16T20:54:18+08:00",
+  "tracks": [
+    {
+      "id": "main",
+      "label": "主方法",
+      "order": 0,
+      "headline_entity": "main.program"
+    },
+    {
+      "id": "atlas",
+      "label": "Token Atlas",
+      "order": 1,
+      "headline_entity": "atlas.statistical"
+    },
+    {
+      "id": "comparisons",
+      "label": "对比实验",
+      "order": 2,
+      "headline_entity": "comparison.campaign"
+    },
+    {
+      "id": "croce",
+      "label": "Croce 验证",
+      "order": 3,
+      "headline_entity": "croce.synthetic"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e.data_contract",
+      "label": "统一数据合同",
+      "path": "docs/DATA_CONTRACT.md",
+      "sha256": "9296a72df8484172c54d4ae1e27bd79b952356a7cfc02ef6e100367d86d205d0",
+      "role": "data_contract"
+    },
+    {
+      "id": "e.method_rationale",
+      "label": "方法依据与主张边界",
+      "path": "docs/METHOD_RATIONALE.md",
+      "sha256": "648d30fc283fb6b33f012fa5550d7f4a82297e4286989ec68584c1d8f0f3b8fc",
+      "role": "decision"
+    },
+    {
+      "id": "e.main_log",
+      "label": "主方法实验日志",
+      "path": "docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md",
+      "sha256": "f234eb33d3106dcf68ffee0314175f8c95b591c527aed8be68fa9735ca2423e6",
+      "role": "decision"
+    },
+    {
+      "id": "e.r_series",
+      "label": "R 系列实验报告",
+      "path": "docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md",
+      "sha256": "97d48bf4032184c30c50fc989cf599013f11857f1183811343c61f91ddb3240c",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.token_atlas",
+      "label": "Token Physiology Atlas 结果",
+      "path": "docs/analysis/TOKEN_PHYSIOLOGY_ATLAS.md",
+      "sha256": "48586da64771e95bf925dbc3c5ffe4447b1777fb4598745e66031f5717d7b160",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.stanet",
+      "label": "STA-Net 五折聚合结果",
+      "path": "comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/summary.json",
+      "sha256": "aeca6a1cd5504a2c649fffe3a792ad15123ac6586a62311dda63afc15ed7daf4",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.biot_alignment",
+      "label": "BIOT 对齐摘要",
+      "path": "comparative_methods/BIOT/evidence/alignment_v2/summary_final.json",
+      "sha256": "7f53a04c0215c562d1f737bcc61d972ab04b8904c00495a59cd4bfb6ba606694",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.cbramod_alignment",
+      "label": "CBraMod 对齐摘要",
+      "path": "comparative_methods/CBraMod/evidence/alignment_v2/summary_final.json",
+      "sha256": "5b61d460ef2d2e1fcd1c73f28d49619bd93804723b620e0dfb78adf2d7246cfa",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.reve_alignment",
+      "label": "REVE 对齐摘要",
+      "path": "comparative_methods/REVE/evidence/alignment_v2/summary_final.json",
+      "sha256": "2d7e0375230675964c763280f2453277a11a2e05a129252347b84f194cb16442",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.efrm_alignment",
+      "label": "EFRM 对齐摘要",
+      "path": "comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json",
+      "sha256": "6f8cbb8c45e082eb2e0cb46a6f490eff74387f35f440131ebd5e67468768bfdf",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.normwear_alignment",
+      "label": "NormWear 对齐摘要",
+      "path": "comparative_methods/NormWear/evidence/alignment_v2/summary_final.json",
+      "sha256": "d1b6d4dcbfff921833c854db1f039bdbabc91f8e11a5325823f7f2257cf48a5b",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.brainfusion_alignment",
+      "label": "BrainFusion 对齐摘要",
+      "path": "comparative_methods/BrainFusion-NVC-CSP-Stacking/evidence/alignment_v2/summary_final.json",
+      "sha256": "9e82666e635489e4404bab2c67ef6de27d54530aa54469995ffbb0530f0af4c3",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.comparison_campaign",
+      "label": "六方法联合 campaign 结果",
+      "path": "docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md",
+      "sha256": "1149dbe3662c19344976574414faf7e6c1ada2ec13fbd61304c95e432d2ffcea",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.comparison_p0",
+      "label": "性能劣化 P0 结果",
+      "path": "docs/comparisons/PERFORMANCE_DEGRADATION_P0_RESULTS_20260816.md",
+      "sha256": "3f74a876c7db4c832027555e5b42150924a4d6ed6c22d9c3f87d3237d46b1f9a",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.croce_plan",
+      "label": "Croce 验证计划",
+      "path": "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md",
+      "sha256": "7eab98b9ecf70b4c29a963b51066df4cff9eb4b6d9eb4c09544b928c39f418a9",
+      "role": "protocol"
+    }
+  ],
+  "records": [
+    {
+      "state_id": "main.program@2026-07-29",
+      "entity": "main.program",
+      "label": "当前方法代际",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "confirmatory",
+      "summary": "本代方法已完成 E0-E2 与 R 系列前置检验，但共享驱动目标未通过资格条件，当前不安排新的 VQ 阶段。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series",
+        "e.method_rationale"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.r1p",
+        "main.r2d"
+      ],
+      "next_step": "如提出新的共享构念，先建立新的独立验证设计，再形成新方法代际。",
+      "headline": true
+    },
+    {
+      "state_id": "main.data_contract@2026-07-30",
+      "entity": "main.data_contract",
+      "label": "统一数据合同",
+      "track": "main",
+      "order": 10,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "四数据集 loader、mask、join、geometry 与 split 合同已建立。",
+      "evidence_ids": [
+        "e.data_contract"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-30T23:36:39+08:00",
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "main.e0@2026-07-29",
+      "entity": "main.e0",
+      "label": "E0 物理 teacher",
+      "track": "main",
+      "order": 20,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "qualified",
+      "analysis_intent": "confirmatory",
+      "summary": "sign-calibrated adaptive teacher 仅支持 development 监督用途，不构成 ground truth。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.method_rationale"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.e1@2026-07-29",
+      "entity": "main.e1",
+      "label": "E1 K128 量化器健康",
+      "track": "main",
+      "order": 30,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "三 seed 软件与 occupancy 合同通过；该结果不形成生理语义主张。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.method_rationale"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.e0"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.e2@2026-07-29",
+      "entity": "main.e2",
+      "label": "E2 语义目标",
+      "track": "main",
+      "order": 40,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "confirmatory",
+      "summary": "九个候选运行均未产生满足保留标准的 semantic row，最终保留无语义目标的 T0。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.method_rationale"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.e1"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.r0p@2026-07-29",
+      "entity": "main.r0p",
+      "label": "R0-P 原始 lag 基线",
+      "track": "main",
+      "order": 50,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "confirmatory",
+      "summary": "预注册的 alpha-HbO 原始滞后主端点为阴性。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.e2"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.r1d@2026-07-29",
+      "entity": "main.r1d",
+      "label": "R1-D teacher 几何",
+      "track": "main",
+      "order": 60,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "correction geometry 提供了探索性定位信息，但不承担资格判定。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.e2"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.r1p@2026-07-29",
+      "entity": "main.r1p",
+      "label": "R1-P 正式资格",
+      "track": "main",
+      "order": 70,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "confirmatory",
+      "summary": "结构审计通过，但 G2 跨被试物理一致性失败；G1 因 dtype 合同无效。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.r1d"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.r2d@2026-07-29",
+      "entity": "main.r2d",
+      "label": "R2-D 连续可观测性",
+      "track": "main",
+      "order": 80,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "EEG 增量区间跨零且 fNIRS 增量为负，双侧连续可观测性条件未满足。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.r1d"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.d1b@2026-07-29",
+      "entity": "main.d1b",
+      "label": "D1B 扰动诊断",
+      "track": "main",
+      "order": 90,
+      "entity_kind": "analysis",
+      "execution": "failed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "validation endpoint 原子发布前发生 JSON serializer 技术错误，因此没有形成科学终点。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.r1p"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.future_vq@2026-07-29",
+      "entity": "main.future_vq",
+      "label": "R2-P 至 R7 与新 VQ",
+      "track": "main",
+      "order": 100,
+      "entity_kind": "project",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "confirmatory",
+      "summary": "前置科学条件未满足，后续阶段没有启动。",
+      "evidence_ids": [
+        "e.main_log",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-29T18:37:45+08:00",
+      "depends_on": [
+        "main.r1p",
+        "main.r2d"
+      ],
+      "next_step": "只在形成新的共享构念与独立验证设计后重新登记。",
+      "headline": false
+    },
+    {
+      "state_id": "atlas.core@2026-07-30",
+      "entity": "atlas.core",
+      "label": "T0 Atlas Core",
+      "track": "atlas",
+      "order": 0,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "descriptive",
+      "summary": "Core tier 已完成并形成 development-only 描述；它不承担 coupling 或生理状态确认。",
+      "evidence_ids": [
+        "e.token_atlas"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-30T23:36:39+08:00",
+      "depends_on": [
+        "main.e2"
+      ],
+      "next_step": "若继续 Atlas，先执行 Statistical tier。",
+      "headline": false
+    },
+    {
+      "state_id": "atlas.statistical@2026-07-30",
+      "entity": "atlas.statistical",
+      "label": "Atlas Statistical tier",
+      "track": "atlas",
+      "order": 10,
+      "entity_kind": "analysis",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "descriptive",
+      "summary": "Core tier 已完成；subject bootstrap、information ledger 与 train-validation uncertainty 尚未运行。",
+      "evidence_ids": [
+        "e.token_atlas"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-30T23:36:39+08:00",
+      "depends_on": [
+        "atlas.core"
+      ],
+      "next_step": "在冻结的 T0 上运行，不生成新 VQ。",
+      "headline": true
+    },
+    {
+      "state_id": "atlas.full@2026-07-30",
+      "entity": "atlas.full",
+      "label": "Atlas Full coupling-null tier",
+      "track": "atlas",
+      "order": 20,
+      "entity_kind": "analysis",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "confirmatory",
+      "summary": "具体 coupling 问题和 Statistical tier 尚未完成，因此该分析没有启动。",
+      "evidence_ids": [
+        "e.token_atlas"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-30T23:36:39+08:00",
+      "depends_on": [
+        "atlas.statistical"
+      ],
+      "next_step": "先完成 Statistical tier，并单独冻结 coupling 问题。",
+      "headline": false
+    },
+    {
+      "state_id": "atlas.new_vq@2026-07-30",
+      "entity": "atlas.new_vq",
+      "label": "新 VQ Atlas",
+      "track": "atlas",
+      "order": 30,
+      "entity_kind": "analysis",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "descriptive",
+      "summary": "当前方法代际未通过前置条件，因此没有新的 VQ 表征可供 Atlas 分析。",
+      "evidence_ids": [
+        "e.token_atlas",
+        "e.r_series"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-30T23:36:39+08:00",
+      "depends_on": [
+        "main.future_vq"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.stanet@2026-07-28",
+      "entity": "comparison.stanet",
+      "label": "STA-Net strict five-fold",
+      "track": "comparisons",
+      "order": 10,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "qualified",
+      "analysis_intent": "confirmatory",
+      "summary": "70 个训练完成并保留为 method-native context reference，不与 support-matched 结果混为同一 estimand。",
+      "evidence_ids": [
+        "e.stanet"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-07-28T02:02:30+08:00",
+      "progress": {
+        "completed": 70,
+        "total": 70,
+        "unit": "trainings"
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.biot@2026-08-15",
+      "entity": "comparison.biot",
+      "label": "BIOT",
+      "track": "comparisons",
+      "order": 20,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "90/90 jobs 完成；6 个支持的分类 cell 中 3 个可带注释报告、3 个数值被拒，REFED 不适用。",
+      "evidence_ids": [
+        "e.biot_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 90,
+        "total": 90,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 3,
+        "rejected_value": 3,
+        "unsupported": 1
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.cbramod@2026-08-15",
+      "entity": "comparison.cbramod",
+      "label": "CBraMod",
+      "track": "comparisons",
+      "order": 30,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "90/90 jobs 完成；6 个支持的分类 cell 中 4 个可带注释报告、2 个数值被拒，REFED 不适用。",
+      "evidence_ids": [
+        "e.cbramod_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 90,
+        "total": 90,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 4,
+        "rejected_value": 2,
+        "unsupported": 1
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.reve@2026-08-15",
+      "entity": "comparison.reve",
+      "label": "REVE",
+      "track": "comparisons",
+      "order": 40,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "90/90 jobs 完成；3 个 cell 可带注释报告、1 个数值被拒、MI/MA 仅进入 overlap track，REFED 不适用。",
+      "evidence_ids": [
+        "e.reve_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 90,
+        "total": 90,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 3,
+        "rejected_value": 1,
+        "overlap_track_only": 2,
+        "unsupported": 1
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.efrm@2026-08-15",
+      "entity": "comparison.efrm",
+      "label": "EFRM",
+      "track": "comparisons",
+      "order": 50,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "105/105 jobs 完成；7 个注册 cell 中 4 个可带注释报告、3 个数值被拒。",
+      "evidence_ids": [
+        "e.efrm_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 105,
+        "total": 105,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 4,
+        "rejected_value": 3
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.normwear@2026-08-15",
+      "entity": "comparison.normwear",
+      "label": "NormWear",
+      "track": "comparisons",
+      "order": 60,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "90/90 jobs 完成；6 个支持的分类 cell 中 5 个可带注释报告、1 个数值被拒，REFED 不适用。",
+      "evidence_ids": [
+        "e.normwear_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 90,
+        "total": 90,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 5,
+        "rejected_value": 1,
+        "unsupported": 1
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.brainfusion@2026-08-15",
+      "entity": "comparison.brainfusion",
+      "label": "BrainFusion NVC-CSP Stacking",
+      "track": "comparisons",
+      "order": 70,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "75/75 jobs 完成；5 个支持的分类 cell 中 3 个可带注释报告、2 个数值被拒，DSR 与 REFED 不适用。",
+      "evidence_ids": [
+        "e.brainfusion_alignment",
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 75,
+        "total": 75,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 3,
+        "rejected_value": 2,
+        "unsupported": 2
+      },
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.campaign@2026-08-15",
+      "entity": "comparison.campaign",
+      "label": "六方法联合正式 campaign",
+      "track": "comparisons",
+      "order": 80,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。",
+      "evidence_ids": [
+        "e.comparison_campaign"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-15T22:25:57+08:00",
+      "progress": {
+        "completed": 540,
+        "total": 540,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 22,
+        "rejected_value": 12,
+        "overlap_track_only": 2,
+        "unsupported": 6
+      },
+      "depends_on": [
+        "comparison.biot",
+        "comparison.cbramod",
+        "comparison.reve",
+        "comparison.efrm",
+        "comparison.normwear",
+        "comparison.brainfusion"
+      ],
+      "next_step": "论文表格仅引用相应 cell 的准入结果和注释边界。",
+      "headline": true
+    },
+    {
+      "state_id": "comparison.p0@2026-08-16",
+      "entity": "comparison.p0",
+      "label": "性能劣化 P0 机制分析",
+      "track": "comparisons",
+      "order": 90,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "首轮诊断形成了协议、身份保留、alignment 与任务难度线索，但没有建立单一确认性因果解释。",
+      "evidence_ids": [
+        "e.comparison_p0"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-16T20:54:18+08:00",
+      "depends_on": [
+        "comparison.campaign"
+      ],
+      "next_step": "后续分析继续保持探索性，并与正式结果选择分离。",
+      "headline": false
+    },
+    {
+      "state_id": "croce.legacy@2026-05-28",
+      "entity": "croce.legacy",
+      "label": "既有 solver 与诊断路径",
+      "track": "croce",
+      "order": 10,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "paper-faithful simulation 与 local solver audit 路径已实现，但尚未使新版设计通过确认性资格。",
+      "evidence_ids": [
+        "e.croce_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-05-28T18:20:26+08:00",
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "croce.synthetic@2026-05-28",
+      "entity": "croce.synthetic",
+      "label": "新版 Synthetic Phase 1",
+      "track": "croce",
+      "order": 0,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "confirmatory",
+      "summary": "新版合成可识别性与 solver recovery 验证尚未开始。",
+      "evidence_ids": [
+        "e.croce_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-05-28T18:20:26+08:00",
+      "depends_on": [
+        "croce.legacy"
+      ],
+      "next_step": "按预定 decision rule 运行 Synthetic Phase 1。",
+      "headline": true
+    },
+    {
+      "state_id": "croce.real@2026-05-28",
+      "entity": "croce.real",
+      "label": "新版 Real Phase 2",
+      "track": "croce",
+      "order": 20,
+      "entity_kind": "experiment",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "confirmatory",
+      "summary": "Synthetic Phase 1 尚未形成结果，真实数据阶段没有启动。",
+      "evidence_ids": [
+        "e.croce_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-05-28T18:20:26+08:00",
+      "depends_on": [
+        "croce.synthetic"
+      ],
+      "next_step": "仅在 Synthetic Phase 1 满足预定规则后重新登记。",
+      "headline": false
+    }
+  ]
+}

@@ -1,11 +1,15 @@
 # NormWear EEG-fNIRS adaptation workspace
 
+_Project-level execution and scientific verdicts are generated in
+[`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Public-development and
+data-boundary statements here describe the frozen implementation/evidence layer._
+
 This workspace is explicitly an EEG-fNIRS adaptation of NormWear, not an
 original-paper fNIRS reproduction. Source fixing, release-asset acquisition,
 safe checkpoint inspection, A0 cell registration, full-public A1-A4 data
 validation, executable A5/A6 adapter smoke, full-public A7 production replay,
-and the 90-job serial A8 public-development matrix are complete. Protected
-evaluation remains separately locked.
+and the 90-job serial A8 public-development matrix completed before the later joint
+campaign.
 
 - Official code: `upstream/`, revision
   `07517fcb13def8c89cb586128359cec02f86ec8d`.

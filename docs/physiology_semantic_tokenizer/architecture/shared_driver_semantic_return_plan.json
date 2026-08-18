@@ -1,9 +1,9 @@
 {
   "schema": "physiology_semantic_architecture_changes_v2",
   "plan_id": "shared_driver_semantic_return_plan",
-  "title": "Proposed After-State · Shared-Driver Semantic VQ",
+  "title": "Historical Pre-Gate Plan · Shared-Driver Semantic VQ",
   "subtitle": "Raw-only modality streams · independent K=128 · full joint-driver-proxy trajectory · scoped frozen evaluation",
-  "banner": "PLAN, not runtime · R1-P panel and R2-P must pass before VQ migration; no R-series scientific gate has run.",
+  "banner": "HISTORICAL PRE-GATE PLAN (2026-07-25), not runtime · R1-P and R2-D were subsequently run and did not support promotion; R2-P–R7 were not started.",
   "summary": "Return to independent raw-physiology tokenizers while using one full joint-driver proxy trajectory as the semantic coordinate; remove multi-entry shaping and separate offline association from strict-cutoff future prediction.",
   "changes": [
     {

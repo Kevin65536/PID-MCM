@@ -17,23 +17,35 @@ The canonical figure describes the checkout's current runtime and evidence bound
 | [`architecture/change_overlay.example.json`](architecture/change_overlay.example.json) | Overlay template |
 | `experiments/scripts/render_physiology_semantic_architecture.py` | Deterministic renderer, validator, and drift checker |
 
-The active proposed after-state is rendered separately from the runtime view:
+The human-readable
+[`physiology_semantic_runtime_overview.drawio`](architecture/physiology_semantic_runtime_overview.drawio)
+and its committed SVG
+[`quick overview`](figures/physiology_semantic_runtime_overview.svg) are a
+presentation draft and paper-figure candidate for the implemented E2-compatible
+runtime. Treat the pair as a current-or-snapshot view of the implementation
+surface, not a timestamped registry view, second source of truth, or
+scientific-admission figure; the canonical JSON/SVG pair above remains the
+implementation detail and validation authority.
 
-![Proposed Shared-Driver Semantic VQ](figures/plans/shared_driver_semantic_return_plan.svg)
+The plan overlays below are kept only where they help explain why the current
+runtime has the boundaries it does. Their labels are deliberately explicit so a
+reader does not mistake a historical proposal for an active component:
 
-Its source is
+| Overlay | Reading status | What it is useful for |
+| --- | --- | --- |
+| [`shared_driver_semantic_return_plan`](figures/plans/shared_driver_semantic_return_plan.svg) | **Historical pre-gate plan** (2026-07-25), not runtime | Records the shared-driver/SD-SVQ proposal before R1-P and R2-D evidence; it is not an active after-state. |
+| [`measurement_first_input_contract_plan`](figures/plans/measurement_first_input_contract_plan.svg) | **Merged historical overlay**, not a separate runtime | Shows how the measured-input contract subsumed the earlier entrance proposal. |
+| [`physical_teacher_gradient_entry_plan`](figures/plans/physical_teacher_gradient_entry_plan.svg) | **Superseded historical plan**, not runtime | Preserves the E2-era preserve–discover–certify proposal for traceability. |
+| [`shared_state_reconstruction_bound_plan`](figures/plans/shared_state_reconstruction_bound_plan.svg) | **Diagnostic-only historical overlay**, not runtime | Captures a bounded shared/private-state diagnostic that was never a promotion gate. |
+| [`physiology_semantic_runtime_overview`](figures/physiology_semantic_runtime_overview.svg) | **Quick overview / paper candidate** | Human-readable current-runtime orientation; use the canonical JSON/SVG for exact implementation detail. |
+
+The shared-driver source is
 [`architecture/shared_driver_semantic_return_plan.json`](architecture/shared_driver_semantic_return_plan.json).
 It records raw-only modality streams, pre-VQ full-window context, independent
 K128 codebooks, a full joint-driver-proxy primary target, removal of mandatory
-residual paths, and separate R6A offline/R6B strict-cutoff raw-fNIRS evaluations. Its plan banner and
-dashed implementation styling are part of the evidence boundary: no R-series
-gate has run.
-
-The older
-[`physical_teacher_gradient_entry_plan`](figures/plans/physical_teacher_gradient_entry_plan.svg)
-is retained as a superseded historical plan. It documents the E2-era
-local/prototype/context routing and preserve–discover–certify proposal; it is no
-longer the approved after-state.
+residual paths, and separate R6A offline/R6B strict-cutoff raw-fNIRS evaluations.
+Those are historical plan contents; the source banner and dashed implementation
+styling are evidence-boundary cues, not a claim that the R-series plan ran.
 
 The JSON is the text-diffable source of truth. Generated SVG files are committed for direct review and documentation rendering. Manual SVG edits are prohibited.
 
@@ -81,16 +93,17 @@ Every canonical edge has a stable `id`, declared `style`, and resolvable endpoin
 
 Use `route.from_side`, `route.to_side`, optional endpoint fractions, and `route.via` waypoints to keep paths out of unrelated cards. Edge labels are rendered on opaque rounded chips and placed on an explicit or longest safe segment. Flow semantics and plan-delta semantics remain separate: adding a training edge does not turn its arrow green.
 
-## 🧩 Proposed after-state overlays
+## 🧩 Plan and historical overlays
 
-An overlay composes a separate drawing while preserving the canonical JSON in memory and on disk. Overlay content remains a plan artifact; upgrading its rendering does not approve or revise the plan.
+An overlay composes a separate drawing while preserving the canonical JSON in memory and on disk. Overlay content remains a plan or historical artifact; upgrading its rendering does not approve or revise the plan.
 
 ```json
 {
   "schema": "physiology_semantic_architecture_changes_v2",
   "plan_id": "example_plan",
-  "title": "Proposed After-State · Example",
+  "title": "Template Overlay · Example Plan",
   "subtitle": "Plan-specific evidence boundary",
+  "banner": "TEMPLATE ONLY, not runtime · replace every placeholder before use.",
   "changes": [
     {
       "node_id": "eeg_quantizer",
@@ -114,7 +127,7 @@ Overlay fields:
 - `edge_changes` can replace a baseline edge's label, style, or route, or mark it removed;
 - every node/edge delta requires a concise `note` and receives a visible `A<n>`, `M<n>`, or `R<n>` reference tied to the callout panel.
 
-The renderer retains canonical implementation/evidence values in `data-canonical-status` and `data-canonical-evidence` on modified nodes. A v1 overlay remains readable for historical compatibility, but new plans must use v2 after-state replacements.
+The renderer retains canonical implementation/evidence values in `data-canonical-status` and `data-canonical-evidence` on modified nodes. A v1 overlay remains readable for historical compatibility. New plans may use v2 after-state replacements, but a rendered overlay is still only a plan/documentation view until the experiment registry records implementation and evidence.
 
 ## 🔄 Regeneration and drift checks
 
@@ -139,7 +152,7 @@ The renderer retains canonical implementation/evidence values in `data-canonical
 .venv/bin/python -m pytest -q tests/test_physiology_semantic_architecture_svg.py
 ```
 
-A plan overlay is rejected if its output path would overwrite the canonical SVG.
+A plan or historical overlay is rejected if its output path would overwrite the canonical SVG.
 
 ## ✅ Acceptance contract
 
@@ -154,4 +167,4 @@ A plan overlay is rejected if its output path would overwrite the canonical SVG.
 
 When model behavior changes, update the architecture changelog. When only renderer or maintenance policy changes, use the project changelog.
 
-_Last updated: 2026-07-25_
+_Last updated: 2026-08-18_
