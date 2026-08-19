@@ -100,7 +100,8 @@ Verify work in this order:
 4. smoke run;
 5. short formal run, if the protocol defines one;
 6. full public/development run;
-7. one-time protected evaluation, only when its gate is satisfied.
+7. one-time protected evaluation, only when the owning protocol gate and the
+   explicitly user-approved scope are both satisfied.
 
 A run is evidence only when its manifest, resolved configuration, completion
 status, summary, and declared endpoint are present. A suite summary cannot

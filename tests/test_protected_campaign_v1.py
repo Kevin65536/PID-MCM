@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import json
 import copy
+import json
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -31,12 +33,30 @@ CANDIDATE = (
     REPO_ROOT
     / "comparative_methods/evidence/protected_campaign/joint_release_candidate_v1.json"
 )
-AUTH_TEMPLATE = (
-    REPO_ROOT
-    / "comparative_methods/evidence/protected_campaign/authorization_template_v1.json"
-)
 
 
+@pytest.fixture
+def non_authorizing_template(tmp_path: Path) -> Path:
+    """Build a real template without reading the completed campaign's signed record."""
+    output = tmp_path / "authorization_template_v1.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "comparative_methods/prepare_protected_authorization.py"),
+            "--candidate",
+            str(CANDIDATE),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return output
+
+
+@pytest.mark.sealed_evidence
 def test_release_candidate_has_exact_frozen_matrix_without_protected_artifacts() -> None:
     candidate, _digest = verify_candidate_file(CANDIDATE, verify_artifacts=False)
     assert candidate["state"] in {"DRAFT", "REVIEWED"}
@@ -64,76 +84,32 @@ def test_release_candidate_has_exact_frozen_matrix_without_protected_artifacts()
     )
 
 
-def test_authorization_template_is_separate_and_strictly_non_authorizing() -> None:
+@pytest.mark.sealed_evidence
+def test_authorization_template_is_separate_and_strictly_non_authorizing(
+    non_authorizing_template: Path,
+) -> None:
     candidate, candidate_sha256 = verify_candidate_file(
         CANDIDATE, verify_artifacts=False
     )
-    template = read_json(AUTH_TEMPLATE)
+    template = read_json(non_authorizing_template)
     assert template["candidate_sha256"] == candidate_sha256
     assert template["protected_evaluation_authorized"] is False
     with pytest.raises(CampaignError, match="not authorized"):
         verify_authorization(
-            AUTH_TEMPLATE,
+            non_authorizing_template,
             candidate=candidate,
             candidate_sha256=candidate_sha256,
         )
 
 
-def test_runtime_audit_redacts_payload_field_names_and_values() -> None:
-    arrays = {
-        "schema_version": np.asarray(
-            ["joint_protected_predictions_v1"] * 2, dtype="<U30"
-        ),
-        "dataset_index": np.asarray([1, 2], dtype=np.int64),
-        "identity": np.asarray(["a", "b"]),
-        "logits": np.asarray([[0.1, 0.9], [0.7, 0.3]], dtype=np.float32),
-        "prediction": np.asarray([1, 0], dtype=np.int64),
-        "target": np.asarray([1, 1], dtype=np.int64),
-    }
-    report = _validate_predictions(arrays, expected_count=2)
-    serialized = json.dumps(report).lower()
-    for forbidden in ("target", "logits", "metric", "confusion", "sample_id"):
-        assert forbidden not in serialized
-    assert report["sample_count"] == 2
-    assert report["unique_identity_count"] == 2
-    assert report["all_numeric_finite"] is True
+@pytest.mark.sealed_evidence
+def test_authorization_template_hash_is_not_candidate_hash(
+    non_authorizing_template: Path,
+) -> None:
+    assert sha256_file(non_authorizing_template) != sha256_file(CANDIDATE)
 
 
-def test_runtime_audit_rejects_duplicate_identity_and_nonfinite_output() -> None:
-    duplicate = {
-        "schema_version": np.asarray(
-            ["joint_protected_predictions_v1"] * 2, dtype="<U30"
-        ),
-        "dataset_index": np.asarray([1, 2], dtype=np.int64),
-        "identity": np.asarray(["a", "a"]),
-        "prediction": np.asarray([0, 1], dtype=np.int64),
-        "target": np.asarray([0, 1], dtype=np.int64),
-    }
-    with pytest.raises(CampaignError, match="duplicate"):
-        _validate_predictions(duplicate, expected_count=2)
-    nonfinite = {**duplicate, "identity": np.asarray(["a", "b"]), "score": np.asarray([0.0, np.nan])}
-    with pytest.raises(CampaignError, match="non-finite"):
-        _validate_predictions(nonfinite, expected_count=2)
-
-
-def test_mask_aware_ccc_golden_data() -> None:
-    target = np.asarray(
-        [
-            [[0.0, 1.0, 2.0]],
-            [[3.0, 4.0, 5.0]],
-        ],
-        dtype=np.float32,
-    )
-    valid = np.ones_like(target, dtype=bool)
-    assert _ccc(target, target.copy(), valid) == pytest.approx(1.0)
-    reversed_prediction = target[:, :, ::-1].copy()
-    assert _ccc(target, reversed_prediction, valid) < 1.0
-
-
-def test_authorization_template_hash_is_not_candidate_hash() -> None:
-    assert sha256_file(AUTH_TEMPLATE) != sha256_file(CANDIDATE)
-
-
+@pytest.mark.sealed_evidence
 def test_unsupported_cells_have_zero_jobs_and_supported_cells_have_fifteen() -> None:
     candidate = read_json(CANDIDATE)
     counts: dict[tuple[str, str], int] = {}
@@ -146,6 +122,7 @@ def test_unsupported_cells_have_zero_jobs_and_supported_cells_have_fifteen() -> 
         assert counts.get(key, 0) == expected
 
 
+@pytest.mark.sealed_evidence
 def test_each_supported_cell_has_exact_fold_seed_product() -> None:
     candidate = read_json(CANDIDATE)
     grouped: dict[tuple[str, str], set[tuple[int, int]]] = {}
@@ -157,40 +134,7 @@ def test_each_supported_cell_has_exact_fold_seed_product() -> None:
     assert grouped and all(values == expected for values in grouped.values())
 
 
-def test_hash_fault_and_missing_cache_index_are_rejected(tmp_path: Path) -> None:
-    artifact = tmp_path / "artifact.bin"
-    artifact.write_bytes(b"frozen")
-    with pytest.raises(CampaignError, match="drifted"):
-        verify_file(str(artifact), "0" * 64, label="fault injection")
-    with pytest.raises(CampaignError, match="absent"):
-        _rows(np.asarray([1, 2], dtype=np.int64), [3])
-
-
-def test_atomic_commit_failure_does_not_publish_destination(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    destination = tmp_path / "status.json"
-
-    def fail_replace(_source: str, _destination: Path) -> None:
-        raise OSError("injected disk failure")
-
-    monkeypatch.setattr("comparative_methods.protected_campaign_common.os.replace", fail_replace)
-    with pytest.raises(OSError, match="disk failure"):
-        write_json_atomic(destination, {"status": "test"})
-    assert not destination.exists()
-
-
-def test_gpu_uuid_failure_is_not_silently_recovered(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_gpu(*_args: object, **_kwargs: object) -> str:
-        raise RuntimeError("injected GPU failure")
-
-    monkeypatch.setattr(
-        "comparative_methods.protected_campaign_worker.subprocess.check_output", fail_gpu
-    )
-    with pytest.raises(RuntimeError, match="GPU failure"):
-        _device_uuid(torch.device("cuda:0"))
-
-
+@pytest.mark.sealed_evidence
 def test_two_retained_cpu_shadow_passes_are_bitwise_identical_and_redacted() -> None:
     candidate = read_json(CANDIDATE)
     pre_lane_candidate_sha256 = candidate["pre_lane_candidate_sha256"]
@@ -225,6 +169,7 @@ def test_two_retained_cpu_shadow_passes_are_bitwise_identical_and_redacted() -> 
                 assert np.array_equal(left[name], right[name])
 
 
+@pytest.mark.sealed_evidence
 def test_single_modal_formal_jobs_freeze_live_encoder_artifacts() -> None:
     candidate = read_json(CANDIDATE)
     expected = {
@@ -245,6 +190,7 @@ def test_single_modal_formal_jobs_freeze_live_encoder_artifacts() -> None:
             )
 
 
+@pytest.mark.sealed_evidence
 def test_user_authorized_single_gpu_lane_is_exact_and_has_no_fallback() -> None:
     candidate = read_json(CANDIDATE)
     lane = candidate["lane_manifest"]["value"]
@@ -270,6 +216,7 @@ def test_user_authorized_single_gpu_lane_is_exact_and_has_no_fallback() -> None:
     )
 
 
+@pytest.mark.sealed_evidence
 def test_quarantine_is_a_durable_incomplete_terminal(tmp_path: Path) -> None:
     candidate = read_json(CANDIDATE)
     job_id = candidate["jobs"][0]["job_id"]
@@ -290,6 +237,7 @@ def test_quarantine_is_a_durable_incomplete_terminal(tmp_path: Path) -> None:
     assert status["protected_test_opened"] is False
 
 
+@pytest.mark.sealed_evidence
 def test_candidate_checker_rejects_unsafe_job_id_and_wrong_seed(tmp_path: Path) -> None:
     candidate = read_json(CANDIDATE)
     unsafe = copy.deepcopy(candidate)
@@ -307,6 +255,7 @@ def test_candidate_checker_rejects_unsafe_job_id_and_wrong_seed(tmp_path: Path) 
         verify_candidate_file(wrong_seed_path, verify_artifacts=False)
 
 
+@pytest.mark.sealed_evidence
 def test_candidate_checker_rejects_input_contract_and_cell_routing_drift(
     tmp_path: Path,
 ) -> None:
@@ -326,11 +275,103 @@ def test_candidate_checker_rejects_input_contract_and_cell_routing_drift(
         verify_candidate_file(routing_path, verify_artifacts=False)
 
 
+def test_runtime_audit_redacts_payload_field_names_and_values() -> None:
+    arrays = {
+        "schema_version": np.asarray(
+            ["joint_protected_predictions_v1"] * 2, dtype="<U30"
+        ),
+        "dataset_index": np.asarray([1, 2], dtype=np.int64),
+        "identity": np.asarray(["a", "b"]),
+        "logits": np.asarray([[0.1, 0.9], [0.7, 0.3]], dtype=np.float32),
+        "prediction": np.asarray([1, 0], dtype=np.int64),
+        "target": np.asarray([1, 1], dtype=np.int64),
+    }
+    report = _validate_predictions(arrays, expected_count=2)
+    serialized = json.dumps(report).lower()
+    for forbidden in ("target", "logits", "metric", "confusion", "sample_id"):
+        assert forbidden not in serialized
+    assert report["sample_count"] == 2
+    assert report["unique_identity_count"] == 2
+    assert report["all_numeric_finite"] is True
+
+
+def test_runtime_audit_rejects_duplicate_identity_and_nonfinite_output() -> None:
+    duplicate = {
+        "schema_version": np.asarray(
+            ["joint_protected_predictions_v1"] * 2, dtype="<U30"
+        ),
+        "dataset_index": np.asarray([1, 2], dtype=np.int64),
+        "identity": np.asarray(["a", "a"]),
+        "prediction": np.asarray([0, 1], dtype=np.int64),
+        "target": np.asarray([0, 1], dtype=np.int64),
+    }
+    with pytest.raises(CampaignError, match="duplicate"):
+        _validate_predictions(duplicate, expected_count=2)
+    nonfinite = {
+        **duplicate,
+        "identity": np.asarray(["a", "b"]),
+        "score": np.asarray([0.0, np.nan]),
+    }
+    with pytest.raises(CampaignError, match="non-finite"):
+        _validate_predictions(nonfinite, expected_count=2)
+
+
+def test_mask_aware_ccc_golden_data() -> None:
+    target = np.asarray(
+        [
+            [[0.0, 1.0, 2.0]],
+            [[3.0, 4.0, 5.0]],
+        ],
+        dtype=np.float32,
+    )
+    valid = np.ones_like(target, dtype=bool)
+    assert _ccc(target, target.copy(), valid) == pytest.approx(1.0)
+    reversed_prediction = target[:, :, ::-1].copy()
+    assert _ccc(target, reversed_prediction, valid) < 1.0
+
+
+def test_hash_fault_and_missing_cache_index_are_rejected(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_bytes(b"frozen")
+    with pytest.raises(CampaignError, match="drifted"):
+        verify_file(str(artifact), "0" * 64, label="fault injection")
+    with pytest.raises(CampaignError, match="absent"):
+        _rows(np.asarray([1, 2], dtype=np.int64), [3])
+
+
+def test_atomic_commit_failure_does_not_publish_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "status.json"
+
+    def fail_replace(_source: str, _destination: Path) -> None:
+        raise OSError("injected disk failure")
+
+    monkeypatch.setattr(
+        "comparative_methods.protected_campaign_common.os.replace", fail_replace
+    )
+    with pytest.raises(OSError, match="disk failure"):
+        write_json_atomic(destination, {"status": "test"})
+    assert not destination.exists()
+
+
+def test_gpu_uuid_failure_is_not_silently_recovered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_gpu(*_args: object, **_kwargs: object) -> str:
+        raise RuntimeError("injected GPU failure")
+
+    monkeypatch.setattr(
+        "comparative_methods.protected_campaign_worker.subprocess.check_output", fail_gpu
+    )
+    with pytest.raises(RuntimeError, match="GPU failure"):
+        _device_uuid(torch.device("cuda:0"))
+
+
 def test_aggregator_rejects_unbound_job_before_opening_predictions(
     tmp_path: Path,
 ) -> None:
-    candidate = read_json(CANDIDATE)
-    job = candidate["jobs"][0]
+    job = {"job_id": "example__job"}
     directory = tmp_path / job["job_id"]
     directory.mkdir()
     write_json_atomic(

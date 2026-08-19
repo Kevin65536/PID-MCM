@@ -1,5 +1,10 @@
 # Single-modal EEG public performance runner
 
+> **COMPATIBILITY-ONLY (frozen 2026 workflow).** Do not use this runner for new
+> BIOT, CBraMod, or REVE development. Use the owning method's v2-or-later runner and
+> current comparison protocol; commands below reproduce the early public surface
+> only and do not authorize a protected or formal run.
+
 This package is the shared executable path for BIOT, CBraMod, and REVE-base.
 It consumes only the train and validation identities exposed by the
 method-neutral strict-cross-subject registry.  It cannot accept a protected

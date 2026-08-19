@@ -3,6 +3,22 @@
 _Runnable surfaces and package ownership. Current execution and scientific verdicts
 are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md)._
 
+## Repository layers
+
+The repository deliberately retains some frozen paths because configs, tests, reports,
+and SHA-bound evidence refer to them. Physical presence does not make every subtree
+active. Use these three layers:
+
+| Layer | Paths | Default rule |
+| --- | --- | --- |
+| Active implementation | `src/`, active `tests/`, `experiments/scripts/` and reviewed configs, method-owned comparison code | read and change through the owning package |
+| Local/generated | `data/`, `runs/`, `cache/`, `checkpoints/`, `upstream/`, `.tmp/` | do not recursively discover; write only to an existing owner root |
+| Frozen/history | dated reports, `archive/`, compatibility namespaces, completed comparison campaign files | explicit-path, read-only unless a versioned migration is the task |
+
+A bulk move of frozen comparison code would invalidate recorded paths and source
+hashes, so future cleanup must create a new version instead of layering shims over
+the old one.
+
 ## Runtime scope
 
 The production tokenizer runtime remains the E2-compatible

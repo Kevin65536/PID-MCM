@@ -1,5 +1,8 @@
 # 2026-08-12 对比方法 campaign 本轮产物清单
 
+> **HISTORICAL SNAPSHOT — 不是当前状态或 authorization。** 本文保留当日
+> `NO-GO` 语义；后续 campaign 的终态只看统一项目状态和带日期的最终结果报告。
+
 ## 冻结结论
 
 本轮完成了六方法联合 protected campaign 的控制面、540-job release candidate、两次

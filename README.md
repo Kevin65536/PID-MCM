@@ -43,17 +43,20 @@ Start with the [generated project status](docs/PROJECT_STATUS.md),
 ## Repository layout
 
 ```text
-src/                    reusable data, inference, tokenizer, and analysis code
-tests/                  active contract, scientific-gate, and regression tests
-experiments/            configs, executable workflows, active runs, archives
-comparative_methods/    isolated comparison implementations and B0 assets
-croce_validation/       physical-model validation and expensive legacy cache
-docs/                   active contracts, status, evidence, history, literature
-data/                   immutable measured data and derived caches
+src/                    active reusable library code
+tests/                  default software and shared-contract tests
+experiments/            main-method configs/workflows; local runs and explicit archives
+comparative_methods/    method owners plus frozen comparison history; see its README
+croce_validation/       isolated physical-model validation and derived caches
+docs/                   authority map, concise contracts, and dated history
+data/                   immutable measured inputs and owner-local derived caches
 ```
 
 Generated payloads are ignored by Git. Active tools do not recursively search
-archives, and comparison packages write only to their own run roots.
+archives, upstream mirrors, caches, checkpoints, or run trees, and comparison
+packages write only to their own run roots. Frozen paths stay in place when reports
+or hashes depend on them; directory cleanup is versioned rather than hidden behind
+compatibility layers.
 
 ## Environment and checks
 

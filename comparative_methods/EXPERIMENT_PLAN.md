@@ -1,5 +1,9 @@
 # 对比方法实验计划与历史完成记录
 
+> **HISTORICAL SNAPSHOT — 不是当前队列、执行指令或 authorization。**
+> 新任务先看 `docs/PROJECT_STATUS.md` 和 `docs/comparisons/PROTOCOL.md`；不要重放本文的
+> 旧 gate、顺序或签署流程。
+
 _原计划冻结于 2026-07-31；本文的完成计数是 2026-08-14 历史执行记录，不是
 当前状态源。当前 execution/scientific verdict 由
 [`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) 生成。_
