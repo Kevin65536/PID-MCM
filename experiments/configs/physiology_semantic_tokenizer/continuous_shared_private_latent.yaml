@@ -1,0 +1,102 @@
+experiment:
+  name: continuous_shared_private_latent_v1
+  scope: full_development_matched_pattern_validation
+  analysis_intent: exploratory
+
+source:
+  ssm_run: experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity/20260819_ssm_reconstruction_reliability_full_v1
+  ssm_schema: ssm_reconstruction_reliability_v1
+  trajectory_schema: ssm_reconstruction_trajectory_v1
+  trajectory_model: adaptive_joint
+  spatial_mode: local
+  protected_open: false
+
+tasks:
+  - task_id: mental_arithmetic
+    dataset_id: eeg_fnirs_single_trial
+    source_task_ids: [single_ma]
+  - task_id: motor_imagery
+    dataset_id: eeg_fnirs_single_trial
+    source_task_ids: [single_lmi, single_rmi]
+  - task_id: word_generation
+    dataset_id: simultaneous_eeg_nirs
+    source_task_ids: [simultaneous_wg]
+  - task_id: n_back
+    dataset_id: simultaneous_eeg_nirs
+    source_task_ids: [simultaneous_0back, simultaneous_2back, simultaneous_3back]
+
+model:
+  type: continuous_shared_private
+  eeg_channels: 6
+  fnirs_channels: 2
+  eeg_patch_samples: 400
+  fnirs_patch_samples: 20
+  num_tokens: 10
+  shared_dim: 64
+  eeg_private_dim: 64
+  fnirs_private_dim: 32
+  target_points: 20
+  encoder_depth: 2
+  encoder_num_heads: 4
+  encoder_feedforward_dim: 256
+  trajectory_decoder_hidden_dim: 128
+  raw_decoder_hidden_dim: 256
+  dropout: 0.1
+
+objective:
+  shared_target: ssm_adaptive_joint_shared_driver
+  shared_loss: masked_point_mse
+  shared_modality_weight: 0.5
+  raw_loss: masked_train_normalized_patch_mse
+  raw_modality_weight: 0.5
+  raw_loss_weight: 1.0
+  raw_shared_gradient: stopped
+  direct_latent_alignment: false
+  adversarial_separation: false
+  orthogonality_penalty: false
+  vector_quantization: false
+
+training:
+  seeds: [20260819, 20260820, 20260821]
+  device: cuda:1
+  amp: true
+  batch_size: 32
+  epochs: 80
+  learning_rate: 3.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  grad_clip_norm: 1.0
+  early_stopping_patience: 15
+  early_stopping_min_delta: 1.0e-5
+  selection_metric: validation_equal_modality_shared_target_mse
+  input_normalization: train_only_slot_channel_zscore
+  target_normalization: train_only_scalar_zscore
+  num_workers: 0
+
+statistics:
+  primary_endpoints:
+    - eeg_target_delta_r2
+    - fnirs_target_delta_r2
+    - fnirs_to_eeg_swap_delta_r2
+    - eeg_to_fnirs_swap_delta_r2
+  seed_aggregation: mean_within_subject_before_bootstrap
+  bootstrap_unit: subject_blocked_within_dataset
+  bootstrap_iterations: 10000
+  confidence_level: 0.95
+  simultaneous_interval: studentized_max_stat
+  bootstrap_seed: 20260822
+  strict_rule: all_16_simultaneous_lower_bounds_gt_zero
+  ridge_probe_components: 32
+  ridge_probe_alpha: 1.0
+  derangement: same_subject_condition_nonidentity_same_token_time
+
+smoke:
+  seeds: 1
+  fit_subjects_per_dataset: 2
+  validation_subjects_per_dataset: 2
+  samples_per_subject_condition: 2
+  optimizer_steps: 4
+  bootstrap_iterations: 200
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/continuous_shared_private

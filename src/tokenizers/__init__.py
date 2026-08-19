@@ -29,6 +29,7 @@ from .shared_driver_semantic_vq import (
     SharedDriverTrajectoryDecoder,
     TemporalPatchStem,
 )
+from .continuous_shared_private import ContinuousSharedPrivateModel
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -75,6 +76,7 @@ __all__ = [
     'SharedDriverContinuousModel',
     'SharedDriverTrajectoryDecoder',
     'TemporalPatchStem',
+    'ContinuousSharedPrivateModel',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',
