@@ -58,9 +58,10 @@ from src.inference.adaptive_neurovascular_ssm import (
     fit_to_mapping,
     measurement_aligned_state_gauge,
 )
+from src.metrics.trajectory_reliability import trajectory_reliability_metrics
 
 
-SCHEMA = "adaptive_shared_neural_ssm_v1"
+SCHEMA = "adaptive_shared_neural_ssm_v2"
 STATE_NAMES = ("vasodilation_s", "flow_delta", "hbo_state", "hbr_state", "shared_driver")
 
 
@@ -89,6 +90,9 @@ class AdaptivePrediction:
     estimate_hbr: np.ndarray
     eeg_observation: np.ndarray
     eeg_reconstruction: np.ndarray
+    observation_predictive_std: np.ndarray
+    eeg_valid_mask: np.ndarray
+    fnirs_valid_mask: np.ndarray
     states: np.ndarray
     state_std: np.ndarray
     target_states: np.ndarray
@@ -196,6 +200,39 @@ def _apply_eeg_adapter(trial: Trial, adapter: EEGAdapter) -> np.ndarray:
     return np.asarray(((normalized - adapter.pca_mean) @ adapter.loading) / adapter.pc_scale, dtype=np.float64)
 
 
+def _downsample_valid_mask(mask: np.ndarray | None, target_length: int) -> np.ndarray:
+    """Require every source sample contributing to a 10 Hz point to be valid."""
+
+    if mask is None:
+        return np.ones(int(target_length), dtype=bool)
+    values = np.asarray(mask, dtype=bool).reshape(-1)
+    if target_length <= 0 or len(values) % int(target_length):
+        raise ValueError("EEG validity mask does not align to the 10 Hz driver")
+    factor = len(values) // int(target_length)
+    return values.reshape(int(target_length), factor).all(axis=1)
+
+
+def _trial_valid_masks(trial: Trial) -> tuple[np.ndarray, np.ndarray]:
+    """Validate the full-support contract of the current 20 s SSM runner."""
+
+    target_length = len(trial.fnirs)
+    eeg_mask = _downsample_valid_mask(trial.eeg_valid_mask, target_length)
+    fnirs_mask = (
+        np.ones(target_length, dtype=bool)
+        if trial.fnirs_valid_mask is None
+        else np.asarray(trial.fnirs_valid_mask, dtype=bool).copy()
+    )
+    if fnirs_mask.shape != (target_length,):
+        raise ValueError("fNIRS validity mask does not match the SSM target")
+    if not np.all(eeg_mask) or not np.all(fnirs_mask):
+        raise RuntimeError(
+            "adaptive SSM core evaluation requires fully supported EEG/fNIRS windows"
+        )
+    if not np.all(np.isfinite(trial.eeg)) or not np.all(np.isfinite(trial.fnirs)):
+        raise RuntimeError("adaptive SSM core evaluation requires finite observations")
+    return eeg_mask, fnirs_mask
+
+
 def _chromophore_targets(
     trials: Sequence[Trial],
     hbo_indices: np.ndarray,
@@ -239,6 +276,7 @@ def _run_subject(
     predictions: list[AdaptivePrediction] = []
     fit_rows: list[dict[str, Any]] = []
     trials = list(trial_values)
+    trial_masks = [_trial_valid_masks(trial) for trial in trials]
     with threadpool_limits(limits=1):
         for heldout in range(len(trials)):
             train_indices = [index for index in range(len(trials)) if index != heldout]
@@ -286,6 +324,9 @@ def _run_subject(
                     ),
                     "adaptive_eeg_only": apply_adaptive_ssm(test_driver, fit),
                 }
+                eeg_valid_mask, fnirs_valid_mask = trial_masks[heldout]
+                if len(eeg_valid_mask) != len(test_driver):
+                    raise ValueError("EEG validity mask does not match the SSM driver")
                 for model, result in outputs.items():
                     gauge = measurement_aligned_state_gauge(result, fit)
                     predictions.append(AdaptivePrediction(
@@ -301,6 +342,9 @@ def _run_subject(
                         estimate_hbr=result.hbr_reconstructed,
                         eeg_observation=test_driver,
                         eeg_reconstruction=result.eeg_reconstructed,
+                        observation_predictive_std=result.observation_predictive_std,
+                        eeg_valid_mask=eeg_valid_mask,
+                        fnirs_valid_mask=fnirs_valid_mask,
                         states=result.states,
                         state_std=result.state_std,
                         target_states=gauge.states,
@@ -345,6 +389,24 @@ def _prediction_metrics(prediction: AdaptivePrediction, baseline_n: int) -> dict
     hbo = _waveform_metrics(prediction.truth_hbo, prediction.estimate_hbo, baseline_n)
     hbr = _waveform_metrics(prediction.truth_hbr, prediction.estimate_hbr, baseline_n)
     eeg = _waveform_metrics(prediction.eeg_observation, prediction.eeg_reconstruction, baseline_n)
+    hbo_reliability = trajectory_reliability_metrics(
+        prediction.truth_hbo,
+        prediction.estimate_hbo,
+        predictive_std=prediction.observation_predictive_std[:, 1],
+        valid_mask=prediction.fnirs_valid_mask,
+    )
+    hbr_reliability = trajectory_reliability_metrics(
+        prediction.truth_hbr,
+        prediction.estimate_hbr,
+        predictive_std=prediction.observation_predictive_std[:, 2],
+        valid_mask=prediction.fnirs_valid_mask,
+    )
+    eeg_reliability = trajectory_reliability_metrics(
+        prediction.eeg_observation,
+        prediction.eeg_reconstruction,
+        predictive_std=prediction.observation_predictive_std[:, 0],
+        valid_mask=prediction.eeg_valid_mask,
+    )
     driver = prediction.states[:, 4]
     return {
         "condition_id": prediction.condition_id,
@@ -357,8 +419,11 @@ def _prediction_metrics(prediction: AdaptivePrediction, baseline_n: int) -> dict
         "selected_fnirs_channels": "|".join(prediction.selected_fnirs_channels),
         "selected_eeg_channels": "|".join(prediction.selected_eeg_channels),
         **hbo,
+        **hbo_reliability,
         **{f"hbr_{key}": value for key, value in hbr.items()},
+        **{f"hbr_{key}": value for key, value in hbr_reliability.items()},
         **{f"eeg_{key}": value for key, value in eeg.items()},
+        **{f"eeg_{key}": value for key, value in eeg_reliability.items()},
         "hbo_turning_points_truth": _turning_points(prediction.truth_hbo),
         "hbo_turning_points_estimate": _turning_points(prediction.estimate_hbo),
         "driver_turning_points": _turning_points(driver),
@@ -376,6 +441,11 @@ def _aggregate_metrics(
     bootstrap_iterations: int,
     seed: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def finite_mean(values: Sequence[float]) -> float:
+        array = np.asarray(values, dtype=np.float64)
+        finite = array[np.isfinite(array)]
+        return float(np.mean(finite)) if len(finite) else float("nan")
+
     identifiers = {
         "condition_id", "dataset_id", "subject", "validation", "heldout_trial", "model", "spatial_mode",
         "selected_fnirs_channels", "selected_eeg_channels",
@@ -393,7 +463,7 @@ def _aggregate_metrics(
             "condition_id": key[0], "subject": key[1], "model": key[2], "spatial_mode": key[3], "folds": len(values),
         }
         for metric in metric_names:
-            row[metric] = float(np.nanmean([float(value[metric]) for value in values]))
+            row[metric] = finite_mean([float(value[metric]) for value in values])
         subject_rows.append(row)
 
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
@@ -401,16 +471,44 @@ def _aggregate_metrics(
         groups[(str(row["condition_id"]), str(row["model"]), str(row["spatial_mode"]))].append(row)
     rng = np.random.default_rng(seed)
     summary_rows = []
+    reliability_ci_suffixes = {
+        "trajectory_deviation_nrmse",
+        "temporal_sd_ratio",
+        "posterior_predictive_sd_mean",
+        "standardized_residual_rms",
+        "predictive_95_coverage",
+    }
     ci_metrics = {"r2", "pcc", "variance_ratio", "eeg_r2", "eeg_pcc"}
+    ci_metrics.update(
+        metric
+        for metric in metric_names
+        if any(
+            metric == suffix or metric.endswith(f"_{suffix}")
+            for suffix in reliability_ci_suffixes
+        )
+    )
     for key, values in sorted(groups.items()):
         row = {"condition_id": key[0], "model": key[1], "spatial_mode": key[2], "subjects": len(values)}
         for metric in metric_names:
             observed = np.asarray([float(value[metric]) for value in values], dtype=np.float64)
-            row[metric] = float(np.nanmean(observed))
+            finite_observed = observed[np.isfinite(observed)]
+            row[metric] = finite_mean(observed)
             if metric in ci_metrics:
+                if not len(finite_observed):
+                    row[f"{metric}_ci_low"] = float("nan")
+                    row[f"{metric}_ci_high"] = float("nan")
+                    continue
                 draws = np.empty(int(bootstrap_iterations), dtype=np.float64)
                 for iteration in range(len(draws)):
-                    draws[iteration] = float(np.nanmean(rng.choice(observed, size=len(observed), replace=True)))
+                    draws[iteration] = float(
+                        np.mean(
+                            rng.choice(
+                                finite_observed,
+                                size=len(finite_observed),
+                                replace=True,
+                            )
+                        )
+                    )
                 row[f"{metric}_ci_low"] = float(np.nanquantile(draws, 0.025))
                 row[f"{metric}_ci_high"] = float(np.nanquantile(draws, 0.975))
         summary_rows.append(row)
@@ -430,10 +528,15 @@ def _save_trajectories(path: Path, predictions: Sequence[AdaptivePrediction]) ->
                 "time_s": index / 10.0 - 5.0,
                 "eeg_observation": prediction.eeg_observation[index],
                 "eeg_reconstruction": prediction.eeg_reconstruction[index],
+                "eeg_valid": prediction.eeg_valid_mask[index],
+                "eeg_predictive_std": prediction.observation_predictive_std[index, 0],
                 "hbo_truth": prediction.truth_hbo[index],
                 "hbo_estimate": prediction.estimate_hbo[index],
+                "hbo_predictive_std": prediction.observation_predictive_std[index, 1],
                 "hbr_truth": prediction.truth_hbr[index],
                 "hbr_estimate": prediction.estimate_hbr[index],
+                "hbr_predictive_std": prediction.observation_predictive_std[index, 2],
+                "fnirs_valid": prediction.fnirs_valid_mask[index],
             }
             row.update({name: prediction.states[index, state_index] for state_index, name in enumerate(STATE_NAMES)})
             row.update({
@@ -526,12 +629,36 @@ def _plot_representative(
         axes[0, column].plot(time, prediction.eeg_observation, color="#777777", alpha=0.65, label="EEG proxy")
         axes[1, column].plot(time, prediction.eeg_observation, color="#222222", label="EEG proxy observed")
         axes[1, column].plot(time, prediction.eeg_reconstruction, color="#0072b2", label="state reconstruction")
+        axes[1, column].fill_between(
+            time,
+            prediction.eeg_reconstruction - 1.96 * prediction.observation_predictive_std[:, 0],
+            prediction.eeg_reconstruction + 1.96 * prediction.observation_predictive_std[:, 0],
+            color="#0072b2",
+            alpha=0.16,
+            label="95% posterior predictive band",
+        )
         axes[2, column].plot(time, prediction.states[:, 0], color="#cc79a7", label="vasodilation s")
         axes[3, column].plot(time, 1.0 + prediction.states[:, 1], color="#009e73", label="relative flow 1+delta_f")
         axes[4, column].plot(time, prediction.truth_hbo, color="#222222", label="HbO observed")
         axes[4, column].plot(time, prediction.estimate_hbo, color="#d55e00", label="HbO reconstructed")
+        axes[4, column].fill_between(
+            time,
+            prediction.estimate_hbo - 1.96 * prediction.observation_predictive_std[:, 1],
+            prediction.estimate_hbo + 1.96 * prediction.observation_predictive_std[:, 1],
+            color="#d55e00",
+            alpha=0.16,
+            label="95% posterior predictive band",
+        )
         axes[5, column].plot(time, prediction.truth_hbr, color="#222222", label="HbR observed")
         axes[5, column].plot(time, prediction.estimate_hbr, color="#56b4e9", label="HbR reconstructed")
+        axes[5, column].fill_between(
+            time,
+            prediction.estimate_hbr - 1.96 * prediction.observation_predictive_std[:, 2],
+            prediction.estimate_hbr + 1.96 * prediction.observation_predictive_std[:, 2],
+            color="#56b4e9",
+            alpha=0.16,
+            label="95% posterior predictive band",
+        )
         for axis in axes[:, column]:
             axis.axvline(0.0, color="#777777", linestyle="--", linewidth=0.8)
             axis.grid(alpha=0.2)
@@ -597,6 +724,26 @@ def _summary_markdown(
             f"{float(row['variance_ratio']):.4f} | {float(row['eeg_r2']):.4f} | {float(row['driver_monotonic_fraction']):.4f} | "
             f"{float(row['hbo_turning_points_truth']):.2f} / {float(row['hbo_turning_points_estimate']):.2f} |"
         )
+    lines.extend([
+        "",
+        "## Reconstruction reliability",
+        "",
+        "Trajectory NRMSE is reconstruction RMSE divided by the observed temporal SD. "
+        "Predictive SD and coverage are separate posterior diagnostics. Joint-smoother coverage is a posterior fit diagnostic because the held-out observation entered smoothing.",
+        "",
+        "| Condition | Model | Spatial | HbO NRMSE | HbR NRMSE | EEG-proxy NRMSE | HbO reconstructed SD | HbO predictive SD | HbO 95% coverage |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ])
+    for row in summary:
+        lines.append(
+            f"| {row['condition_id']} | {row['model']} | {row['spatial_mode']} | "
+            f"{float(row['trajectory_deviation_nrmse']):.4f} | "
+            f"{float(row['hbr_trajectory_deviation_nrmse']):.4f} | "
+            f"{float(row['eeg_trajectory_deviation_nrmse']):.4f} | "
+            f"{float(row['reconstructed_temporal_sd']):.4f} | "
+            f"{float(row['posterior_predictive_sd_mean']):.4f} | "
+            f"{float(row['predictive_95_coverage']):.4f} |"
+        )
     focus_legacy = [
         row for row in legacy
         if row.get("validation") == "leave_one_trial"
@@ -627,7 +774,7 @@ def _summary_markdown(
         "",
         "- Joint smoothing is allowed to trade EEG fit for fNIRS fit; it is not a deployable EEG-only predictor.",
         "- HbO/HbR measurement gains absorb canonical-unit scaling, while the transition shape remains bounded by Croce/Balloon parameters.",
-        "- Physiological parameters and modality balance are fitted only on the nine training trials inside each fold.",
+        "- Physiological parameters and modality balance are fitted only on the non-held-out training trials inside each fold.",
         "- A better joint waveform supports use as a soft multimodal teacher only if the retained EEG reconstruction is non-trivial; it does not establish a unique physical neural source.",
         "- The EEG-only path determines how much delayed hemodynamic structure is independently recoverable from EEG.",
         "",
@@ -648,11 +795,11 @@ def run(args: argparse.Namespace) -> Path:
         config["analysis"]["ssm"]["fnirs_noise_scale_candidates"] = [0.5, 1.0]
     run_dir = Path(args.output_dir) if args.output_dir else (
         REPO_ROOT / "experiments/runs/physiology_semantic_tokenizer/e0_teacher_validity"
-        / datetime.now().strftime("%Y%m%d_%H%M%S_adaptive_shared_neural_ssm_v1")
+        / datetime.now().strftime("%Y%m%d_%H%M%S_adaptive_shared_neural_ssm_v2")
     )
     if not run_dir.is_absolute():
         run_dir = REPO_ROOT / run_dir
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     grouped, contracts = _load_trials(config)
     tasks = []
@@ -702,6 +849,7 @@ def run(args: argparse.Namespace) -> Path:
         Path(__file__),
         REPO_ROOT / "experiments/evaluate_shared_neural_driver_unified.py",
         REPO_ROOT / "src/inference/adaptive_neurovascular_ssm.py",
+        REPO_ROOT / "src/metrics/trajectory_reliability.py",
         REPO_ROOT / "src/inference/neurovascular_smc.py",
         REPO_ROOT / str(config["data"]["cache_root"]) / "cache_manifest.json",
         REPO_ROOT / str(config["data"]["cache_root"]) / "event_index/event_manifest.json",
@@ -711,6 +859,7 @@ def run(args: argparse.Namespace) -> Path:
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "smoke" if args.smoke else "formal_exploratory",
+        "protected_open": False,
         "git": _git_payload(),
         "platform": {"python": platform.python_version(), "platform": platform.platform()},
         "input_hashes": [{"path": str(path), "sha256": _sha256(path)} for path in sources],
@@ -718,6 +867,14 @@ def run(args: argparse.Namespace) -> Path:
         "prediction_count": len(predictions),
         "fit_count": len(fit_rows),
         "representative_samples": representative_samples,
+        "reliability_contract": {
+            "primary_deviation_metric": "trajectory_deviation_nrmse",
+            "observed_std_floor": 1e-8,
+            "predictive_std_floor": 1e-8,
+            "predictive_interval": "normal_95_percent_z_1.959963984540054",
+            "aggregation": "fold_then_subject_equal_then_condition",
+            "bootstrap_unit": "subject",
+        },
         "artifacts": [
             "config.yaml", "fold_metrics.csv", "subject_metrics.csv", "summary_metrics.csv",
             "fit_parameters.csv", "trajectories.csv", "summary.md", *figures,
@@ -726,6 +883,8 @@ def run(args: argparse.Namespace) -> Path:
             "joint output is a multimodal compromise, not EEG-only prediction",
             "EEG-only output is the cross-modal reconstruction control",
             "bounded linearized physiology is not proof of unique latent-state identity",
+            "posterior predictive bands are fit diagnostics for joint smoothing",
+            "EEG observation means the log-power PCA proxy, not the raw EEG waveform",
             "exploratory validation; not a protected E0 gate decision",
         ],
     }

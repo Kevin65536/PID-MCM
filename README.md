@@ -5,15 +5,15 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（当前方法代际）— 已完成 / 不支持预定主张：本代方法已完成 E0-E2 与 R 系列前置检验，但共享驱动目标未通过资格条件，当前不安排新的 VQ 阶段。
+- **主方法**（可靠性与连续共享状态支路）— 运行中 / 尚未判定：既有 VQ/shared-driver 代际维持不支持结论；新的独立支路先审计 SSM 重建可信度，再以无 VQ 的连续 shared/private latent 检验共享性。
 - **Token Atlas**（Atlas Statistical tier）— 未开始 / 尚未判定：Core tier 已完成；subject bootstrap、information ledger 与 train-validation uncertainty 尚未运行。
 - **对比实验**（六方法联合正式 campaign）— 已完成 / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 未开始 / 尚未判定：新版合成可识别性与 solver recovery 验证尚未开始。
 
 ### Next steps
+- **主方法** — 先完成 SSM 可信度 S0 软件合同，再执行当前条件 S1；连续 latent 在该合同稳定后启动。
 - **Token Atlas** — 在冻结的 T0 上运行，不生成新 VQ。
 - **Croce 验证** — 按预定 decision rule 运行 Synthetic Phase 1。
-- **主方法** — 如提出新的共享构念，先建立新的独立验证设计，再形成新方法代际。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for evidence links, dependencies, and next steps.
 <!-- project-state:end -->

@@ -72,6 +72,7 @@ class AdaptiveSmootherResult:
 
     states: np.ndarray
     state_std: np.ndarray
+    observation_predictive_std: np.ndarray
     eeg_reconstructed: np.ndarray
     hbo_reconstructed: np.ndarray
     hbr_reconstructed: np.ndarray
@@ -298,7 +299,7 @@ def rts_smoother(
     observation: np.ndarray,
     observation_cov: np.ndarray,
     initial_cov: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """Run a missing-value-aware Kalman filter and RTS backward smoother."""
 
     values = np.asarray(observations, dtype=np.float64)
@@ -347,7 +348,7 @@ def rts_smoother(
         smoothed_cov[index] += smoothing_gain @ (smoothed_cov[index + 1] - predicted_cov[index + 1]) @ smoothing_gain.T
         smoothed_cov[index] = (smoothed_cov[index] + smoothed_cov[index].T) * 0.5
     state_std = np.sqrt(np.maximum(np.diagonal(smoothed_cov, axis1=1, axis2=2), 0.0))
-    return smoothed_mean, state_std, float(log_likelihood)
+    return smoothed_mean, state_std, smoothed_cov, float(log_likelihood)
 
 
 def _lowpass_residual_variance(signal: np.ndarray, cutoff_bins: int = 7) -> float:
@@ -424,7 +425,7 @@ def fit_adaptive_ssm(
             ]).astype(np.float64)
             modality_errors = []
             for eeg, hbo, hbr in zip(drivers, hbo_norm, hbr_norm):
-                states, _, _ = rts_smoother(
+                states, _, _, _ = rts_smoother(
                     np.column_stack((eeg, hbo, hbr)),
                     transition,
                     process_cov,
@@ -492,7 +493,7 @@ def apply_adaptive_ssm(
         hbr = (np.asarray(hbr_observation, dtype=np.float64).reshape(-1) - fit.hbr_mean) / fit.hbr_std
         if len(hbo) != steps or len(hbr) != steps:
             raise ValueError("all observations must have the same length")
-    states, state_std, log_likelihood = rts_smoother(
+    states, state_std, state_cov, log_likelihood = rts_smoother(
         np.column_stack((eeg, hbo, hbr)),
         fit.transition,
         fit.process_cov,
@@ -501,12 +502,25 @@ def apply_adaptive_ssm(
         fit.initial_cov,
     )
     reconstruction = states @ fit.observation.T
+    observation_predictive_variance = np.einsum(
+        "oi,tij,oj->to",
+        fit.observation,
+        state_cov,
+        fit.observation,
+        optimize=True,
+    ) + np.diag(fit.observation_cov)[None, :]
+    observation_predictive_std = np.sqrt(
+        np.maximum(observation_predictive_variance, 0.0)
+    )
     if fit.baseline_samples > 0:
         stop = min(int(fit.baseline_samples), len(reconstruction))
         reconstruction[:, 1:] -= np.mean(reconstruction[:stop, 1:], axis=0, keepdims=True)
+    observation_predictive_std[:, 1] *= abs(float(fit.hbo_std))
+    observation_predictive_std[:, 2] *= abs(float(fit.hbr_std))
     return AdaptiveSmootherResult(
         states=states,
         state_std=state_std,
+        observation_predictive_std=observation_predictive_std,
         eeg_reconstructed=reconstruction[:, 0],
         hbo_reconstructed=reconstruction[:, 1] * fit.hbo_std + fit.hbo_mean,
         hbr_reconstructed=reconstruction[:, 2] * fit.hbr_std + fit.hbr_mean,

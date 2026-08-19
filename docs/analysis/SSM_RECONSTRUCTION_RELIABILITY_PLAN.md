@@ -1,6 +1,7 @@
 # SSM reconstruction reliability experiment plan
 
-_Status: planned exploratory development experiment; 2026-08-19_
+_Protocol status: active exploratory plan; current execution status is owned by
+[`research_state/registry.json`](../../research_state/registry.json); 2026-08-19_
 
 ## Purpose and claim boundary
 

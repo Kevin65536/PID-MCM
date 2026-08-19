@@ -1,7 +1,8 @@
 # Continuous shared/private latent experiment plan
 
-_Status: planned exploratory development experiment; depends on the SSM
-reconstruction reliability contract; 2026-08-19_
+_Protocol status: active exploratory plan; depends on the SSM reconstruction
+reliability contract; current execution status is owned by
+[`research_state/registry.json`](../../research_state/registry.json); 2026-08-19_
 
 ## Purpose and claim boundary
 

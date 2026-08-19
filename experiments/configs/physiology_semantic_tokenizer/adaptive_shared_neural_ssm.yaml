@@ -1,5 +1,5 @@
 experiment:
-  name: adaptive_shared_neural_ssm_v1
+  name: adaptive_shared_neural_ssm_v2
   scope: exploratory_validation_only
 
 data:

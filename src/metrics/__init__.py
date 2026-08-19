@@ -14,6 +14,7 @@ from .reconstruction import (
     compute_snr,
     compute_spectral_mse,
 )
+from .trajectory_reliability import trajectory_reliability_metrics
 
 __all__ = [
     'compute_codebook_health',
@@ -23,4 +24,5 @@ __all__ = [
     'compute_reconstruction_mse',
     'compute_snr',
     'compute_spectral_mse',
+    'trajectory_reliability_metrics',
 ]

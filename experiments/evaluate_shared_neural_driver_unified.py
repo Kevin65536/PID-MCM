@@ -63,6 +63,8 @@ class Trial:
     eeg_channel_names: tuple[str, ...] = ()
     eeg_positions: np.ndarray | None = None
     fnirs_positions: np.ndarray | None = None
+    eeg_valid_mask: np.ndarray | None = None
+    fnirs_valid_mask: np.ndarray | None = None
 
 
 @dataclass
@@ -189,6 +191,12 @@ def _load_trials(config: Mapping[str, Any]) -> tuple[dict[str, dict[str, list[Tr
                     [row.get(axis, np.nan) for axis in ("x", "y", "z")]
                     for row in sample["channel_geometry"]["fnirs"]
                 ], dtype=np.float64),
+                eeg_valid_mask=np.asarray(
+                    sample["valid_mask"]["eeg"], dtype=bool
+                ).copy(),
+                fnirs_valid_mask=np.asarray(
+                    sample["valid_mask"]["fnirs"], dtype=bool
+                ).copy(),
             ))
         missing = sorted(allowed_subjects - set(per_subject))
         if missing:

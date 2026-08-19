@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-16T20:54:18+08:00",
+  "updated_at": "2026-08-19T18:41:40+08:00",
   "tracks": [
     {
       "id": "main",
@@ -55,6 +55,20 @@
       "path": "docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md",
       "sha256": "97d48bf4032184c30c50fc989cf599013f11857f1183811343c61f91ddb3240c",
       "role": "result_summary"
+    },
+    {
+      "id": "e.ssm_reliability_plan",
+      "label": "SSM 重建可信度实验计划",
+      "path": "docs/analysis/SSM_RECONSTRUCTION_RELIABILITY_PLAN.md",
+      "sha256": "7871bdfb40ac435549d0480f49db1f1d4a52f58ce9ec612c6ad4054b989c77a5",
+      "role": "protocol"
+    },
+    {
+      "id": "e.continuous_latent_plan",
+      "label": "连续 shared/private latent 实验计划",
+      "path": "docs/analysis/CONTINUOUS_SHARED_PRIVATE_LATENT_PLAN.md",
+      "sha256": "24a3abf7bc92004c13ae05e26f868ca352f2431a642a79f3c7ccb3274222fbf1",
+      "role": "protocol"
     },
     {
       "id": "e.token_atlas",
@@ -158,6 +172,32 @@
         "main.r2d"
       ],
       "next_step": "如提出新的共享构念，先建立新的独立验证设计，再形成新方法代际。",
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-19.reliability",
+      "entity": "main.program",
+      "label": "可靠性与连续共享状态支路",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "既有 VQ/shared-driver 代际维持不支持结论；新的独立支路先审计 SSM 重建可信度，再以无 VQ 的连续 shared/private latent 检验共享性。",
+      "evidence_ids": [
+        "e.ssm_reliability_plan",
+        "e.continuous_latent_plan"
+      ],
+      "supersedes": [
+        "main.program@2026-07-29"
+      ],
+      "updated_at": "2026-08-19T18:41:40+08:00",
+      "depends_on": [
+        "main.ssm_reliability",
+        "main.continuous_latent"
+      ],
+      "next_step": "先完成 SSM 可信度 S0 软件合同，再执行当前条件 S1；连续 latent 在该合同稳定后启动。",
       "headline": true
     },
     {
@@ -377,6 +417,74 @@
         "main.r2d"
       ],
       "next_step": "只在形成新的共享构念与独立验证设计后重新登记。",
+      "headline": false
+    },
+    {
+      "state_id": "main.future_vq@2026-08-19.continuous-first",
+      "entity": "main.future_vq",
+      "label": "未来 VQ 阶段",
+      "track": "main",
+      "order": 100,
+      "entity_kind": "project",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "confirmatory",
+      "summary": "新一轮明确移除 VQ；只有连续 shared/private latent 在登记控制下支持共享性后，才重新讨论信息瓶颈。",
+      "evidence_ids": [
+        "e.continuous_latent_plan"
+      ],
+      "supersedes": [
+        "main.future_vq@2026-07-29"
+      ],
+      "updated_at": "2026-08-19T18:41:40+08:00",
+      "depends_on": [
+        "main.continuous_latent"
+      ],
+      "next_step": "保持阻塞，不训练或选择新 codebook。",
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_reliability@2026-08-19",
+      "entity": "main.ssm_reliability",
+      "label": "SSM 重建可信度",
+      "track": "main",
+      "order": 110,
+      "entity_kind": "analysis",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "S0 正在实现轨迹偏离、时间标准差、观测预测不确定度、覆盖率与 subject-equal 汇总；正式任务矩阵尚未启动。",
+      "evidence_ids": [
+        "e.ssm_reliability_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-19T18:41:40+08:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "next_step": "收口 S0 产物与负例测试，然后运行当前 MA/WG 条件的 S1 探索性审计。",
+      "headline": false
+    },
+    {
+      "state_id": "main.continuous_latent@2026-08-19",
+      "entity": "main.continuous_latent",
+      "label": "连续 shared/private latent",
+      "track": "main",
+      "order": 120,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "无 VQ、无离散信息瓶颈的连续 shared/private latent 验证已形成计划，尚未启动训练。",
+      "evidence_ids": [
+        "e.continuous_latent_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-19T18:41:40+08:00",
+      "depends_on": [
+        "main.ssm_reliability"
+      ],
+      "next_step": "等待 SSM 可信度软件合同稳定后，实现连续模型与 matched-swap/derangement 控制。",
       "headline": false
     },
     {
