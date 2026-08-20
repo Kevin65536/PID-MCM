@@ -1338,6 +1338,14 @@ def _selection_pretraining_loss(
     return float(total / count)
 
 
+def _combined_cross_entropy(arrays: Mapping[str, Any]) -> float:
+    logits = torch.from_numpy(
+        np.asarray(arrays["coupling_plus_private_logits"], dtype=np.float32)
+    )
+    targets = torch.from_numpy(np.asarray(arrays["target"], dtype=np.int64))
+    return float(torch.nn.functional.cross_entropy(logits, targets).item())
+
+
 def _selection_head_metrics(
     model: Any,
     partition: reviewed.PreparedPartition,
@@ -1355,9 +1363,7 @@ def _selection_head_metrics(
     )
     combined = metrics["coupling_plus_private"]
     coupling_only = metrics["coupling_only"]
-    logits = torch.from_numpy(np.asarray(arrays["combined_logits"], dtype=np.float32))
-    targets = torch.from_numpy(np.asarray(arrays["target"], dtype=np.int64))
-    cross_entropy = float(torch.nn.functional.cross_entropy(logits, targets).item())
+    cross_entropy = _combined_cross_entropy(arrays)
     primary = float(combined["subject_equal_macro_f1"])
     coupling_primary = float(coupling_only["subject_equal_macro_f1"])
     return metrics, primary, coupling_primary, {
@@ -2612,9 +2618,7 @@ def evaluate_development_candidate(
         device=device,
         seed=int(seed),
     )
-    logits = torch.from_numpy(np.asarray(arrays["combined_logits"], dtype=np.float32))
-    targets = torch.from_numpy(np.asarray(arrays["target"], dtype=np.int64))
-    cross_entropy = float(torch.nn.functional.cross_entropy(logits, targets).item())
+    cross_entropy = _combined_cross_entropy(arrays)
     after_digest = _frozen_state_digest(model, lag_module)
     if before_digest != after_digest:
         raise RuntimeError("frozen development apply changed model/VQ state")

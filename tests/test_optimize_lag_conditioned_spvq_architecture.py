@@ -18,6 +18,7 @@ from experiments.optimize_lag_conditioned_spvq_architecture import (
     TASKS,
     _assert_target_mapping,
     _candidate_override_payload,
+    _combined_cross_entropy,
     _issue_development_selection_permit,
     _stratified_dataset_view,
     _validated_development_checkpoint,
@@ -503,6 +504,25 @@ def test_orchestration_defers_development_and_writes_outputs(tmp_path):
     assert (tmp_path / "run" / "selection_development_curves.png").is_file()
     assert (tmp_path / "run" / "selection_development_curves.pdf").is_file()
     assert (tmp_path / "run" / "curve_figure_source_data.csv").is_file()
+
+
+def test_combined_cross_entropy_uses_reviewed_export_key():
+    value = _combined_cross_entropy(
+        {
+            "coupling_plus_private_logits": np.asarray(
+                [[3.0, 0.0], [0.0, 3.0]], dtype=np.float32
+            ),
+            "target": np.asarray([0, 1], dtype=np.int64),
+        }
+    )
+    assert 0.0 < value < 0.1
+    with pytest.raises(KeyError, match="coupling_plus_private_logits"):
+        _combined_cross_entropy(
+            {
+                "combined_logits": np.zeros((2, 2), dtype=np.float32),
+                "target": np.asarray([0, 1], dtype=np.int64),
+            }
+        )
 
 
 def test_development_checkpoint_is_candidate_local_and_provenance_bound(tmp_path):
