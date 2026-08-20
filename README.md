@@ -5,15 +5,15 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（LC-SPVQ 有时延概率通道代际）— 运行中 / 尚未判定：新代际把 sharedness 重定义为模态特异离散状态之间的有时延条件预测；existing-export probe、B0/M1/N1、独立 K16、proper-score/coupling 端点及双任务 measured smoke 已完成并通过治理审计，但尚无 multi-seed/full-epoch 科学比较。
+- **主方法**（LC-SPVQ 有时延概率通道代际）— 已完成 / 证据不足：新代际已完成单种子、fit-selection-only 架构优化：lag-loss 权重 0.5 在 selection 上相对 reference 提高 task-mean macro-F1 0.0526，但历史架构未改善，且冻结 development 两任务均反向；因此仅保留 objective-weight QC 候选，不构成可迁移性能或 sharedness 科学结论。
 - **Token Atlas**（Atlas Statistical tier）— 未开始 / 尚未判定：Core tier 已完成；subject bootstrap、information ledger 与 train-validation uncertainty 尚未运行。
 - **对比实验**（六方法联合正式 campaign）— 已完成 / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 未开始 / 尚未判定：新版合成可识别性与 solver recovery 验证尚未开始。
 
 ### Next steps
-- **主方法** — 先实现 fit-selection-only 的 lag-loss 权重与 checkpoint 选择循环，再决定是否授权 multi-seed/full-epoch exploratory development run；protected cohort 继续关闭。
 - **Token Atlas** — 在冻结的 T0 上运行，不生成新 VQ。
 - **Croce 验证** — 按预定 decision rule 运行 Synthetic Phase 1。
+- **主方法** — 保持 protected cohort 关闭；若继续验证 lag05_h23，须先冻结新的独立评估设计，并把 selection 增益与 development 反向同时作为前置证据。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for evidence links, dependencies, and next steps.
 <!-- project-state:end -->

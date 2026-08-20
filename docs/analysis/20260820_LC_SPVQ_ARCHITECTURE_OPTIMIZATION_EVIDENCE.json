@@ -1,0 +1,272 @@
+{
+  "schema": "lc_spvq_architecture_optimization_evidence_v1",
+  "document_id": "20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_EVIDENCE",
+  "date": "2026-08-20",
+  "stage": "single_seed_fit_selection_optimization_and_frozen_development_apply",
+  "analysis_intent": "exploratory_architecture_optimization",
+  "claim_status": "not_a_comprehensive_scientific_validation",
+  "processing_boundary": "local_only",
+  "human_verification": {
+    "status": "pending",
+    "submission_or_release_approved": false,
+    "note": "Accountable human investigators must open the bound sources, verify every scientific proposition, and approve any external use."
+  },
+  "immutable_context": {
+    "legacy_continuous_result": "2/16 simultaneous lower bounds exceeded zero; all fNIRS-target and matched-swap cells failed",
+    "legacy_result_reinterpreted_as_success": false,
+    "development_subjects_19_23_are_new_independent_holdout": false,
+    "protected_cohorts_open": false,
+    "protected_measured_access_count": 0,
+    "causal_or_future_physiology_claim": false,
+    "coupling_endpoint_claim": false,
+    "multi_seed_inference": false,
+    "confidence_intervals_reported": false
+  },
+  "prospective_boundaries": {
+    "architecture_implementation_commit": "7099eb918f59f7c44ae92ea4fe733dcb31f60e74",
+    "optimization_harness_commit": "39b75b5",
+    "measured_runtime_fix_commit": "ce2b7c7394c4030bafd421a5ce72f589f2fa0282",
+    "successful_run_git_status_short": "",
+    "training_seed": 20260820,
+    "sample_registry_seed": 20260824,
+    "derangement_seed": 20260825,
+    "single_seed": true,
+    "development_values_used_for_selection": false,
+    "development_apply_frozen": true
+  },
+  "evidence_sources": [
+    {
+      "id": "E001",
+      "kind": "result_report",
+      "path": "docs/analysis/20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_RESULTS.md",
+      "sha256": "333f70921b615e414765ccb6fb1f80aeb1fbc6f3ebf37cad460778dc94b22f5d"
+    },
+    {
+      "id": "E002",
+      "kind": "successful_run_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/manifest.json",
+      "sha256": "c4abb9d81dd559103b0e6bee40ca7138d86db46326b08c2fa1184586b6694ade"
+    },
+    {
+      "id": "E003",
+      "kind": "global_candidate_selection",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/global_candidate_selection.json",
+      "sha256": "dd7f6950532dff420803b7cf04427f9bcfca45c2806d17aa88ff1fb5607e5593"
+    },
+    {
+      "id": "E004",
+      "kind": "candidate_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/candidate_summary.json",
+      "sha256": "f776fd6edaff7bf778ba7277e472da13f1297a81be08180e19ee3a5434d388ee"
+    },
+    {
+      "id": "E005",
+      "kind": "frozen_development_comparison",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/development_comparison.json",
+      "sha256": "7a9919e9916b3388631bb33594f82c711d93861832986fbfb93d7e36cfc96b43"
+    },
+    {
+      "id": "E006",
+      "kind": "sample_access_audit",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/sample_access_audit.json",
+      "sha256": "aa40bb639e83287f9db0fae09fcb3c0d2f41418311e925ded2297ea303d0bca6"
+    },
+    {
+      "id": "E007",
+      "kind": "fit_selection_sample_registry",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/fit_selection_sample_registry.json",
+      "sha256": "c0b28300e71a55307b1a9a3b6ccfadcd11c3d05c758d85cdddf9db971fd5e91f"
+    },
+    {
+      "id": "E008",
+      "kind": "development_sample_registry",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/development_sample_registry.json",
+      "sha256": "45ec4bd0cf77fcf07b0932165c2ee68d2390bac10212f3e6557ec7fef3882406"
+    },
+    {
+      "id": "E009",
+      "kind": "curve_source_data",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/curve_figure_source_data.csv",
+      "sha256": "f0fe02216dd874f296594231588cfca06d0aff685ee11561f1d7ef99da8ed015"
+    },
+    {
+      "id": "E010",
+      "kind": "curve_figure_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/curve_figure_manifest.json",
+      "sha256": "56179dd00d6d84a4bc10b1a7a6244bf234a40938549bcd8632556cb3291fcfa6"
+    },
+    {
+      "id": "E011",
+      "kind": "curve_png",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/selection_development_curves.png",
+      "sha256": "ddea3305973a2261da066829fd5c03b54b163c2d91a473b054ca81b5c5388741"
+    },
+    {
+      "id": "E012",
+      "kind": "curve_pdf",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/selection_development_curves.pdf",
+      "sha256": "adec1a499a8408707e755e555ce91f76ca479b268e2201a4d826d6ee6d54c958"
+    },
+    {
+      "id": "E013",
+      "kind": "frozen_optimization_protocol",
+      "path": "docs/analysis/LC_SPVQ_ARCHITECTURE_OPTIMIZATION_PROTOCOL.md",
+      "sha256": "8f1dff3510936ff136ac5df2dc1e0ebd625554b4b065df980a5844fbdf6fc7a8"
+    },
+    {
+      "id": "E014",
+      "kind": "frozen_optimization_configuration",
+      "path": "experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq_architecture_optimization.yaml",
+      "sha256": "d6d65fb9e6ad35065582e50c0e30668e765a9dc64e4d72ccca0def388822fab9"
+    }
+  ],
+  "registered_outcomes": {
+    "selected_candidate_id": "lag05_h23",
+    "recommended_candidate_id_under_frozen_selector": "lag05_h23",
+    "improvement_interpretation": "objective_weight_improvement_not_history_architecture",
+    "architecture_improvement": false,
+    "selection_task_mean_primary_reference": 0.622284469343293,
+    "selection_task_mean_primary_selected": 0.6749027388733271,
+    "selection_selected_minus_reference": 0.05261826953003412,
+    "minimum_descriptive_improvement": 0.01,
+    "best_history_candidate_id": "h13_lag01",
+    "best_history_minus_reference": 0.0005718954248365993,
+    "best_history_minus_long_control": -0.008518893387314375,
+    "long_control_minus_reference": 0.009090788812150974,
+    "selection_coupling_only_selected_minus_reference": -0.0924935630817984,
+    "development_task_mean_primary_reference": 0.5399538791102259,
+    "development_task_mean_primary_selected": 0.5204873652319473,
+    "development_selected_minus_reference": -0.01946651387827858,
+    "development_selected_better_on_any_registered_task": false
+  },
+  "sample_accounting": {
+    "fit_parameter_samples": 480,
+    "fit_selection_samples": 96,
+    "development_apply_samples": 160,
+    "total_unique_task_partition_samples": 736,
+    "prior_two_task_smoke_samples": 32,
+    "samples_per_subject_class": 8,
+    "fit_selection_registry_rows": 576,
+    "development_registry_rows": 160,
+    "all_subject_class_cells_exact": true,
+    "protected_measured_access_count": 0
+  },
+  "artifact_accounting": {
+    "manifest_artifact_count": 77,
+    "manifest_input_count": 8,
+    "candidate_task_cells": 10,
+    "checkpoint_count": 30,
+    "development_frozen_model_applications": 4,
+    "permit_registered_applications": 4,
+    "unselected_development_applications": 0,
+    "curve_source_rows": 254,
+    "all_present_curve_values_finite": true,
+    "all_manifest_hashes_recomputed": true,
+    "all_manifest_sizes_recomputed": true,
+    "all_checkpoint_provenance_verified": true,
+    "all_development_state_digests_unchanged": true,
+    "all_fit_parameter_codebooks_active_16_of_16": true
+  },
+  "failed_attempt": {
+    "status": "failed_closed_before_global_selection",
+    "source_commit": "39b75b5",
+    "staging_path": "experiments/runs/physiology_semantic_tokenizer/.lag_conditioned_spvq_optimization.staging-o9h46fbq",
+    "error": "KeyError: combined_logits during first candidate task-head evaluation",
+    "development_registry_created": false,
+    "global_selection_created": false,
+    "retained_file_count": 6,
+    "fit_selection_registry_sha256": "c0b28300e71a55307b1a9a3b6ccfadcd11c3d05c758d85cdddf9db971fd5e91f",
+    "corrective_commit": "ce2b7c7394c4030bafd421a5ce72f589f2fa0282",
+    "regression_test_added": true
+  },
+  "machine_checks": [
+    {
+      "id": "Q001",
+      "status": "passed",
+      "check": "focused_optimization_pytest_after_runtime_fix",
+      "result": "18 passed in 7.66 s",
+      "evidence_ids": ["E013", "E014"]
+    },
+    {
+      "id": "Q002",
+      "status": "passed_with_declared_exclusions",
+      "check": "repository_pytest_excluding_two_known_historical_r1p_seal_modules",
+      "result": "535 passed, 11 deselected, 51 warnings in 50.75 s",
+      "exclusion_scope": "tests/test_build_r1p_train_only_perturbation_bundles.py and tests/test_qualify_r1p_population_frozen_teacher.py",
+      "evidence_ids": []
+    },
+    {
+      "id": "Q003",
+      "status": "expected_failures_only",
+      "check": "final_full_repository_pytest",
+      "result": "558 passed, 10 failed, 11 deselected, 51 warnings in 52.19 s",
+      "failure_scope": "All 10 failures are unchanged fail-closed R1P prevalidation-seal checks caused by a previously changed sealed source; historical seals were not rewritten.",
+      "evidence_ids": []
+    },
+    {
+      "id": "Q004",
+      "status": "passed",
+      "check": "artifact_manifest_and_input_inventory_recomputation",
+      "result": "77 artifact hashes/sizes and 8 input hashes matched",
+      "evidence_ids": ["E002"]
+    },
+    {
+      "id": "Q005",
+      "status": "passed",
+      "check": "checkpoint_schema_provenance_and_replay_surface",
+      "result": "30/30 checkpoints matched task, candidate, seed, variant, stage, access boundary, VQ surface, optimizer state, and RNG state",
+      "evidence_ids": ["E002", "E004"]
+    },
+    {
+      "id": "Q006",
+      "status": "passed",
+      "check": "sample_registry_and_access_governance",
+      "result": "576 fit/selection rows plus 160 development rows; every subject-condition cell had 8 samples; development followed selection; protected measured access was zero",
+      "evidence_ids": ["E006", "E007", "E008"]
+    },
+    {
+      "id": "Q007",
+      "status": "passed",
+      "check": "frozen_development_application",
+      "result": "4/4 authorized applications, 0 unselected applications, and 4/4 unchanged before/after state digests",
+      "evidence_ids": ["E005", "E006"]
+    },
+    {
+      "id": "Q008",
+      "status": "passed_provisional_general_qc",
+      "check": "curve_source_and_export_inspection",
+      "result": "254 finite source rows; 2520x827 opaque RGBA PNG at approximately 180 DPI; untagged one-page vector PDF with embedded subsetted Type-3 DejaVu Sans; no clipping or false stage connections; legends obscure data, stage gaps are unlabeled, exact-value markers overlap, Panel C uses selected checkpoints, and four development source rows omit curve-kind/stage/step",
+      "certification": "Neither journal compliance nor accessibility is certified",
+      "evidence_ids": ["E009", "E010", "E011", "E012"]
+    },
+    {
+      "id": "Q009",
+      "status": "passed",
+      "check": "prospective_governance_audit",
+      "result": "No remaining concrete execution blockers after permit, selector, target-type, checkpoint, and application-once hardening",
+      "evidence_ids": ["E013", "E014"]
+    },
+    {
+      "id": "Q010",
+      "status": "passed_with_claim_boundary",
+      "check": "independent_post_run_result_audit",
+      "result": "Selection arithmetic, all-active codebooks, registry hashes, frozen application state digests, and zero protected access were consistent; gate passed only for single-seed exploratory implementation/QC, not architecture improvement, generalization, coupling/sharedness, or a scientific endpoint",
+      "evidence_ids": ["E002", "E003", "E004", "E005", "E006"]
+    }
+  ],
+  "claim_boundaries": [
+    "The selected result is a lag-loss objective-weight/task-head QC improvement, not a history-architecture improvement.",
+    "The selected candidate did not improve frozen descriptive development performance on either task.",
+    "Task-head metrics do not establish q0/q1 coupling, sharedness, physiological validity, causality, or future prediction.",
+    "No protected-cohort, multi-seed, confidence-interval, or comprehensive scientific claim is authorized.",
+    "Independent EEG and fNIRS code IDs are not aligned by identity.",
+    "The legacy continuous 2/16 negative result remains unchanged."
+  ],
+  "remaining_gates": [
+    "Obtain accountable human scientific verification before external release or submission.",
+    "Use a newly frozen design and genuinely independent data before claiming transferable performance.",
+    "Keep protected cohorts closed absent a separate protocol and explicit authorization.",
+    "Do not use descriptive development values to revise the frozen selection retrospectively.",
+    "Treat the provisional curve figure and source table as general QC, not journal or accessibility certification."
+  ]
+}

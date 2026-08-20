@@ -176,6 +176,34 @@
       "role": "run_manifest"
     },
     {
+      "id": "e.lc_spvq_optimization_protocol",
+      "label": "LC-SPVQ 架构优化预注册协议",
+      "path": "docs/analysis/LC_SPVQ_ARCHITECTURE_OPTIMIZATION_PROTOCOL.md",
+      "sha256": "8f1dff3510936ff136ac5df2dc1e0ebd625554b4b065df980a5844fbdf6fc7a8",
+      "role": "protocol"
+    },
+    {
+      "id": "e.lc_spvq_optimization_results",
+      "label": "LC-SPVQ 单种子架构优化结果",
+      "path": "docs/analysis/20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_RESULTS.md",
+      "sha256": "333f70921b615e414765ccb6fb1f80aeb1fbc6f3ebf37cad460778dc94b22f5d",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.lc_spvq_optimization_ledger",
+      "label": "LC-SPVQ 架构优化证据账本",
+      "path": "docs/analysis/20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_EVIDENCE.json",
+      "sha256": "0589913aafa1c336de6665ed3bb71dc45a686754847aa2022f746700210320f2",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.lc_spvq_optimization_run",
+      "label": "LC-SPVQ 架构优化运行清单",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization/manifest.json",
+      "sha256": "c4abb9d81dd559103b0e6bee40ca7138d86db46326b08c2fa1184586b6694ade",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.croce_plan",
       "label": "Croce 验证计划",
       "path": "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md",
@@ -244,25 +272,29 @@
       "track": "main",
       "order": 0,
       "entity_kind": "aggregate",
-      "execution": "running",
-      "scientific_verdict": "unreviewed",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
       "analysis_intent": "exploratory",
-      "summary": "新代际把 sharedness 重定义为模态特异离散状态之间的有时延条件预测；existing-export probe、B0/M1/N1、独立 K16、proper-score/coupling 端点及双任务 measured smoke 已完成并通过治理审计，但尚无 multi-seed/full-epoch 科学比较。",
+      "summary": "新代际已完成单种子、fit-selection-only 架构优化：lag-loss 权重 0.5 在 selection 上相对 reference 提高 task-mean macro-F1 0.0526，但历史架构未改善，且冻结 development 两任务均反向；因此仅保留 objective-weight QC 候选，不构成可迁移性能或 sharedness 科学结论。",
       "evidence_ids": [
         "e.lc_spvq_plan",
         "e.lc_spvq_smoke_results",
         "e.lc_spvq_validation_ledger",
+        "e.lc_spvq_optimization_protocol",
+        "e.lc_spvq_optimization_results",
+        "e.lc_spvq_optimization_ledger",
+        "e.lc_spvq_optimization_run",
         "e.continuous_latent_results"
       ],
       "supersedes": [
         "main.program@2026-08-19.reliability"
       ],
-      "updated_at": "2026-08-20T17:04:07+08:00",
+      "updated_at": "2026-08-20T19:35:20+08:00",
       "depends_on": [
         "main.continuous_latent",
         "main.lc_spvq"
       ],
-      "next_step": "先实现 fit-selection-only 的 lag-loss 权重与 checkpoint 选择循环，再决定是否授权 multi-seed/full-epoch exploratory development run；protected cohort 继续关闭。",
+      "next_step": "保持 protected cohort 关闭；若继续验证 lag05_h23，须先冻结新的独立评估设计，并把 selection 增益与 development 反向同时作为前置证据。",
       "headline": true
     },
     {
@@ -562,22 +594,26 @@
       "track": "main",
       "order": 130,
       "entity_kind": "experiment",
-      "execution": "running",
-      "scientific_verdict": "unreviewed",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
       "analysis_intent": "exploratory",
-      "summary": "已完成 existing-export 12-cell lag probe、B0/M1/N1 双任务 measured smoke、独立 K16 全 fit-latent 初始化、known-lag synthetic gate、coupling map、q0/q1 proper-score 流水线及独立治理审计；smoke 不构成科学终点。",
+      "summary": "已完成单种子五候选架构优化与冻结 development 应用：lag05_h23 的 selection task-mean macro-F1 相对 reference 提高 0.0526 并过预设阈值，但 coupling-only QC 更低、两个 development 任务均劣于 reference，且历史架构候选未改善；结论仅限 objective-weight selection QC。",
       "evidence_ids": [
         "e.lc_spvq_plan",
         "e.lc_spvq_smoke_results",
-        "e.lc_spvq_validation_ledger"
+        "e.lc_spvq_validation_ledger",
+        "e.lc_spvq_optimization_protocol",
+        "e.lc_spvq_optimization_results",
+        "e.lc_spvq_optimization_ledger",
+        "e.lc_spvq_optimization_run"
       ],
       "supersedes": [],
-      "updated_at": "2026-08-20T17:04:07+08:00",
+      "updated_at": "2026-08-20T19:35:20+08:00",
       "depends_on": [
         "main.continuous_latent",
         "main.data_contract"
       ],
-      "next_step": "补齐 full-mode fit-selection-only 超参数与 checkpoint 选择；在此之前不启动 multi-seed/full-epoch，也不开放 protected cohort。",
+      "next_step": "当前优化阶段结束且 protected cohort 保持关闭；任何后续可迁移性能验证须另行冻结独立评估设计，并不得用本轮 reused development 反向调参。",
       "headline": false
     },
     {
