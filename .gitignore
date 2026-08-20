@@ -12,6 +12,7 @@ experiments/configs/physiology_semantic_tokenizer/*
 !experiments/configs/physiology_semantic_tokenizer/r2d_continuous_observability.yaml
 !experiments/configs/physiology_semantic_tokenizer/token_physiology_atlas.yaml
 !experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq.yaml
+!experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq_architecture_optimization.yaml
 !experiments/configs/physiology_semantic_tokenizer/probe_existing_lagged_predictability.yaml
 experiments/logs
 experiments/results

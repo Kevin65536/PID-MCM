@@ -1,0 +1,181 @@
+experiment:
+  name: lag_conditioned_spvq_architecture_optimization_v1
+  schema: lc_spvq_architecture_optimization_config_v1
+  execution_mode: architecture_optimization
+  analysis_intent: exploratory_architecture_optimization
+  claim_scope: architecture_implementation_and_single_seed_development_qc
+  claim_status: architecture_optimization_only
+  scientific_endpoint: false
+  protected_open: false
+  old_continuous_2_of_16_verdict_mutable: false
+
+base_config:
+  path: experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq.yaml
+  sha256: a5f5953aa3102407cef28291ebf8e5509190fd9f88765f672db423f0bf7363f5
+
+execution:
+  seed: 20260820
+  sample_registry_seed: 20260824
+  derangement_seed: 20260825
+  device: cuda:1
+  tasks: [motor_imagery, word_generation]
+  variant: M1
+  deterministic_algorithms: true
+  amp: false
+  multi_seed_repetition: false
+  scientific_full_mode_authorized: false
+
+sample_budget:
+  fit_parameter_subjects_per_dataset: 15
+  fit_selection_subjects_per_dataset: 3
+  development_apply_subjects_per_dataset: 5
+  samples_per_subject_class: 8
+  within_group_sampling: deterministic_record_round_robin_event_time_spread
+  require_exact_group_support: true
+  development_materialization: after_global_candidate_selection_only
+
+schedule:
+  equal_budget_for_standard_candidates: true
+  prior_smoke_used_as_performance_comparator: false
+  batch_size: 16
+  continuous_pretrain_optimizer_steps: 64
+  vq_optimizer_steps: 32
+  task_head_optimizer_steps: 64
+  long_control_step_multiplier: 2
+  selection_evaluation_interval_steps: 8
+  early_stopping_patience_evaluations: 4
+  representation_early_stopping_min_delta: 1.0e-4
+  head_early_stopping_min_delta: 1.0e-6
+  pretrain_minimum_steps: 32
+  vq_minimum_steps: 16
+  head_minimum_steps: 32
+  learning_rate: 3.0e-4
+  head_learning_rate: 1.0e-3
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  grad_clip_norm: 1.0
+  learning_rate_scheduler: none
+  warmup_optimizer_steps: 0
+  vq_annealing: linear_then_hold
+  vq_anneal_optimizer_steps: 32
+  posterior_temperature_start: 1.0
+  posterior_temperature_end: 0.1
+  quantization_strength_start: 0.0
+  quantization_strength_end: 1.0
+
+candidate_constants:
+  encoder_depth: 2
+  encoder_num_heads: 4
+  encoder_feedforward_dim: 256
+  shared_dim: 64
+  eeg_private_dim: 64
+  fnirs_private_dim: 32
+  dropout: 0.1
+  codebook_size: 16
+  coupling_rank: 8
+  projection_dim: 64
+  head_representation_mode: fully_frozen_shared_private_and_codebooks
+
+candidates:
+  - candidate_id: reference_h23_lag01
+    role: common_budget_reference
+    comparison_class: reference
+    eeg_shared_history_tokens: 1
+    fnirs_shared_history_tokens: 2
+    lag_loss_weight: 0.1
+    step_multiplier: 1
+  - candidate_id: lag05_h23
+    role: objective_weight_candidate
+    comparison_class: objective
+    eeg_shared_history_tokens: 1
+    fnirs_shared_history_tokens: 2
+    lag_loss_weight: 0.5
+    step_multiplier: 1
+  - candidate_id: h13_lag01
+    role: eeg_current_only_history_candidate
+    comparison_class: architecture
+    eeg_shared_history_tokens: 0
+    fnirs_shared_history_tokens: 2
+    lag_loss_weight: 0.1
+    step_multiplier: 1
+  - candidate_id: h12_lag01
+    role: both_modalities_shorter_history_candidate
+    comparison_class: architecture
+    eeg_shared_history_tokens: 0
+    fnirs_shared_history_tokens: 1
+    lag_loss_weight: 0.1
+    step_multiplier: 1
+  - candidate_id: reference_h23_lag01_long
+    role: exact_reference_longer_training_control
+    comparison_class: duration_control
+    eeg_shared_history_tokens: 1
+    fnirs_shared_history_tokens: 2
+    lag_loss_weight: 0.1
+    step_multiplier: 2
+
+checkpoint_selection:
+  representation_partition: fit_selection
+  representation_metric: fixed_native_plus_lag_loss
+  representation_formula: 0.5*eeg_native_mse+0.5*fnirs_native_mse+0.5*lag_matching_loss
+  representation_include_raw_loss: false
+  representation_include_commitment_loss: false
+  representation_fixed_lag_weight: 0.5
+  representation_direction: minimize
+  representation_task_labels_used: false
+  vq_evaluation_quantization_strength: 1.0
+  vq_evaluation_posterior_temperature: 0.1
+  head_partition: fit_selection
+  head_primary_metric: coupling_plus_private_subject_equal_macro_f1
+  head_direction: maximize
+  head_tie_breaker: selection_combined_cross_entropy
+  architecture_partition: fit_selection
+  architecture_primary_metric: task_mean_coupling_plus_private_subject_equal_macro_f1
+  architecture_direction: maximize
+  architecture_task_labels_used: true
+  architecture_claim_scope: task_head_performance_qc_not_coupling_endpoint
+  architecture_tie_breakers:
+    - task_minimum_coupling_plus_private_subject_equal_macro_f1
+    - task_mean_coupling_only_subject_equal_macro_f1
+    - lower_task_mean_selection_combined_cross_entropy
+    - fewer_actual_optimizer_steps
+    - lower_trainable_parameter_count
+  architecture_improvement_requires_history_candidate_to_beat:
+    - reference_h23_lag01
+    - reference_h23_lag01_long
+  duration_control_win_interpretation: optimization_duration_improvement_not_architecture
+  numeric_tie_tolerance: 1.0e-8
+  require_finite_metrics: true
+  require_complete_support_on_both_tasks: true
+  require_all_fit_parameter_codes_active: true
+  require_derangement_nonoverlap_verified: true
+  fail_if_no_valid_candidate: true
+  minimum_descriptive_improvement: 0.01
+  reference_candidate_id: reference_h23_lag01
+  long_control_candidate_id: reference_h23_lag01_long
+  recommendation_if_threshold_not_met: retain_reference_h23_lag01
+  apply_best_candidate_for_descriptive_transfer_if_threshold_not_met: true
+  development_values_available_to_selector: false
+
+frozen_apply:
+  evaluate_reference_on_development: true
+  evaluate_selected_candidate_on_development: true
+  evaluate_unselected_candidates_on_development: false
+  application_count_definition: once_per_distinct_frozen_reference_or_selected_model
+  deduplicate_when_selected_is_reference: true
+  development_is_new_independent_holdout: false
+  development_claim: post_selection_development_apply
+  protected_evaluation: false
+  m1_vs_n1_claim: false
+  m1_vs_b0_claim: false
+  q0_q1_coupling_endpoint_claim: false
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_optimization
+  atomic_publish: true
+  write_candidate_checkpoints: true
+  checkpoint_includes_optimizer_rng_and_quantizer_temperature: true
+  verify_frozen_state_digest_before_after_development: true
+  write_step_curves_csv: true
+  write_curve_figure_png: true
+  write_curve_figure_pdf: true
+  figure_status: provisional_general_qc_not_journal_certified
