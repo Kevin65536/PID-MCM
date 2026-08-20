@@ -114,15 +114,15 @@ The reference's two-task development mean was 0.539954; the selected candidate's
 
 ## Interpretation and decision
 
-Under the frozen selector, `lag05_h23` remains the **registered recommendation for a future nonprotected confirmatory comparison**, because development was not allowed to alter selection. It should not replace the reference as a validated model on the basis of this run: its gain was concentrated in motor-imagery fit selection, its coupling-only QC was lower, and both descriptive development tasks favored the reference.
+Under the frozen selector, `lag05_h23` remains the **registered candidate for a future, separately frozen nonprotected evaluation**, because development was not allowed to alter selection. It should not replace the reference as a validated model on the basis of this run: its gain was concentrated in motor-imagery fit selection, its coupling-only QC was lower, and both descriptive development tasks favored the reference.
 
 The architecture-history optimization question is answered negatively for this candidate set: neither shorter-history candidate met the registered improvement rule, and the best history candidate did not beat both reference controls. Longer optimization was task-dependent and did not reach the 0.01 global threshold.
 
-Any future claim of transferable performance would require a newly frozen evaluation design with genuinely independent subjects or protected authorization. This run does not authorize protected access, multi-seed inference, causal interpretation of positive lags, or reinterpretation of the immutable legacy continuous result (2/16 successful cells).
+Any future claim of transferable performance would require a newly frozen design and genuinely independent evaluation data; if protected cohorts were involved, explicit authorization would be an additional requirement, not a substitute for independence. This run does not authorize protected access, multi-seed inference, causal interpretation of positive lags, or reinterpretation of the immutable legacy continuous result (only 2/16 simultaneous lower-bound criteria exceeded zero).
 
 ## Limitations
 
-1. One seed was used by request; there are no seed-variance estimates or confidence intervals.
+1. The declared run scope used one seed; there are no seed-variance estimates or confidence intervals.
 2. Candidate selection repeatedly used subjects 16–18, making selection scores optimistic for the chosen candidate.
 3. Subjects 19–23 were reused post-selection development subjects, not a new independent holdout.
 4. Task-head macro-F1 and cross-entropy are QC endpoints, not q0/q1 coupling/sharedness evidence.

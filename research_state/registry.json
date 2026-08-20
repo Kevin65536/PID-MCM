@@ -186,14 +186,14 @@
       "id": "e.lc_spvq_optimization_results",
       "label": "LC-SPVQ 单种子架构优化结果",
       "path": "docs/analysis/20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_RESULTS.md",
-      "sha256": "333f70921b615e414765ccb6fb1f80aeb1fbc6f3ebf37cad460778dc94b22f5d",
+      "sha256": "18e193ecf84cd5f28ffd3542c0c707abd2dbbb334a947dfa679a40fb4b1f1c64",
       "role": "result_summary"
     },
     {
       "id": "e.lc_spvq_optimization_ledger",
       "label": "LC-SPVQ 架构优化证据账本",
       "path": "docs/analysis/20260820_LC_SPVQ_ARCHITECTURE_OPTIMIZATION_EVIDENCE.json",
-      "sha256": "0589913aafa1c336de6665ed3bb71dc45a686754847aa2022f746700210320f2",
+      "sha256": "a529bac48174ca2f3752a560224804941b68c05582276ddd87f27a610b5ead84",
       "role": "run_manifest"
     },
     {
