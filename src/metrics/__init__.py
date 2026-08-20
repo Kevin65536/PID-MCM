@@ -15,6 +15,12 @@ from .reconstruction import (
     compute_spectral_mse,
 )
 from .trajectory_reliability import trajectory_reliability_metrics
+from .lag_conditioned_downstream import (
+    classification_metrics,
+    confusion_matrix,
+    evaluate_logit_ablations,
+    subject_equal_classification_metrics,
+)
 
 __all__ = [
     'compute_codebook_health',
@@ -25,4 +31,8 @@ __all__ = [
     'compute_snr',
     'compute_spectral_mse',
     'trajectory_reliability_metrics',
+    'classification_metrics',
+    'confusion_matrix',
+    'evaluate_logit_ablations',
+    'subject_equal_classification_metrics',
 ]

@@ -1,0 +1,244 @@
+experiment:
+  name: lag_conditioned_spvq_development_v1
+  schema: lag_conditioned_spvq_config_v1
+  scope: exploratory_reused_development_generation
+  analysis_intent: exploratory
+  estimand: lagged_modality_specific_probability_channel
+  old_continuous_2_of_16_verdict_mutable: false
+
+source:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  eeg_signal_branch: single_trial_eeg_artifact_clean_v4
+  window_duration_s: 20.0
+  window_offset_s: -5.0
+  patch_duration_s: 2.0
+  eeg_sample_rate_hz: 200.0
+  fnirs_sample_rate_hz: 10.0
+  protected_open: false
+  artifact_mask_is_validity: false
+  support_policy: recorded_and_analysis_valid_intersection
+
+data_split:
+  fit_parameter_subjects:
+    eeg_fnirs_single_trial: [subject_01, subject_02, subject_03, subject_04, subject_05, subject_06, subject_07, subject_08, subject_09, subject_10, subject_11, subject_12, subject_13, subject_14, subject_15]
+    simultaneous_eeg_nirs: [VP001, VP002, VP003, VP004, VP005, VP006, VP007, VP008, VP009, VP010, VP011, VP012, VP013, VP014, VP015]
+  fit_selection_subjects:
+    eeg_fnirs_single_trial: [subject_16, subject_17, subject_18]
+    simultaneous_eeg_nirs: [VP016, VP017, VP018]
+  development_apply_subjects:
+    eeg_fnirs_single_trial: [subject_19, subject_20, subject_21, subject_22, subject_23]
+    simultaneous_eeg_nirs: [VP019, VP020, VP021, VP022, VP023]
+  protected_or_unused:
+    eeg_fnirs_single_trial: [subject_24, subject_25, subject_26, subject_27, subject_28, subject_29]
+    simultaneous_eeg_nirs: [VP024, VP025, VP026]
+  development_is_new_independent_holdout: false
+
+tasks:
+  - task_id: motor_imagery
+    dataset_id: eeg_fnirs_single_trial
+    namespace: eeg_fnirs_single_trial:motor_imagery
+    class_names: [LMI, RMI]
+    record_ids: [session_00, session_02, session_04]
+    first_round: true
+  - task_id: word_generation
+    dataset_id: simultaneous_eeg_nirs
+    namespace: simultaneous_eeg_nirs:wg
+    class_names: [WG, BL]
+    record_ids: [cnt_wg]
+    first_round: true
+  - task_id: mental_arithmetic
+    dataset_id: eeg_fnirs_single_trial
+    namespace: eeg_fnirs_single_trial:mental_arithmetic
+    class_names: [MA, BL]
+    record_ids: [session_01, session_03, session_05]
+    first_round: false
+  - task_id: n_back
+    dataset_id: simultaneous_eeg_nirs
+    namespace: simultaneous_eeg_nirs:nback
+    class_names: [0-back session, 2-back session, 3-back session]
+    record_ids: [cnt_nback]
+    first_round: false
+
+variants:
+  B0:
+    shared_temporal_scope: bidirectional_full_window
+    lag_objective: false
+    vector_quantization: false
+    positive_pairing: matched
+  C1:
+    shared_temporal_scope: modality_specific_local_causal
+    lag_objective: true
+    vector_quantization: false
+    positive_pairing: matched
+  M1:
+    shared_temporal_scope: modality_specific_local_causal
+    lag_objective: true
+    vector_quantization: true
+    positive_pairing: matched
+  N1:
+    shared_temporal_scope: modality_specific_local_causal
+    lag_objective: true
+    vector_quantization: true
+    positive_pairing: same_subject_condition_deranged
+  first_round_order: [B0, M1, N1]
+
+model:
+  num_tokens: 10
+  shared_dim: 64
+  eeg_private_dim: 64
+  fnirs_private_dim: 32
+  encoder_depth: 2
+  encoder_num_heads: 4
+  encoder_feedforward_dim: 256
+  dropout: 0.1
+  eeg_shared_history_tokens: 1
+  fnirs_shared_history_tokens: 2
+  private_temporal_scope: bidirectional_full_window
+  raw_decoder_hidden_dim: 256
+  native_decoder_hidden_dim: 128
+  projection_dim: 64
+
+native_targets:
+  eeg:
+    aggregation: admitted_channel_mean
+    features:
+      - log_absolute_power_theta
+      - log_absolute_power_alpha
+      - log_absolute_power_beta
+      - log_absolute_power_low_gamma
+      - spectral_entropy
+      - line_length
+      - hjorth_mobility
+  fnirs:
+    aggregation: component_role_mean
+    component_roles: [HbO, HbR]
+    features: [mean, slope, endpoint_delta, auc]
+  extraction_coordinate: canonical_robust_sd_before_train_only_input_zscore
+  target_normalization: fit_parameter_subjects_only_coordinate_zscore
+
+objective:
+  raw_shared_gradient: stopped
+  raw_loss: masked_train_normalized_patch_mse
+  raw_modality_weight: 0.5
+  native_loss: masked_train_standardized_feature_mse
+  native_modality_weight: 0.5
+  raw_loss_weight: 1.0
+  native_loss_weight: 1.0
+  lag_loss_weight_candidates: [0.1, 0.5]
+  lag_loss_temperature: 0.1
+  lag_seconds: [0, 2, 4, 6, 8, 10]
+  direction_weight: 0.5
+  lag_prior: train_only_learned_softmax
+  target_stop_gradient: true
+  hard_negative: same_subject_condition_nonidentity_same_token_time
+  task_label_as_shared_encoder_input: false
+  direct_id_alignment: false
+  token_cooccurrence_loss: false
+  ssm_target_primary_loss: false
+
+quantizer:
+  enabled_variants: [M1, N1]
+  eeg_codebook_size: 16
+  fnirs_codebook_size: 16
+  embedding_dim: 64
+  independent_codebooks: true
+  assignment: euclidean
+  normalize_latents: false
+  ema_decay: 0.99
+  eps: 1.0e-5
+  commitment_cost: 0.25
+  initialization: fit_parameter_continuous_latents_kmeans
+  kmeans_iterations: 20
+  posterior_temperature_start: 1.0
+  posterior_temperature_end: 0.1
+  quantization_strength_start: 0.0
+  quantization_strength_end: 1.0
+  anneal_epochs: 10
+  dead_code_revival: false
+  capacity_ablation_codebook_size: 32
+
+head:
+  coupling_rank: 8
+  lag_seconds: [0, 2, 4, 6, 8, 10]
+  shared_encoder_frozen: true
+  codebook_frozen: true
+  private_encoder_mode: frozen_primary_finetuned_secondary
+  outputs:
+    - coupling_only
+    - shared_marginal_only
+    - private_only
+    - coupling_plus_private
+  primary_metric: macro_f1
+  ablation_auxiliary_cross_entropy_weight: 0.25
+  report_subject_equal_macro_f1: true
+  report_pooled_macro_f1: true
+
+training:
+  seeds: [20260820, 20260821, 20260822]
+  device: cuda:1
+  amp: true
+  batch_size: 16
+  pretrain_epochs: 60
+  vq_epochs: 20
+  head_epochs: 40
+  learning_rate: 3.0e-4
+  head_learning_rate: 1.0e-3
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  grad_clip_norm: 1.0
+  early_stopping_patience: 10
+  early_stopping_min_delta: 1.0e-5
+  checkpoint_selection_partition: fit_selection_subjects
+  checkpoint_selection_metric: native_plus_lag_loss_without_task_labels
+  num_workers: 0
+  deterministic_algorithms: true
+
+statistics:
+  biological_unit: subject
+  seed_aggregation: mean_within_subject_before_bootstrap
+  bootstrap_unit: subject_blocked_within_dataset
+  bootstrap_iterations: 10000
+  confidence_level: 0.95
+  bootstrap_seed: 20260823
+  coupling_primary_score: categorical_log_loss
+  coupling_secondary_score: brier_loss
+  coupling_gain_direction: q0_loss_minus_q1_loss
+  q0_controls: [fnirs_token_history, relative_token_time, task_condition]
+  q1_addition: eeg_token_posterior_at_source_time
+  q0_q1_probe_l2: 1.0
+  q0_q1_train_target_label_smoothing: 0.05
+  q0_q1_evaluation_target_smoothing: 0.0
+  q0_q1_max_iter: 5000
+  q0_q1_tolerance: 1.0e-6
+  q0_q1_convergence_required: true
+  nulls:
+    - same_subject_condition_nonidentity_trial_derangement
+    - within_trial_nonzero_circular_shift
+    - negative_lag
+    - N1_training_pair_derangement
+  map_smoothing_alpha: 0.5
+  map_display: matched_minus_expected_deranged_conditional_log_lift
+  display_order_fit_scope: fit_parameter_subjects_only
+  development_display_reordering: false
+
+smoke:
+  seeds: 1
+  tasks: [motor_imagery, word_generation]
+  variants: [B0, M1, N1]
+  parameter_subjects_per_dataset: 2
+  selection_subjects_per_dataset: 1
+  development_subjects_per_dataset: 1
+  samples_per_subject_class: 2
+  pretrain_optimizer_steps: 3
+  vq_optimizer_steps: 2
+  head_optimizer_steps: 3
+  bootstrap_iterations: 100
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq
+  atomic_publish: true
+  retain_pre_vq_latent: true
+  retain_soft_posterior: true
+  retain_hard_id: true
+  retain_expected_embedding: true
+  protected_open: false

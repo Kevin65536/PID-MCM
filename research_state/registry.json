@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-19T21:12:41+08:00",
+  "updated_at": "2026-08-20T15:05:00+08:00",
   "tracks": [
     {
       "id": "main",
@@ -155,6 +155,27 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.lc_spvq_plan",
+      "label": "LC-SPVQ 开发计划",
+      "path": "docs/analysis/LC_SPVQ_DEVELOPMENT_PLAN.md",
+      "sha256": "ea46e360798788efb6da295b88078d4a7610f505843c1c0341bc002b38e2dbb1",
+      "role": "protocol"
+    },
+    {
+      "id": "e.lc_spvq_smoke_results",
+      "label": "LC-SPVQ 实现与 smoke 验证记录",
+      "path": "docs/analysis/20260820_LC_SPVQ_IMPLEMENTATION_AND_SMOKE.md",
+      "sha256": "4b5001a55307cfff54cc1865324a3c07ecac38437dda6d1eb9ef90396b4dc320",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.lc_spvq_validation_ledger",
+      "label": "LC-SPVQ 验证证据账本",
+      "path": "docs/analysis/20260820_LC_SPVQ_VALIDATION_EVIDENCE.json",
+      "sha256": "747a36fcb2d02bf1242801758aa17a6b70c6471d06ed2ad808a882063b5665eb",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.croce_plan",
       "label": "Croce 验证计划",
       "path": "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md",
@@ -214,6 +235,34 @@
         "main.continuous_latent"
       ],
       "next_step": "保持 VQ 阻塞；若继续主线，先提出不依赖当前 SSM proxy 的共享构念与可识别性验证设计。",
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-20.lc-spvq",
+      "entity": "main.program",
+      "label": "LC-SPVQ 有时延概率通道代际",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "新代际把 sharedness 重定义为模态特异离散状态之间的有时延条件预测；existing-export probe、B0/M1/N1、独立 K16、proper-score/coupling 端点及双任务 measured smoke 已完成并通过治理审计，但尚无 multi-seed/full-epoch 科学比较。",
+      "evidence_ids": [
+        "e.lc_spvq_plan",
+        "e.lc_spvq_smoke_results",
+        "e.lc_spvq_validation_ledger",
+        "e.continuous_latent_results"
+      ],
+      "supersedes": [
+        "main.program@2026-08-19.reliability"
+      ],
+      "updated_at": "2026-08-20T17:04:07+08:00",
+      "depends_on": [
+        "main.continuous_latent",
+        "main.lc_spvq"
+      ],
+      "next_step": "先实现 fit-selection-only 的 lag-loss 权重与 checkpoint 选择循环，再决定是否授权 multi-seed/full-epoch exploratory development run；protected cohort 继续关闭。",
       "headline": true
     },
     {
@@ -504,6 +553,31 @@
         "main.ssm_reliability"
       ],
       "next_step": "停止当前 proxy/architecture 进入 VQ；如继续，先重设共享 target 和 identifiability 负对照。",
+      "headline": false
+    },
+    {
+      "state_id": "main.lc_spvq@2026-08-20",
+      "entity": "main.lc_spvq",
+      "label": "LC-SPVQ 开发与验证",
+      "track": "main",
+      "order": 130,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "已完成 existing-export 12-cell lag probe、B0/M1/N1 双任务 measured smoke、独立 K16 全 fit-latent 初始化、known-lag synthetic gate、coupling map、q0/q1 proper-score 流水线及独立治理审计；smoke 不构成科学终点。",
+      "evidence_ids": [
+        "e.lc_spvq_plan",
+        "e.lc_spvq_smoke_results",
+        "e.lc_spvq_validation_ledger"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-20T17:04:07+08:00",
+      "depends_on": [
+        "main.continuous_latent",
+        "main.data_contract"
+      ],
+      "next_step": "补齐 full-mode fit-selection-only 超参数与 checkpoint 选择；在此之前不启动 multi-seed/full-epoch，也不开放 protected cohort。",
       "headline": false
     },
     {

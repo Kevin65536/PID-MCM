@@ -146,6 +146,14 @@ from .unified_physiology import (
     refed_continuous_target_window,
     simultaneous_eeg_eog_cleaning_config,
 )
+from .lag_conditioned_dataset import (
+    CANONICAL_PROTECTED_SUBJECTS as LAG_CONDITIONED_PROTECTED_SUBJECTS,
+    LagConditionedSampleIndex,
+    LagConditionedTaskDataset,
+    LagConditionedTaskSpec,
+    TASK_SPECS as LAG_CONDITIONED_TASK_SPECS,
+    make_group_derangement,
+)
 from .physiology_semantic_local import (
     LOCAL_VIEW_SCHEMA,
     LocalWindowEntry,
@@ -284,6 +292,12 @@ __all__ = [
     'CANONICAL_PREPROCESSING',
     'CanonicalPreprocessingContract',
     'UnifiedPhysiologyWindowDataset',
+    'LagConditionedSampleIndex',
+    'LagConditionedTaskDataset',
+    'LagConditionedTaskSpec',
+    'LAG_CONDITIONED_PROTECTED_SUBJECTS',
+    'LAG_CONDITIONED_TASK_SPECS',
+    'make_group_derangement',
     'LOCAL_VIEW_SCHEMA',
     'LocalWindowEntry',
     'UnifiedPhysiologyLocalViewDataset',

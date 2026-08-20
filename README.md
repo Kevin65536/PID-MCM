@@ -5,15 +5,15 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（可靠性与连续共享状态支路）— 已完成 / 不支持预定主张：SSM 审计仅支持 joint 后验拟合诊断；无 VQ 连续实验仅 2/16 个 simultaneous 下界大于零，所有 fNIRS target 与 matched-swap 单元均失败，不支持当前 shared-state 构念。
+- **主方法**（LC-SPVQ 有时延概率通道代际）— 运行中 / 尚未判定：新代际把 sharedness 重定义为模态特异离散状态之间的有时延条件预测；existing-export probe、B0/M1/N1、独立 K16、proper-score/coupling 端点及双任务 measured smoke 已完成并通过治理审计，但尚无 multi-seed/full-epoch 科学比较。
 - **Token Atlas**（Atlas Statistical tier）— 未开始 / 尚未判定：Core tier 已完成；subject bootstrap、information ledger 与 train-validation uncertainty 尚未运行。
 - **对比实验**（六方法联合正式 campaign）— 已完成 / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 未开始 / 尚未判定：新版合成可识别性与 solver recovery 验证尚未开始。
 
 ### Next steps
+- **主方法** — 先实现 fit-selection-only 的 lag-loss 权重与 checkpoint 选择循环，再决定是否授权 multi-seed/full-epoch exploratory development run；protected cohort 继续关闭。
 - **Token Atlas** — 在冻结的 T0 上运行，不生成新 VQ。
 - **Croce 验证** — 按预定 decision rule 运行 Synthetic Phase 1。
-- **主方法** — 保持 VQ 阻塞；若继续主线，先提出不依赖当前 SSM proxy 的共享构念与可识别性验证设计。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for evidence links, dependencies, and next steps.
 <!-- project-state:end -->

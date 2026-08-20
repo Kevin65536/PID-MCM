@@ -1,0 +1,169 @@
+{
+  "schema": "lc_spvq_validation_evidence_v1",
+  "document_id": "20260820_LC_SPVQ_VALIDATION_EVIDENCE",
+  "date": "2026-08-20",
+  "stage": "local_engineering_and_scientific_qc",
+  "analysis_intent": "exploratory_post_selection_development",
+  "claim_status": "not_a_scientific_endpoint",
+  "processing_boundary": "local_only",
+  "human_verification": {
+    "status": "pending",
+    "submission_or_release_approved": false,
+    "note": "Accountable human investigators must open the bound sources, verify every scientific proposition, and approve any external use."
+  },
+  "immutable_context": {
+    "legacy_continuous_result": "2/16 simultaneous lower bounds exceeded zero; all fNIRS-target and matched-swap cells failed",
+    "legacy_result_reinterpreted_as_success": false,
+    "development_subjects_19_23_are_new_independent_holdout": false,
+    "protected_cohorts_open": false,
+    "causal_or_future_physiology_claim": false
+  },
+  "evidence_sources": [
+    {
+      "id": "E001",
+      "kind": "synthetic_governance_smoke_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/existing_lagged_predictability/20260820_synthetic_smoke_v4/manifest.json",
+      "sha256": "ef76be9e069b2278b6762b8aad1b577e19107d62c69165f090c121a32c4c532f"
+    },
+    {
+      "id": "E002",
+      "kind": "legacy_existing_export_probe_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/existing_lagged_predictability/20260820_full_v3/manifest.json",
+      "sha256": "f7baa02ded0de25ad1249f8973d110285dbfa21e738844274b13cca0ffc9f76d"
+    },
+    {
+      "id": "E003",
+      "kind": "measured_preparation_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq/20260820_lc_spvq_preparation_smoke_v9/manifest.json",
+      "sha256": "6f4ef73dfd65f38cc2d28fb1bf7e653c6a251ac11b9d10528fc3bd4aee8d6127"
+    },
+    {
+      "id": "E004",
+      "kind": "motor_imagery_b0_m1_n1_smoke_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq/20260820_b0_m1_n1_motor_imagery_smoke_v8/manifest.json",
+      "sha256": "900196d2ca997b2ce43432e8d43e2ab708a836c0d87b2baab4608becf338f6b5"
+    },
+    {
+      "id": "E005",
+      "kind": "word_generation_b0_m1_n1_smoke_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq/20260820_b0_m1_n1_word_generation_smoke_v8/manifest.json",
+      "sha256": "7929338cad520b15c848b2e921d5d2c397c27251a6d79358d4ad861950cf2a34"
+    },
+    {
+      "id": "E006",
+      "kind": "motor_imagery_coupling_analysis_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_analysis/20260820_motor_imagery_smoke_v12/manifest.json",
+      "sha256": "bde85a014b91062be53cfd12e1660ae27fe164c089d32972d90809cdeaf0c1df"
+    },
+    {
+      "id": "E007",
+      "kind": "word_generation_coupling_analysis_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/lag_conditioned_spvq_analysis/20260820_word_generation_smoke_v11/manifest.json",
+      "sha256": "790aaf82b98d9bee3a2ddef59a1e69c42cdcf38753bd7084291fedd5557428fa"
+    }
+  ],
+  "machine_checks": [
+    {
+      "id": "Q001",
+      "status": "passed",
+      "check": "targeted_lc_spvq_pytest",
+      "result": "92 passed in 7.58 s",
+      "evidence_ids": ["E001", "E003", "E004", "E005", "E006", "E007"]
+    },
+    {
+      "id": "Q002",
+      "status": "expected_failures_only",
+      "check": "full_repository_pytest",
+      "result": "540 passed, 10 failed, 11 deselected, 51 warnings in 47.36 s",
+      "failure_scope": "All 10 failures are unchanged fail-closed R1P prevalidation-seal checks for experiments/evaluate_adaptive_shared_neural_ssm.py. The historical seal was not altered."
+    },
+    {
+      "id": "Q003",
+      "status": "passed",
+      "check": "python_compile_and_git_diff_check",
+      "result": "All edited Python entrypoints/modules compiled; git diff --check produced no output."
+    },
+    {
+      "id": "Q004",
+      "status": "passed",
+      "check": "final_manifest_artifact_and_input_sha256_recomputation",
+      "result": {
+        "manifest_count": 7,
+        "artifact_mismatch_count": 0,
+        "input_mismatch_count": 0
+      },
+      "evidence_ids": ["E001", "E002", "E003", "E004", "E005", "E006", "E007"]
+    },
+    {
+      "id": "Q005",
+      "status": "passed",
+      "check": "protected_access_governance",
+      "result": "Canonical protected sets, canonical cache and branch-specific subcache roots, window/rate/event identities, and support policy were fail-closed; measured protected access and protected sample getitem calls were zero.",
+      "evidence_ids": ["E003", "E004", "E005"]
+    },
+    {
+      "id": "Q006",
+      "status": "passed",
+      "check": "paired_export_and_derangement_contract",
+      "result": "Token-export schema v2; unique sample IDs; integer complete donor permutations; same-subject/same-condition/nonidentity support; EEG and fNIRS 20 s nonoverlap; identical M1/N1 role ordering, labels, donor indices, event times, and validity masks; registered same-token-time hard-negative policy.",
+      "evidence_ids": ["E004", "E005", "E006", "E007"]
+    },
+    {
+      "id": "Q007",
+      "status": "passed",
+      "check": "q0_q1_convergence",
+      "result": {
+        "row_count": 48,
+        "all_q0_converged": true,
+        "all_q1_converged": true,
+        "q0_max_iterations": 3884,
+        "q1_max_iterations": 4140,
+        "registered_iteration_ceiling": 5000
+      },
+      "evidence_ids": ["E006", "E007"]
+    },
+    {
+      "id": "Q008",
+      "status": "passed",
+      "check": "fit_parameter_codebook_health",
+      "result": {
+        "all_codebooks_active_codes": "16/16",
+        "motor_imagery_M1_eeg_fnirs_perplexity": [13.987360000610352, 14.95339584350586],
+        "motor_imagery_N1_eeg_fnirs_perplexity": [13.04150104522705, 14.864290237426758],
+        "word_generation_M1_eeg_fnirs_perplexity": [14.161070823669434, 14.102230072021484],
+        "word_generation_N1_eeg_fnirs_perplexity": [13.859651565551758, 14.504019737243652]
+      },
+      "evidence_ids": ["E004", "E005"]
+    },
+    {
+      "id": "Q009",
+      "status": "passed",
+      "check": "legacy_probe_result_stability",
+      "result": {
+        "subject_summary_sha256": "060f301700fc46e2fe7dc33ea30017b8bc1e6433a0a9a686bee6ed0b87eb25a7",
+        "legacy_derangement_nonoverlap_verified": false
+      },
+      "evidence_ids": ["E002"]
+    },
+    {
+      "id": "Q010",
+      "status": "passed",
+      "check": "independent_code_and_governance_audits",
+      "result": "Two independent read-only audit tracks reported no remaining blocking/high governance issue after fixes."
+    },
+    {
+      "id": "Q011",
+      "status": "provisional_qc_only",
+      "check": "delivered_figure_inspection",
+      "result": "Four final PNGs were visually inspected at 1728x1248; each reports approximately 240 DPI and an opaque alpha channel. Paired PDFs are one-page vector outputs with an embedded subsetted DejaVu Sans font. Layouts were unclipped and used zero-centered task-shared diverging scales. No journal or accessibility compliance claim is made.",
+      "evidence_ids": ["E006", "E007"]
+    }
+  ],
+  "remaining_gates": [
+    "Implement fit-selection-only lag-loss-weight and checkpoint selection before any multi-seed/full-epoch development run.",
+    "Keep protected cohorts closed until a separate frozen protocol and explicit human authorization exist.",
+    "Do not treat one-subject smoke bootstrap intervals or QC heatmaps as endpoint evidence.",
+    "Retain the legacy 2/16 negative verdict unchanged.",
+    "Obtain accountable human scientific verification before external release or submission."
+  ]
+}

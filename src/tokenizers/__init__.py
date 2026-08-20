@@ -30,6 +30,13 @@ from .shared_driver_semantic_vq import (
     TemporalPatchStem,
 )
 from .continuous_shared_private import ContinuousSharedPrivateModel
+from .lag_conditioned_baseline import B0ContinuousSharedPrivate
+from .lag_conditioned_shared_private_vq import (
+    LCSPVQModel,
+    LagAwareContinuousMatchingLoss,
+    LocalCausalPatchEncoder,
+    LowRankLagCouplingHead,
+)
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -77,6 +84,11 @@ __all__ = [
     'SharedDriverTrajectoryDecoder',
     'TemporalPatchStem',
     'ContinuousSharedPrivateModel',
+    'B0ContinuousSharedPrivate',
+    'LCSPVQModel',
+    'LagAwareContinuousMatchingLoss',
+    'LocalCausalPatchEncoder',
+    'LowRankLagCouplingHead',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',

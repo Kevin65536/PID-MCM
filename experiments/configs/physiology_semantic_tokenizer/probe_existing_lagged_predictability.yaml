@@ -1,0 +1,62 @@
+# Independent downstream probe.  This file is intentionally separate from
+# continuous_shared_private_latent.yaml and never rewrites its 2/16 outputs.
+experiment:
+  name: probe_existing_lagged_predictability_v1
+  scope: development_validation_existing_export
+  analysis_intent: exploratory
+
+source:
+  continuous_run: experiments/runs/physiology_semantic_tokenizer/continuous_shared_private/20260819_continuous_shared_private_full_v1
+  protected_open: false
+
+# target time minus source time; positive values are later fNIRS tokens in
+# offline delayed association, never a causal/future claim.
+lag_bank_seconds: [-4, -2, 0, 2, 4, 6, 8, 10]
+token_step_seconds: 2
+
+evaluation_conditions:
+  - matched
+  - deranged_same_subject_same_condition_nonidentity
+  - within_trial_circular_shift
+
+features:
+  # validation_predictions.npz carries train-normalized raw observations;
+  # native features reconstruct canonical robust-SD values with saved train-only
+  # statistics before calling physiological_patch_features.py.
+  sample_rate_hz:
+    eeg: 200.0
+    fnirs: 10.0
+  patch_samples:
+    eeg: 400
+    fnirs: 20
+
+probe:
+  method: ridge
+  components: 32
+  alpha: 1.0
+  seed: 20260822
+inference_batch_size: 32
+
+governance:
+  claim_status: post_selection_development_offline_delayed_association
+  checkpoint_selection_status: legacy_best_pt_selected_on_development_validation_subjects19_23
+  checkpoint_selection_subject_range: 19-23
+  checkpoint_selection_subjects: [subject_19..subject_23, VP019..VP023]
+  evaluator_temporal_mode: offline_same_window
+  causal_future_claim: false
+  fresh_fit_held_out: false
+  forbidden_model_fields_not_used: [target, eeg_driver, fnirs_driver]
+  target_mask_use: validity_only
+  no_raw_fnirs_prediction: true
+
+nulls:
+  # A one-token (2 s) right circular roll of the EEG source within each trial.
+  within_trial_circular_shift_tokens: 1
+
+smoke:
+  cells: 1
+  max_fit_trials: 16
+  max_validation_trials: 16
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/existing_lagged_predictability
