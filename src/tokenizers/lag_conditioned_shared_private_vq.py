@@ -77,6 +77,8 @@ def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
 
 def _masked_pair_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    """Pool all valid token pairs together (the historical LC-SPVQ rule)."""
+
     if values.ndim != 4 or mask.shape != values.shape[:3]:
         raise ValueError("values must be [B,N,M,C] and mask must be [B,N,M]")
     admitted = mask.to(device=values.device, dtype=torch.bool).unsqueeze(-1)
@@ -85,6 +87,50 @@ def _masked_pair_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         raise FloatingPointError("masked pair mean contains a non-finite admitted value")
     weights = admitted.to(dtype=values.dtype)
     return masked_values.sum(dim=(1, 2)) / weights.sum(dim=(1, 2)).clamp_min(1.0)
+
+
+def _masked_lag_balanced_mean(
+    values: torch.Tensor,
+    mask: torch.Tensor,
+    allowed_lags: Sequence[int],
+) -> torch.Tensor:
+    """Average within each lag before averaging the supported lags.
+
+    The historical global pair mean gives short lags more weight because they
+    contain more valid token pairs.  This helper gives every configured lag
+    with support in a sample one equal vote.  It deliberately does not impute a
+    value for an unsupported lag.
+    """
+
+    if values.ndim != 4 or mask.shape != values.shape[:3]:
+        raise ValueError("values must be [B,N,M,C] and mask must be [B,N,M]")
+    lags = tuple(int(value) for value in allowed_lags)
+    if not lags or len(lags) != len(set(lags)):
+        raise ValueError("allowed_lags must be a non-empty unique sequence")
+    eeg_positions = torch.arange(values.shape[1], device=values.device)
+    fnirs_positions = torch.arange(values.shape[2], device=values.device)
+    relative_lag = fnirs_positions[None, :] - eeg_positions[:, None]
+    per_lag: list[torch.Tensor] = []
+    support: list[torch.Tensor] = []
+    for lag in lags:
+        lag_mask = mask.to(device=values.device, dtype=torch.bool) & (
+            relative_lag == lag
+        ).unsqueeze(0)
+        admitted = lag_mask.unsqueeze(-1)
+        count = admitted.to(dtype=values.dtype).sum(dim=(1, 2))
+        pooled = torch.where(admitted, values, torch.zeros_like(values)).sum(
+            dim=(1, 2)
+        ) / count.clamp_min(1.0)
+        per_lag.append(pooled)
+        support.append(count.squeeze(-1) > 0)
+    stacked = torch.stack(per_lag, dim=1)
+    supported = torch.stack(support, dim=1)
+    admitted_values = torch.where(
+        supported.unsqueeze(-1), stacked, torch.zeros_like(stacked)
+    )
+    return admitted_values.sum(dim=1) / supported.to(values.dtype).sum(
+        dim=1, keepdim=True
+    ).clamp_min(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +583,12 @@ class LowRankLagCouplingHead(nn.Module):
         eeg_valid_mask: torch.Tensor | None = None,
         fnirs_valid_mask: torch.Tensor | None = None,
         return_mask: bool = False,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        return_components: bool = False,
+    ) -> (
+        torch.Tensor
+        | tuple[torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]
+    ):
         if eeg_projection.ndim != 3 or fnirs_projection.ndim != 3:
             raise ValueError("coupling projections must be [B,N,D]")
         if eeg_projection.shape[0] != fnirs_projection.shape[0]:
@@ -573,9 +624,12 @@ class LowRankLagCouplingHead(nn.Module):
             all_interactions, dim=3, index=gather_index
         ).squeeze(3)
         class_factor = self.rank_to_class[lag_index]
-        logits = torch.einsum("bijr,ijcr->bijc", interaction, class_factor)
+        interaction_logits = torch.einsum(
+            "bijr,ijcr->bijc", interaction, class_factor
+        )
         lag_term = self.lag_bias[lag_index]
-        logits = logits + lag_term.unsqueeze(0) + self.class_bias
+        bias_logits = lag_term.unsqueeze(0) + self.class_bias
+        logits = interaction_logits + bias_logits
 
         if eeg_valid_mask is None:
             eeg_valid_mask = torch.ones(
@@ -604,6 +658,19 @@ class LowRankLagCouplingHead(nn.Module):
         # logit, carries validity into the loss/pooling code.  In particular,
         # negative lags and lags outside ``allowed_lags`` can never be pooled.
         logits = logits.masked_fill(~pair_mask.unsqueeze(-1), 0.0)
+        if return_components:
+            components = {
+                "interaction": interaction_logits.masked_fill(
+                    ~pair_mask.unsqueeze(-1), 0.0
+                ),
+                "bias": bias_logits.expand_as(interaction_logits).masked_fill(
+                    ~pair_mask.unsqueeze(-1), 0.0
+                ),
+                "lag_index": lag_index,
+            }
+            if return_mask:
+                return logits, pair_mask, components
+            return logits, components  # type: ignore[return-value]
         if return_mask:
             return logits, pair_mask
         return logits
@@ -1071,8 +1138,11 @@ def lag_aware_continuous_matching_loss(
     supplied, the explicit negative interface is same subject + same relative
     time + different trial; ``negative_mask`` can instead provide any exact
     candidate relation. An explicit ``deranged_target`` is appended as a
-    guaranteed negative bank; ``deranged_target_negative_mask`` and its reverse
-    counterpart can restrict that bank to registered same-time donor pairs.
+    guaranteed negative bank. For a single lag, the explicit donor masks must
+    encode endpoint-aligned pairs ``E_trial(t) -> F_donor(t+lag)`` (and the
+    transposed reverse relation). For a lag mixture, use
+    :class:`LagAwareContinuousMatchingLoss` with the ``*_by_lag`` mappings so
+    each lag receives its own endpoint-aligned candidate relation.
 
     The target branch is detached by default (or can be produced by a frozen
     ``target_encoder``), making the function compatible with a momentum target
@@ -1492,7 +1562,35 @@ class LagAwareContinuousMatchingLoss(nn.Module):
                 buffer.copy_(online_buffers[name])
 
     def forward(self, query: torch.Tensor, target: torch.Tensor, **kwargs: Any) -> torch.Tensor | Dict[str, Any]:
+        per_lag_mask_names = (
+            "negative_mask",
+            "deranged_target_negative_mask",
+            "deranged_query_negative_mask",
+        )
+        per_lag_masks = {
+            name: kwargs.pop(f"{name}_by_lag", None)
+            for name in per_lag_mask_names
+        }
+
+        def kwargs_for_lag(lag: int) -> Dict[str, Any]:
+            selected = dict(kwargs)
+            for name, mapping in per_lag_masks.items():
+                if mapping is None:
+                    continue
+                if not isinstance(mapping, Mapping):
+                    raise TypeError(f"{name}_by_lag must be a mapping from lag to mask")
+                if lag not in mapping:
+                    raise KeyError(f"{name}_by_lag lacks configured lag {lag}")
+                selected[name] = mapping[lag]
+            return selected
+
         if not self.learnable_lag_mixture:
+            if any(value is not None for value in per_lag_masks.values()):
+                if len(self.lag_values) != 1:
+                    raise ValueError(
+                        "lag-specific negative masks require per-lag loss evaluation"
+                    )
+                kwargs = kwargs_for_lag(self.lag_values[0])
             return lag_aware_continuous_matching_loss(
                 query,
                 target,
@@ -1522,7 +1620,7 @@ class LagAwareContinuousMatchingLoss(nn.Module):
                 bidirectional=self.bidirectional,
                 target_stop_gradient=self.target_stop_gradient,
                 return_details=return_details,
-                **kwargs,
+                **kwargs_for_lag(lag),
             )
             if return_details:
                 assert isinstance(result, dict)
@@ -2020,15 +2118,37 @@ class LCSPVQModel(nn.Module):
         # pairwise interaction.
         eeg_projection = self.eeg_shared_projection_head(eeg_pre)
         fnirs_projection = self.fnirs_shared_projection_head(fnirs_pre)
-        coupling_pair_logits, coupling_pair_mask = self.coupling_head(
+        (
+            coupling_pair_logits,
+            coupling_pair_mask,
+            coupling_components,
+        ) = self.coupling_head(
             eeg_vq.posterior,
             fnirs_vq.posterior,
             eeg_valid_mask=eeg_mask,
             fnirs_valid_mask=fnirs_mask,
             return_mask=True,
+            return_components=True,
         )
+        # Preserve the historical global-pair pooled output for exact audit of
+        # completed checkpoints.  New estimands use lag-balanced pooling so a
+        # short lag cannot dominate merely because it has more valid pairs.
         coupling_only_logits = _masked_pair_mean(
             coupling_pair_logits, coupling_pair_mask
+        )
+        coupling_lag_balanced_logits = _masked_lag_balanced_mean(
+            coupling_pair_logits, coupling_pair_mask, self.allowed_lags
+        )
+        interaction_only_logits = _masked_lag_balanced_mean(
+            coupling_components["interaction"],
+            coupling_pair_mask,
+            self.allowed_lags,
+        )
+        interaction_class_centered_logits = interaction_only_logits - (
+            interaction_only_logits.mean(dim=-1, keepdim=True)
+        )
+        coupling_bias_only_logits = _masked_lag_balanced_mean(
+            coupling_components["bias"], coupling_pair_mask, self.allowed_lags
         )
         shared_marginal_only_logits, shared_marginal_pooled = self.shared_marginal_classifier(
             eeg_vq.posterior,
@@ -2044,9 +2164,24 @@ class LCSPVQModel(nn.Module):
             fnirs_valid_mask=fnirs_mask,
             return_pooled=True,
         )
-        # The registered primary head is coupling + private. Shared marginals
-        # are an exported diagnostic ablation, not an additional task shortcut.
+        # ``combined_logits`` remains the historical registered output so old
+        # checkpoints can be audited without changing their estimand.  The new
+        # recommended decomposition makes shared marginals explicit and adds
+        # only sample-varying, class-centered interaction logits.
         combined_logits = coupling_only_logits + private_only_logits
+        private_plus_bias_logits = (
+            private_only_logits + coupling_bias_only_logits
+        )
+        private_plus_interaction_logits = (
+            private_only_logits + interaction_class_centered_logits
+        )
+        private_plus_shared_marginal_logits = (
+            private_only_logits + shared_marginal_only_logits
+        )
+        private_shared_interaction_logits = (
+            private_plus_shared_marginal_logits
+            + interaction_class_centered_logits
+        )
 
         # Historical native-feature hooks are raw decoders and isolate shared
         # gradients.  New native target hooks consume only pre-VQ shared and
@@ -2103,7 +2238,14 @@ class LCSPVQModel(nn.Module):
             "coupling_pair_logits": coupling_pair_logits,
             "coupling_logits": coupling_pair_logits,
             "coupling_pair_valid_mask": coupling_pair_mask,
+            "coupling_interaction_pair_logits": coupling_components["interaction"],
+            "coupling_bias_pair_logits": coupling_components["bias"],
             "coupling_only_logits": coupling_only_logits,
+            "coupling_global_pair_mean_logits": coupling_only_logits,
+            "coupling_lag_balanced_logits": coupling_lag_balanced_logits,
+            "interaction_only_logits": interaction_only_logits,
+            "interaction_class_centered_logits": interaction_class_centered_logits,
+            "coupling_bias_only_logits": coupling_bias_only_logits,
             "coupling_sample_logits": coupling_only_logits,
             "coupling_pooled_logits": coupling_only_logits,
             "shared_marginal_pooled": shared_marginal_pooled,
@@ -2114,6 +2256,10 @@ class LCSPVQModel(nn.Module):
             "private_pooled_logits": private_only_logits,
             "private_only_logits": private_only_logits,
             "combined_logits": combined_logits,
+            "private_plus_bias_logits": private_plus_bias_logits,
+            "private_plus_interaction_logits": private_plus_interaction_logits,
+            "private_plus_shared_marginal_logits": private_plus_shared_marginal_logits,
+            "private_shared_interaction_logits": private_shared_interaction_logits,
             "eeg_raw": eeg_raw,
             "fnirs_raw": fnirs_raw,
             # Compatibility aliases for the old raw decoder output names.

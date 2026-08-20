@@ -277,7 +277,7 @@ def validate_config(config: Mapping[str, Any]) -> None:
     if tuple(map(int, config["objective"]["lag_seconds"])) != POSITIVE_LAGS_SECONDS:
         raise ValueError("positive lag bank drifted")
     if config["objective"].get("hard_negative") != (
-        "same_subject_condition_nonidentity_same_token_time"
+        "same_subject_condition_nonidentity_lag_endpoint_aligned"
     ):
         raise ValueError("registered hard-negative policy drifted")
     if config["objective"].get("ssm_target_primary_loss") is not False:
@@ -1206,11 +1206,17 @@ def make_same_group_time_negative_mask(
     conditions: Sequence[str],
     *,
     token_count: int,
+    lag: int = 0,
     query_trial_ids: Sequence[Any] | None = None,
     target_trial_ids: Sequence[Any] | None = None,
     device: torch.device | None = None,
 ) -> torch.Tensor:
-    """Admit only same-subject/condition, other-trial, same-time negatives."""
+    """Admit same-group other-trial negatives at the positive endpoint time.
+
+    A positive lag pairs ``E[t]`` with ``F[t + lag]``.  The negative mask uses
+    that same endpoint, rather than the historical token-time diagonal.  This
+    prevents position/event phase from separating positives and negatives.
+    """
 
     subject = tuple(map(str, subjects))
     condition = tuple(map(str, conditions))
@@ -1220,14 +1226,25 @@ def make_same_group_time_negative_mask(
     target_ids = tuple(range(len(subject))) if target_trial_ids is None else tuple(target_trial_ids)
     if len(query_ids) != len(subject) or len(target_ids) != len(subject):
         raise ValueError("trial ID vectors must match the metadata batch")
-    if int(token_count) <= 0:
+    tokens = int(token_count)
+    lag = int(lag)
+    if tokens <= 0:
         raise ValueError("token_count must be positive")
+    if abs(lag) >= tokens:
+        raise ValueError("abs(lag) must be smaller than token_count")
+    endpoint = torch.zeros(tokens, tokens, dtype=torch.bool, device=device)
+    if lag >= 0:
+        source = torch.arange(tokens - lag, device=device)
+        endpoint[source, source + lag] = True
+    else:
+        target_position = torch.arange(tokens + lag, device=device)
+        endpoint[target_position - lag, target_position] = True
     batch = len(subject)
     output = torch.zeros(
         batch,
-        int(token_count),
+        tokens,
         batch,
-        int(token_count),
+        tokens,
         dtype=torch.bool,
         device=device,
     )
@@ -1238,10 +1255,7 @@ def make_same_group_time_negative_mask(
                 and subject[query] == subject[target]
                 and condition[query] == condition[target]
             ):
-                diagonal = torch.eye(
-                    int(token_count), dtype=torch.bool, device=device
-                )
-                output[query, :, target, :] = diagonal
+                output[query, :, target, :] = endpoint
     return output
 
 
@@ -1249,14 +1263,35 @@ def make_aligned_donor_time_negative_mask(
     *,
     batch_size: int,
     token_count: int,
+    lag: int = 0,
     device: torch.device | None = None,
 ) -> torch.Tensor:
-    """Pair each query only with its registered donor at the same token time."""
-    if int(batch_size) <= 0 or int(token_count) <= 0:
+    """Pair each query with its donor at ``target_time = query_time + lag``."""
+
+    batch = int(batch_size)
+    tokens = int(token_count)
+    lag = int(lag)
+    if batch <= 0 or tokens <= 0:
         raise ValueError("batch_size and token_count must be positive")
-    batch_eye = torch.eye(int(batch_size), dtype=torch.bool, device=device)
-    time_eye = torch.eye(int(token_count), dtype=torch.bool, device=device)
-    return batch_eye[:, None, :, None] & time_eye[None, :, None, :]
+    if abs(lag) >= tokens:
+        raise ValueError("abs(lag) must be smaller than token_count")
+    batch_eye = torch.eye(batch, dtype=torch.bool, device=device)
+    endpoint = torch.zeros(tokens, tokens, dtype=torch.bool, device=device)
+    if lag >= 0:
+        source = torch.arange(tokens - lag, device=device)
+        endpoint[source, source + lag] = True
+    else:
+        target_position = torch.arange(tokens + lag, device=device)
+        endpoint[target_position - lag, target_position] = True
+    return batch_eye[:, None, :, None] & endpoint[None, :, None, :]
+
+
+def transpose_pair_negative_mask(mask: torch.Tensor) -> torch.Tensor:
+    """Transpose ``[Bq,Nq,Bt,Nt]`` into the reverse matching direction."""
+
+    if mask.ndim != 4:
+        raise ValueError("pair negative mask must have shape [Bq,Nq,Bt,Nt]")
+    return mask.permute(2, 3, 0, 1).contiguous()
 
 
 def _batch_to_device(batch: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
@@ -1486,19 +1521,32 @@ def _lc_spvq_pretraining_losses(
         if variant == "N1"
         else query_physical_trial_ids
     )
-    in_batch_negative_mask = make_same_group_time_negative_mask(
-        subjects,
-        conditions,
-        token_count=token_count,
-        query_trial_ids=query_physical_trial_ids,
-        target_trial_ids=target_physical_trial_ids,
-        device=output["eeg_projection"].device,
-    )
-    aligned_donor_mask = make_aligned_donor_time_negative_mask(
-        batch_size=batch_size,
-        token_count=token_count,
-        device=output["eeg_projection"].device,
-    )
+    lag_values = tuple(int(value) for value in lag_module.lag_values)
+    in_batch_negative_masks = {
+        lag: make_same_group_time_negative_mask(
+            subjects,
+            conditions,
+            token_count=token_count,
+            lag=lag,
+            query_trial_ids=query_physical_trial_ids,
+            target_trial_ids=target_physical_trial_ids,
+            device=output["eeg_projection"].device,
+        )
+        for lag in lag_values
+    }
+    aligned_donor_masks = {
+        lag: make_aligned_donor_time_negative_mask(
+            batch_size=batch_size,
+            token_count=token_count,
+            lag=lag,
+            device=output["eeg_projection"].device,
+        )
+        for lag in lag_values
+    }
+    reverse_aligned_donor_masks = {
+        lag: transpose_pair_negative_mask(mask)
+        for lag, mask in aligned_donor_masks.items()
+    }
     pair_slot_ids = torch.arange(
         batch_size, device=output["eeg_projection"].device, dtype=torch.long
     )
@@ -1526,13 +1574,13 @@ def _lc_spvq_pretraining_losses(
         target_subject_ids=subject_ids,
         query_relative_time=relative_time,
         target_relative_time=relative_time,
-        negative_mask=in_batch_negative_mask,
+        negative_mask_by_lag=in_batch_negative_masks,
         deranged_target=negative_fnirs_projection,
-        deranged_target_negative_mask=aligned_donor_mask,
+        deranged_target_negative_mask_by_lag=aligned_donor_masks,
         deranged_target_valid_mask=negative_fnirs_mask,
         deranged_query=negative_eeg_projection,
         deranged_query_valid_mask=batch["donor_eeg_token_valid_mask"],
-        deranged_query_negative_mask=aligned_donor_mask,
+        deranged_query_negative_mask_by_lag=reverse_aligned_donor_masks,
         return_details=True,
     )
     losses: dict[str, torch.Tensor] = {
@@ -1898,9 +1946,17 @@ def _evaluate_lc_spvq(
     )
     logit_names = {
         "coupling_only": "coupling_only_logits",
+        "coupling_lag_balanced": "coupling_lag_balanced_logits",
+        "coupling_bias_only": "coupling_bias_only_logits",
+        "interaction_only": "interaction_only_logits",
+        "interaction_class_centered": "interaction_class_centered_logits",
         "shared_marginal_only": "shared_marginal_only_logits",
         "private_only": "private_only_logits",
         "coupling_plus_private": "combined_logits",
+        "private_plus_bias": "private_plus_bias_logits",
+        "private_plus_interaction": "private_plus_interaction_logits",
+        "private_plus_shared_marginal": "private_plus_shared_marginal_logits",
+        "private_shared_interaction": "private_shared_interaction_logits",
     }
     logits = {name: [] for name in logit_names}
     exports: dict[str, list[np.ndarray]] = {
@@ -2221,7 +2277,7 @@ def train_lc_spvq_variant(
             split_arrays[f"{role}__{name}"] = value
     np.savez_compressed(
         output_dir / "token_exports.npz",
-        schema=np.asarray("lc_spvq_token_exports_v2"),
+        schema=np.asarray("lc_spvq_token_exports_v3"),
         task_id=np.asarray(prepared.task_id),
         variant=np.asarray(variant),
         seed=np.asarray(seed, dtype=np.int64),
@@ -2238,7 +2294,7 @@ def train_lc_spvq_variant(
             )
         ),
         registered_hard_negative_policy=np.asarray(
-            "same_subject_condition_nonidentity_same_token_time"
+            "same_subject_condition_nonidentity_lag_endpoint_aligned"
         ),
         **split_arrays,
     )

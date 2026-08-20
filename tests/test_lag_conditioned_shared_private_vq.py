@@ -128,6 +128,11 @@ def test_model_has_four_independent_encoders_and_complete_vq_surfaces():
     assert output["private_only_logits"].shape == (2, 3)
     assert output["private_logits"].shape == (2, 3)
     assert output["combined_logits"].shape == (2, 3)
+    assert output["coupling_bias_only_logits"].shape == (2, 3)
+    assert output["interaction_only_logits"].shape == (2, 3)
+    assert output["interaction_class_centered_logits"].shape == (2, 3)
+    assert output["private_plus_shared_marginal_logits"].shape == (2, 3)
+    assert output["private_shared_interaction_logits"].shape == (2, 3)
     assert output["eeg_raw"].shape == eeg.shape
     assert output["fnirs_raw"].shape == fnirs.shape
     assert output["eeg_native_features"].shape == eeg.shape  # raw compatibility alias
@@ -144,6 +149,26 @@ def test_model_has_four_independent_encoders_and_complete_vq_surfaces():
         output["combined_logits"],
         output["coupling_only_logits"] + output["private_only_logits"],
     )
+    torch.testing.assert_close(
+        output["interaction_class_centered_logits"].sum(dim=-1),
+        torch.zeros(2),
+        atol=1e-6,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        output["coupling_lag_balanced_logits"],
+        output["interaction_only_logits"] + output["coupling_bias_only_logits"],
+    )
+    assert output["coupling_pair_valid_mask"].dtype == torch.bool
+    assert output["coupling_pair_valid_mask"].any()
+    assert torch.isfinite(
+        output["coupling_interaction_pair_logits"][
+            output["coupling_pair_valid_mask"]
+        ]
+    ).all()
+    assert torch.isfinite(
+        output["coupling_bias_pair_logits"][output["coupling_pair_valid_mask"]]
+    ).all()
 
 
 def test_vq_codebooks_are_independent_and_ids_are_not_swapped():
@@ -308,6 +333,33 @@ def test_learnable_lag_mixture_computes_per_lag_symmetric_terms():
     result["loss"].backward()
     assert loss_module.lag_mixture_logits.grad is not None
     assert bool(loss_module.lag_mixture_logits.grad.abs().sum() > 0)
+
+
+def test_learnable_lag_mixture_selects_endpoint_aligned_mask_per_lag():
+    torch.manual_seed(118)
+    query = torch.randn(2, 4, 8)
+    target = torch.randn(2, 4, 8)
+    masks = {}
+    for lag in (0, 2):
+        mask = torch.zeros(2, 4, 2, 4, dtype=torch.bool)
+        for batch in range(2):
+            donor = 1 - batch
+            for position in range(4 - lag):
+                mask[batch, position, donor, position + lag] = True
+        masks[lag] = mask
+    objective = LagAwareContinuousMatchingLoss(
+        positive_lag_weights={0: 1.0, 2: 1.0},
+        bidirectional=False,
+        learnable_lag_mixture=True,
+    )
+    details = objective(
+        query,
+        target,
+        negative_mask_by_lag=masks,
+        return_details=True,
+    )
+    assert int(details["per_lag"][0]["forward"]["candidate_count"]) == 16
+    assert int(details["per_lag"][1]["forward"]["candidate_count"]) == 8
 
 
 def test_learnable_lag_mixture_recovers_known_two_patch_delay():

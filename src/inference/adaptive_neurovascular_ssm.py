@@ -77,6 +77,7 @@ class AdaptiveSmootherResult:
     hbo_reconstructed: np.ndarray
     hbr_reconstructed: np.ndarray
     innovation_log_likelihood: float
+    observation_mode: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -474,21 +475,54 @@ def fit_adaptive_ssm(
 
 
 def apply_adaptive_ssm(
-    eeg_driver: np.ndarray,
+    eeg_driver: np.ndarray | None,
     fit: AdaptiveSSMFit,
     *,
     hbo_observation: np.ndarray | None = None,
     hbr_observation: np.ndarray | None = None,
+    observation_mode: str | None = None,
 ) -> AdaptiveSmootherResult:
-    """Apply an EEG-only or joint fixed-interval smoother to one trial."""
+    """Apply joint, EEG-only, or fNIRS-only fixed-interval smoothing.
 
-    eeg = np.asarray(eeg_driver, dtype=np.float64).reshape(-1)
-    steps = len(eeg)
+    ``observation_mode=None`` preserves the historical API: supplying both
+    chromophores selects ``joint`` and omitting both selects ``eeg_only``.
+    ``fnirs_only`` requires both chromophores, deliberately replaces the EEG
+    update with missing values, and permits ``eeg_driver=None`` so callers do
+    not have to pass a semantically unused EEG array. The fitted dynamics and
+    observation operators are unchanged.
+    """
+
     if (hbo_observation is None) != (hbr_observation is None):
         raise ValueError("HbO and HbR observations must either both be supplied or both omitted")
+    inferred_mode = "joint" if hbo_observation is not None else "eeg_only"
+    mode = inferred_mode if observation_mode is None else str(observation_mode)
+    if mode not in {"joint", "eeg_only", "fnirs_only"}:
+        raise ValueError("observation_mode must be joint, eeg_only, or fnirs_only")
+    if mode in {"joint", "fnirs_only"} and hbo_observation is None:
+        raise ValueError(f"{mode} requires both HbO and HbR observations")
+    if mode == "eeg_only" and hbo_observation is not None:
+        raise ValueError("eeg_only does not admit HbO/HbR observations")
+    if eeg_driver is None:
+        if mode != "fnirs_only":
+            raise ValueError("eeg_driver=None is permitted only for fnirs_only")
+        assert hbo_observation is not None
+        steps = len(np.asarray(hbo_observation).reshape(-1))
+        eeg_input = np.full(steps, np.nan, dtype=np.float64)
+    else:
+        eeg_input = np.asarray(eeg_driver, dtype=np.float64).reshape(-1)
+        steps = len(eeg_input)
+    if steps <= 0:
+        raise ValueError("observations must contain at least one time point")
+
+    eeg = (
+        eeg_input
+        if mode in {"joint", "eeg_only"}
+        else np.full(steps, np.nan, dtype=np.float64)
+    )
     hbo = np.full(steps, np.nan, dtype=np.float64)
     hbr = np.full(steps, np.nan, dtype=np.float64)
-    if hbo_observation is not None and hbr_observation is not None:
+    if mode in {"joint", "fnirs_only"}:
+        assert hbo_observation is not None and hbr_observation is not None
         hbo = (np.asarray(hbo_observation, dtype=np.float64).reshape(-1) - fit.hbo_mean) / fit.hbo_std
         hbr = (np.asarray(hbr_observation, dtype=np.float64).reshape(-1) - fit.hbr_mean) / fit.hbr_std
         if len(hbo) != steps or len(hbr) != steps:
@@ -525,6 +559,7 @@ def apply_adaptive_ssm(
         hbo_reconstructed=reconstruction[:, 1] * fit.hbo_std + fit.hbo_mean,
         hbr_reconstructed=reconstruction[:, 2] * fit.hbr_std + fit.hbr_mean,
         innovation_log_likelihood=log_likelihood,
+        observation_mode=mode,
     )
 
 

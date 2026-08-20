@@ -111,7 +111,7 @@ Each private token reconstructs its own train-normalized raw patch. The private 
 
 ### Lag-predictive objective
 
-The primary matching loss is computed on continuous projected shared latents before VQ. It uses the fixed non-negative lag bank and a learned train-only lag distribution. The target branch is stop-gradient or momentum-compatible. Batch negatives are restricted to same-subject, same-condition, nonidentity trials at the same relative token time and are supplemented by the registered donor at that same token time. Donor eligibility fails closed unless every group admits a complete permutation whose 20 s windows do not overlap on either the EEG or fNIRS event clock within a record. EEG→fNIRS and fNIRS→EEG terms are reported separately and combined equally.
+The primary matching loss is computed on continuous projected shared latents before VQ. It uses the fixed non-negative lag bank and a learned train-only lag distribution. The target branch is stop-gradient or momentum-compatible. For each lag, batch negatives are restricted to same-subject, same-condition, nonidentity trials at the same lag endpoint as the positive relation: `E_trial(t) -> F_other_trial(t+lag)`. The registered donor uses that endpoint-aligned relation, and the reverse-direction mask is its transpose. Historical v2 exports retain the earlier same-token-time null; endpoint-aligned training is emitted only under the v3 export contract. Donor eligibility fails closed unless every group admits a complete permutation whose 20 s windows do not overlap on either the EEG or fNIRS event clock within a record. EEG→fNIRS and fNIRS→EEG terms are reported separately and combined equally.
 
 The first sensitivity is limited to
 

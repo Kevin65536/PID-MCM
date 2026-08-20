@@ -37,6 +37,12 @@ from .lag_conditioned_shared_private_vq import (
     LocalCausalPatchEncoder,
     LowRankLagCouplingHead,
 )
+from .ssm_observation_shared_private import (
+    CausalFIRTransferHead,
+    ContinuousDecomposedTaskHead,
+    ContinuousLagInteractionHead,
+    SSMObservationSharedPrivateModel,
+)
 from .registry import (
     register_tokenizer,
     get_tokenizer_class,
@@ -89,6 +95,10 @@ __all__ = [
     'LagAwareContinuousMatchingLoss',
     'LocalCausalPatchEncoder',
     'LowRankLagCouplingHead',
+    'CausalFIRTransferHead',
+    'ContinuousDecomposedTaskHead',
+    'ContinuousLagInteractionHead',
+    'SSMObservationSharedPrivateModel',
     # NeuroRVQ components
     'NormEMAVectorQuantizer',
     'ResidualVectorQuantization',

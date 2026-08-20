@@ -117,7 +117,8 @@ def _inventory(root: Path) -> list[dict[str, Any]]:
 def _load(path: Path) -> dict[str, np.ndarray]:
     with np.load(path, allow_pickle=False) as archive:
         values = {name: np.asarray(archive[name]) for name in archive.files}
-    if str(values.get("schema", np.asarray("")).item()) != "lc_spvq_token_exports_v2":
+    schema = str(values.get("schema", np.asarray("")).item())
+    if schema not in {"lc_spvq_token_exports_v2", "lc_spvq_token_exports_v3"}:
         raise ValueError(f"{path} is not an LC-SPVQ token export")
     if bool(values["protected_open"].item()):
         raise PermissionError("token export opens a protected cohort")
@@ -125,7 +126,11 @@ def _load(path: Path) -> dict[str, np.ndarray]:
         raise ValueError("reused development cannot be labelled independent")
     if not bool(values.get("derangement_nonoverlap_verified", np.asarray(False)).item()):
         raise ValueError("token export lacks verified nonoverlapping derangements")
-    expected_negative = "same_subject_condition_nonidentity_same_token_time"
+    expected_negative = (
+        "same_subject_condition_nonidentity_same_token_time"
+        if schema == "lc_spvq_token_exports_v2"
+        else "same_subject_condition_nonidentity_lag_endpoint_aligned"
+    )
     observed_negative = str(
         values.get("registered_hard_negative_policy", np.asarray("")).item()
     )

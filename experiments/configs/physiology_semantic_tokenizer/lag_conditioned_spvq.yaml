@@ -130,7 +130,7 @@ objective:
   direction_weight: 0.5
   lag_prior: train_only_learned_softmax
   target_stop_gradient: true
-  hard_negative: same_subject_condition_nonidentity_same_token_time
+  hard_negative: same_subject_condition_nonidentity_lag_endpoint_aligned
   task_label_as_shared_encoder_input: false
   direct_id_alignment: false
   token_cooccurrence_loss: false

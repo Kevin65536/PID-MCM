@@ -372,6 +372,24 @@ def test_same_group_time_negative_mask_is_strict():
     assert not mask[0, :, 3, :].any()
 
 
+def test_nonzero_lag_negative_mask_matches_positive_endpoint_time():
+    mask = make_same_group_time_negative_mask(
+        ("s1", "s1"),
+        ("a", "a"),
+        token_count=4,
+        lag=2,
+    )
+    expected = torch.zeros(4, 4, dtype=torch.bool)
+    expected[0, 2] = True
+    expected[1, 3] = True
+    assert torch.equal(mask[0, :, 1, :], expected)
+    assert not bool(mask[0, 0, 1, 0])
+    donor = make_aligned_donor_time_negative_mask(
+        batch_size=2, token_count=4, lag=2
+    )
+    assert torch.equal(donor[0, :, 0, :], expected)
+
+
 def test_hard_negative_masks_admit_only_registered_other_trial_same_time():
     in_batch = make_same_group_time_negative_mask(
         ("s1", "s1"),
@@ -400,6 +418,7 @@ def test_runner_threads_strict_masks_to_both_deranged_banks(monkeypatch):
 
     class CaptureLag:
         kwargs = None
+        lag_values = (0, 1, 2)
 
         def __call__(self, query, target, **kwargs):
             self.kwargs = kwargs
@@ -468,15 +487,21 @@ def test_runner_threads_strict_masks_to_both_deranged_banks(monkeypatch):
     )
     kwargs = capture.kwargs
     assert kwargs is not None
-    aligned = make_aligned_donor_time_negative_mask(
-        batch_size=batch_size, token_count=tokens
-    )
-    assert torch.equal(kwargs["deranged_target_negative_mask"], aligned)
-    assert torch.equal(kwargs["deranged_query_negative_mask"], aligned)
-    negative = kwargs["negative_mask"]
-    assert not negative[0, :, 0, :].any()
-    assert torch.equal(negative[0, :, 1, :], torch.eye(tokens, dtype=torch.bool))
-    assert not negative[0, :, 2:, :].any()
+    for lag in range(3):
+        aligned = make_aligned_donor_time_negative_mask(
+            batch_size=batch_size, token_count=tokens, lag=lag
+        )
+        assert torch.equal(
+            kwargs["deranged_target_negative_mask_by_lag"][lag], aligned
+        )
+        assert torch.equal(
+            kwargs["deranged_query_negative_mask_by_lag"][lag],
+            aligned.permute(2, 3, 0, 1),
+        )
+        negative = kwargs["negative_mask_by_lag"][lag]
+        assert not negative[0, :, 0, :].any()
+        assert torch.equal(negative[0, :, 1, :], aligned[0, :, 0, :])
+        assert not negative[0, :, 2:, :].any()
 
 
 def test_prepared_loader_shuffle_is_seed_deterministic():

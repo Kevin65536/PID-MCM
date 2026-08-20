@@ -44,6 +44,7 @@ DESCRIPTIVE_TASKS = TASK_ORDER[7:]
 MODEL_STYLE = {
     "adaptive_joint": ("Joint smoother", "#D55E00", "o"),
     "adaptive_eeg_only": ("EEG-only smoother", "#0072B2", "s"),
+    "adaptive_fnirs_only": ("fNIRS-only smoother", "#009E73", "^"),
 }
 
 
@@ -57,7 +58,10 @@ def _sha256(path: Path) -> str:
 
 def _verify_run(run_dir: Path) -> dict[str, Any]:
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("schema") != "ssm_reconstruction_reliability_v1":
+    if manifest.get("schema") not in {
+        "ssm_reconstruction_reliability_v1",
+        "ssm_reconstruction_reliability_v2",
+    }:
         raise ValueError("source run schema mismatch")
     if manifest.get("protected_open") is not False:
         raise PermissionError("source run opened a protected cohort")

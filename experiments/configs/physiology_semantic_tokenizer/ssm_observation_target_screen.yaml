@@ -1,0 +1,91 @@
+experiment:
+  name: ssm_observation_target_screen_v1
+  schema: ssm_observation_target_screen_config_v1
+  analysis_intent: exploratory_continuous_target_screen
+  claim_scope: fit_parameter_training_and_fit_selection_qc
+  protected_open: false
+
+source:
+  base_lc_spvq_config: experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq.yaml
+  optimization_config: experiments/configs/physiology_semantic_tokenizer/lag_conditioned_spvq_architecture_optimization.yaml
+  tasks: [motor_imagery, word_generation]
+  fit_scope: fit_parameter_all_subjects_all_conditions
+  task_labels_enter_ssm: false
+  condition_specific_ssm_parameters: false
+
+teachers:
+  modes: [NATIVE, SSM-SELF, SSM-JOINT, SSM-SELF-XPRED-0.02, SSM-SELF-XPRED-0.05]
+  eeg_features: spatial_alpha_beta_low_gamma
+  eeg_target_channel_count: 6
+  fnirs_features: full_hbo_hbr_patch_for_one_train_selected_pair
+  fnirs_target_channel_count: 2
+  channel_selection: fit_parameter_all_conditions_only
+  ssm_ridge: 1.0
+  max_spectral_radius: 0.995
+  joint_role: privileged_upper_bound_only
+
+model:
+  shared_dim: 64
+  eeg_private_dim: 64
+  fnirs_private_dim: 32
+  eeg_shared_history_tokens: 2
+  fnirs_shared_history_tokens: 3
+  encoder_depth: 2
+  encoder_num_heads: 4
+  encoder_feedforward_dim: 256
+  decoder_hidden_dim: 128
+  dropout: 0.1
+  interaction_rank: 8
+  allowed_lags: [0, 1, 2, 3, 4, 5]
+  interaction_weight: 1.0
+  cross_prediction_lags: [1, 2, 3, 4, 5]
+
+objective:
+  clean_weight: 1.0
+  residual_weight: 1.0
+  huber_delta: 1.0
+  uncertainty_epsilon: 1.0e-6
+  uncertainty_weight_min: 0.05
+  uncertainty_weight_max: 20.0
+  xpred_weight_candidates: [0.02, 0.05]
+  direct_latent_alignment: false
+  bidirectional_matching: false
+  vector_quantization: false
+
+training:
+  seeds: [20260821, 20260822, 20260823]
+  device: cuda:1
+  batch_size: 16
+  num_workers: 0
+  representation_optimizer_steps: 128
+  representation_evaluation_interval: 16
+  head_optimizer_steps: 128
+  learning_rate: 3.0e-4
+  head_learning_rate: 1.0e-3
+  weight_decay: 0.01
+  betas: [0.9, 0.98]
+  grad_clip_norm: 1.0
+  representation_selection: fit_selection_equal_modality_clean_loss
+  head_selection: fixed_steps_no_fit_selection_checkpointing
+
+statistics:
+  representation_endpoints:
+    - eeg_clean_delta_r2_vs_condition_time_mean
+    - fnirs_clean_delta_r2_vs_condition_time_mean
+  downstream_heads:
+    - private_only
+    - private_plus_shared_marginal
+    - private_shared_interaction
+  interaction_increment: score_private_shared_interaction_minus_private_shared_marginal
+  coupling_endpoint_claim: false
+  q0_q1_deferred_until_vq: true
+  provenance_missingness_uncertainty_control: true
+
+smoke:
+  seeds: [20260821]
+  representation_optimizer_steps: 4
+  head_optimizer_steps: 4
+  partition_policy: full_governed_partitions
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/ssm_observation_target_screen

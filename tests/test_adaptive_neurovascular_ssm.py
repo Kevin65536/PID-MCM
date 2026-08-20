@@ -73,6 +73,52 @@ def test_joint_smoother_recovers_delayed_signal_without_erasing_eeg():
     assert np.all(normalized_hbo_std > 0.0)
     assert np.all(normalized_hbr_std > 0.0)
 
+    fnirs_only = apply_adaptive_ssm(
+        None,
+        fit,
+        hbo_observation=hbo,
+        hbr_observation=hbr,
+        observation_mode="fnirs_only",
+    )
+    fnirs_only_with_length_reference = apply_adaptive_ssm(
+        driver,
+        fit,
+        hbo_observation=hbo,
+        hbr_observation=hbr,
+        observation_mode="fnirs_only",
+    )
+    eeg_only = apply_adaptive_ssm(driver, fit, observation_mode="eeg_only")
+    assert fnirs_only.hbo_reconstructed.shape == hbo.shape
+    assert fnirs_only.observation_mode == "fnirs_only"
+    assert result.observation_mode == "joint"
+    assert np.all(np.isfinite(fnirs_only.hbo_reconstructed))
+    assert np.all(np.isfinite(fnirs_only.observation_predictive_std))
+    np.testing.assert_allclose(
+        fnirs_only.states,
+        fnirs_only_with_length_reference.states,
+    )
+    partial_hbo = hbo.copy()
+    partial_hbr = hbr.copy()
+    partial_hbo[4:7] = np.nan
+    partial_hbr[9:11] = np.nan
+    partial = apply_adaptive_ssm(
+        None,
+        fit,
+        hbo_observation=partial_hbo,
+        hbr_observation=partial_hbr,
+        observation_mode="fnirs_only",
+    )
+    assert np.all(np.isfinite(partial.states))
+    assert np.all(np.isfinite(partial.observation_predictive_std))
+    # The modality-specific smoothers use genuinely different observation
+    # updates; they are not aliases of joint smoothing.
+    assert not np.allclose(fnirs_only.states, result.states)
+    assert not np.allclose(eeg_only.states, result.states)
+    with pytest.raises(ValueError, match="requires both"):
+        apply_adaptive_ssm(driver, fit, observation_mode="fnirs_only")
+    with pytest.raises(ValueError, match="only for fnirs_only"):
+        apply_adaptive_ssm(None, fit, observation_mode="eeg_only")
+
     normalized_observations = np.column_stack(
         (
             driver,

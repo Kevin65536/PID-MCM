@@ -45,11 +45,11 @@ from experiments.evaluate_adaptive_shared_neural_ssm import (
     STATE_NAMES,
     _apply_eeg_adapter,
     _chromophore_targets,
+    _downsample_valid_mask,
     _fit_eeg_adapter,
     _fit_model,
     _local_eeg_indices,
     _paired_hbr_indices,
-    _trial_valid_masks,
 )
 from experiments.evaluate_shared_neural_driver_unified import (
     Trial,
@@ -67,8 +67,25 @@ from src.metrics.trajectory_reliability import trajectory_reliability_metrics
 from src.visualization.token_physiology_plots import save_figure_atomic
 
 
-SCHEMA = "ssm_reconstruction_reliability_v1"
-TRAJECTORY_SCHEMA = "ssm_reconstruction_trajectory_v1"
+SCHEMA = "ssm_reconstruction_reliability_v2"
+TRAJECTORY_SCHEMA = "ssm_reconstruction_trajectory_v2"
+MODEL_OBSERVATION_CONTRACT = {
+    "adaptive_joint": {
+        "observed_modalities": ("EEG", "HbO", "HbR"),
+        "target_modalities": ("EEG", "HbO", "HbR"),
+        "role": "posterior_self_fit_diagnostic",
+    },
+    "adaptive_eeg_only": {
+        "observed_modalities": ("EEG",),
+        "target_modalities": ("HbO", "HbR"),
+        "role": "out_of_modality_fnirs_reconstruction",
+    },
+    "adaptive_fnirs_only": {
+        "observed_modalities": ("HbO", "HbR"),
+        "target_modalities": ("EEG",),
+        "role": "out_of_modality_eeg_proxy_reconstruction",
+    },
+}
 PRIMARY_BOOTSTRAP_METRICS = (
     "hbo_trajectory_deviation_nrmse",
     "hbr_trajectory_deviation_nrmse",
@@ -116,6 +133,11 @@ class Prediction:
     fold_index: int
     model: str
     spatial_mode: str
+    observed_modalities: tuple[str, ...]
+    target_modalities: tuple[str, ...]
+    observation_role: str
+    fit_source: str
+    fit_parameter_hash: str
     time_s: np.ndarray
     truth_hbo: np.ndarray
     estimate_hbo: np.ndarray
@@ -288,12 +310,41 @@ def _sample_to_trial(
     )
 
 
-def _unit_is_full(unit: Unit) -> bool:
+def _trial_modality_masks(trial: Trial) -> tuple[np.ndarray, np.ndarray]:
+    """Return independent 10 Hz EEG and fNIRS observation support masks."""
+
+    target_length = len(trial.fnirs)
+    eeg_finite = np.all(np.isfinite(trial.eeg), axis=1)
+    if trial.eeg_valid_mask is not None:
+        eeg_finite &= np.asarray(trial.eeg_valid_mask, dtype=bool).reshape(-1)
+    eeg_mask = _downsample_valid_mask(eeg_finite, target_length)
+    fnirs_mask = (
+        np.ones(target_length, dtype=bool)
+        if trial.fnirs_valid_mask is None
+        else np.asarray(trial.fnirs_valid_mask, dtype=bool).copy()
+    )
+    if fnirs_mask.shape != (target_length,):
+        raise ValueError("fNIRS validity mask does not match the SSM target")
+    fnirs_mask &= np.all(np.isfinite(trial.fnirs), axis=1)
+    return eeg_mask, fnirs_mask
+
+
+def _unit_has_any_support(unit: Unit) -> bool:
     try:
-        _trial_valid_masks(unit.trial)
-    except (RuntimeError, ValueError):
+        eeg_mask, fnirs_mask = _trial_modality_masks(unit.trial)
+    except ValueError:
         return False
-    return True
+    return bool(np.any(eeg_mask) or np.any(fnirs_mask))
+
+
+def _unit_is_full(unit: Unit) -> bool:
+    """Training fits retain the historical fully observed window contract."""
+
+    try:
+        eeg_mask, fnirs_mask = _trial_modality_masks(unit.trial)
+    except ValueError:
+        return False
+    return bool(np.all(eeg_mask) and np.all(fnirs_mask))
 
 
 def _load_core_units(job: Job) -> tuple[list[Unit], dict[str, Any]]:
@@ -321,7 +372,7 @@ def _load_core_units(job: Job) -> tuple[list[Unit], dict[str, Any]]:
         trial = _sample_to_trial(sample, task, unit_index=local_index)
         unit_id = f"{job.subject}|{trial.record_id}|event={trial.event_index}"
         unit = Unit(trial=trial, unit_id=unit_id, dependency_group=unit_id, stratum=trial.record_id)
-        if not _unit_is_full(unit):
+        if not _unit_has_any_support(unit):
             raise RuntimeError(f"core window lacks complete support: {unit_id}")
         units.append(unit)
     if len(units) < 2:
@@ -375,7 +426,7 @@ def _load_visual_units(job: Job) -> tuple[list[Unit], dict[str, Any]]:
                 dependency_group=group_id,
                 stratum=_visual_probe(trial.record_id),
             )
-            if not _unit_is_full(unit):
+            if not _unit_has_any_support(unit):
                 incomplete_groups.add(group_id)
             loaded[group_id].append(unit)
     units = [
@@ -438,7 +489,7 @@ def _load_refed_units(job: Job) -> tuple[list[Unit], dict[str, Any]]:
             dependency_group=group_id,
             stratum="all_videos",
         )
-        if not _unit_is_full(unit):
+        if not _unit_has_any_support(unit):
             raise RuntimeError(f"REFED full-only loader emitted incomplete unit: {unit.unit_id}")
         units.append(unit)
     if len(set(unit.dependency_group for unit in units)) < 2:
@@ -503,7 +554,7 @@ def _load_dsr_units(job: Job) -> tuple[list[Unit], dict[str, Any]]:
             dependency_group=group_id,
             stratum="all_blocks",
         )
-        if _unit_is_full(unit):
+        if _unit_has_any_support(unit):
             units.append(unit)
         else:
             incomplete += 1
@@ -567,7 +618,10 @@ def _run_stratum(
         + float(task["window_offset_s"])
     )
     for fold_index in fold_indices:
-        train_units = [unit for unit in units if fold_map[unit.dependency_group] != fold_index]
+        candidate_train_units = [
+            unit for unit in units if fold_map[unit.dependency_group] != fold_index
+        ]
+        train_units = [unit for unit in candidate_train_units if _unit_is_full(unit)]
         test_units = [unit for unit in units if fold_map[unit.dependency_group] == fold_index]
         if not train_units or not test_units:
             raise RuntimeError(f"empty train/test fold {fold_index} for {task['task_id']}/{job.subject}")
@@ -607,6 +661,14 @@ def _run_stratum(
                 analysis["ssm"],
                 baseline_samples,
             )
+            fit_mapping = fit_to_mapping(fit)
+            fit_parameter_hash = hashlib.sha256(
+                json.dumps(
+                    _jsonable(fit_mapping),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
             fit_rows.append(
                 {
                     "task_id": task["task_id"],
@@ -618,32 +680,51 @@ def _run_stratum(
                     "stratum": units[0].stratum,
                     "fold_index": fold_index,
                     "train_unit_count": len(train_units),
+                    "train_partial_support_excluded_count": len(candidate_train_units) - len(train_units),
                     "test_unit_count": len(test_units),
                     "train_dependency_group_count": len({unit.dependency_group for unit in train_units}),
                     "test_dependency_group_count": len({unit.dependency_group for unit in test_units}),
                     "spatial_mode": spatial_mode,
                     "selected_fnirs_channels": "|".join(hbo_names + hbr_names),
                     "selected_eeg_channels": "|".join(adapter.channel_names),
-                    **fit_to_mapping(fit),
+                    "fit_source": "within_subject_crossfit_training_dependency_groups",
+                    "fit_parameter_hash": fit_parameter_hash,
+                    **fit_mapping,
                 }
             )
             for test_unit, truth_hbo, truth_hbr in zip(test_units, test_hbo, test_hbr, strict=True):
                 driver = _apply_eeg_adapter(test_unit.trial, adapter)
-                eeg_mask, fnirs_mask = _trial_valid_masks(test_unit.trial)
+                eeg_mask, fnirs_mask = _trial_modality_masks(test_unit.trial)
                 if len(driver) != len(time_s):
                     raise ValueError(
                         f"SSM time length drift: {task['task_id']}/{job.subject}/{test_unit.unit_id}"
                     )
-                outputs = {
-                    "adaptive_joint": apply_adaptive_ssm(
-                        driver,
+                masked_driver = np.where(eeg_mask, driver, np.nan)
+                masked_hbo = np.where(fnirs_mask, truth_hbo, np.nan)
+                masked_hbr = np.where(fnirs_mask, truth_hbr, np.nan)
+                outputs = {}
+                if np.any(eeg_mask) and np.any(fnirs_mask):
+                    outputs["adaptive_joint"] = apply_adaptive_ssm(
+                        masked_driver,
                         fit,
-                        hbo_observation=truth_hbo,
-                        hbr_observation=truth_hbr,
-                    ),
-                    "adaptive_eeg_only": apply_adaptive_ssm(driver, fit),
-                }
+                        hbo_observation=masked_hbo,
+                        hbr_observation=masked_hbr,
+                        observation_mode="joint",
+                    )
+                if np.any(eeg_mask):
+                    outputs["adaptive_eeg_only"] = apply_adaptive_ssm(
+                        masked_driver, fit, observation_mode="eeg_only"
+                    )
+                if np.any(fnirs_mask):
+                    outputs["adaptive_fnirs_only"] = apply_adaptive_ssm(
+                        None,
+                        fit,
+                        hbo_observation=masked_hbo,
+                        hbr_observation=masked_hbr,
+                        observation_mode="fnirs_only",
+                    )
                 for model, output in outputs.items():
+                    observation_contract = MODEL_OBSERVATION_CONTRACT[model]
                     predictions.append(
                         Prediction(
                             task_id=str(task["task_id"]),
@@ -658,6 +739,11 @@ def _run_stratum(
                             fold_index=fold_index,
                             model=model,
                             spatial_mode=spatial_mode,
+                            observed_modalities=observation_contract["observed_modalities"],
+                            target_modalities=observation_contract["target_modalities"],
+                            observation_role=str(observation_contract["role"]),
+                            fit_source="within_subject_crossfit_training_dependency_groups",
+                            fit_parameter_hash=fit_parameter_hash,
                             time_s=time_s.copy(),
                             truth_hbo=np.asarray(truth_hbo, dtype=np.float64),
                             estimate_hbo=output.hbo_reconstructed,
@@ -853,6 +939,11 @@ def prediction_metrics(prediction: Prediction) -> dict[str, Any]:
         "fold_index": prediction.fold_index,
         "model": prediction.model,
         "spatial_mode": prediction.spatial_mode,
+        "observed_modalities": "|".join(prediction.observed_modalities),
+        "target_modalities": "|".join(prediction.target_modalities),
+        "observation_role": prediction.observation_role,
+        "fit_source": prediction.fit_source,
+        "fit_parameter_hash": prediction.fit_parameter_hash,
         "selected_fnirs_channels": "|".join(prediction.selected_fnirs_channels),
         "selected_eeg_channels": "|".join(prediction.selected_eeg_channels),
     }
@@ -1069,7 +1160,9 @@ def aggregate_timecourses(
 
 TRAJECTORY_FIELDS = (
     "schema", "task_id", "family", "stage", "dataset_id", "role", "subject", "stratum",
-    "dependency_group", "unit_id", "fold_index", "model", "spatial_mode", "time_s",
+    "dependency_group", "unit_id", "fold_index", "model", "spatial_mode",
+    "observed_modalities", "target_modalities", "observation_role", "fit_source",
+    "fit_parameter_hash", "time_s",
     "eeg_observed", "eeg_reconstructed", "eeg_predictive_std", "eeg_valid",
     "hbo_observed", "hbo_reconstructed", "hbo_predictive_std", "hbr_observed",
     "hbr_reconstructed", "hbr_predictive_std", "fnirs_valid",
@@ -1096,6 +1189,11 @@ def _write_predictions(writer: csv.DictWriter, predictions: Sequence[Prediction]
                 "fold_index": prediction.fold_index,
                 "model": prediction.model,
                 "spatial_mode": prediction.spatial_mode,
+                "observed_modalities": "|".join(prediction.observed_modalities),
+                "target_modalities": "|".join(prediction.target_modalities),
+                "observation_role": prediction.observation_role,
+                "fit_source": prediction.fit_source,
+                "fit_parameter_hash": prediction.fit_parameter_hash,
                 "time_s": float(time_value),
                 "eeg_observed": float(prediction.eeg_observation[index]),
                 "eeg_reconstructed": float(prediction.eeg_reconstruction[index]),
@@ -1231,13 +1329,14 @@ def plot_reliability_overview(
     models = (
         ("adaptive_joint", "Joint smoother", "#D55E00", "o"),
         ("adaptive_eeg_only", "EEG-only smoother", "#0072B2", "s"),
+        ("adaptive_fnirs_only", "fNIRS-only smoother", "#009E73", "^"),
     )
     with matplotlib.rc_context({"axes.spines.top": False, "axes.spines.right": False}):
         fig, axes = plt.subplots(2, 3, figsize=(22, 10), layout="constrained", sharex=True)
         positions = np.arange(len(task_order), dtype=np.float64)
         for axis, (metric, label, reference) in zip(axes.flat, metrics, strict=True):
             for model_index, (model, model_label, color, marker) in enumerate(models):
-                offset = -0.12 if model_index == 0 else 0.12
+                offset = (-0.18, 0.0, 0.18)[model_index]
                 for task_index, task_id in enumerate(task_order):
                     row = lookup.get((task_id, model))
                     if row is None:
@@ -1291,7 +1390,7 @@ def plot_reliability_overview(
             "Six-panel task profile. The top row shows subject-level and equal-subject mean HbO, HbR, "
             "and EEG-proxy trajectory NRMSE with 95% subject-bootstrap intervals. The bottom row shows "
             "empirical posterior predictive coverage with a nominal 0.95 reference. Orange circles are "
-            "joint smoothing and blue squares are EEG-only smoothing. A dotted divider separates the seven "
+            "joint smoothing, blue squares are EEG-only smoothing, and green triangles are fNIRS-only smoothing. A dotted divider separates the seven "
             "core task cells from the descriptive Visual, REFED, and DSR cells; no cross-task average is shown."
         ),
         source_path=source_path,
@@ -1320,13 +1419,14 @@ def plot_spread_calibration(
     models = (
         ("adaptive_joint", "Joint smoother", "#D55E00", "o"),
         ("adaptive_eeg_only", "EEG-only smoother", "#0072B2", "s"),
+        ("adaptive_fnirs_only", "fNIRS-only smoother", "#009E73", "^"),
     )
     with matplotlib.rc_context({"axes.spines.top": False, "axes.spines.right": False}):
         fig, axes = plt.subplots(2, 3, figsize=(22, 10), layout="constrained", sharex=True)
         x = np.arange(len(task_order), dtype=np.float64)
         for axis, (metric, label, reference) in zip(axes.flat, metrics, strict=True):
             for model_index, (model, model_label, color, marker) in enumerate(models):
-                offset = -0.12 if model_index == 0 else 0.12
+                offset = (-0.18, 0.0, 0.18)[model_index]
                 values = [
                     float(lookup[(task_id, model)][metric])
                     if (task_id, model) in lookup
@@ -1354,7 +1454,7 @@ def plot_spread_calibration(
         alt_text=(
             "Six-panel task profile of temporal spread ratios and standardized residual RMS. Values of one "
             "match observed temporal spread or predictive standardization. Orange circles show the joint "
-            "smoother and blue squares the EEG-only smoother. Core and descriptive task cells are separated "
+            "smoother, blue squares the EEG-only smoother, and green triangles the fNIRS-only smoother. Core and descriptive task cells are separated "
             "and are not pooled."
         ),
         source_path=source_path,
@@ -1378,8 +1478,16 @@ def plot_timecourse_families(
         "dsr": ["simultaneous_dsr"],
     }
     artifacts: list[str] = []
-    colors = {"adaptive_joint": "#D55E00", "adaptive_eeg_only": "#0072B2"}
-    labels = {"adaptive_joint": "Joint reconstruction", "adaptive_eeg_only": "EEG-only reconstruction"}
+    colors = {
+        "adaptive_joint": "#D55E00",
+        "adaptive_eeg_only": "#0072B2",
+        "adaptive_fnirs_only": "#009E73",
+    }
+    labels = {
+        "adaptive_joint": "Joint reconstruction",
+        "adaptive_eeg_only": "EEG-only reconstruction",
+        "adaptive_fnirs_only": "fNIRS-only reconstruction",
+    }
     for family_name, tasks in families.items():
         subset = [
             row
@@ -1428,7 +1536,11 @@ def plot_timecourse_families(
                     observed_high = np.asarray([float(value["observed_ci_high"]) for value in observed_rows])
                     axis.plot(time, observed, color="#222222", linewidth=1.5, label="Observed")
                     axis.fill_between(time, observed_low, observed_high, color="#777777", alpha=0.14)
-                    for model in ("adaptive_joint", "adaptive_eeg_only"):
+                    for model in (
+                        "adaptive_joint",
+                        "adaptive_eeg_only",
+                        "adaptive_fnirs_only",
+                    ):
                         values = sorted(
                             lookup[(task_id, modality, model)],
                             key=lambda value: float(value["time_s"]),
@@ -1436,7 +1548,11 @@ def plot_timecourse_families(
                         reconstruction = np.asarray([float(value["reconstructed_mean"]) for value in values])
                         low = np.asarray([float(value["reconstructed_ci_low"]) for value in values])
                         high = np.asarray([float(value["reconstructed_ci_high"]) for value in values])
-                        linestyle = "-" if model == "adaptive_joint" else "--"
+                        linestyle = {
+                            "adaptive_joint": "-",
+                            "adaptive_eeg_only": "--",
+                            "adaptive_fnirs_only": "-.",
+                        }[model]
                         axis.plot(time, reconstruction, color=colors[model], linestyle=linestyle, label=labels[model])
                         axis.fill_between(time, low, high, color=colors[model], alpha=0.10)
                     if float(time[0]) < 0.0:
@@ -1458,7 +1574,7 @@ def plot_timecourse_families(
                 alt_text=(
                     f"Task-specific HbO and HbR group time courses for {family_name.replace('_', ' ')}. "
                     "Black lines are equal-subject observed means, orange solid lines are joint reconstructions, "
-                    "and blue dashed lines are EEG-only reconstructions; shaded regions are 95% subject-bootstrap "
+                    "blue dashed lines are EEG-only reconstructions, and green dash-dot lines are fNIRS-only reconstructions; shaded regions are 95% subject-bootstrap "
                     "intervals. Each row is a separate task estimand."
                 ),
                 source_path=source_path,
@@ -1535,7 +1651,8 @@ def _summary_markdown(
         "",
         "The EEG observation is the train-fold log-power PCA proxy rather than the raw high-rate EEG waveform. "
         "Joint smoothing conditions on the held-out EEG, HbO, and HbR observations, so its coverage is a posterior fit diagnostic. "
-        "Only the EEG-only path is an out-of-modality fNIRS reconstruction check.",
+        "EEG-only to fNIRS and fNIRS-only to the EEG proxy are the two directional out-of-modality checks; "
+        "fNIRS-only HbO/HbR reconstruction itself remains a within-modality self-observation diagnostic.",
         "",
         "## Task-level reliability profile",
         "",
@@ -1546,7 +1663,11 @@ def _summary_markdown(
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for task_id in task_order:
-        for model in ("adaptive_joint", "adaptive_eeg_only"):
+        for model in (
+            "adaptive_joint",
+            "adaptive_eeg_only",
+            "adaptive_fnirs_only",
+        ):
             row = lookup.get((task_id, model))
             if row is None:
                 lines.append(f"| {_task_label(task_id)} | {model} | — | failed/missing | — | — | — | — | — |")
@@ -1785,9 +1906,19 @@ def run(args: argparse.Namespace) -> Path:
                 "bootstrap_iterations": int(config["analysis"]["bootstrap_iterations"]),
                 "predictive_interval": "normal_95_percent_z_1.959963984540054",
                 "combined_cross_task_scalar": False,
+                "teacher_input_masks": "model_specific_observed_modalities",
+                "scoring_masks": "target_modality_specific",
+                "partial_missingness": "passed_as_NaN_to_missing_aware_RTS_smoother",
+                "fit_window_support": "fully_observed_training_windows_only",
             },
             "task_time_origins": {
                 str(task["task_id"]): str(task["time_origin"]) for task in config["data"]["tasks"]
+            },
+            "observation_modes": _jsonable(MODEL_OBSERVATION_CONTRACT),
+            "fit_provenance": {
+                "source": "within_subject_crossfit_training_dependency_groups",
+                "parameter_hash_field": "fit_parameter_hash",
+                "parameter_table": "fit_parameters.csv",
             },
             "figure_artifacts": figure_artifacts,
             "artifacts": [
@@ -1800,6 +1931,7 @@ def run(args: argparse.Namespace) -> Path:
             ],
             "claim_boundary": [
                 "joint smoothing is a posterior fit diagnostic because held-out fNIRS enters smoothing",
+                "fNIRS-only smoothing is a within-modality self-observation diagnostic, not cross-modal evidence",
                 "EEG-only smoothing is the out-of-modality fNIRS reconstruction check",
                 "EEG observation is a train-fold log-power PCA proxy, not the raw waveform",
                 "task-specific descriptive annexes are not pooled with the core matrix",

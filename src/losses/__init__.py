@@ -16,6 +16,11 @@ from .lag_conditioned import (
     raw_patch_reconstruction_loss,
     weighted_pretraining_loss,
 )
+from .ssm_observation import (
+    masked_huber_loss,
+    ssm_observation_objective,
+    uncertainty_weighted_huber_loss,
+)
 
 __all__ = [
     'AlignmentLoss',
@@ -30,4 +35,7 @@ __all__ = [
     'native_feature_prediction_loss',
     'raw_patch_reconstruction_loss',
     'weighted_pretraining_loss',
+    'masked_huber_loss',
+    'ssm_observation_objective',
+    'uncertainty_weighted_huber_loss',
 ]

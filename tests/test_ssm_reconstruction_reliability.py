@@ -1,10 +1,19 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import yaml
 
 from experiments.evaluate_ssm_reconstruction_reliability import (
+    MODEL_OBSERVATION_CONTRACT,
+    SCHEMA,
+    TRAJECTORY_FIELDS,
+    TRAJECTORY_SCHEMA,
+    Unit,
+    _trial_modality_masks,
+    _unit_has_any_support,
+    _unit_is_full,
     _visual_pair_id,
     aggregate_metrics,
     aggregate_timecourses,
@@ -31,6 +40,45 @@ def _window_row(subject: str, group: str, unit: str, value: float) -> dict[str, 
         "selected_eeg_channels": "eeg",
         "hbo_trajectory_deviation_nrmse": value,
     }
+
+
+def test_reliability_v2_records_observed_and_target_modalities():
+    assert SCHEMA == "ssm_reconstruction_reliability_v2"
+    assert TRAJECTORY_SCHEMA == "ssm_reconstruction_trajectory_v2"
+    assert MODEL_OBSERVATION_CONTRACT["adaptive_eeg_only"]["observed_modalities"] == ("EEG",)
+    assert MODEL_OBSERVATION_CONTRACT["adaptive_eeg_only"]["target_modalities"] == ("HbO", "HbR")
+    assert MODEL_OBSERVATION_CONTRACT["adaptive_fnirs_only"]["observed_modalities"] == ("HbO", "HbR")
+    assert MODEL_OBSERVATION_CONTRACT["adaptive_fnirs_only"]["target_modalities"] == ("EEG",)
+    for field in (
+        "observed_modalities",
+        "target_modalities",
+        "observation_role",
+        "fit_source",
+        "fit_parameter_hash",
+    ):
+        assert field in TRAJECTORY_FIELDS
+
+
+def test_modality_support_masks_do_not_reject_fnirs_only_windows():
+    trial = SimpleNamespace(
+        fnirs=np.ones((4, 2), dtype=float),
+        eeg=np.ones((8, 2), dtype=float),
+        eeg_valid_mask=np.zeros(8, dtype=bool),
+        fnirs_valid_mask=np.asarray([True, True, False, True]),
+    )
+    eeg_mask, fnirs_mask = _trial_modality_masks(trial)
+    np.testing.assert_array_equal(eeg_mask, np.zeros(4, dtype=bool))
+    np.testing.assert_array_equal(
+        fnirs_mask, np.asarray([True, True, False, True])
+    )
+    unit = Unit(
+        trial=trial,
+        unit_id="u",
+        dependency_group="g",
+        stratum="s",
+    )
+    assert _unit_has_any_support(unit)
+    assert not _unit_is_full(unit)
 
 
 def test_group_folds_are_deterministic_balanced_and_never_split_groups():

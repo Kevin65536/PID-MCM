@@ -5,6 +5,7 @@ from experiments.analyze_lag_conditioned_spvq import (
     LAGS,
     PROBE_TARGET_LABEL_SMOOTHING,
     _coupling,
+    _load,
     _paired_m1_n1_rows,
     _role,
     _smooth_probe_train_targets,
@@ -38,6 +39,34 @@ def _archive() -> dict[str, np.ndarray]:
         prefix + "sample_id": np.asarray(["x0", "x1", "x2", "x3"]),
         prefix + "target": np.asarray([0, 0, 1, 1]),
     }
+
+
+def test_export_schema_distinguishes_historical_and_endpoint_aligned_nulls(tmp_path):
+    common = {
+        "protected_open": np.asarray(False),
+        "development_is_new_independent_holdout": np.asarray(False),
+        "derangement_nonoverlap_verified": np.asarray(True),
+    }
+    historical = tmp_path / "historical.npz"
+    np.savez_compressed(
+        historical,
+        schema=np.asarray("lc_spvq_token_exports_v2"),
+        registered_hard_negative_policy=np.asarray(
+            "same_subject_condition_nonidentity_same_token_time"
+        ),
+        **common,
+    )
+    assert str(_load(historical)["schema"].item()).endswith("v2")
+    corrected = tmp_path / "corrected.npz"
+    np.savez_compressed(
+        corrected,
+        schema=np.asarray("lc_spvq_token_exports_v3"),
+        registered_hard_negative_policy=np.asarray(
+            "same_subject_condition_nonidentity_lag_endpoint_aligned"
+        ),
+        **common,
+    )
+    assert str(_load(corrected)["schema"].item()).endswith("v3")
 
 
 def test_role_enforces_independent_k16_and_derangement_contract():
