@@ -7,6 +7,13 @@ estimation. The core departure from Croce 2017: r(t) has no endogenous dynamics
 (no OU process, no random walk). It is proposed from EEG and weighted by fNIRS
 likelihood in a particle filter.
 
+The legacy particle-filter (PF) lane is an independent candidate-validation lane.
+Its current result is inconclusive and must not be treated as a qualified teacher,
+ground truth, causal estimate, or authorization for tokenizer training. Shared,
+self, and direct supervision targets remain competing exploratory choices; no
+target relation or information decomposition is frozen. The existing Croce 2017
+model may be checked for reuse only under its canonical design and validation plan.
+
 ## Scope
 
 This workspace is only for:
@@ -23,6 +30,11 @@ This workspace is not for:
 2. cross-task extensions without prior validation,
 3. global EEG-power proxy experiments,
 4. full-channel scalar-state reductions that erase local source meaning.
+
+Downstream reuse would require a versioned, revalidated Croce candidate; it would
+not promote the legacy PF result into teacher qualification or authorization.
+A measured run still needs its owning protocol and explicit user authorization
+when it crosses a protected boundary.
 
 ## Design Documents
 

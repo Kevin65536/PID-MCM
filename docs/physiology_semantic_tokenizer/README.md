@@ -5,6 +5,13 @@ _Frozen design and evidence index; decision snapshot recorded 2026-07-30_
 This directory preserves the E0–E2 and 2026-07-25 SD-SVQ/R-series generation.
 It is not an instruction to continue the originally planned sequence.
 
+The archive remains historical and its YAML/runtime plans are not current
+contracts. The co-located
+[`observation–source exploration note`](architecture/observation_source_exploration_v2.json)
+and [`framework visualization`](figures/plans/observation_source_exploration_v2.svg)
+list replaceable candidates only; they do not define a fixed architecture or
+authorize measured or protected data access.
+
 The generation ended with:
 
 ```text
@@ -29,7 +36,7 @@ Current project status is generated in
 | [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md) | preregistered R0–R7 ordering and gates |
 | [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) | dated decision snapshot for this generation |
 | [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) | frozen migration plan, partly implemented before stop |
-| [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) | current runtime figure and historical-plan figure guide |
+| [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) | shared Draw.io/SVG style, ownership, and historical-overlay guide |
 | [`09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md) | dated full data-quality evidence |
 
 Method interpretation has been consolidated into

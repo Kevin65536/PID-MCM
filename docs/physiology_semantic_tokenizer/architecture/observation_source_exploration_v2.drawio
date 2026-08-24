@@ -1,0 +1,101 @@
+<mxfile host="app.diagrams.net"><diagram id="observation-source-exploration-v2" name="Candidate exploration">
+    <mxGraphModel dx="1700" dy="1020" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1020" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="canvas" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="1700" height="1020" as="geometry" />
+        </mxCell>
+        <mxCell id="title" value="Observation–Source Candidate Exploration" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#1F2937;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="300" y="22" width="1100" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Exploratory design note · replaceable target, teacher, token, grammar, and analysis candidates" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=14;fontColor=#5F6B7A;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="220" y="66" width="1260" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="status" value="EXPLORATORY  ·  no method identity or information decomposition is frozen  ·  candidates remain replaceable until selection" style="rounded=1;whiteSpace=wrap;html=1;arcSize=28;fillColor=#F1F5F9;strokeColor=#CBD5E1;fontColor=#475569;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="405" y="99" width="890" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eeg-zone" value="EEG · INDEPENDENT MEASURED INFERENCE" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FBFCFE;strokeColor=#B9C9D8;dashed=1;dashPattern=5 5;strokeWidth=1.5;fontColor=#51687D;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=12;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="145" width="1620" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="teacher-zone" value="TRAINING-ONLY · CROCE CHECK / REUSE + SHARED-SOURCE SUPERVISION" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FCFAFF;strokeColor=#C4B5D5;dashed=1;dashPattern=5 5;strokeWidth=1.5;fontColor=#76558F;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=12;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="385" width="1620" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="fnirs-zone" value="fNIRS · INDEPENDENT MEASURED INFERENCE" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FBFCFE;strokeColor=#B9C9D8;dashed=1;dashPattern=5 5;strokeWidth=1.5;fontColor=#51687D;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingTop=12;spacingLeft=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="665" width="1620" height="210" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eeg-input" value="&lt;b&gt;Measured EEG&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;versioned measured branch&lt;br&gt;recorded support + provenance&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="75" y="215" width="210" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="eeg-observation" value="&lt;b&gt;EEG observation path&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;transform / receptive field open&lt;br&gt;fit-fold parameters only&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="345" y="215" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="eeg-student" value="&lt;b&gt;EEG observation + source paths&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;EEG-only inference&lt;br&gt;candidate source supervision&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F1ECFA;strokeColor=#9482C4;strokeWidth=2;fontColor=#352B52;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="930" y="215" width="250" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="eeg-vocab" value="&lt;b&gt;EEG fine → coarse vocabulary&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;capacity / map open&lt;br&gt;independent token identity&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E5F6EF;strokeColor=#63A58B;strokeWidth=2;fontColor=#214C3D;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="215" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="paired-view" value="&lt;b&gt;Paired teacher view&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;EEG + fNIRS · label-free&lt;br&gt;fit-fold only · offline&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="75" y="455" width="210" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="croce-candidate" value="&lt;b&gt;Croce 2017 candidate&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;inspect existing model&lt;br&gt;reuse where justified&lt;br&gt;version + revalidation required&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F3E8FF;strokeColor=#A578C7;strokeWidth=2;fontColor=#2F2540;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="345" y="450" width="240" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="shared-state" value="&lt;b&gt;Shared neural activity&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;jointly constrained state&lt;br&gt;form / dimension / rank open&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F1ECFA;strokeColor=#9482C4;strokeWidth=2;fontColor=#352B52;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="455" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="target-representations" value="&lt;b&gt;Candidate supervision views&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;shared, self, and direct targets compete&lt;br&gt;none is a fixed method identity&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F3E8FF;strokeColor=#A578C7;strokeWidth=2;fontColor=#2F2540;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="930" y="450" width="250" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="grammar" value="&lt;b&gt;Optional endpoint-aligned grammar&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;independent student outputs&lt;br&gt;conditional contribution probes&lt;br&gt;replaceable diagnostic ≠ evidence&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=14;align=left;verticalAlign=middle;spacingLeft=14;spacingRight=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="410" width="210" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="evidence" value="&lt;b&gt;Select + preregister evaluation&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;selected estimand · proper score · matched nulls&lt;br&gt;architecture remains revisable&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FCEEF2;strokeColor=#C44569;strokeWidth=2;fontColor=#68243A;fontSize=14;align=left;verticalAlign=middle;spacingLeft=14;spacingRight=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="525" width="210" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="fnirs-input" value="&lt;b&gt;Measured fNIRS&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;versioned measured branch&lt;br&gt;recorded support + provenance&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E9F2FF;strokeColor=#7AA6D8;strokeWidth=2;fontColor=#233A55;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="75" y="735" width="210" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fnirs-observation" value="&lt;b&gt;fNIRS observation path&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;transform / receptive field open&lt;br&gt;fit-fold parameters only&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#FFF4D6;strokeColor=#D6A84B;strokeWidth=2;fontColor=#493815;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="345" y="735" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fnirs-student" value="&lt;b&gt;fNIRS observation + source paths&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;fNIRS-only inference&lt;br&gt;candidate source supervision&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#F1ECFA;strokeColor=#9482C4;strokeWidth=2;fontColor=#352B52;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="930" y="735" width="250" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fnirs-vocab" value="&lt;b&gt;fNIRS fine → coarse vocabulary&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5F6B7A&quot;&gt;capacity / map open&lt;br&gt;independent token identity&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#E5F6EF;strokeColor=#63A58B;strokeWidth=2;fontColor=#214C3D;fontSize=15;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="735" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-eeg-input-observation" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="eeg-input" target="eeg-observation"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-eeg-observation-student" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="eeg-observation" target="eeg-student"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-eeg-student-vocab" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="eeg-student" target="eeg-vocab"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-paired-croce" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="paired-view" target="croce-candidate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-croce-shared" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="croce-candidate" target="shared-state"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-shared-targets" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="shared-state" target="target-representations"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-targets-eeg-student" value="detached T_E" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;strokeWidth=1.9;strokeColor=#9A70B7;dashed=1;dashPattern=4 5;flowAnimation=1;fontColor=#76558F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.42;exitY=0;entryX=0.42;entryY=1;" edge="1" parent="1" source="target-representations" target="eeg-student"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-targets-fnirs-student" value="detached T_F" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;endFill=0;strokeWidth=1.9;strokeColor=#9A70B7;dashed=1;dashPattern=4 5;flowAnimation=1;fontColor=#76558F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.68;exitY=1;entryX=0.68;entryY=0;" edge="1" parent="1" source="target-representations" target="fnirs-student"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-fnirs-input-observation" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="fnirs-input" target="fnirs-observation"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-fnirs-observation-student" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="fnirs-observation" target="fnirs-student"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-fnirs-student-vocab" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2.4;strokeColor=#5F89B5;dashed=1;dashPattern=8 8;flowAnimation=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="fnirs-student" target="fnirs-vocab"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-eeg-vocab-grammar" value="EEG tokens" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;fontColor=#76558F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="eeg-vocab" target="grammar">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1395" y="265" /><mxPoint x="1515" y="370" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e-fnirs-vocab-grammar" value="fNIRS tokens" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#9A70B7;dashed=1;dashPattern=5 5;flowAnimation=1;fontColor=#76558F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=1;entryY=0.7;" edge="1" parent="1" source="fnirs-vocab" target="grammar">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1650" y="785" /><mxPoint x="1650" y="477" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e-grammar-evidence" value="select estimand" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#C44569;dashed=1;dashPattern=8 6;fontColor=#68243A;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="grammar" target="evidence"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="legend-data" value="animated measured flow" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#E9F2FF;strokeColor=#7AA6D8;fontColor=#43566B;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="440" y="920" width="225" height="30" as="geometry" /></mxCell>
+        <mxCell id="legend-training" value="animated training-only route" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#F3E8FF;strokeColor=#A578C7;fontColor=#5A456C;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="700" y="920" width="225" height="30" as="geometry" /></mxCell>
+        <mxCell id="legend-open" value="open design variable" style="rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#F3F4F6;strokeColor=#9CA3AF;dashed=1;fontColor=#5F6772;fontSize=12;align=center;" vertex="1" parent="1"><mxGeometry x="960" y="920" width="225" height="30" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram></mxfile>

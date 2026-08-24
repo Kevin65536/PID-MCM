@@ -77,6 +77,13 @@ experiment needs:
 - parser and shape tests;
 - dry-run or synthetic execution before measured data access.
 
+The observation–source v2 material is an exploratory design note, not an
+executable configuration or fixed architecture. Do not repurpose an E0–E2 or
+R-series YAML for it. Any candidate taken forward needs its own versioned
+software, tensor-shape, split, and null checks on synthetic data first. A
+protected measured run additionally requires its owning protocol and separate
+explicit user authorization.
+
 Use the owning launcher. For the physiology-semantic namespace:
 
 ```bash
@@ -88,7 +95,8 @@ bash experiments/scripts/launch_training_nohup.sh \
 
 This launcher can replay the E0–E2-compatible runtime. Launcher availability does
 not change the execution state or scientific verdict in the unified registry;
-inspect the generated status before defining a new VQ generation.
+inspect the generated status before defining a new VQ generation. It does not
+implement the observation–source exploration map.
 
 ## Evidence ladder
 

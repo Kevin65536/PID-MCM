@@ -21,7 +21,13 @@ from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC = REPO_ROOT / "docs/physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json"
-DEFAULT_OUTPUT = REPO_ROOT / "docs/physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg"
+DRAWIO_OWNED_OUTPUTS = {
+    REPO_ROOT / "docs/physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg",
+    REPO_ROOT
+    / "docs/physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg",
+    REPO_ROOT
+    / "docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg",
+}
 
 SPEC_SCHEMAS = {"physiology_semantic_architecture_v1", "physiology_semantic_architecture_v2"}
 OVERLAY_SCHEMAS = {
@@ -30,26 +36,26 @@ OVERLAY_SCHEMAS = {
 }
 
 ROLE_STYLE = {
-    "data": ("#EAF3FA", "#0072B2", "#123B56"),
-    "encoder": ("#EDF4FB", "#3B78A8", "#173B55"),
-    "latent": ("#F3EEFA", "#8A5FB0", "#432A5C"),
-    "quantizer": ("#EAF7F2", "#009E73", "#124C3D"),
-    "objective": ("#FFF5DF", "#D68B00", "#5B3A00"),
-    "lifecycle": ("#F1F4F6", "#59636E", "#29313A"),
-    "interface": ("#EAF7F7", "#008A91", "#16474B"),
-    "evaluator": ("#FCEEF2", "#C44569", "#68243A"),
-    "teacher": ("#F3EEFA", "#7A54A3", "#432A5C"),
+    "data": ("#E9F2FF", "#7AA6D8", "#233A55"),
+    "encoder": ("#FFF4D6", "#D6A84B", "#493815"),
+    "latent": ("#F1ECFA", "#9482C4", "#352B52"),
+    "quantizer": ("#E5F6EF", "#63A58B", "#214C3D"),
+    "objective": ("#FFF4D6", "#D6A84B", "#493815"),
+    "lifecycle": ("#F1F5F9", "#94A3B8", "#334155"),
+    "interface": ("#E5F6EF", "#63A58B", "#214C3D"),
+    "evaluator": ("#FDECEC", "#D98A8A", "#6B2F37"),
+    "teacher": ("#F3E8FF", "#A578C7", "#2F2540"),
 }
 
 EDGE_STYLE = {
-    "data": ("#526272", "", "solid data flow"),
-    "training": ("#7A54A3", "9 6", "training-only supervision"),
-    "gradient": ("#A45C00", "3 5", "gradient path"),
-    "control": ("#59636E", "12 5 3 5", "lifecycle control"),
-    "evaluation": ("#C44569", "5 5", "frozen evaluation"),
-    "guarded": ("#A45C00", "12 6", "guarded transition"),
-    "blocked": ("#6B7280", "3 6", "blocked transition"),
-    "removed": ("#9F1239", "4 5", "removed relationship"),
+    "data": ("#5B8DBD", "", "solid data flow"),
+    "training": ("#9365C0", "9 6", "training-only supervision"),
+    "gradient": ("#D39A2C", "3 5", "gradient path"),
+    "control": ("#7E8C9C", "12 5 3 5", "lifecycle control"),
+    "evaluation": ("#C55E73", "5 5", "frozen evaluation"),
+    "guarded": ("#C58A20", "12 6", "guarded transition"),
+    "blocked": ("#94A3B8", "3 6", "blocked transition"),
+    "removed": ("#D56B78", "4 5", "removed relationship"),
 }
 
 CHANGE_STYLE = {
@@ -554,10 +560,9 @@ def _render_node(node: Mapping[str, Any]) -> str:
         f'aria-labelledby="node-{node_id}-title node-{node_id}-desc">'
         f'<title id="node-{node_id}-title">{escape(str(node["label"]))}</title>'
         f'<desc id="node-{node_id}-desc">{escape("; ".join(description_parts))}</desc>'
-        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="11" fill="{fill}" stroke="{accent}" stroke-width="2.2"{border_dash}/>'
-        f'<rect x="{x:.1f}" y="{y:.1f}" width="7" height="{height:.1f}" rx="3.5" fill="{accent}"/>'
-        f'<text x="{x + 18:.1f}" y="{y + 29:.1f}" class="node-title" fill="{text_color}">{escape(str(node["label"]))}</text>'
-        f'<text x="{x + 18:.1f}" y="{y + 42:.1f}" class="node-detail" fill="{text_color}">{detail_lines}</text>'
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="16" fill="{fill}" stroke="{accent}" stroke-width="2"{border_dash}/>'
+        f'<text x="{x + 16:.1f}" y="{y + 29:.1f}" class="node-title" fill="{text_color}">{escape(str(node["label"]))}</text>'
+        f'<text x="{x + 16:.1f}" y="{y + 42:.1f}" class="node-detail" fill="#5F6B7A">{detail_lines}</text>'
         f'{implementation_badge}{evidence_badge}{change_overlay}</g>'
     )
 
@@ -568,7 +573,7 @@ def _render_sections(sections: Iterable[Mapping[str, Any]]) -> str:
         description = str(section.get("description", ""))
         rendered.append(
             f'<g id="section-{escape(str(section["id"]))}">'
-            f'<rect x="{section["x"]}" y="{section["y"]}" width="{section["width"]}" height="{section["height"]}" rx="18" class="section-box"/>'
+            f'<rect x="{section["x"]}" y="{section["y"]}" width="{section["width"]}" height="{section["height"]}" rx="16" class="section-box"/>'
             f'<text x="{section["x"] + 18}" y="{section["y"] + 31}" class="section-title">{escape(str(section["label"]))}</text>'
             + (
                 f'<text x="{section["x"] + 18}" y="{section["y"] + 52}" class="section-description">{escape(description)}</text>'
@@ -706,15 +711,15 @@ def render_svg(
   <metadata>{escape(json.dumps(metadata, sort_keys=True))}</metadata>
   <defs>{marker_defs}</defs>
   <style>
-    text {{ font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }}
-    .page-title {{ font-size: 29px; font-weight: 750; fill: #13202B; }}
-    .page-subtitle {{ font-size: 15px; fill: #4B5B68; }}
-    .banner-box {{ fill: #FFF8E8; stroke: #D68B00; stroke-width: 1.4; }}
-    .banner-text {{ font-size: 13.5px; font-weight: 650; fill: #5B3A00; }}
-    .section-box {{ fill: #FAFBFC; stroke: #C9D2D9; stroke-width: 1.4; }}
-    .section-title {{ font-size: 17px; font-weight: 750; fill: #2D3A45; }}
-    .section-description {{ font-size: 12px; fill: #667784; }}
-    .node-title {{ font-size: 15px; font-weight: 750; }}
+    text {{ font-family: Helvetica, "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }}
+    .page-title {{ font-size: 28px; font-weight: 700; fill: #1F2937; }}
+    .page-subtitle {{ font-size: 14px; fill: #5F6B7A; }}
+    .banner-box {{ fill: #F1F5F9; stroke: #CBD5E1; stroke-width: 1.2; }}
+    .banner-text {{ font-size: 12px; font-weight: 700; fill: #475569; }}
+    .section-box {{ fill: #FBFCFE; stroke: #B9C9D8; stroke-width: 1.5; stroke-dasharray: 6 6; }}
+    .section-title {{ font-size: 15px; font-weight: 700; fill: #51687D; }}
+    .section-description {{ font-size: 12px; fill: #5F6B7A; }}
+    .node-title {{ font-size: 15px; font-weight: 700; }}
     .node-detail {{ font-size: 12.5px; }}
     .scope-label {{ font-size: 9.5px; font-weight: 750; fill: #53616D; letter-spacing: .35px; }}
     .micro-badge {{ font-size: 8.5px; font-weight: 800; text-anchor: middle; fill: #FFFFFF; }}
@@ -723,7 +728,7 @@ def render_svg(
     .change-badge {{ font-size: 10px; font-weight: 850; text-anchor: middle; fill: #FFFFFF; }}
     .legend-title {{ font-size: 12px; font-weight: 750; fill: #34424E; }}
     .legend-label {{ font-size: 10.5px; fill: #465661; }}
-    .callout-panel {{ fill: #F8FAFC; stroke: #BFCAD2; stroke-width: 1.4; }}
+    .callout-panel {{ fill: #FBFCFE; stroke: #B9C9D8; stroke-width: 1.4; }}
     .callout-title {{ font-size: 17px; font-weight: 750; fill: #2D3A45; }}
     .callout-object {{ font-size: 12px; font-weight: 750; fill: #2D3A45; }}
     .callout-note {{ font-size: 11.5px; fill: #53616D; }}
@@ -743,15 +748,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC)
     parser.add_argument("--changes", type=Path)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--check", action="store_true", help="Fail when output differs from a fresh render")
     args = parser.parse_args()
 
     spec = load_json(args.spec)
     changes = load_json(args.changes) if args.changes else None
     output = args.output.resolve()
-    if changes is not None and output == DEFAULT_OUTPUT.resolve():
-        raise ValueError("A plan overlay must use a plan-specific output and cannot overwrite the current architecture SVG")
+    if output in {path.resolve() for path in DRAWIO_OWNED_OUTPUTS}:
+        raise ValueError("Draw.io-owned SVGs must be exported from their matching .drawio source")
     try:
         spec_source = str(args.spec.resolve().relative_to(REPO_ROOT))
     except ValueError:

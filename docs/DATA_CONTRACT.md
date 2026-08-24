@@ -1,12 +1,22 @@
 # EEG–fNIRS data contract
 
-_Active measured-data, alignment, mask, and cache rules; consolidated 2026-07-30_
+_Active measured-data, alignment, mask, and cache rules; v1 historical target
+boundary plus an exploratory continuous-target interface, 2026-08-22_
 
 This document is the active data entrypoint. Dataset-native formats, tasks,
 units, and original-document locations remain in the reference catalog
 [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md); the full dated
 implementation audit remains in
 [`physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md`](physiology_semantic_tokenizer/09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md).
+
+## Version boundary
+
+The measured-data loader and masks below remain the active v1 data authority.
+The continuous-target interface in this document is **exploratory and
+unimplemented**. It is one safe candidate interface, not a required method
+architecture; alternatives may replace it through a versioned contract. It does
+not relabel the current patch target, Croce cache, or any v1 checkpoint.
+Documentation changes do not authorize measured or protected-data access.
 
 ## Registered measured datasets
 
@@ -43,6 +53,129 @@ Teacher targets, raw views, trajectories, labels, masks, geometry, split
 registries, and exported tokens must round-trip this identity exactly. A join
 that succeeds only because two arrays currently share an ordering is invalid.
 
+## Target lineage and continuous 10 Hz schema
+
+### v1 patch target (historical)
+
+The implemented v1 observation screen is retained as a reproducible historical
+surface. Its producer is src/data/ssm_observation_targets.py and its provenance
+schema is ssm_modality_observation_teacher_v1. It extracts an array shaped
+[sample, token, feature] from ten 2 s positions. EEG features are selected
+channel-by-band patch log-power; fNIRS samples inside each patch are flattened
+into the feature axis. A full-rank observation-space AR smoother then operates
+on the ten positions. This is not a continuous 10 Hz target and does not satisfy
+the exploratory interface below. Existing v1 results must retain their original
+schema and source hashes.
+
+### Observation–source candidate target (exploratory; no reader yet)
+
+The draft target schema is observation_source_candidate_target_v1. A
+producer may not publish this schema until the synthetic contract tests,
+fold-fitting audit, and source/provenance manifest exist. For a 20 s window,
+the continuous axis has T=200 points at 10 Hz; other durations must record T
+and the exact timestamps rather than assuming 200.
+
+Using this schema does not select a teacher, observation/source split, token
+hierarchy, grammar, or downstream decomposition. An experiment may use a
+different versioned interface when its candidate needs different fields.
+
+Each modality m publishes one record with these fields:
+
+| Field | Shape / type | Contract |
+| --- | --- | --- |
+| canonical identity | exact join-key object | dataset, subject, record/session, task/event, window, and modality branch; no array-order joins |
+| time_s | [T] float64 | common record-relative time grid; native anchor and modality-clock offsets remain in provenance |
+| observation_values | [T,C_m] float32 | measured target coordinate consumed by the teacher; EEG is channel×band envelope, fNIRS is HbO/HbR model coordinate |
+| trajectory_mean | [T,C_m] float32 | posterior/teacher dynamic trajectory $\widetilde O_m(t)$; emitted only where teacher support is valid |
+| trajectory_uncertainty | [T,C_m] float32 | non-negative predictive standard deviation, or a declared diagonal/covariance representation; never an unlabelled scalar |
+| innovation | [T,C_m] float32 | observation_values - trajectory_mean on the innovation-valid support; no implicit zero fill |
+| coordinate_names / component_roles | [C_m] strings | stable order, channel identity, band or HbO/HbR role |
+| masks | named boolean arrays | measured, teacher, uncertainty, innovation, and any token/lag masks below |
+| teacher_mode | enum | native_baseline, self, or privileged_joint; native_baseline records the identity comparison arm and is not a dynamic-teacher claim |
+| fit provenance | manifest object | fit fold, parameter hash, target/code hash, source hash, and label-use=false |
+
+EEG observation construction is defined at the continuous coordinate level:
+
+$$
+e_{c,b}(t)=\log\left(\left|\mathcal H(B_b*x_c)(t)\right|^2+\epsilon\right),
+\qquad
+O_E(t)=e_{c,b}(t)-\overline e_{c,b}^{baseline}.
+$$
+
+The main target is baseline-relative envelope/ERD--ERS; absolute log energy
+may be retained as an explicitly named auxiliary coordinate. Channel order and
+band order are preserved (for example, six channels by alpha/beta/low-gamma
+gives C_E=18). The envelope is formed from the 200 Hz EEG view and then
+aligned/downsampled to 10 Hz. A frequency-aware, amplitude-preserving stem is
+an architecture choice, not permission to change this target silently.
+
+The fNIRS observation coordinate is continuous HbO/HbR at 10 Hz after the
+declared native transformation and fit-fold model scaling. For a 20 s window,
+the unified model coordinate is [B,200,2] (or [T,2] for one record); this is
+not a claim about the native raw array shape or unit. The teacher is applied
+to the [T,2] trajectory first; only then may a tokenizer create
+patches, fine tokens, coarse meta-tokens, or lag endpoints. A target producer
+must not flatten each 2 s patch and call the resulting feature sequence
+continuous.
+
+### Teacher modes and Croce provenance
+
+The self teacher fits each modality using only that modality and no task
+labels. The privileged_joint candidate may fit aligned EEG and fNIRS together
+within the fit partition and then emit modality-specific slices, but it is an
+offline training/ablation target and is never an inference input. The accepted
+adaptive Croce/Balloon implementation and its E0 development-supervision
+decision are linked from [METHOD_RATIONALE](METHOD_RATIONALE.md); its later
+population-frozen R1-P physical qualification failed. The legacy
+croce_validation particle-filter lane is an independent, inconclusive audit
+track, not evidence that the v2 target exists.
+
+Croce parameter bounds, candidate version, gauge/sign convention, state
+dimension, and output coordinate must be recorded in the fit manifest. A
+Croce-derived sidecar is not allowed to replace the measured fNIRS branch or
+to be described as ground truth, a causal estimator, or a unique physical
+parameterization.
+
+### Continuous-target masks
+
+The named masks are distinct even when their arrays happen to be equal:
+
+| Mask | Shape | Meaning |
+| --- | --- | --- |
+| observation_valid_mask | [T,C_m] | real recorded support after alignment; derived from the measured branch |
+| teacher_valid_mask | [T,C_m] | the frozen teacher emitted a finite trajectory at this point |
+| uncertainty_valid_mask | [T,C_m] | uncertainty is finite, non-negative, and calibrated under the declared convention |
+| trajectory_valid_mask | [T,C_m] | observation/teacher target can be used for state loss; typically teacher_valid_mask intersected with observation support |
+| innovation_valid_mask | [T,C_m] | observation_valid_mask intersected with trajectory and uncertainty support |
+| token_valid_mask | [N_token] | support after an explicitly declared aggregation from the continuous target; no padding is observed data |
+| endpoint_aligned_lag_mask | [N_source,N_target] | source endpoint t and target endpoint t+tau are both valid under the declared lag; same-position shortcut masks are forbidden |
+| causal_valid_mask | [T] | only required for a strict-cutoff/future estimand; a full-window offline teacher cannot be labelled causal |
+
+Losses and metrics consume the mask belonging to their tensor. Missing,
+unsupported, padded, and zero values are never interchangeable. Innovation is
+undefined where either observation or trajectory support is absent; it is not
+silently replaced by zero.
+
+### Fit-fold rules
+
+For every outer fold, fit only on the authorized fit-parameter partition:
+channel selection, EEG envelope/scaling parameters, fNIRS model-coordinate
+normalizers, baseline templates if learned, teacher dynamics and Q/R/H/A (or
+Croce parameters), uncertainty calibration, target projections, fine/coarse
+aggregation, codebooks, and grammar parameters. Record the fold identifier,
+subject/record inventory, source and software hashes, and parameter hashes.
+Apply the frozen objects to validation and held-out rows without refitting.
+Task labels are excluded from teacher fitting; if a downstream private adapter
+uses labels, that use is recorded separately and does not alter the
+label-blind state vocabulary. Subject, trial, and record dependencies cannot
+cross a fold.
+
+If a candidate reaches independent evaluation, its selected target, estimator,
+split, and nulls are preregistered before held-out access. A learned grammar/map
+may be selected on fit/selection data, but held-out proper-score increments and
+matched-minus-null maps are the evidence surface; the exploratory design note
+itself freezes no architecture.
+
 ## Signal branches
 
 The loader distinguishes measurement provenance from model coordinates:
@@ -75,6 +208,23 @@ HbO and HbR roles remain explicit. A linear model-space normalization does not
 make the upstream physical measurements identical. High-wavelength-only
 Croce caches are historical derived supervision and are not the default
 measured fNIRS input.
+
+For every continuous target and every derived cache, retain this native fNIRS
+provenance tuple before any fold scaling:
+
+| Provenance field | Required value |
+| --- | --- |
+| source family | Single-Trial optical intensity, or released chromophore export for REFED/Visual/Simultaneous |
+| source path/record and hash | immutable dataset-native identifier and source hash |
+| native sampling rate and units | recorded rate and unit (for example optical intensity, optical density, concentration, or dimensionless export); never inferred from the canonical rate |
+| transformation contract | optical-density/MBLL or released-HbO/HbR lineage, component roles, filter/resampling steps, and software/schema version |
+| model coordinate | fold-fitted centering/scaling and the resulting coordinate name; this does not erase the native source |
+| channel identity | optode/channel label, HbO/HbR role, geometry version, and missingness |
+
+An fNIRS teacher may consume the fold-fitted model coordinate, but its manifest
+must point back to this native tuple. Optical highWL/lowWL Croce values and
+HbO/HbR concentration coordinates cannot be concatenated or called one unit
+without an explicit transform and provenance record.
 
 ## Time and event alignment
 
@@ -144,6 +294,13 @@ Every derived cache records:
 - shapes, sampling rates, units/coordinates, channel roles, and masks;
 - success, exclusion, and failure counts;
 - creation time and atomic completion marker.
+
+Any cache using the exploratory continuous-target interface must additionally
+record its schema, teacher_mode, time grid, trajectory/uncertainty/
+innovation field versions, every named mask, fit-fold and parameter hashes,
+native fNIRS provenance tuple, and whether the target was self or privileged
+joint. A cache without these fields remains a v1/legacy sidecar and cannot be
+joined under this candidate interface.
 
 Raw data is immutable. Rebuildable caches may be removed after their manifest,
 summary, and retained-result status are recorded. Never clean

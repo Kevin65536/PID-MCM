@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-20T15:05:00+08:00",
+  "updated_at": "2026-08-24T18:18:22+08:00",
   "tracks": [
     {
       "id": "main",
@@ -32,14 +32,14 @@
       "id": "e.data_contract",
       "label": "统一数据合同",
       "path": "docs/DATA_CONTRACT.md",
-      "sha256": "9296a72df8484172c54d4ae1e27bd79b952356a7cfc02ef6e100367d86d205d0",
+      "sha256": "fcc6c260fc00f1d4757b1b2f82e97ea319b9663a02597559894e65e521089bd9",
       "role": "data_contract"
     },
     {
       "id": "e.method_rationale",
       "label": "方法依据与主张边界",
       "path": "docs/METHOD_RATIONALE.md",
-      "sha256": "648d30fc283fb6b33f012fa5550d7f4a82297e4286989ec68584c1d8f0f3b8fc",
+      "sha256": "8a75a284434ea803c9680016036a77f36bdebf3c8354ce359faa3cca71f23bc7",
       "role": "decision"
     },
     {
@@ -158,7 +158,7 @@
       "id": "e.lc_spvq_plan",
       "label": "LC-SPVQ 开发计划",
       "path": "docs/analysis/LC_SPVQ_DEVELOPMENT_PLAN.md",
-      "sha256": "ea46e360798788efb6da295b88078d4a7610f505843c1c0341bc002b38e2dbb1",
+      "sha256": "345063f5c4acb28465c33894818b41fa6d6c1a7bc677c3f95291d4fc2a4e9bfd",
       "role": "protocol"
     },
     {
@@ -209,6 +209,20 @@
       "path": "croce_validation/CROCE2017_REAL_DATA_VALIDATION_PLAN.md",
       "sha256": "7eab98b9ecf70b4c29a963b51066df4cff9eb4b6d9eb4c09544b928c39f418a9",
       "role": "protocol"
+    },
+    {
+      "id": "e.ssm_observation_qc_20260821",
+      "label": "SSM observation 与 LC-SPVQ coupling QC（2026-08-21）",
+      "path": "docs/analysis/SSM_OBSERVATION_AND_COUPLING_QC_RESULTS_20260821.md",
+      "sha256": "05cf1be1f6be134a727c17b4b955c078befa86074cf59acab793dbce50fa918f",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.observation_source_exploration_v2",
+      "label": "Observation–source candidate exploration note",
+      "path": "docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json",
+      "sha256": "dcb4eeff22e2830534c03f851435d933714fe69ea547a8dca8c83e4a65351ac3",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -295,6 +309,58 @@
         "main.lc_spvq"
       ],
       "next_step": "保持 protected cohort 关闭；若继续验证 lag05_h23，须先冻结新的独立评估设计，并把 selection 增益与 development 反向同时作为前置证据。",
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-21.ssm-observation-qc",
+      "entity": "main.program",
+      "label": "SSM_OBSERVATION v1 QC 与后续探索",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "2026-08-21 v1 fit-selection QC 已纳入当前主方法边界：motor-imagery EEG gate 在所有 seed/mode 失败，fNIRS target 可学习，SSM-SELF 未优于 NATIVE，SSM-JOINT 未形成有用上界，未支持 SSM superiority、trial-specific coupling、K16 或 q0/q1；后续 observation–source 图只记录候选，implementation 尚未开始。",
+      "evidence_ids": [
+        "e.ssm_observation_qc_20260821",
+        "e.method_rationale"
+      ],
+      "supersedes": [
+        "main.program@2026-08-20.lc-spvq"
+      ],
+      "updated_at": "2026-08-22T21:54:00+08:00",
+      "depends_on": [
+        "main.ssm_observation_qc",
+        "main.lc_spvq"
+      ],
+      "next_step": "根据 v1 失败面定义最小 observation–source 候选比较并先做 synthetic/software checks；不默认采用完整候选图或固定矩阵。protected cohort 保持关闭，不授权 measured/protected、VQ、K16 或 q0/q1。",
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-24.observation-source-exploration",
+      "entity": "main.program",
+      "label": "Observation–source 候选探索",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "v1 2026-08-21 SSM_OBSERVATION QC 的 negative/inconclusive 结果已完成并保留为当前证据；observation–source 设计图只列出可替换候选，没有冻结下一代架构。candidate implementation、software tests 与 measured evaluation 尚未开始。",
+      "evidence_ids": [
+        "e.ssm_observation_qc_20260821",
+        "e.observation_source_exploration_v2"
+      ],
+      "supersedes": [
+        "main.program@2026-08-21.ssm-observation-qc"
+      ],
+      "updated_at": "2026-08-24T18:18:22+08:00",
+      "depends_on": [
+        "main.observation_source_exploration",
+        "main.ssm_observation_qc"
+      ],
+      "next_step": "先从候选图中定义一个最小、可证伪的 synthetic/public comparison；2×2×2×3-seed 矩阵和分解探针均不默认冻结。protected cohort 保持关闭，不授权 measured/protected、VQ、K16 或 q0/q1。",
       "headline": true
     },
     {
@@ -614,6 +680,76 @@
         "main.data_contract"
       ],
       "next_step": "当前优化阶段结束且 protected cohort 保持关闭；任何后续可迁移性能验证须另行冻结独立评估设计，并不得用本轮 reused development 反向调参。",
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_observation_qc@2026-08-21",
+      "entity": "main.ssm_observation_qc",
+      "label": "SSM_OBSERVATION 与 LC-SPVQ coupling v1 QC",
+      "track": "main",
+      "order": 140,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "探索性 fit/selection QC 完成：历史 LC-SPVQ checkpoint controls 与三 seed continuous SSM screen 均保留；motor-imagery EEG delta-R² 在非 privileged modes 全部未过，fNIRS 为正，SSM-SELF 未优于 NATIVE，XPRED 与 interaction 增量不稳定。该 v1 negative screen 不构成 SSM superiority 或 coupling 证据，也未选择后续架构；K16 与 q0/q1 deferred。",
+      "evidence_ids": [
+        "e.ssm_observation_qc_20260821"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-21T23:59:00+08:00",
+      "depends_on": [
+        "main.lc_spvq",
+        "main.continuous_latent"
+      ],
+      "next_step": "保持 protected cohort 关闭与 VQ/q0/q1 未授权；从 observation–source 候选图中选择最小对照，在单独版本化合同中实现并测试。",
+      "headline": false
+    },
+    {
+      "state_id": "main.observation_source_exploration@2026-08-24",
+      "entity": "main.observation_source_exploration",
+      "label": "Observation–source candidate exploration",
+      "track": "main",
+      "order": 150,
+      "entity_kind": "analysis",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Observation–source JSON/figure 记录了 continuous teacher、独立 observation/source 分支、fine→coarse vocabulary、endpoint-aligned grammar 和条件贡献探针等可替换候选；它不是 architecture protocol，未实现或测量任何候选。",
+      "evidence_ids": [
+        "e.observation_source_exploration_v2"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-08-24T18:18:22+08:00",
+      "depends_on": [
+        "main.ssm_observation_qc"
+      ],
+      "next_step": "选择一个最小候选对照后再建立其版本化 software contract 与 synthetic checks；不得把整张候选图或条件贡献探针作为固定下游架构。protected cohort 保持关闭。",
+      "headline": false
+    },
+    {
+      "state_id": "main.future_vq@2026-08-24.hierarchy",
+      "entity": "main.future_vq",
+      "label": "可选 fine/coarse source vocabulary 探索",
+      "track": "main",
+      "order": 100,
+      "entity_kind": "project",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "v1 的 K16 与 q0/q1 已延期；fine/coarse source vocabulary 只是一项可选探索，不是后续必经架构。只有新候选先证明连续 target、teacher、encoder 与 observation path 可用，才可另行提出容量搜索。",
+      "evidence_ids": [
+        "e.ssm_observation_qc_20260821",
+        "e.observation_source_exploration_v2"
+      ],
+      "supersedes": [
+        "main.future_vq@2026-08-19.continuous-first"
+      ],
+      "updated_at": "2026-08-24T18:18:22+08:00",
+      "depends_on": [
+        "main.ssm_observation_qc"
+      ],
+      "next_step": "保持阻塞且不训练或选择 codebook；仅当某个 source candidate 先通过独立定义的开发门槛时，再决定是否提出 fit/selection-only 的 K_f/K_c、聚合、map-quality 与 null 合同。protected cohort 保持关闭。",
       "headline": false
     },
     {

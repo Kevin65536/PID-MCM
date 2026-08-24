@@ -1,5 +1,5 @@
 """
-Tokenizers module for PID-MCM.
+Physiology-semantic tokenizer module.
 Contains VQ-VAE, FSQ, and other quantization methods.
 """
 

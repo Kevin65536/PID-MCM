@@ -1,6 +1,6 @@
 # Source-code authority map
 
-_Reusable and compatibility boundaries, updated 2026-07-30_
+_Reusable and compatibility boundaries, updated 2026-08-22_
 
 New code may depend on reusable packages but must not import the dated
 compatibility namespace. Historical tools opt into compatibility explicitly.
@@ -8,7 +8,7 @@ compatibility namespace. Historical tools opt into compatibility explicitly.
 | Package | Active responsibility |
 | --- | --- |
 | `data/` | registry, unified loaders, preprocessing, alignment, masks, geometry, caches, E0–E2 and R-series joins |
-| `inference/` | neurovascular SSM inference and the sealed R1-P teacher |
+| `inference/` | neurovascular SSM implementations and replayable E0/R-series inference; the adaptive Croce/Balloon path was accepted only for offline E0 development supervision and was not R1-P-qualified |
 | `tokenizers/` | tokenizer interfaces, corrected EMA VQ, E2 runtime, R2 diagnostic model |
 | `analysis/` | E2 evaluation and Token Physiology Atlas |
 | `losses/` | physiology-semantic reconstruction/routed objectives plus historical reusable losses |
@@ -37,6 +37,13 @@ identity and leakage boundaries; they are not duplication to merge away.
 Several general tokenizer, metric, loss, and visualization modules exist only
 for historical configs/checkpoints. They remain in place until checkpoint
 serialization compatibility is audited.
+
+The observation–source exploration note does not change this current-code
+map. Its target adapters, teachers, encoder paths, token hierarchies, grammar,
+and conditional analyses are replaceable candidates, not implemented owners.
+If one is selected for implementation, add it beside the nearest existing
+`data/`, `inference/`, `tokenizers/`, or `losses/` component; do not rewrite the
+sealed R1-P sources or reuse their evidence identity.
 
 The R1-P prevalidation seal fixes exact source, script, config, registry, and
 test paths/hashes. Ordinary cleanup must not move or edit them. Likewise,

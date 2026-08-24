@@ -30,6 +30,20 @@ Launcher availability is an implementation fact, not evidence that a scientific
 prerequisite has passed. Live-process checks must still be performed immediately
 before touching generated run or cache directories.
 
+## Observation–source exploration boundary
+
+The v2 exploration is a replaceable, not-yet-implemented candidate map. It is
+recorded in the [design note](../docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
+and its [framework diagram](../docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg).
+No YAML or measured-data run is authorized by those artifacts.
+
+The existing physiology-semantic YAML/runtime surface is historical and replay-only;
+do not clone or reinterpret it as a new contract. A selected candidate must first
+pass synthetic software, target/teacher, tensor-shape, split, and null checks.
+Only after those checks are recorded may a development comparison be proposed.
+Protected data requires the owning protocol and a separate, explicit user
+authorization for that measured action.
+
 ## Run contract
 
 New physiology-semantic output uses:

@@ -1,5 +1,5 @@
 """
-Masking strategies for PID-MCM training.
+Masking strategies for physiology-semantic training.
 
 Implements three masking patterns:
 1. Cross-Modal: Mask modality 1 heavily, keep modality 2 (learns Redundancy)

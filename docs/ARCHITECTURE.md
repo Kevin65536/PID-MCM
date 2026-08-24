@@ -19,36 +19,100 @@ A bulk move of frozen comparison code would invalidate recorded paths and source
 hashes, so future cleanup must create a new version instead of layering shims over
 the old one.
 
-## Runtime scope
+## Runtime scope and version boundary
 
-The production tokenizer runtime remains the E2-compatible
-`PhysiologySemanticTokenizer`. R0-P, R1-D/R1-P, D1B, and R2-D added diagnostic
-and qualification components around it. Their execution outcomes and scientific
-interpretation are intentionally absent from this architecture document.
+The only currently runnable tokenizer generation is the E2-compatible
+`PhysiologySemanticTokenizer` (v1). R0-P, R1-D/R1-P, D1B, and R2-D added
+diagnostic and qualification components around it. The v1 implementation,
+checkpoints, and negative screen are retained as historical evidence; they are
+not a new runtime generation. Their execution outcomes and scientific
+interpretation are recorded in the owning reports rather than inferred from
+file presence.
 
-There are three reading levels for the runtime. The short Mermaid flow below is
-the quick project summary; the canonical JSON/SVG pair is the implementation
-detail; and the Draw.io file is a human-readable presentation draft.
+The v2 artifact below is an exploratory map of replaceable candidates, not a
+versioned architecture target, runnable code, an admission result, or permission
+to access measured/protected data. It does not freeze a teacher, path, token
+hierarchy, grammar, or information decomposition. A candidate selected for
+implementation must first receive its own software/data contract and synthetic
+checks; any later independent evaluation separately preregisters its estimand,
+split, nulls, and stopping rule.
 
-The canonical current-runtime artifacts remain
-[`physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json)
-and
-[`physiology_semantic_architecture.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg).
-The shared-driver/SD-SVQ diagrams are pre-gate historical plan evidence, not an
-implemented or active after-state.
-
-The review-oriented Draw.io overview is available as a
-**quick overview / paper-figure candidate**:
+The machine-readable current-runtime authority is
+[`physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json).
+The review-oriented **quick overview / paper-figure candidate** is
 [`physiology_semantic_runtime_overview.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg),
 with its editable
 [`drawio` source](physiology_semantic_tokenizer/architecture/physiology_semantic_runtime_overview.drawio).
 It is a current-or-snapshot presentation projection of the same E2 runtime, not a
 timestamped registry view, second source of truth, or scientific-admission figure.
-The JSON and deterministic renderer above remain the implementation authority.
+The detailed
+[`candidate architecture`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg)
+and its
+[`Draw.io source`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.drawio)
+are exploratory visual projections, not a runtime or frozen target. Draw.io owns
+their visual layout; the JSON and registry remain the implementation and state
+authorities. Historical shared-driver/SD-SVQ diagrams remain pre-gate evidence.
 
 ![Quick runtime overview (presentation draft)](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
 
-## Current E2 dataflow
+## Observation–source candidate exploration (unimplemented)
+
+The exploration projection is kept separately from the v1 runtime:
+
+- [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
+  is the text-diffable semantic design note.
+- [`observation_source_exploration_v2.drawio`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.drawio)
+  owns the editable visual layout and shared project figure style.
+- [`observation_source_exploration_v2.svg`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
+  is the exported framework figure, with
+  [`alt text`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt).
+
+The JSON owns only the figure content; this Mermaid view is a compact reader aid.
+Neither is an implementation authority:
+
+```mermaid
+flowchart LR
+    eeg0["EEG native waveform<br/>200 Hz"] --> eeg1["frequency-aware,<br/>amplitude-preserving envelope"]
+    nir0["fNIRS native branch<br/>HbO/HbR provenance"] --> nir1["continuous 10 Hz trajectory"]
+    eeg1 --> eeg10["EEG aligned target<br/>10 Hz, e.g. 18 coordinates"]
+    eeg10 -. "candidate" .-> es["modality-specific low-rank self teacher<br/>LDS/neural-SSM family; label-blind, fit-fold only"]
+    nir1 -. "candidate" .-> fs["modality-specific low-rank self teacher<br/>LDS/neural-SSM family; label-blind, fit-fold only"]
+    eeg10 -. "optional" .-> jt["privileged joint Croce candidate<br/>fit-only / ablation"]
+    nir1 -. "optional" .-> jt
+    es --> eo["EEG teacher output<br/>trajectory + uncertainty + innovation"]
+    fs --> fo["fNIRS teacher output<br/>trajectory + uncertainty + innovation"]
+    jt -. "offline target only;<br/>never inference input" .-> eo
+    jt -. "offline target only;<br/>never inference input" .-> fo
+    eo --> se["EEG source path S_E"]
+    fo --> sf["fNIRS source path S_F"]
+    eeg0 --> oe["EEG observation path O_E^res"]
+    nir0 --> of["fNIRS observation path O_F^res"]
+    eo -. "optional residual target" .-> oe
+    fo -. "optional residual target" .-> of
+    se --> qe["independent Q_E<br/>fine tokens Z_E^f"] --> ae["A_E<br/>coarse Z_E^c"]
+    sf --> qf["independent Q_F<br/>fine tokens Z_F^f"] --> af["A_F<br/>coarse Z_F^c"]
+    ae -. "optional" .-> gram["endpoint-aligned grammar<br/>P(Z_F^c(t+tau)|Z_E^c(t), history, condition)"]
+    af -. "optional" .-> gram
+    oe -.-> probe["optional conditional-contribution probe<br/>development diagnostic only"]
+    of -.-> probe
+    se -.-> probe
+    sf -.-> probe
+    gram -.-> probe
+    gram --> eval["select estimand + preregister<br/>held-out proper scores + nulls"]
+```
+
+The graph keeps these candidates available for controlled comparison. It does
+not make observation/source branches, codebooks, fine-to-coarse mapping, grammar,
+or conditional contribution probes mandatory method identity. A comparison
+must declare input ownership and prevent leakage, but any candidate may be
+replaced or removed before a method is selected.
+
+If a grammar is tested, its fit/selection map is a learned artifact. Coupling
+evidence is available only after a final estimator and evaluation protocol are
+preregistered and applied to fresh held-out rows. A training map,
+reconstruction score, occupancy plot, or decomposition label is not evidence.
+
+## Current E2/v1 historical dataflow
 
 ```mermaid
 flowchart LR
@@ -93,7 +157,7 @@ flowchart LR
 | `src/tokenizers/physiology_semantic_tokenizer.py` | current E2 tokenizer |
 | `src/tokenizers/ema_vector_quantizer.py` | corrected fixed-K128 VQ |
 | `src/tokenizers/shared_driver_semantic_vq.py` | R2 diagnostic model component; not promoted runtime |
-| `src/inference/adaptive_neurovascular_ssm.py` | sealed R1-P teacher implementation |
+| `src/inference/adaptive_neurovascular_ssm.py` | Croce/Balloon-inspired adaptive five-state RTS joint candidate; E0 offline development supervision accepted, R1-P population-frozen qualification rejected; not a qualified future teacher |
 | `src/analysis/token_*` and `physiological_patch_features.py` | Token Physiology Atlas |
 | `src/compatibility/pre_physiology_semantic_20260701/` | explicit historical checkpoint/replay surface |
 
@@ -103,7 +167,10 @@ under `experiments/`. Comparison methods remain isolated below
 
 ## Scientific boundary
 
-Code presence is not experiment state and does not imply scientific support. Query
-the unified project status before using a runnable component. A future method
-generation requires a new independent holdout and a newly frozen
-target/estimator/null/threshold contract.
+Code presence is not experiment state and does not imply scientific support.
+The v1 runtime and its negative results remain historical facts; the v2 JSON
+and SVG are exploratory design artifacts only. Query the unified project status
+before using a runnable component. A future method generation requires a
+versioned implementation contract; independent evaluation then requires a new
+holdout and a preregistered estimator/null/threshold contract. No architecture
+edit opens a protected boundary or authorizes a measured campaign.

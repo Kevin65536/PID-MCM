@@ -1,31 +1,31 @@
-# SVG architecture visualization standard
+# Architecture visualization standard
 
-_Drawing and maintenance contract for canonical runtime diagrams and plan overlays_
+_Drawing and maintenance contract for runtime, candidate, and historical views_
 
 ---
 
 ## 🗺️ Maintained views
 
-The canonical figure describes the checkout's current runtime and evidence boundary. It must never display a proposed component as implemented merely because the proposal is scientifically plausible.
+Current runtime facts and candidate drawings are deliberately separate. A polished
+diagram must never turn a proposal into an implemented component or a selected
+method.
 
-![Current physiology-semantic tokenizer runtime](figures/physiology_semantic_architecture.svg)
+![Detailed observation–source candidate architecture](figures/physiology_semantic_architecture.svg)
 
-| Artifact | Role |
-| --- | --- |
-| [`architecture/physiology_semantic_architecture.json`](architecture/physiology_semantic_architecture.json) | Canonical sections, node semantics, geometry, evidence axes, and routed edges |
-| [`figures/physiology_semantic_architecture.svg`](figures/physiology_semantic_architecture.svg) | Generated current-runtime figure |
-| [`architecture/change_overlay.example.json`](architecture/change_overlay.example.json) | Overlay template |
-| `experiments/scripts/render_physiology_semantic_architecture.py` | Deterministic renderer, validator, and drift checker |
+| Owning source | Derived view | Role |
+| --- | --- | --- |
+| [`architecture/physiology_semantic_architecture.json`](architecture/physiology_semantic_architecture.json) | none | Machine-readable current-runtime semantics; not a visual-style owner |
+| [`architecture/physiology_semantic_runtime_overview.drawio`](architecture/physiology_semantic_runtime_overview.drawio) | [`runtime overview SVG`](figures/physiology_semantic_runtime_overview.svg) | Current-runtime presentation view |
+| [`architecture/physiology_semantic_architecture.drawio`](architecture/physiology_semantic_architecture.drawio) | [`detailed candidate SVG`](figures/physiology_semantic_architecture.svg) | Editable detailed candidate view; exploratory, not runtime |
+| [`architecture/observation_source_exploration_v2.drawio`](architecture/observation_source_exploration_v2.drawio) | [`exploration SVG`](figures/plans/observation_source_exploration_v2.svg) | Compact observation–source candidate map |
+| Overlay JSON files | Historical plan SVGs | Text-diffable historical content rendered by `experiments/scripts/render_physiology_semantic_architecture.py` |
 
-The human-readable
-[`physiology_semantic_runtime_overview.drawio`](architecture/physiology_semantic_runtime_overview.drawio)
-and its committed SVG
-[`quick overview`](figures/physiology_semantic_runtime_overview.svg) are a
-presentation draft and paper-figure candidate for the implemented E2-compatible
-runtime. Treat the pair as a current-or-snapshot view of the implementation
-surface, not a timestamped registry view, second source of truth, or
-scientific-admission figure; the canonical JSON/SVG pair above remains the
-implementation detail and validation authority.
+The registry remains the only owner of current scientific state. The runtime JSON
+owns machine-readable implementation semantics. A Draw.io file owns the layout,
+wording, and visual style of its matching hand-authored SVG; the SVG is only an
+export. Historical overlay JSON owns its overlay content, and the renderer owns
+only those generated overlay SVGs. This separation prevents either renderer from
+overwriting a requested visual design.
 
 The plan overlays below are kept only where they help explain why the current
 runtime has the boundaries it does. Their labels are deliberately explicit so a
@@ -37,7 +37,9 @@ reader does not mistake a historical proposal for an active component:
 | [`measurement_first_input_contract_plan`](figures/plans/measurement_first_input_contract_plan.svg) | **Merged historical overlay**, not a separate runtime | Shows how the measured-input contract subsumed the earlier entrance proposal. |
 | [`physical_teacher_gradient_entry_plan`](figures/plans/physical_teacher_gradient_entry_plan.svg) | **Superseded historical plan**, not runtime | Preserves the E2-era preserve–discover–certify proposal for traceability. |
 | [`shared_state_reconstruction_bound_plan`](figures/plans/shared_state_reconstruction_bound_plan.svg) | **Diagnostic-only historical overlay**, not runtime | Captures a bounded shared/private-state diagnostic that was never a promotion gate. |
-| [`physiology_semantic_runtime_overview`](figures/physiology_semantic_runtime_overview.svg) | **Quick overview / paper candidate** | Human-readable current-runtime orientation; use the canonical JSON/SVG for exact implementation detail. |
+| [`observation_source_exploration_v2`](figures/plans/observation_source_exploration_v2.svg) | **Exploratory candidate map**, not runtime or architecture contract | Keeps continuous teachers, a guarded Croce candidate, independent observation/source paths, token hierarchies, endpoint grammar, and conditional contribution probes available for comparison; every branch may be replaced or removed before a method is selected. |
+| [`physiology_semantic_runtime_overview`](figures/physiology_semantic_runtime_overview.svg) | **Quick overview / paper candidate** | Human-readable current-runtime orientation; use the runtime JSON for exact implementation detail. |
+| [`physiology_semantic_architecture`](figures/physiology_semantic_architecture.svg) | **Detailed exploratory candidate view** | Shows replaceable source/observation candidates; it is not a target or current-runtime contract. |
 
 The shared-driver source is
 [`architecture/shared_driver_semantic_return_plan.json`](architecture/shared_driver_semantic_return_plan.json).
@@ -47,11 +49,30 @@ residual paths, and separate R6A offline/R6B strict-cutoff raw-fNIRS evaluations
 Those are historical plan contents; the source banner and dashed implementation
 styling are evidence-boundary cues, not a claim that the R-series plan ran.
 
-The JSON is the text-diffable source of truth. Generated SVG files are committed for direct review and documentation rendering. Manual SVG edits are prohibited.
+The v2 exploration is a separate design note, not a planned after-state and not
+the current runtime. Its semantic note
+[`architecture/observation_source_exploration_v2.json`](architecture/observation_source_exploration_v2.json),
+editable visual source
+[`architecture/observation_source_exploration_v2.drawio`](architecture/observation_source_exploration_v2.drawio),
+exported figure, and concise
+[`alt text`](figures/plans/observation_source_exploration_v2.alt.txt) jointly
+describe candidate continuous teachers, modality-independent paths, token
+hierarchies, grammar, optional conditional analyses, and a separate evaluation
+preregistration boundary. The optional contribution probe has no admission
+status and no edge into preregistration; the symbolic inputs contain no measured
+values and do not promote the note into the canonical v1 runtime.
+
+The JSON is a text-diffable semantic note, not a frozen method contract or visual
+source. Generated SVG files are committed for direct review and documentation
+rendering. Change a Draw.io-authored figure in its matching `.drawio` source;
+manual SVG edits remain prohibited.
 
 ## 🔒 Content-preservation boundary
 
-The drawing system does not redesign the model. Node labels, tensor contracts, statuses, sections, and graph relationships remain authoritative in the existing architecture and overlay JSON files.
+The drawing system does not redesign the runtime. Runtime semantics remain in the
+runtime JSON; historical overlay semantics remain in their overlay JSON; candidate
+wording and layout remain in the matching Draw.io source. None of these visual
+sources can advance the registry's scientific state.
 
 For the legacy v1 specification, the renderer uniformly expands the canvas and geometry at render time so titles and detail lines remain legible. This transformation is deliberately absent from the source JSON diff: it changes presentation, not architecture. New routing or visual metadata must not be interpreted as a model edge, loss, gate, or experiment update.
 
@@ -68,15 +89,22 @@ The legacy `status` field mixes functional role, runtime availability, and scien
 
 This prevents a passing software smoke test from being read as a scientific admission while preserving the original architecture status text.
 
-## 📐 Geometry and typography
+## 🎨 Shared visual language
 
-- Canvas and section positions are declared in the canonical JSON; legacy geometry is scaled uniformly in memory and the source file remains unchanged.
-- Node height must fit every declared detail line. The renderer rejects text-overflow geometry before producing an SVG.
-- Node titles use at least 15 px and details at least 12.5 px in the native viewBox.
-- Cards use a redundant left accent, implementation border, scope label, and evidence pill.
-- The font stack includes common CJK fonts before system fallbacks so English and Chinese annotations remain legible.
-- Footer legends and plan callouts are outside the architecture content region. Callout height expands the SVG viewBox dynamically.
-- A plan with too many relationships must add a grouped objective/bus or be split into linked figures; shrinking text is not an accepted remedy.
+All actively maintained architecture figures use the same quiet, paper-ready
+visual language:
+
+- white canvas; Helvetica first, followed by CJK-capable sans-serif fallbacks;
+- 28 px dark title, 14 px slate subtitle, 15 px card title, and at least 12 px detail text;
+- 16 px rounded cards, 2 px flat borders, pastel fills, no gradients or shadows;
+- pale dashed zones for runtime/training scope and a neutral gray status banner;
+- blue for measured data, amber for observation/transform paths, purple for teacher/source candidates, green for vocabularies/exports, rose for evaluation;
+- solid blue measured flow, dashed purple training-only flow, and gray or rose guarded/evaluation flow; status must also be written in text and never encoded by color alone;
+- `source` and `observation` are the branch names. `innovation` may appear only as a mathematical residual field, never as a branch, method, or project identity.
+
+Dense detailed views may left-align the title; compact overview and exploration
+views center it. Node height must fit every detail line. A crowded plan must group
+or split content instead of shrinking text.
 
 ## 🔗 Edge and routing contract
 
@@ -88,7 +116,7 @@ Every canonical edge has a stable `id`, declared `style`, and resolvable endpoin
 | purple dashed | training-only supervision |
 | amber dotted | permitted gradient path |
 | gray dash-dot | lifecycle/control transition |
-| rose dashed | frozen evaluation path |
+| rose dashed | preregistered evaluation path |
 | amber/gray long-dash | guarded or blocked transition |
 
 Use `route.from_side`, `route.to_side`, optional endpoint fractions, and `route.via` waypoints to keep paths out of unrelated cards. Edge labels are rendered on opaque rounded chips and placed on an explicit or longest safe segment. Flow semantics and plan-delta semantics remain separate: adding a training edge does not turn its arrow green.
@@ -132,7 +160,17 @@ The renderer retains canonical implementation/evidence values in `data-canonical
 ## 🔄 Regeneration and drift checks
 
 ```bash
-.venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py
+drawio --export --format svg --embed-diagram \
+  --output docs/physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg \
+  docs/physiology_semantic_tokenizer/architecture/physiology_semantic_runtime_overview.drawio
+
+drawio --export --format svg --embed-diagram \
+  --output docs/physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg \
+  docs/physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.drawio
+
+drawio --export --format svg --embed-diagram \
+  --output docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg \
+  docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.drawio
 
 .venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py \
   --changes docs/physiology_semantic_tokenizer/architecture/measurement_first_input_contract_plan.json \
@@ -142,8 +180,6 @@ The renderer retains canonical implementation/evidence values in `data-canonical
   --changes docs/physiology_semantic_tokenizer/architecture/shared_driver_semantic_return_plan.json \
   --output docs/physiology_semantic_tokenizer/figures/plans/shared_driver_semantic_return_plan.svg
 
-.venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py --check
-
 .venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py \
   --changes docs/physiology_semantic_tokenizer/architecture/shared_driver_semantic_return_plan.json \
   --output docs/physiology_semantic_tokenizer/figures/plans/shared_driver_semantic_return_plan.svg \
@@ -152,12 +188,15 @@ The renderer retains canonical implementation/evidence values in `data-canonical
 .venv/bin/python -m pytest -q tests/test_physiology_semantic_architecture_svg.py
 ```
 
-A plan or historical overlay is rejected if its output path would overwrite the canonical SVG.
+Draw.io exports must retain `role="img"`, a concise title, and a description.
+The test checks the embedded Draw.io cell values/styles against the matching source.
+The historical-overlay renderer rejects either Draw.io-owned SVG path as output.
 
 ## ✅ Acceptance contract
 
-- Canonical and registered plan SVGs are byte-identical to fresh renders.
-- Root SVG, every node, every edge, and every callout has an accessible name and stable XML ID.
+- Draw.io-authored SVGs embed cell values and styles matching their editable source.
+- Registered historical-overlay SVGs are byte-identical to fresh renders.
+- Every root SVG has an accessible title and description; generated overlay nodes, edges, and callouts retain stable accessible IDs.
 - Node, edge, change, and endpoint IDs are unique and resolvable.
 - Architecture edges contain orthogonal line segments, not unconstrained curves through unrelated cards.
 - Plan title, description, and callouts are plan-specific when an overlay declares them.
@@ -167,4 +206,4 @@ A plan or historical overlay is rejected if its output path would overwrite the 
 
 When model behavior changes, update the architecture changelog. When only renderer or maintenance policy changes, use the project changelog.
 
-_Last updated: 2026-08-18_
+_Last updated: 2026-08-24_

@@ -1,5 +1,5 @@
 """
-Experiment Logger for PID-MCM experiments.
+Experiment logger for physiology-semantic runs.
 Handles config management, metrics logging, and visualization generation.
 """
 

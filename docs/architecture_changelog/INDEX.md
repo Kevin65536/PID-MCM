@@ -2,8 +2,9 @@
 
 > The authoritative chronological record of every architectural change to the neuro-tokenization mainline.
 > Current architecture state: [ARCHITECTURE.md](../ARCHITECTURE.md)
-> Proposed target architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
-> Target implementation plan: [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
+> Historical proposed architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Historical implementation plan: [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
+> Current observation–source exploration (not an architecture contract): [design note](../physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [framework SVG](../physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
 
 ---
 
@@ -44,6 +45,7 @@ gantt
         Teacher gradient-entry plan        :done, 2026-07-19, 5d
         E1 occupancy contract restoration  :done, 2026-07-20, 1d
         Shared-driver semantic return      :milestone, 2026-07-25, 0d
+        Observation–source exploration      :milestone, 2026-08-22, 0d
 ```
 
 ## Change Records
@@ -65,6 +67,7 @@ gantt
 | 13 | 2026-07-20 | Phase 3 E1/P2 | [E1 Codebook Occupancy Contract Restoration](2026-07-20_e1_codebook_occupancy_contract_restoration.md) | Fixed-K=128 EMA VQ, gradient-preserving balance, bounded diverse revival, multi-seed retention gate v2 | Complete — G1 passed |
 | 14 | 2026-07-24 | Phase 3 E0 final | [Sign-calibrated physical-teacher acceptance](../physiology_semantic_tokenizer/analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md) | adaptive SSM, gauge/sign calibration, fNIRS status correction | Complete — full E0 passed |
 | 15 | 2026-07-25 | Phase 4 architecture return | [Shared-Driver Semantic VQ architecture return](2026-07-25_shared_driver_semantic_return.md) | full-window raw-only encoders, independent K128, full-driver primary objective, frozen external certificate | Planned — R0–R7 not run |
+| 16 | 2026-08-22 | Phase 5 exploration note | [Observation–source candidate map](../physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) | replaceable continuous targets, teachers, observation/source branches, token hierarchies, endpoint grammar, and optional conditional analyses | Exploratory note only — no architecture frozen; implementation and measured runs not started |
 
 ## How to Add a New Entry
 

@@ -1,8 +1,11 @@
 # Documentation map
 
 _Authority index. Current execution and scientific verdicts are generated from the
-machine-readable research-state registry. Paper-facing evidence routes are listed
-in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
+machine-readable research-state registry. The 2026-08-22 observation–source
+exploration is integrated into [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md),
+[`METHOD_RATIONALE.md`](METHOD_RATIONALE.md), and the [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json);
+paper-facing evidence routes are listed in
+[`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 
 ## Active documents
 
@@ -15,6 +18,8 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
 | What are the dataset-native facts and original sources? | [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) |
 | What code/runtime exists today? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| What candidate branches are available for the next exploration? | [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [exploration figure](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg) |
+| What did the 2026-08-21 v1 QC actually measure? | [`analysis/SSM_OBSERVATION_AND_COUPLING_QC_RESULTS_20260821.md`](analysis/SSM_OBSERVATION_AND_COUPLING_QC_RESULTS_20260821.md) |
 | What happened in E0–E2 and R0–R2? | [`physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
 | What is the full R-series evidence? | [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) |
 | What is the comparison contract? | [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md) |
@@ -33,12 +38,23 @@ indexes the 2026-07-25 SD-SVQ proposal, its preregistration, and dated E0/E1/E2/
 reports. Those documents preserve the generation that was actually tested; they
 are not active instructions to proceed past a failed gate.
 
+The 2026-08-22 theory note is now absorbed by the tracked owners above. Its
+candidate branches are exploratory options, not runtime, a fixed architecture,
+or scientific results. The dependency order in
+[`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md) deliberately keeps the v1 2026-08-21
+QC, the current E2-compatible runtime, and future candidate selection separate.
+
+Within the 2026-08-21 QC report, “v2” and “v3” label historical LC-SPVQ
+mask-contract generations only; they do not name a current method generation.
+
 Other evidence layers:
 
-- [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) and
-  [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) are
-  dated decision snapshots. Any “current” wording inside them is local to that
-  snapshot; it does not replace the generated project status;
+- [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) is the active 2026-08-22 v1/v2
+  claim-boundary and architecture-rationale owner; it explains what evidence can
+  support a claim but does not replace the registry's current status;
+- [`06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) is a
+  dated E0–E2/R0–R2 decision snapshot. Any “current” wording inside it is local to
+  that snapshot and does not replace the generated project status;
 - [`architecture_changelog/`](architecture_changelog/INDEX.md): architecture
   and data-contract decisions;
 - [`project_changelog/`](project_changelog/INDEX.md): repository and
@@ -46,7 +62,10 @@ Other evidence layers:
 - `physiology_semantic_tokenizer/analysis/`: dated result reports;
 - `reliable_survey/`, `references/`, and `notes/`: literature/background, not
   implementation authority;
-- ignored manuscript/report/PDF trees: communication or reference assets.
+- ignored manuscript/report/PDF trees: communication or reference assets. In
+  particular, `docs/paper/科学通报/` is a local communication asset; its figures and
+  manuscript drafts do not replace the tracked runtime, exploration note, or dated
+  evidence reports.
 
 ## Lightweight lifecycle
 
@@ -64,6 +83,8 @@ Other evidence layers:
 - Preregistrations, manifests, and result reports are dated snapshots; if a
   narrative needs correction, point to a newer dated note rather than making the
   history difficult to follow.
-- Completion in one lane does not change another lane's dependency order.
+- Completion in one lane does not change another lane's dependency order. A passing
+  software check, a v1 QC result, or an exploration figure does not promote the
+  corresponding method stage.
 - Archived code, configs, tests, and results require an explicit path and do not
   participate in default discovery.
