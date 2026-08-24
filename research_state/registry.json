@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-24T18:18:22+08:00",
+  "updated_at": "2026-08-24T21:20:09+08:00",
   "tracks": [
     {
       "id": "main",
@@ -32,14 +32,14 @@
       "id": "e.data_contract",
       "label": "统一数据合同",
       "path": "docs/DATA_CONTRACT.md",
-      "sha256": "fcc6c260fc00f1d4757b1b2f82e97ea319b9663a02597559894e65e521089bd9",
+      "sha256": "80f2f05ab8dbf6f37a1958cb844a12081a58854c1f7c19fb3d3144debb7ae437",
       "role": "data_contract"
     },
     {
       "id": "e.method_rationale",
       "label": "方法依据与主张边界",
       "path": "docs/METHOD_RATIONALE.md",
-      "sha256": "8a75a284434ea803c9680016036a77f36bdebf3c8354ce359faa3cca71f23bc7",
+      "sha256": "d7b91b7adb090fbd3218fce7855cfaa3de758b15972f28ca38536f9984540dfd",
       "role": "decision"
     },
     {
@@ -347,7 +347,7 @@
       "execution": "planned",
       "scientific_verdict": "unreviewed",
       "analysis_intent": "exploratory",
-      "summary": "v1 2026-08-21 SSM_OBSERVATION QC 的 negative/inconclusive 结果已完成并保留为当前证据；observation–source 设计图只列出可替换候选，没有冻结下一代架构。candidate implementation、software tests 与 measured evaluation 尚未开始。",
+      "summary": "v1 2026-08-21 SSM_OBSERVATION QC 的 negative/inconclusive 结果已完成并保留为当前证据；observation–source 设计图只列出可替换候选，没有冻结下一代架构。部分信息分解（partial information decomposition, PID）仅是后续预训练可选探索，不属于核心创新、方法身份或冻结项。candidate implementation、software tests 与 measured evaluation 尚未开始。",
       "evidence_ids": [
         "e.ssm_observation_qc_20260821",
         "e.observation_source_exploration_v2"
@@ -355,12 +355,39 @@
       "supersedes": [
         "main.program@2026-08-21.ssm-observation-qc"
       ],
-      "updated_at": "2026-08-24T18:18:22+08:00",
+      "updated_at": "2026-08-24T20:38:51+08:00",
       "depends_on": [
         "main.observation_source_exploration",
         "main.ssm_observation_qc"
       ],
-      "next_step": "先从候选图中定义一个最小、可证伪的 synthetic/public comparison；2×2×2×3-seed 矩阵和分解探针均不默认冻结。protected cohort 保持关闭，不授权 measured/protected、VQ、K16 或 q0/q1。",
+      "next_step": "先从候选图中定义一个最小、可证伪的 synthetic/public comparison；PID/部分信息分解探针只可作为后续预训练的可选探索，不属于核心创新或冻结项，2×2×2×3-seed 矩阵也不默认冻结。protected cohort 保持关闭，不授权 measured/protected、VQ、K16 或 q0/q1。",
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-24.theory-architecture-freeze",
+      "entity": "main.program",
+      "label": "冻结边界内的主方法实现",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "主方法现只冻结九项边界：数据身份/mask/split/protected boundary、EEG/fNIRS 主路径输入所有权、连续目标先于 patch/token、teacher 非 ground truth、条件式独立 codebook 语义、observation/source 功能与证伪、endpoint-aligned increment/proper-score/null 证据内核；fine-to-coarse 保持开放，cross masking 在信息干预合同建立前未定义且不冻结。具体实现和 measured evaluation 尚未开始。",
+      "evidence_ids": [
+        "e.method_rationale",
+        "e.data_contract",
+        "e.ssm_observation_qc_20260821"
+      ],
+      "supersedes": [
+        "main.program@2026-08-24.observation-source-exploration"
+      ],
+      "updated_at": "2026-08-24T21:20:09+08:00",
+      "depends_on": [
+        "main.observation_source_exploration",
+        "main.ssm_observation_qc"
+      ],
+      "next_step": "在九项冻结边界内建立最小版本化实现和 synthetic/software checks；坐标、teacher family、网络、是否 VQ、K/D、fine-to-coarse 与 grammar 网络保持开放。cross masking 未定义，不得进入实现或主张。protected cohort 保持关闭，不授权 measured/protected 运行。",
       "headline": true
     },
     {

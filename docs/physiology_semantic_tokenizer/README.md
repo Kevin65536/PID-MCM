@@ -9,8 +9,9 @@ The archive remains historical and its YAML/runtime plans are not current
 contracts. The co-located
 [`observation–source exploration note`](architecture/observation_source_exploration_v2.json)
 and [`framework visualization`](figures/plans/observation_source_exploration_v2.svg)
-list replaceable candidates only; they do not define a fixed architecture or
-authorize measured or protected data access.
+are pre-freeze candidate snapshots; they do not override the current frozen
+principles in [`METHOD_RATIONALE.md`](../METHOD_RATIONALE.md), define a runtime,
+or authorize measured or protected data access.
 
 The generation ended with:
 

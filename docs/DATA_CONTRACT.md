@@ -11,11 +11,13 @@ implementation audit remains in
 
 ## Version boundary
 
-The measured-data loader and masks below remain the active v1 data authority.
-The continuous-target interface in this document is **exploratory and
-unimplemented**. It is one safe candidate interface, not a required method
-architecture; alternatives may replace it through a versioned contract. It does
-not relabel the current patch target, Croce cache, or any v1 checkpoint.
+The measured-data loader, canonical identity, masks, splits, and protected
+boundaries below are hard-frozen for the forward method generation. The
+continuous-target interface is **exploratory and unimplemented**: only the rule
+"preserve timestamps and construct the continuous trajectory before patching or
+tokenization" is frozen. Sampling rate, target coordinates, filters, and target
+dimension remain replaceable through a versioned implementation contract. This
+does not relabel the current patch target, Croce cache, or any v1 checkpoint.
 Documentation changes do not authorize measured or protected-data access.
 
 ## Registered measured datasets
@@ -53,7 +55,7 @@ Teacher targets, raw views, trajectories, labels, masks, geometry, split
 registries, and exported tokens must round-trip this identity exactly. A join
 that succeeds only because two arrays currently share an ordering is invalid.
 
-## Target lineage and continuous 10 Hz schema
+## Target lineage and versioned continuous-target candidate
 
 ### v1 patch target (historical)
 
@@ -102,14 +104,15 @@ e_{c,b}(t)=\log\left(\left|\mathcal H(B_b*x_c)(t)\right|^2+\epsilon\right),
 O_E(t)=e_{c,b}(t)-\overline e_{c,b}^{baseline}.
 $$
 
-The main target is baseline-relative envelope/ERD--ERS; absolute log energy
+This draft schema uses baseline-relative envelope/ERD--ERS; absolute log energy
 may be retained as an explicitly named auxiliary coordinate. Channel order and
 band order are preserved (for example, six channels by alpha/beta/low-gamma
 gives C_E=18). The envelope is formed from the 200 Hz EEG view and then
 aligned/downsampled to 10 Hz. A frequency-aware, amplitude-preserving stem is
-an architecture choice, not permission to change this target silently.
+an architecture choice. None of this paragraph freezes 10 Hz, the filterbank,
+the coordinate family, or `C_E=18` as method identity.
 
-The fNIRS observation coordinate is continuous HbO/HbR at 10 Hz after the
+This draft schema uses continuous HbO/HbR at 10 Hz after the
 declared native transformation and fit-fold model scaling. For a 20 s window,
 the unified model coordinate is [B,200,2] (or [T,2] for one record); this is
 not a claim about the native raw array shape or unit. The teacher is applied
@@ -170,11 +173,13 @@ uses labels, that use is recorded separately and does not alter the
 label-blind state vocabulary. Subject, trial, and record dependencies cannot
 cross a fold.
 
-If a candidate reaches independent evaluation, its selected target, estimator,
-split, and nulls are preregistered before held-out access. A learned grammar/map
-may be selected on fit/selection data, but held-out proper-score increments and
-matched-minus-null maps are the evidence surface; the exploratory design note
-itself freezes no architecture.
+For a main coupling claim, the endpoint-aligned estimand, tested increment,
+baseline, proper-score endpoint, and null operators are the frozen evidence
+kernel. Their task-specific choices, along with the selected target, estimator,
+split, thresholds, and stopping rule, are preregistered before held-out access.
+The exact grammar network may change before preregistration. A learned
+grammar/map may be selected on fit/selection data, but held-out proper-score
+increments and the declared null comparisons are the evidence surface.
 
 ## Signal branches
 
@@ -258,6 +263,12 @@ Keep these concepts separate:
 
 Zero, missing, censored, excluded, and padded values are not interchangeable.
 Every loss and metric must consume the mask that belongs to its tensor.
+
+`cross masking` is not a named mask or frozen mechanism in this contract. It
+cannot be introduced by reusing zero, missingness, censoring, exclusion, or
+padding. Before the term is used as an architecture component, a versioned
+information-intervention contract must define what is intervened on and how;
+until then it remains undefined and unfrozen.
 
 ## Geometry
 

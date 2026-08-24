@@ -1,29 +1,38 @@
 # Method rationale and claim boundary
 
 _Consolidated from the legacy postmortem, theoretical foundations, and
-architecture-return review; v1 historical boundary and replaceable future
-candidates, 2026-08-22_
+architecture-return review; v1 historical boundary and frozen forward method
+principles, 2026-08-24_
 
 ## Version boundary and status
 
 This document has two deliberately different jobs. **v1** names the
 implemented E2/SSM_OBSERVATION/LC-SPVQ development surfaces and their audited
-negative results. **v2 exploration** groups replaceable, unimplemented
-candidates; it does not name the project, define the next architecture, or
-freeze a method identity. A diagram, schema, or design paragraph does not
-authorize a measured run, open a protected split, or relabel a v1 result.
+negative results. The **forward contract** freezes only the theory and
+architecture principles listed below; the concrete implementation remains
+unimplemented and open where the contract says it is open. This documentation
+freeze does not authorize a measured run, open a protected split, or relabel a
+v1 result.
 
 The v1 code, checkpoints, manifests, and reports remain reproducible history.
 They must not be silently upgraded by changing their names in prose. The
 forward-looking claim boundary is therefore:
 
 ```text
-v1 implementation/negative evidence  ->  historical fact
-v2 exploration note                   ->  candidate menu, not an architecture
-future held-out coupling claim         ->  unavailable until one candidate is
-                                          selected, versioned, synthetic-tested,
-                                          and independently evaluated
+v1 implementation/negative evidence   ->  historical fact
+forward theory/architecture principles ->  frozen below
+implementation candidates              ->  replaceable until versioned
+future held-out coupling claim          ->  unavailable until implementation is
+                                           synthetic-tested and its evaluation
+                                           contract is preregistered
 ```
+
+Partial information decomposition (PID) is only a replaceable direction for
+later pretraining development. It is **not** the core innovation, method
+identity, architecture invariant, or a frozen objective, and a future method
+may omit it entirely. If a PID-style probe is eventually selected, only that
+concrete estimator, objective, and evaluation protocol may be versioned for the
+corresponding experiment; the present exploration freezes none of them.
 
 No measured or protected data was read for this documentation update.
 
@@ -65,6 +74,8 @@ proper-score/null evidence surface. These are hypotheses about input ownership,
 estimands, and claim contracts, not a frozen bundle. Direct performance or novelty claims require a
 same-track comparison with matched inputs, splits, pretraining exposure, and
 training budget; none is supplied by this documentation update.
+Invoking PID or naming operational information components is not itself a
+novelty claim.
 
 ## What the earlier tokenizer taught us
 
@@ -178,162 +189,29 @@ testing a modality-specific dynamic target, an observation--source split,
 an independent vocabulary, or a lagged grammar. The v1 gate consequently
 deferred K16/q0/q1 work; it did not select or preserve a successor architecture.
 
-## Observation–source candidate family (unimplemented)
+## Frozen theory and architecture contract (unimplemented)
 
-The following path is a design-space sketch. Each branch is optional and
-replaceable; the sketch is not the project's name or a method contract:
+Only the nine rows below define the forward freeze. They freeze scientific
+principles, functional semantics, and evidence contracts rather than a concrete
+network. No implementation or measured evaluation has started.
 
-```text
-X_m  -- modality-specific dynamic teacher T_m -->
-      (O~_m(t), Sigma_m(t), epsilon_m(t), masks)
-       |                         |
-       v                         v
-  source encoder S_m        observation branch O_m^res
-       |                         |
-       v                         v
-   fine Q_m -> coarse A_m     raw/masked or feature preservation
-       |
-       +--> endpoint-aligned lag grammar G_tau
-                    |
-                    v
-       optional conditional-contribution diagnostics
-```
+| Design object | Frozen boundary | Explicitly open boundary |
+| --- | --- | --- |
+| Data source, canonical identity, masks, splits, and protected boundary | Hard-frozen within the method generation. Joins use canonical identity rather than array order; missing, zero, and padding remain distinct; fitting occurs only on the authorized partition. | A correction requires a versioned contract rather than an in-place reinterpretation. |
+| EEG/fNIRS input ownership | Every main path that carries a coupling claim satisfies $Z_E=f_E(X_E)$ and $Z_F=f_F(X_F)$. Before each tokenizer produces its representation, it cannot read the other modality. | Network structure remains replaceable. A privileged joint teacher is a separately declared training-only ablation, not a main-path input. |
+| Continuous target before patch/tokenization | Timestamps and continuous trajectories are preserved; the continuous target is constructed before patching or tokenization. | Sampling rate, EEG coordinates, filterbank, target dimension, patch length, and stride remain replaceable. |
+| Teacher epistemic boundary | A teacher is not ground truth. It is label-blind, fit-fold-only, and carries provenance, support, and uncertainty. | NATIVE, LDS, neural SSM, Croce/RTS, and other teacher families remain replaceable. |
+| Codebook semantics | If VQ is used, EEG and fNIRS use independent codebook namespaces; equal numeric IDs never imply equal cross-modal semantics. | Whether VQ is used, plus $K$, $D$, quantizer family, and parameters remain replaceable. |
+| Observation/source functions | `observation` preserves modality-specific measured information; `source` represents the continuous teacher target from the same modality. Their claimed roles are falsified when their preregistered incremental endpoints fail the corresponding baseline/null contract. | Encoder, decoder, loss, and latent dimension remain replaceable; the functions need not be separate physical modules. |
+| Endpoint-aligned lag grammar, proper score, and nulls | The main-method evidence kernel fixes the endpoint-aligned estimand, the increment being tested, its baseline, its proper-score endpoint, and its null operators before held-out access. Source contribution is tested beyond the observation baseline; grammar interaction is tested beyond observation plus source. | The exact grammar network and estimator implementation remain replaceable before preregistration. |
+| Fine-to-coarse hierarchy | No scientific claim depends on a fine-to-coarse hierarchy. | The hierarchy, capacities, aggregation, and whether it is used remain replaceable. |
+| Cross masking | It is not frozen and cannot be claimed as a defined component until a versioned contract specifies it as an information intervention. | No architecture may use the name alone as a frozen mechanism. |
 
-The candidate menu and its safety boundaries are:
-
-1. **Continuous, aligned supervision candidate.** EEG may be converted from the 200 Hz
-   waveform to channel-preserving band-envelope trajectories (the primary
-   candidate is baseline-relative log envelope/ERD--ERS, with absolute
-   energy only as an auxiliary coordinate), then represented at a common
-   10 Hz grid. fNIRS remains a continuous 10 Hz HbO/HbR trajectory. The
-   teacher runs on this continuous axis before any 2 s patch/token operation.
-   NATIVE/direct targets remain comparators, and the v1 patch-flattened target
-   is not silently relabelled.
-2. **Optional teacher residual outputs.** A candidate teacher may emit,
-   for each modality $m$, a posterior trajectory mean $\widetilde O_m(t)$, predictive
-   uncertainty $\Sigma_m(t)$ (at minimum a non-negative diagonal
-   standard deviation with a recorded covariance convention), and the
-   supported innovation $\epsilon_m(t)=O_m(t)-\widetilde O_m(t)$.
-   The uncertainty may weight the source target; the innovation may supervise
-   the observation branch and is not silently treated as missing data.
-3. **Self versus privileged joint Croce candidate.** One candidate is a
-   label-blind, modality-specific (self) teacher. A privileged joint
-   candidate may fit the adaptive five-state Croce/Balloon equations on
-   aligned EEG+fNIRS in the fit partition, but it is an offline training or
-   ablation teacher and is never an inference input. The E0 sign-calibrated
-   Croce implementation is accepted only for offline privileged development
-   supervision; the later population-frozen R1-P qualification was rejected.
-   The existing Croce algorithm/parameter bounds are therefore a versioned
-   candidate to revalidate, not a protected-qualified teacher, ground truth,
-   causal estimator, unique parameterization, or main self teacher. The
-   accepted adaptive implementation is
-   [adaptive_neurovascular_ssm.py](../src/inference/adaptive_neurovascular_ssm.py);
-   its E0 status is recorded in the
-   [E0 admission decision](physiology_semantic_tokenizer/analysis/E0_V3_ADAPTIVE_TEACHER_ADMISSION_DECISION.md)
-   (with the sign-calibration record in
-   [the E0 acceptance report](physiology_semantic_tokenizer/analysis/20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md)).
-   The legacy particle-filter lane under croce_validation/ is an independent
-   simulation/real-data audit lane with an inconclusive decision; it is not a
-   qualified future teacher.
-   The accepted adaptive runner is a useful continuous-window joint baseline:
-   it runs a five-state RTS model on a 20 s/200-point 10 Hz window using an
-   EEG-PCA neural driver and one HbO/HbR pair. It is not a multi-channel self
-   target; such a candidate could retain EEG band-envelope coordinates (for
-   example `[B,200,18]`) and compare low-rank dimensions such as `{4,8,16}`.
-   The existing runner remains a baseline/ablation.
-4. **Independent-path candidate.** When testing modality-specific inference,
-   EEG and fNIRS source paths and observation
-   paths receive only their own modality before quantization. $Q_E$ and
-   $Q_F$ are independent vocabularies; equal numeric IDs have no shared
-   semantics. Any cross-modal relation is learned only after the two state
-   paths have produced their own tokens.
-5. **Optional fine-to-coarse hierarchy.** A searched fine vocabulary
-   $Z_m^f=Q_m(S_m)$ is mapped by a declared, fit-only aggregation
-   $Z_m^c=A_m(Z_m^f)$ to a smaller physiological meta-vocabulary. Fine
-   capacity serves downstream performance; the coarse vocabulary serves
-   support, stability, and readable coupling maps. `K=16` is not a frozen
-   v2 requirement. Candidate fine (K_f) values are open (for example
-   `{16,32,64,128}`) and coarse (K_c) values are open (for example
-   `{8,12,16,24}`). The aggregation may use posterior/expected embeddings,
-   decoded-trajectory similarity, support, prototype stability, transition
-   similarity, and grammar utility, but only under a fit/selection-only
-   Pareto rule.
-6. **Optional endpoint-aligned grammar.** One candidate coupling object is
-   $G_\tau=P(Z_F^c(t+\tau)\mid Z_E^c(t),H_F,C)$, with an explicit
-   endpoint-aligned mask and declared lag set. Same-position negative masks
-   are forbidden. A grammar may be predictive, sparse, or otherwise learned;
-   it is not automatically scientific evidence.
-
-### Optional conditional-contribution probe
-
-A development-only diagnostic may report three ablatable task contributions:
-
-```text
-observation  per-modality observation-branch endpoints;
-source       incremental proper score from source marginals after conditioning
-             on the observation baseline;
-interaction  incremental proper score from an endpoint-aligned grammar beyond
-             observation + source marginals.
-```
-
-The corresponding downstream head may be written
-
-$$
-\widehat Y=f_{observation}(O_E^{res},O_F^{res})+f_{source}(Z_E^f,Z_F^f)+f_{interaction}(G_\tau).
-$$
-
-These are conditional predictive increments, not identified components of an
-information decomposition. The probe may be replaced or removed before method
-selection. If it reaches evaluation, use task-appropriate held-out proper
-scores, subject-level resampling, and explicit matched, deranged,
-circular-shift, and history/phase nulls.
-
-### Learned grammar versus held-out evidence
-
-If tested, a coarse grammar may use a coupling-aware loss and a fit-selection map
-quality objective (support, seed/fold stability, null separation,
-concentration, lag localization, and a posterior-entropy penalty). This is
-**learned grammar**. It can choose a Pareto point among downstream score,
-coupling score, and map quality without looking at held-out rows.
-
-One auditable fit/selection objective is
-
-$$
-J_{map}=\lambda_1S_{support}+\lambda_2S_{stability}+\lambda_3S_{null}
- +\lambda_4S_{concentration}+\lambda_5S_{lag}-\lambda_6S_{diffuse},
-$$
-
-where each term is computed without held-out rows. The formula itself is only a
-candidate; a selected estimator's exact weights and capacity must be
-preregistered before held-out evaluation.
-
-**Empirical coupling evidence** is computed only after selecting the method and
-preregistering the estimator, split, nulls, and stopping rule, then
-recomputing held-out proper-score increments and matched-minus-null maps. A
-pretty or sparse learned map, code usage, reconstruction, or training loss is
-not evidence by itself. This distinction permits the grammar to be optimized
-for readability without turning a training artifact into a discovery claim.
-
-### Candidate gates and openness
-
-The former rule requiring every non-privileged task/seed to have positive EEG
-and fNIRS condition-time delta-R² is retired as the sole VQ admission gate.
-Evaluation is staged:
-
-1. basic learnability against a time-only/global mean baseline;
-2. secondary trial-specific residual performance beyond the
-   condition-by-time template;
-3. observation, source-marginal, observation+source, and full-grammar task utility;
-4. teacher increment (reliability, downstream score, prototype stability, and
-   cross-seed stability) relative to NATIVE.
-
-No listed model component is fixed method identity: observation--source
-branches, teacher family, independent paths, codebooks, token hierarchy,
-grammar, and conditional-contribution probes all remain replaceable. The fixed
-boundaries are data provenance, modality/input ownership declared per
-comparison, fit/selection versus held-out separation, and no protected access
-without its owning protocol. Only a candidate selected after development may
-receive a versioned implementation and evaluation contract.
+The proper-score endpoint and null operators are task-specific but stable once
+declared for that task. Learned grammar maps remain training artifacts;
+held-out proper-score increments and their declared null comparisons are the
+coupling evidence. Cross masking is outside this freeze until its intervention
+contract exists.
 
 ## Interpretation hierarchy
 

@@ -5,13 +5,13 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（Observation–source 候选探索）— 未开始 / 尚未判定：v1 2026-08-21 SSM_OBSERVATION QC 的 negative/inconclusive 结果已完成并保留为当前证据；observation–source 设计图只列出可替换候选，没有冻结下一代架构。candidate implementation、software tests 与 measured evaluation 尚未开始。
+- **主方法**（冻结边界内的主方法实现）— 未开始 / 尚未判定：主方法现只冻结九项边界：数据身份/mask/split/protected boundary、EEG/fNIRS 主路径输入所有权、连续目标先于 patch/token、teacher 非 ground truth、条件式独立 codebook 语义、observation/source 功能与证伪、endpoint-aligned increment/proper-score/null 证据内核；fine-to-coarse 保持开放，cross masking 在信息干预合同建立前未定义且不冻结。具体实现和 measured evaluation 尚未开始。
 - **Token Atlas**（Atlas Statistical tier）— 未开始 / 尚未判定：Core tier 已完成；subject bootstrap、information ledger 与 train-validation uncertainty 尚未运行。
 - **对比实验**（六方法联合正式 campaign）— 已完成 / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 未开始 / 尚未判定：新版合成可识别性与 solver recovery 验证尚未开始。
 
 ### Next steps
-- **主方法** — 先从候选图中定义一个最小、可证伪的 synthetic/public comparison；2×2×2×3-seed 矩阵和分解探针均不默认冻结。protected cohort 保持关闭，不授权 measured/protected、VQ、K16 或 q0/q1。
+- **主方法** — 在九项冻结边界内建立最小版本化实现和 synthetic/software checks；坐标、teacher family、网络、是否 VQ、K/D、fine-to-coarse 与 grammar 网络保持开放。cross masking 未定义，不得进入实现或主张。protected cohort 保持关闭，不授权 measured/protected 运行。
 - **Token Atlas** — 在冻结的 T0 上运行，不生成新 VQ。
 - **Croce 验证** — 按预定 decision rule 运行 Synthetic Phase 1。
 

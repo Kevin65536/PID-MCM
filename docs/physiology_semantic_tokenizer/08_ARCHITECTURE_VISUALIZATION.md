@@ -37,7 +37,7 @@ reader does not mistake a historical proposal for an active component:
 | [`measurement_first_input_contract_plan`](figures/plans/measurement_first_input_contract_plan.svg) | **Merged historical overlay**, not a separate runtime | Shows how the measured-input contract subsumed the earlier entrance proposal. |
 | [`physical_teacher_gradient_entry_plan`](figures/plans/physical_teacher_gradient_entry_plan.svg) | **Superseded historical plan**, not runtime | Preserves the E2-era preserve–discover–certify proposal for traceability. |
 | [`shared_state_reconstruction_bound_plan`](figures/plans/shared_state_reconstruction_bound_plan.svg) | **Diagnostic-only historical overlay**, not runtime | Captures a bounded shared/private-state diagnostic that was never a promotion gate. |
-| [`observation_source_exploration_v2`](figures/plans/observation_source_exploration_v2.svg) | **Exploratory candidate map**, not runtime or architecture contract | Keeps continuous teachers, a guarded Croce candidate, independent observation/source paths, token hierarchies, endpoint grammar, and conditional contribution probes available for comparison; every branch may be replaced or removed before a method is selected. |
+| [`observation_source_exploration_v2`](figures/plans/observation_source_exploration_v2.svg) | **Pre-freeze candidate snapshot**, not runtime or current architecture contract | Preserves earlier implementation candidates. Its optional-grammar wording is superseded by the frozen endpoint/proper-score/null kernel in `METHOD_RATIONALE.md`; exact modules remain replaceable. |
 | [`physiology_semantic_runtime_overview`](figures/physiology_semantic_runtime_overview.svg) | **Quick overview / paper candidate** | Human-readable current-runtime orientation; use the runtime JSON for exact implementation detail. |
 | [`physiology_semantic_architecture`](figures/physiology_semantic_architecture.svg) | **Detailed exploratory candidate view** | Shows replaceable source/observation candidates; it is not a target or current-runtime contract. |
 
@@ -49,18 +49,17 @@ residual paths, and separate R6A offline/R6B strict-cutoff raw-fNIRS evaluations
 Those are historical plan contents; the source banner and dashed implementation
 styling are evidence-boundary cues, not a claim that the R-series plan ran.
 
-The v2 exploration is a separate design note, not a planned after-state and not
-the current runtime. Its semantic note
+The v2 exploration is a pre-freeze design snapshot, not a planned after-state,
+current runtime, or current method-boundary owner. Its semantic note
 [`architecture/observation_source_exploration_v2.json`](architecture/observation_source_exploration_v2.json),
 editable visual source
 [`architecture/observation_source_exploration_v2.drawio`](architecture/observation_source_exploration_v2.drawio),
 exported figure, and concise
 [`alt text`](figures/plans/observation_source_exploration_v2.alt.txt) jointly
-describe candidate continuous teachers, modality-independent paths, token
-hierarchies, grammar, optional conditional analyses, and a separate evaluation
-preregistration boundary. The optional contribution probe has no admission
-status and no edge into preregistration; the symbolic inputs contain no measured
-values and do not promote the note into the canonical v1 runtime.
+describe the earlier candidate continuous teachers, modality-independent paths,
+token hierarchies, grammar, optional conditional analyses, and evaluation
+boundary. The symbolic inputs contain no measured values; current frozen
+principles are owned by [`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
 
 The JSON is a text-diffable semantic note, not a frozen method contract or visual
 source. Generated SVG files are committed for direct review and documentation

@@ -1,8 +1,9 @@
 # Paper evidence index
 
 This is the reader-facing route from the project tree to manuscript material. The
-2026-08-22 observation–source exploration is represented by the tracked design
-note, experiment sequence, and method rationale below. The registry and generated
+current theory/architecture freeze is owned by the method rationale and data
+contract below; the 2026-08-22 observation–source design note is a pre-freeze
+implementation snapshot. The registry and generated
 status pages are useful navigation for progress, but they are not substitutes for the
 dated reports and contracts listed here.
 
@@ -21,12 +22,13 @@ specified:
   current E2-compatible implementation and data-flow structure. It must be kept
   separate from the exploratory design note below.
 - [`physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json):
-  tracked candidate map for continuous teachers, observation/source branches,
-  token hierarchies, and optional lagged grammar. It is not a Methods contract or
-  a report that any candidate has been implemented or qualified.
-- [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): v1 QC → smallest candidate definition
-  and synthetic checks → optional public development → select or reject → separately
-  preregister any holdout.
+  pre-freeze candidate map for continuous teachers, observation/source branches,
+  token hierarchies, and an earlier optional-grammar projection. It is not the
+  current Methods contract and does not override the frozen endpoint/proper-score/null
+  kernel.
+- [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): v1 QC → frozen theory/architecture
+  boundary → versioned implementation and synthetic checks → optional public
+  development → separately preregister any holdout.
 - [`physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md):
   frozen 2026-07-25 SD-SVQ/R-series v1 design and gate definitions; it is historical
   context and is not the current Methods owner.
@@ -95,8 +97,8 @@ scientific gates separate in the manuscript.
 
 ## Figures
 
-Use the tracked runtime figure for implemented Methods. The candidate figure may
-illustrate future explorations only and is not implementation-facing evidence.
+Use the tracked runtime figure for implemented Methods. Candidate figures are
+pre-freeze snapshots and are not implementation-facing evidence.
 
 - [`physiology_semantic_runtime_overview.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
   with its editable Draw.io source in the
@@ -109,10 +111,9 @@ illustrate future explorations only and is not implementation-facing evidence.
   its tracked design note
   [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json),
   and [`alt text`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt)
-  show replaceable continuous-teacher, observation/source, token-hierarchy, and
-  grammar candidates. The optional contribution probe has no path into evaluation
-  preregistration. The schematic contains **no measured values** and is not a
-  Methods target.
+  preserve replaceable implementation candidates from before the current freeze.
+  Their optional-grammar wording is superseded by `METHOD_RATIONALE.md`. The
+  schematic contains **no measured values** and is not a Methods target.
 - [`shared_driver_semantic_return_plan.svg`](physiology_semantic_tokenizer/figures/plans/shared_driver_semantic_return_plan.svg)
   is a historical pre-gate return-plan figure, not a report of a completed run.
 - [`experiment_plan.svg`](figures/experiment_plan.svg),
@@ -128,7 +129,7 @@ illustrate future explorations only and is not implementation-facing evidence.
 
 - Local Git-ignored older manuscript trees may contain obsolete project names,
   live-run text, or presentation figures. They are not current Methods or Results
-  sources; use the tracked runtime, exploration note, and dated reports above.
+  sources; use the tracked runtime, method freeze, and dated reports above.
 - Local Git-ignored `docs/paper_pdf/` and `docs/report/` trees are
   communication/reference assets; use the tracked reports above for current claims.
 - [`../data/DATASETS_DESCRIPTION.md`](../data/DATASETS_DESCRIPTION.md) is only a

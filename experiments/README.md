@@ -30,15 +30,18 @@ Launcher availability is an implementation fact, not evidence that a scientific
 prerequisite has passed. Live-process checks must still be performed immediately
 before touching generated run or cache directories.
 
-## Observation–source exploration boundary
+## Frozen method boundary and implementation candidates
 
-The v2 exploration is a replaceable, not-yet-implemented candidate map. It is
+The theory/architecture principles are frozen in
+[`METHOD_RATIONALE.md`](../docs/METHOD_RATIONALE.md). The v2 exploration is a
+replaceable, not-yet-implemented pre-freeze candidate map. It is
 recorded in the [design note](../docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
 and its [framework diagram](../docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg).
 No YAML or measured-data run is authorized by those artifacts.
 
 The existing physiology-semantic YAML/runtime surface is historical and replay-only;
-do not clone or reinterpret it as a new contract. A selected candidate must first
+do not clone or reinterpret it as a new contract. An implementation inside the
+frozen boundary must first
 pass synthetic software, target/teacher, tensor-shape, split, and null checks.
 Only after those checks are recorded may a development comparison be proposed.
 Protected data requires the owning protocol and a separate, explicit user

@@ -29,13 +29,30 @@ not a new runtime generation. Their execution outcomes and scientific
 interpretation are recorded in the owning reports rather than inferred from
 file presence.
 
-The v2 artifact below is an exploratory map of replaceable candidates, not a
-versioned architecture target, runnable code, an admission result, or permission
-to access measured/protected data. It does not freeze a teacher, path, token
-hierarchy, grammar, or information decomposition. A candidate selected for
-implementation must first receive its own software/data contract and synthetic
-checks; any later independent evaluation separately preregisters its estimand,
-split, nulls, and stopping rule.
+The forward theory and architecture boundary is now frozen in
+[`METHOD_RATIONALE.md`](METHOD_RATIONALE.md). It is not runnable code, an
+admission result, or permission to access measured/protected data. Concrete
+implementation still requires a versioned software contract and synthetic
+checks; independent evaluation separately preregisters its estimator and
+task-specific evidence settings.
+
+Specifically, partial information decomposition (PID) is at most a replaceable
+probe during later pretraining development. It is not core innovation, a runtime
+requirement, or an item frozen by this candidate map.
+
+The software consequences of the owning freeze are:
+
+| Design object | Architecture boundary |
+| --- | --- |
+| Data identity, masks, splits, protected boundary | Hard-frozen through `DATA_CONTRACT.md`; no array-order joins or missing/zero/padding conflation |
+| Input ownership | Main coupling paths implement `Z_E=f_E(X_E)` and `Z_F=f_F(X_F)`; neither tokenizer reads the other modality before producing its representation |
+| Continuous target order | Preserve timestamps and construct a continuous trajectory before patch/tokenization; rate, coordinates, filters, and dimensions stay open |
+| Teacher | Label-blind, fit-fold-only, provenance/support/uncertainty-carrying, and never ground truth; teacher family stays open |
+| Codebook | If VQ is used, modality namespaces are independent and equal IDs have no shared semantics; VQ, `K`, and `D` stay open |
+| Observation/source | Functional roles and falsification endpoints are fixed; encoder, decoder, loss, latent dimension, and physical module split stay open |
+| Lag grammar/evidence | Endpoint-aligned increment, baseline, proper score, and null operators form the method kernel; grammar network stays open before preregistration |
+| Fine-to-coarse | Optional capacity/stability/readability mechanism, not a scientific invariant |
+| Cross masking | Undefined and unfrozen until a versioned information-intervention contract exists |
 
 The machine-readable current-runtime authority is
 [`physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json).
@@ -55,20 +72,21 @@ authorities. Historical shared-driver/SD-SVQ diagrams remain pre-gate evidence.
 
 ![Quick runtime overview (presentation draft)](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
 
-## Observation–source candidate exploration (unimplemented)
+## Pre-freeze observation–source candidate snapshot (unimplemented)
 
-The exploration projection is kept separately from the v1 runtime:
+The earlier exploration projection is retained separately from the v1 runtime
+and the current frozen-principle contract:
 
 - [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
-  is the text-diffable semantic design note.
+  is the text-diffable pre-freeze candidate note.
 - [`observation_source_exploration_v2.drawio`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.drawio)
   owns the editable visual layout and shared project figure style.
 - [`observation_source_exploration_v2.svg`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
   is the exported framework figure, with
   [`alt text`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt).
 
-The JSON owns only the figure content; this Mermaid view is a compact reader aid.
-Neither is an implementation authority:
+The JSON owns only the snapshot content; this Mermaid view is a compact reader
+aid. Neither overrides the frozen boundary above or defines an implementation:
 
 ```mermaid
 flowchart LR
@@ -101,11 +119,11 @@ flowchart LR
     gram --> eval["select estimand + preregister<br/>held-out proper scores + nulls"]
 ```
 
-The graph keeps these candidates available for controlled comparison. It does
-not make observation/source branches, codebooks, fine-to-coarse mapping, grammar,
-or conditional contribution probes mandatory method identity. A comparison
-must declare input ownership and prevent leakage, but any candidate may be
-replaced or removed before a method is selected.
+The graph keeps implementation candidates available for controlled comparison.
+Teacher family, codebooks, fine-to-coarse mapping, and exact modules remain
+replaceable. Its historical `optional grammar` label is superseded: the current
+method kernel fixes endpoint alignment, the tested increment, baseline, proper
+score, and null operators while leaving the grammar network open.
 
 If a grammar is tested, its fit/selection map is a learned artifact. Coupling
 evidence is available only after a final estimator and evaluation protocol are

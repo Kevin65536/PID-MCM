@@ -11,15 +11,18 @@ for exact replay, but new work must not infer an R-series contract from them.
 The current R-series conclusion is `do_not_enter_r2_p`: no VQ or token
 co-occurrence experiment is authorized.
 
-The observation–source v2 map is exploratory only; no executable YAML
-exists yet. The
+The theory/architecture principles are frozen in
+[`METHOD_RATIONALE.md`](../../../docs/METHOD_RATIONALE.md). The
+observation–source v2 map is a pre-freeze implementation snapshot only; no
+executable YAML exists yet. The
 historical YAML/runtime surface is for exact replay and compatibility checks,
 not a template for a new candidate. Do not reuse an old YAML by changing its
 experiment ID, target, or output path. The replaceable design note is
 [`observation_source_exploration_v2.json`](../../../docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json).
 
-No architecture or matrix is fixed by that note. Any candidate selected for a
-development comparison must first pass synthetic software, target/teacher,
+No architecture or matrix is fixed by that note; it does not override the
+current frozen principles. Any implementation proposed for a development
+comparison must first pass synthetic software, target/teacher,
 tensor-shape, split, and null checks. Protected cohorts require the owning
 protocol plus separate, explicit user authorization and are never opened by a
 config flag.
