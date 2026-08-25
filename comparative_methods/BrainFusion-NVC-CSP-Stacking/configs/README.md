@@ -1,5 +1,5 @@
-# B4 config queue
+# B4 config record（STOPPED）
 
-No formal hyperparameter contract is frozen. HRF delays, CSP filter count,
-feature subsets, and stacking learners require training-only or inner-validation
-selection.
+The former B4 queue is closed. The completed public matrix used training-only or
+inner-validation selection for HRF delays, CSP filters, feature subsets, and
+stacking learners; this record does not authorize new work.

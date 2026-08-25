@@ -1,4 +1,5 @@
-# B1 adapter queue
+# B1 adapter record（STOPPED）
 
-Pending: define 200 Hz EEG windows, registry-backed 3D coordinate sidecars,
-coordinate provenance assertions, valid masks, and frozen-encoder pooling.
+The former B1 checklist (200 Hz windows, coordinate sidecars/provenance, masks
+and pooling) was superseded by the completed A0-A8/public evidence. This file is
+retained as a historical record; no B1 queue remains.

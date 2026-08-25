@@ -1,9 +1,10 @@
-# B2-B3 test queue
+# B2-B3 test record（STOPPED）
 
 `test_cbramod_smoke.py` covers hash-verified `weights_only=True` loading,
 strict official state-dict compatibility, input-contract rejection checks, and
 a GPU frozen-encoder probe through forward/backward, optimizer step, and strict
 reload.
 
-Mean token pooling is provisional until B3 source-fidelity and the shared EEG
-support are frozen. These tests therefore do not authorize B4.
+The former provisional-pooling note is superseded by the completed representation
+audit and A0-A8/public evidence. These tests are retained for audit and do not
+authorize new work.

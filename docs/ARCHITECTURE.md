@@ -1,7 +1,8 @@
 # Software architecture
 
-_Runnable surfaces and package ownership. Current execution and scientific verdicts
-are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md)._
+_Retained software surfaces and package ownership. Registered execution and
+scientific verdicts are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md); no
+forward runtime is active._
 
 ## Repository layers
 
@@ -21,19 +22,20 @@ the old one.
 
 ## Runtime scope and version boundary
 
-The only currently runnable tokenizer generation is the E2-compatible
+The only retained tokenizer runtime surface is the E2-compatible
 `PhysiologySemanticTokenizer` (v1). R0-P, R1-D/R1-P, D1B, and R2-D added
 diagnostic and qualification components around it. The v1 implementation,
-checkpoints, and negative screen are retained as historical evidence; they are
-not a new runtime generation. Their execution outcomes and scientific
-interpretation are recorded in the owning reports rather than inferred from
-file presence.
+checkpoints, and negative screen are **stopped historical evidence** and are
+replay-only; no forward runtime generation is active. Their execution outcomes
+and scientific interpretation are recorded in the owning reports rather than
+inferred from file presence.
 
-The forward theory and architecture boundary is now frozen in
+The theory and architecture boundary is retained in
 [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md). It is not runnable code, an
-admission result, or permission to access measured/protected data. Concrete
-implementation still requires a versioned software contract and synthetic
-checks; independent evaluation separately preregisters its estimator and
+admission result, or permission to access measured/protected data. No concrete
+implementation is registered in the clean-slate flow; any future implementation
+would require a versioned software contract and synthetic checks, while an
+independent evaluation would separately preregister its estimator and
 task-specific evidence settings.
 
 Specifically, partial information decomposition (PID) is at most a replaceable
@@ -54,14 +56,15 @@ The software consequences of the owning freeze are:
 | Fine-to-coarse | Optional capacity/stability/readability mechanism, not a scientific invariant |
 | Cross masking | Undefined and unfrozen until a versioned information-intervention contract exists |
 
-The machine-readable current-runtime authority is
+The machine-readable retained-runtime authority is
 [`physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json).
 The review-oriented **quick overview / paper-figure candidate** is
 [`physiology_semantic_runtime_overview.svg`](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg),
 with its editable
 [`drawio` source](physiology_semantic_tokenizer/architecture/physiology_semantic_runtime_overview.drawio).
-It is a current-or-snapshot presentation projection of the same E2 runtime, not a
-timestamped registry view, second source of truth, or scientific-admission figure.
+It is a retained historical presentation projection of the stopped E2 runtime,
+not a timestamped registry view, second source of truth, or scientific-admission
+figure.
 The detailed
 [`candidate architecture`](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg)
 and its
@@ -72,10 +75,11 @@ authorities.
 
 ![Quick runtime overview (presentation draft)](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
 
-## Pre-freeze observation–source candidate snapshot (unimplemented)
+## Abandoned observation–source candidate snapshot (unimplemented)
 
-The earlier exploration projection is retained separately from the v1 runtime
-and the current frozen-principle contract:
+The earlier exploration projection is retained separately from the stopped v1
+runtime and the method-rationale contract. It is an **abandoned** candidate map,
+not a future target:
 
 - [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
   is the text-diffable pre-freeze candidate note.
@@ -119,18 +123,19 @@ flowchart LR
     gram --> eval["select estimand + preregister<br/>held-out proper scores + nulls"]
 ```
 
-The graph keeps implementation candidates available for controlled comparison.
-Teacher family, codebooks, fine-to-coarse mapping, and exact modules remain
-replaceable. Its historical `optional grammar` label is superseded: the current
-method kernel fixes endpoint alignment, the tested increment, baseline, proper
-score, and null operators while leaving the grammar network open.
+The graph records abandoned implementation candidates for historical comparison;
+it does not keep a runtime selection available. Teacher family, codebooks,
+fine-to-coarse mapping, and exact modules remain replaceable only in a future
+versioned contract. Its historical `optional grammar` label is superseded: the
+retained method kernel fixes endpoint alignment, the tested increment, baseline,
+proper score, and null operators while leaving the grammar network open.
 
 If a grammar is tested, its fit/selection map is a learned artifact. Coupling
 evidence is available only after a final estimator and evaluation protocol are
 preregistered and applied to fresh held-out rows. A training map,
 reconstruction score, occupancy plot, or decomposition label is not evidence.
 
-## Current E2/v1 historical dataflow
+## Stopped E2/v1 historical dataflow
 
 ```mermaid
 flowchart LR
@@ -165,18 +170,18 @@ flowchart LR
 - Artifact annotations are diagnostics. Real recorded support in `valid_mask`
   remains the current validity authority.
 
-## Package ownership
+## Retained package ownership
 
-| Package / entrypoint | Current responsibility |
+| Package / entrypoint | Retained responsibility |
 | --- | --- |
 | `src/data/registry.py`, `factory.py`, `unified_physiology.py` | central measured-data registry and loader |
 | `src/data/physiology_semantic_*` | E0–E2 local views and targets |
 | `src/data/shared_driver_*` | independent raw view/teacher joins for R-series work |
-| `src/tokenizers/physiology_semantic_tokenizer.py` | current E2 tokenizer |
+| `src/tokenizers/physiology_semantic_tokenizer.py` | stopped E2 tokenizer; replay-only |
 | `src/tokenizers/ema_vector_quantizer.py` | corrected fixed-K128 VQ |
 | `src/tokenizers/shared_driver_semantic_vq.py` | R2 diagnostic model component; not promoted runtime |
 | `src/inference/adaptive_neurovascular_ssm.py` | Croce/Balloon-inspired adaptive five-state RTS joint candidate; E0 offline development supervision accepted, R1-P population-frozen qualification rejected; not a qualified future teacher |
-| `src/analysis/token_*` and `physiological_patch_features.py` | Token Physiology Atlas |
+| `src/analysis/token_*` and `physiological_patch_features.py` | stopped Token Physiology Atlas |
 
 Executable training, qualification, evaluation, and rendering workflows live
 under `experiments/`. Comparison methods remain isolated below

@@ -1,5 +1,10 @@
 # Adapter alignment and result-readiness audit
 
+> **STATUS: STOPPED / ABANDONED（历史快照）。** 已完成的 public delivery 和后续
+> campaign 记录均为 STOPPED evidence；本文“Exact remaining path”中的 protected
+> review/unlock 步骤已被后续结果 supersede，属于 ABANDONED legacy queue。本文不
+> 是当前执行、launch 或 authorization 入口。
+
 _Evidence snapshot: 2026-08-11_
 
 _Historical pre-campaign snapshot; it is not a current status source. The later
@@ -71,7 +76,11 @@ The retained completion summary is
 and the seven-cell A0-A8 evidence is
 [`summary_final.json`](../../comparative_methods/EFRM-PyTorch/evidence/alignment_v2/summary_final.json).
 
-## Exact remaining path to the paper table
+## Exact remaining path to the paper table（ABANDONED legacy queue）
+
+The following path was not a current authorization and is retained only to show
+what the pre-campaign snapshot had left unresolved; the later dated campaign
+report is the evidence authority.
 
 1. Human-review the frozen
    [42-cell candidate](../../comparative_methods/evidence/joint_protected_unlock_candidate_v2.json).

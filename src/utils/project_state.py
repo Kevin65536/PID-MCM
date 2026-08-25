@@ -35,6 +35,8 @@ EXECUTION_STATES = {
     "blocked",
     "running",
     "completed",
+    "stopped",
+    "abandoned",
     "failed",
     "aborted",
 }
@@ -74,6 +76,8 @@ EXECUTION_LABELS = {
     "blocked": "前置条件未满足",
     "running": "运行中",
     "completed": "已完成",
+    "stopped": "已停止（此前已完成）",
+    "abandoned": "已废弃（未完成且不再开展）",
     "failed": "技术失败",
     "aborted": "已中止",
 }
@@ -367,17 +371,28 @@ def validate_registry(
             raise ProjectStateError(
                 f"{context}: {execution} work cannot have scientific verdict {verdict}"
             )
+        if execution == "abandoned" and verdict not in {
+            "unreviewed",
+            "not_applicable",
+            "inconclusive",
+        }:
+            raise ProjectStateError(
+                f"{context}: abandoned work cannot have scientific verdict {verdict}"
+            )
         if execution in {"failed", "aborted"} and verdict != "inconclusive":
             raise ProjectStateError(
                 f"{context}: {execution} work must remain scientifically inconclusive"
             )
-        if verdict in {"qualified", "rejected", "mixed"} and execution != "completed":
+        if verdict in {"qualified", "rejected", "mixed"} and execution not in {
+            "completed",
+            "stopped",
+        }:
             raise ProjectStateError(
-                f"{context}: scientific verdict {verdict} requires completed execution"
+                f"{context}: scientific verdict {verdict} requires completed or stopped execution"
             )
         if verdict == "mixed" and record["entity_kind"] != "aggregate":
             raise ProjectStateError(f"{context}: mixed verdict is aggregate-only")
-        if execution in {"completed", "failed", "aborted"} and not evidence_ids:
+        if execution in {"completed", "stopped", "failed", "aborted", "abandoned"} and not evidence_ids:
             raise ProjectStateError(f"{context}: terminal execution requires evidence")
         if verdict in {"qualified", "rejected", "mixed"}:
             roles = {evidence_by_id[item]["role"] for item in evidence_ids}
@@ -405,9 +420,13 @@ def validate_registry(
                 raise ProjectStateError(f"{context}.progress: invalid completed/total")
             if not isinstance(progress["unit"], str) or not progress["unit"].strip():
                 raise ProjectStateError(f"{context}.progress.unit: must be non-empty")
-            if execution == "completed" and completed != total:
+            if execution in {"completed", "stopped"} and completed != total:
                 raise ProjectStateError(
-                    f"{context}.progress: completed execution requires completed == total"
+                    f"{context}.progress: {execution} execution requires completed == total"
+                )
+            if execution == "abandoned" and completed == total:
+                raise ProjectStateError(
+                    f"{context}.progress: abandoned execution cannot be complete"
                 )
 
         outcome_counts = record.get("outcome_counts")
@@ -436,6 +455,10 @@ def validate_registry(
             not isinstance(next_step, str) or not next_step.strip()
         ):
             raise ProjectStateError(f"{context}.next_step: must be non-empty when present")
+        if execution in {"stopped", "abandoned"} and next_step is not None:
+            raise ProjectStateError(
+                f"{context}: {execution} execution cannot carry next_step"
+            )
 
         record_by_id[state_id] = record
         entity_by_record_id[state_id] = entity
@@ -615,6 +638,9 @@ def _next_text(
 ) -> str:
     """Combine dependencies and the optional next action in one readable cell."""
 
+    if record["execution"] not in {"running", "planned", "blocked"}:
+        return "—"
+
     parts: list[str] = []
     dependencies = []
     for dependency in record.get("depends_on", []):
@@ -669,7 +695,7 @@ def render_status_markdown(
         f"_Registry snapshot: `{_effective_updated_at(registry)}` · "
         "source: [`research_state/registry.json`](../research_state/registry.json)_",
         "",
-        "Status combines execution and scientific verdict; a completed run does not "
+        "Status combines execution and scientific verdict; a terminal run does not "
         "by itself mean that the hypothesis passed.",
         "",
         "## Current overview",
@@ -750,15 +776,13 @@ def render_readme_block(registry: Mapping[str, Any]) -> str:
         "running": 0,
         "planned": 0,
         "blocked": 1,
-        "completed": 2,
-        "failed": 2,
-        "aborted": 2,
     }
     next_records = sorted(
         (
             (track, active[track["headline_entity"]])
             for track in registry["tracks"]
             if active[track["headline_entity"]].get("next_step")
+            and active[track["headline_entity"]]["execution"] in next_priority
         ),
         key=lambda item: (next_priority[item[1]["execution"]], item[0]["order"]),
     )[:3]
@@ -769,8 +793,8 @@ def render_readme_block(registry: Mapping[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "See the [generated project status](docs/PROJECT_STATUS.md) for evidence "
-            "links, dependencies, and next steps.",
+            "See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle "
+            "states and evidence links.",
             README_END,
         ]
     )

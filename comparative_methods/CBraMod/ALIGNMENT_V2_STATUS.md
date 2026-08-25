@@ -1,14 +1,18 @@
 # CBraMod adapter-alignment v2 status
 
+> **STATUS: STOPPED（历史 public-delivery record）。** 本文记录的 A0-A8/public scope
+> 已完成；后续 joint campaign 也已停止。下方 queue/locked 语句均为时点记录，不是
+> 当前 authorization；未执行 follow-up 已废弃。
+
 _Historical public-development snapshot. It is not a current status source; use
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
 statements below retain their time-local meaning._
 
-CBraMod has reached its public-development terminal state in the serial queue.
+CBraMod reached its public-development terminal state in the historical serial queue.
 Its representation layer is fixed at the official downstream latent-token
 boundary, and all six supported classification cells pass A0–A8. REFED remains
-preregistered unsupported. Protected evaluation remains separately locked, and
-the active delivery method has advanced to REVE.
+preregistered unsupported. The old protected-locked note and queue advancement to
+REVE are time-local and do not authorize a rerun.
 
 | Task | Unique public samples | Representation result | Disposition |
 | --- | ---: | --- | --- |
@@ -77,5 +81,6 @@ and the terminal cell bundle is
 [`evidence/alignment_v2/summary_final.json`](evidence/alignment_v2/summary_final.json).
 
 Public validation aggregates are development-only and remain explicitly
-non-table-admissible. CBraMod protected execution is not authorized and may not
-overlap REVE, which is now the sole active delivery method.
+non-table-admissible. The former protected/queue concurrency rule is historical;
+no active delivery method remains, and final joint-campaign evidence is recorded
+separately.

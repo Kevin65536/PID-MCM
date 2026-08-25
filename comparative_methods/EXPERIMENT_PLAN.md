@@ -1,6 +1,8 @@
 # 对比方法实验计划与历史完成记录
 
-> **HISTORICAL SNAPSHOT — 不是当前队列、执行指令或 authorization。**
+> **STATUS: ABANDONED（历史计划）；已完成记录为 STOPPED。** 本文保留 2026
+> 方法队列及完成证据；其中未执行的 queue、future track 和 remaining path 均已废弃。
+> 不是当前队列、执行指令或 authorization。
 > 新任务先看 `docs/PROJECT_STATUS.md` 和 `docs/comparisons/PROTOCOL.md`；不要重放本文的
 > 旧 gate、顺序或签署流程。
 
@@ -8,13 +10,13 @@ _原计划冻结于 2026-07-31；本文的完成计数是 2026-08-14 历史执�
 当前状态源。当前 execution/scientific verdict 由
 [`docs/PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) 生成。_
 
-本文是 `comparative_methods/` 下对比实验的规划入口。现阶段正式方法集合固定为：
+本文是 `comparative_methods/` 下历史对比实验的规划记录；它不是新实验流入口。历史方法集合为：
 
 - 单模态 EEG：**BIOT、CBraMod、REVE**；
 - 多模态 EEG–fNIRS：**NormWear、EFRM、BrainFusion NVC–CSP
   Stacking、STA-Net**。
 
-方法进入此队列表示“计划实现或保留为正式比较”，不表示已经完成复现、通过
+方法曾进入此历史队列表示“计划实现或保留为正式比较”，不表示已经完成复现、通过
 source-fidelity 检查或可以填入最终论文表格。现有数据、划分、指标和
 protected-test 边界继续服从
 [`docs/DATA_CONTRACT.md`](../docs/DATA_CONTRACT.md)、
@@ -32,7 +34,7 @@ protected-test 边界继续服从
 处置也已保留。该快照中没有 active delivery method。EFRM LODO v2 与上述五种方法共同
 进入完成的联合 protected campaign；STA-Net 只引用当时已有的冻结结果。
 
-## 1. 固定方法队列
+## 1. 历史固定方法队列（已停止）
 
 ### 1.1 单模态：EEG-only
 
@@ -165,9 +167,9 @@ fNIRS 13 s，DSR 是 2 s + 13 s；这与 EFRM 的 8/8 s、DSR 2/2 s 不同。因
 STA-Net 结果按 `method_native_context_reference` 保留，不能仅凭相同 sample/split
 声称为同步 support-matched direct comparison。
 
-## 4. 每个新方法的实施门
+## 4. 历史新方法实施门（已停止）
 
-新方法按以下顺序推进，未通过前一门不得开始高成本正式矩阵：
+当时的新方法按以下顺序推进；该队列已停止，未执行的后续工作已废弃：
 
 下表保留项目级 B0–B6 执行阶段；其中 B1 的实际准入由 adapter v2 的 A0–A7
 逐 cell 门控给出，B4 unlock 对应 A8。synthetic 或 public mini smoke 不能形成
@@ -234,7 +236,7 @@ full-public A4/A7 结论。
 | 联合 protected campaign | **540/540 完成；双签揭盲和聚合完成；42-cell 终态已生成** |
 | 新 measured-data evaluation | **不属于这份冻结记录；必须建立新版本协议** |
 
-实现时，每个新方法在 `comparative_methods/<method>/` 下独立保存上游
+历史实现中，每个方法在 `comparative_methods/<method>/` 下独立保存上游
 revision、adapter、config、tests、source-fidelity 说明和运行工件，不向主方法
 的 `experiments/runs/` 写入结果。
 
@@ -380,13 +382,13 @@ NormWear 均保留 `reimplementation/adapted` 名称，不能伪装成原论文�
 
 - GPU0 正在运行 EFRM Stage-B Single-Trial final refit，项目进程约占
   16.6 GiB；在该队列结束前不向 GPU0 加入新方法任务；
-- GPU1 约有 23.4 GiB 可用，当时可供 active delivery method BIOT 的 public
+- GPU1 约有 23.4 GiB 可用，当时可供历史 delivery method BIOT 的 public
   audit/development 使用；不得借空闲资源提前启动 CBraMod 或更后方法；
 - `/SSD_2` 约有 1.5 TiB 可用。运行目录继续忽略，不复制 raw data、upstream
   checkout 或相同 checkpoint；feature cache 在生成前必须先给出体积估计。
 
 REVE-large、full fine-tuning、sample-random 和 few-shot 未进入该历史资源队列。
-EFRM 的既有冻结 GPU0 队列与新方法 delivery queue 分开管理。新方法侧每次只晋级
+EFRM 的既有冻结 GPU0 队列与历史 new-method delivery queue 分开管理。当时新方法侧每次只晋级
 一个 method；GPU0/GPU1 的物理空闲不改变冻结的执行顺序。
 
 ## 10. 失败、重试与停止规则

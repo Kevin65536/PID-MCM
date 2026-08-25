@@ -1,10 +1,14 @@
 # BrainFusion adapter-alignment v2 status
 
+> **STATUS: STOPPED（历史 public-delivery record）。** 本文记录的 A0-A8/public scope
+> 已完成；后续 joint campaign 也已停止。下方 queue/locked 语句均为时点记录，不是
+> 当前 authorization；未执行 follow-up 已废弃。
+
 _Historical public-development snapshot. It is not a current status source; use
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
 statements below retain their time-local meaning._
 
-BrainFusion has completed implementation review and the full-public A0–A7
+BrainFusion completed implementation review and the full-public A0–A7
 gate and A8 freeze as an explicitly independent NVC-CSP-stacking reimplementation. Five
 8-second classification cells are supported; DSR and REFED are preregistered
 unsupported. Independently audited smoke and full-fold public pilots passed,
@@ -56,5 +60,5 @@ fold membership, targets, macro-F1, checkpoint predictions, and decision
 scores. Every matrix job also verifies that cached validation tensors are
 bitwise equal to fresh raw-adapter materialization. Public validation results
 remain development-only and non-table-admissible; protected evaluation was not
-authorized. BrainFusion is terminal for the current public delivery scope, and
-the serial implementation queue advances to NormWear.
+authorized in this public snapshot. BrainFusion was terminal for that historical
+public-delivery scope; the serial queue then advanced to NormWear and is now stopped.

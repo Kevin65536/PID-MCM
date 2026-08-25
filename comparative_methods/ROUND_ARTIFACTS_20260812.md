@@ -1,7 +1,8 @@
 # 2026-08-12 对比方法 campaign 本轮产物清单
 
-> **HISTORICAL SNAPSHOT — 不是当前状态或 authorization。** 本文保留当日
-> `NO-GO` 语义；后续 campaign 的终态只看统一项目状态和带日期的最终结果报告。
+> **STATUS: ABANDONED（历史 NO-GO 轮次）。** 本轮正式 job 数为 0，后续
+> campaign 已完成并以 dated result report 为准。本文保留当日 `NO-GO`、工件身份和
+> 哈希，仅作 provenance；不得恢复、重建或把它当作新流 launch 指令。
 
 ## 冻结结论
 
@@ -75,9 +76,8 @@ bitwise identical。两次运行的 runtime JSON 均通过 forbidden-token redac
 - 健康空闲 GPU 少于 2 张
 - authorization template 为 false/pending，未双签
 
-下一次继续时，应先等待第二张 GPU 健康空闲，运行双 GPU shadow 并冻结 lane；随后必须
-重建 release candidate，重新核对 SHA，再由协议负责人和运行负责人在单独文件中双签
-GO。不得复用本轮非授权模板作为授权。
+旧记录中的“下一次继续时”步骤已废弃；不得等待 GPU、重建 candidate 或复用本轮
+非授权模板。任何新实验都必须在干净的新流中重新定义范围、协议和授权边界。
 
 ## 同轮配套产物
 

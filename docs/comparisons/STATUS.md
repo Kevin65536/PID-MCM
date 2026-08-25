@@ -1,5 +1,9 @@
 # Comparison status
 
+> **STATUS: STOPPED（历史比较汇总）。** 下表记录的 campaign、方法和 P0 分析均已
+> 完成并停止；未完成的 follow-up queue 已废弃。本文是 dated navigation aid，不是
+> 当前实验流、launch 或 authorization 入口。
+
 Current comparison execution and scientific verdicts are generated in the
 [comparison section of the unified project status](../PROJECT_STATUS.md#对比实验).
 This compatibility page keeps a short, reader-facing method summary. It is a dated

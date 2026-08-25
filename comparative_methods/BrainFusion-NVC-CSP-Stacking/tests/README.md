@@ -1,4 +1,4 @@
-# B2-B3 test queue
+# B2-B3 test record（STOPPED）
 
 `test_gpu_nvc.py` pins the public NVC source file and verifies that the
 vectorized CUDA `avg_raw` implementation matches the published CPU formula for
@@ -15,4 +15,6 @@ selection plus CSP are deterministic and bound to one training identity set.
 meta-estimator fitting, and estimator reload. `test_pipeline_reload.py` binds
 all feature and estimator state to the same outer-training identity and checks
 exact complete-pipeline prediction replay. BrainFusion's implementation smoke
-therefore passes; full-public A0–A8 evidence remains separate and pending.
+therefore passes. The former full-public pending note is superseded by the
+completed A0-A8/public evidence; these tests are retained for audit and do not
+authorize new work.

@@ -1,5 +1,9 @@
 # Shared comparison protocol
 
+> **ROLE: FROZEN CONTRACT（2026 legacy）。** 本文保留比较面的数据、指标、split
+> 和 protected 边界；旧 serial queue 与其完成的实验均已 STOPPED，未执行的扩展已
+> ABANDONED。本文不授权新的实验流。
+
 _Frozen benchmark contract; execution-status note updated 2026-08-14_
 
 This document defines the common comparison surface. Method-specific frozen
@@ -8,16 +12,15 @@ protected-evaluation boundaries below. Current execution and scientific verdicts
 generated in [`PROJECT_STATUS.md`](../PROJECT_STATUS.md#对比实验); admission of a number to a paper table is governed by
 [`METRIC_ACCEPTANCE.md`](METRIC_ACCEPTANCE.md) and the
 [machine-readable targets](../../comparative_methods/comparison_metric_targets_v1.yaml).
-New or not-yet-frozen adapters are additionally governed by the
+The stopped 2026 adapters and their historical records were additionally governed by the
 [adapter alignment v2 contract](../../comparative_methods/ADAPTER_ALIGNMENT_GATES_V2.md)
 and its [machine-readable form](../../comparative_methods/adapter_alignment_gate_contract_v2.yaml).
-The completed campaign was governed by a strict serial new-method delivery
-queue: only one new method could be active across adapter
-implementation/review, public development, freeze, and formal execution.
-Frozen EFRM work was allowed to continue in the background without being
-modified. Idle hardware did not advance the frozen queue. At the 2026-08-14
-aggregate there was no active delivery method; any new experiment requires a new
-frozen scope and protocol version.
+The completed 2026 campaign used a strict serial new-method delivery queue: only
+one new method could be active across adapter implementation/review, public
+development, freeze, and formal execution. That queue is STOPPED; frozen EFRM
+work and idle hardware do not authorize or advance anything. At the 2026-08-14
+aggregate there was no active delivery method. Any new experiment belongs to a
+new frozen scope and protocol version.
 
 ## Benchmark matrix
 
@@ -99,21 +102,22 @@ explicit multiclass, context, or regression adapters. Original-paper
 subject-specific values are contextual and are never treated as same-protocol
 comparisons.
 
-The completed local STA-Net results retain their frozen status, but their
+The completed local STA-Net results retain their frozen STOPPED status, but their
 default classification observation budget (EEG 3 s, fNIRS 13 s; DSR 2 s/13 s)
 is a method-native context reference rather than a direct match to the current
-synchronous 8 s/8 s and DSR 2 s/2 s profile. A future direct-profile result
-would require a new protocol version and separate authorization; existing
+synchronous 8 s/8 s and DSR 2 s/2 s profile. Any direct-profile extension was not
+part of this stopped record and is abandoned for the legacy flow; a clean new flow
+would require a new protocol version and separate authorization. Existing
 protected results are not rewritten.
 
 ### EFRM
 
 The synchronized-data adaptation lives in
 [`comparative_methods/EFRM-PyTorch`](../../comparative_methods/EFRM-PyTorch/README.md).
-Its active v2 estimand is leave-one-dataset-out pretraining followed by strict
-five-fold target-dataset evaluation. Frozen-backbone linear probing is the
-primary representation track; full fine-tuning is a separately named,
-resource-contingent track. The source-code contrastive multiplier and all
+Its completed v2 estimand was leave-one-dataset-out pretraining followed by strict
+five-fold target-dataset evaluation. Frozen-backbone linear probing was the
+primary representation track; the unexecuted full-fine-tuning extension is
+ABANDONED for this legacy flow. The source-code contrastive multiplier and all
 deviations from the upstream data regime remain explicit.
 
 ### EEG foundation models
@@ -136,9 +140,9 @@ inside the allowed outer-training support.
 
 ### Retired UMAP diagnostic
 
-UMAP is not in the fixed active comparison queue and receives no new formal
-run. Its repeatedly viewed historical test results remain Git-history context
-only and are not admitted as formal benchmark values.
+UMAP was not in the fixed comparison queue and receives no new formal run. Its
+repeatedly viewed historical test results remain Git-history context only and are
+not admitted as formal benchmark values.
 
 ## Minimum retained artifact
 

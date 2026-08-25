@@ -1,7 +1,8 @@
-# B4 config queue
+# B4 config record（STOPPED）
 
-No encoder size or formal configuration is frozen. Base and large results may
-not be selected post hoc using protected outcomes.
+The former B4 queue is closed. The retained base-encoder configuration below
+records the completed historical scope; no encoder-size selection or protected
+outcome selection is authorized here.
 
 The executable public-development v1 contract is shared at
 [`../../single_modal_eeg/configs/public_performance_v1.yaml`](../../single_modal_eeg/configs/public_performance_v1.yaml).

@@ -1,5 +1,10 @@
 # Comparison methods
 
+> **STATUS: LEGACY 2026 TREE — STOPPED.** The recorded comparison campaigns and
+> method deliveries are complete and retained as read-only evidence. Any
+> unexecuted queue, launch path, or follow-up in this tree is **ABANDONED**;
+> these files are not a current experiment-flow entrypoint or authorization.
+
 This tree contains comparison-method integrations, compact protocol/evidence files,
 and local generated assets. It also retains the frozen 2026 public matrices and joint
 protected campaign at their original paths so their hashes remain auditable. Those
@@ -21,7 +26,7 @@ Read only what the task needs:
 3. for adapter changes, [`ADAPTER_ALIGNMENT_GATES_V2.md`](ADAPTER_ALIGNMENT_GATES_V2.md),
    its [`machine contract`](adapter_alignment_gate_contract_v2.yaml), and
    [`metric targets`](comparison_metric_targets_v1.yaml);
-4. the target method's `README.md`, `sources/method_manifest.yaml`, active config,
+4. the target method's `README.md`, `sources/method_manifest.yaml`, retained config,
    implementation, and tests;
 5. for the completed 2026 results only, the dated
    [`PROTECTED_CAMPAIGN_RESULTS_20260814.md`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md).
@@ -34,8 +39,8 @@ understanding the repository or starting public-surface code work.
 
 | Path | Role | Default treatment |
 | --- | --- | --- |
-| `BIOT/`, `CBraMod/`, `REVE/` | EEG-only method owners | active method-local code |
-| `NormWear/`, `EFRM-PyTorch/`, `BrainFusion-NVC-CSP-Stacking/` | multimodal/adapted method owners | active method-local code |
+| `BIOT/`, `CBraMod/`, `REVE/` | EEG-only method owners | legacy method-local code/evidence; no current queue |
+| `NormWear/`, `EFRM-PyTorch/`, `BrainFusion-NVC-CSP-Stacking/` | multimodal/adapted method owners | legacy method-local code/evidence; no current queue |
 | `STA-Net-PyTorch/` | independent retained implementation and frozen result | change only for an explicit STA-Net task |
 | `performance_analysis/` | cross-method descriptive analysis | analysis only; never an execution authority |
 | `single_modal_eeg/` | early shared BIOT/CBraMod/REVE runner | compatibility only; no new features |

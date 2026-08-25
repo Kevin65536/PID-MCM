@@ -1,9 +1,9 @@
 # Single-modal EEG public performance runner
 
-> **COMPATIBILITY-ONLY (frozen 2026 workflow).** Do not use this runner for new
-> BIOT, CBraMod, or REVE development. Use the owning method's v2-or-later runner and
-> current comparison protocol; commands below reproduce the early public surface
-> only and do not authorize a protected or formal run.
+> **STATUS: ABANDONED — COMPATIBILITY-ONLY (frozen 2026 workflow).** The early
+> shared public runner and its queue are retained for replay only. Do not use it for
+> new BIOT, CBraMod, or REVE development; commands below are not a current entrypoint
+> and do not authorize a protected or formal run.
 
 This package is the shared executable path for BIOT, CBraMod, and REVE-base.
 It consumes only the train and validation identities exposed by the
@@ -23,7 +23,7 @@ REFED is disabled in v1 because the shared inventory intentionally retains
 partial terminal windows while the current frozen encoders do not implement a
 truthful time-padding mask.  The six classification tasks remain available.
 
-Run a non-admissible connectivity test on GPU1 with:
+Historical non-admissible connectivity replay (do not launch a new run):
 
 ```bash
 .venv/bin/python -m comparative_methods.single_modal_eeg.run_public_performance \
@@ -33,14 +33,10 @@ Run a non-admissible connectivity test on GPU1 with:
   --output-dir comparative_methods/single_modal_eeg/runs/biot_mi_outer0_seed17_smoke
 ```
 
-Omit `--smoke` only for a public-development performance run.  Such a run
-extracts every public train/validation feature, fits normalization and the
-linear head on training features only, selects the configured head on public
-validation macro-F1, and retains metrics, predictions, resource use, and a
-weights-only reload check.  No command in this package performs protected
-evaluation.
+The former non-smoke public-development route is abandoned. No command in this
+package performs protected evaluation.
 
-Generate the complete public queue with:
+Historical queue definition (do not launch):
 
 ```bash
 .venv/bin/python -m comparative_methods.single_modal_eeg.build_public_job_matrix \
@@ -50,9 +46,6 @@ Generate the complete public queue with:
   --output comparative_methods/single_modal_eeg/runs/public_performance_v1/job_matrix.json
 ```
 
-The matrix contains 270 serial jobs. To start the first real public-performance
-cell directly, use the smoke command above without `--smoke` and choose a new
-output directory under `runs/public_performance_v1/`. Feature caches are keyed
-by method checkpoint, adapter, task panel, data-branch hashes, and public split;
-they are reused across the three frozen seeds without fitting any target-wide
-transform.
+The former matrix contained 270 serial jobs; its first real public-performance
+cell is not to be started. Feature-cache and split details remain only for
+historical replay and audit.

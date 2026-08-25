@@ -1,7 +1,11 @@
-# Croce-Style SSM: Observation-Constrained r(t), No Endogenous Dynamics
+# Historical Croce-Style SSM: Observation-Constrained r(t), No Endogenous Dynamics
 
-> 最终方案：r(t) 无内生动力学。EEG 提议，fNIRS 选择。
+> 原设计：r(t) 无内生动力学。EEG 提议，fNIRS 选择。
 > 状态空间保持 5D，粒子滤波结构根本性修改。
+>
+> **生命周期：stopped / abandoned（2026-08-25）。** 本文保留已停止 solver、
+> audit、cache 的数学和数值记录。Synthetic Phase 1 与 Real Phase 2 未执行，
+> 现已废弃；本文不再定义当前实验入口、授权或执行顺序。
 
 ---
 
@@ -197,7 +201,10 @@ $y_{nirs}^{obs}(t) = y_{nirs}^{raw}(t) - \hat{y}_{nirs}^{source}(t)$
 
 ---
 
-## 6. 对 `run_local_neighborhood_solver_audit.py` 的修改
+## 6. 已停止 solver 的实现记录
+
+以下内容记录已停止的 `run_local_neighborhood_solver_audit.py` 实现，供证据
+解释和回放使用，不构成新实验的修改指令。
 
 ### 6.1 `state_drift()` — r 维度零漂移
 
@@ -215,7 +222,8 @@ def state_drift(x, params):
 
 ### 6.3 `run_particle_filter()` — 核心重构
 
-原代码中 r 通过 `local_linearized_step` + `process_noise` 传播。修改为：
+原代码中 r 曾通过 `local_linearized_step` + `process_noise` 传播；以下片段
+记录当时的重构：
 
 ```python
 # 在 PF 循环中的每个子步：
@@ -248,23 +256,32 @@ log_weights += -0.5 * np.sum(
 ) / (sigma_nirs ** 2)
 ```
 
-### 6.5 删除的参数
+### 6.5 历史删除参数
 
 - `--prior-std` 中 r 的项（设为零）
 - `--state-noise-std` 中 r 的项（设为零）
 - σ_eeg（不再需要）
 - λ_r（不再需要）
 
-### 6.6 新增的参数
+### 6.6 历史新增参数
 
 - `--sigma-prop`：r 提议带宽（默认 2.0，单位 μV）
 - `--sigma-nirs`：fNIRS 观测噪声（数据集相关）
 
 ---
 
-## 7. 实验方案
+## 7. 历史实验方案（已停止 / 已废弃）
 
-### Phase 1 — 合成验证
+本节保留原设计的指标、数值和通过标准，作为历史证据边界；它们不再形成
+当前队列。
+
+| Lane / artifact | Lifecycle |
+|---|---|
+| Paper-faithful simulation, local solver audit, cache generation and QC/benchmark diagnostics | **stopped** — completed evidence retained for replay only |
+| Synthetic Phase 1 | **abandoned** — not run; no longer pursued |
+| Real-data Phase 2 | **abandoned** — not run; no longer pursued |
+
+### Phase 1 — 合成验证（abandoned）
 
 验证"EEG提议 + fNIRS选择"机制在已知 ground truth 下工作。
 
@@ -282,7 +299,7 @@ log_weights += -0.5 * np.sum(
 - EEG source target 重建相关性 > 0.85
 - fNIRS source target 重建相关性 > 0.7
 
-### Phase 2 — 真实数据（EEG+NIRS Single-Trial, Subject 1）
+### Phase 2 — 真实数据（EEG+NIRS Single-Trial, Subject 1；abandoned）
 
 3 个 fNIRS 源 × 2 个 EEG case × 3 个随机种子：
 

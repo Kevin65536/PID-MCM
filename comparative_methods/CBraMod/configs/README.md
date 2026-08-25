@@ -1,7 +1,8 @@
-# B4 config queue
+# B4 config record（STOPPED）
 
-No formal configuration is frozen. Development configs must not open protected
-indices or write outside this method's `runs/` root.
+The former B4 queue is closed. The retained public-development contract below
+records the completed historical scope; it does not authorize protected indices,
+new development, or writes outside this method's `runs/` root.
 
 The executable public-development v1 contract is shared at
 [`../../single_modal_eeg/configs/public_performance_v1.yaml`](../../single_modal_eeg/configs/public_performance_v1.yaml).

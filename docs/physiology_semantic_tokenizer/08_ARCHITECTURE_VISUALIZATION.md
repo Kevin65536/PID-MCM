@@ -1,41 +1,42 @@
 # Architecture visualization standard
 
-_Ownership and maintenance contract for retained runtime and candidate views_
+_Ownership and maintenance contract for stopped runtime and abandoned candidate views_
 
 ## Maintained views
 
 | Owning source | Derived view | Role |
 | --- | --- | --- |
-| [`architecture/physiology_semantic_architecture.json`](architecture/physiology_semantic_architecture.json) | renderer output in memory | machine-readable E2 runtime semantics |
-| [`architecture/physiology_semantic_runtime_overview.drawio`](architecture/physiology_semantic_runtime_overview.drawio) | [`runtime overview SVG`](figures/physiology_semantic_runtime_overview.svg) | current-runtime presentation view |
+| [`architecture/physiology_semantic_architecture.json`](architecture/physiology_semantic_architecture.json) | renderer output in memory | stopped E2 runtime semantics |
+| [`architecture/physiology_semantic_runtime_overview.drawio`](architecture/physiology_semantic_runtime_overview.drawio) | [`runtime overview SVG`](figures/physiology_semantic_runtime_overview.svg) | stopped/replay-only presentation view |
 | [`architecture/physiology_semantic_architecture.drawio`](architecture/physiology_semantic_architecture.drawio) | [`detailed candidate SVG`](figures/physiology_semantic_architecture.svg) | exploratory detailed view, not runtime |
-| [`architecture/observation_source_exploration_v2.drawio`](architecture/observation_source_exploration_v2.drawio) | [`exploration SVG`](figures/plans/observation_source_exploration_v2.svg) | pre-freeze replaceable candidate map |
+| [`architecture/observation_source_exploration_v2.drawio`](architecture/observation_source_exploration_v2.drawio) | [`exploration SVG`](figures/plans/observation_source_exploration_v2.svg) | abandoned pre-freeze candidate map |
 
-The registry alone owns current scientific state. Runtime JSON owns exact
+The registry alone owns recorded scientific state. Runtime JSON owns exact
 implementation semantics; each Draw.io file owns its matching layout and wording;
 SVG is an exported review artifact. No visualization changes a scientific gate,
 method freeze, or data authorization.
 
-The v2 exploration is not a target architecture. Its semantic
+The v2 exploration is an abandoned candidate, not a target architecture. Its semantic
 [`JSON note`](architecture/observation_source_exploration_v2.json), editable Draw.io
 source, exported SVG, and
 [`alt text`](figures/plans/observation_source_exploration_v2.alt.txt) preserve
-replaceable candidates from before the current freeze. Current principles are owned
-by [`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
+replaceable candidates from before the retained boundary. Retained principles are
+owned by [`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
 
 ## Visual and semantic contract
 
 - white canvas, Helvetica/CJK sans-serif fallbacks, flat pastel cards, no shadows;
 - color indicates functional role, while text and line style redundantly show
   scope, implementation, and evidence state;
-- `implemented`, `planned`, and `removed` must remain visually distinct;
+- `implemented`, `planned`, and `removed` are historical renderer labels and must remain visually distinct;
 - `admitted`, `guarded`, `blocked`, and `n_a` are evidence labels, not inferred
   from color;
 - stable node/edge IDs, accessible title/description, and orthogonal edge routes;
 - Draw.io-owned SVGs embed the editable diagram and must not be hand-edited.
 
-The Python renderer still accepts an in-memory v2 overlay for validation and future
-versioned designs. No tracked historical overlay is part of the active surface.
+The Python renderer still accepts an in-memory v2 overlay for validation and a
+future versioned design. No tracked historical overlay is part of the active
+surface, and no new overlay is registered.
 
 ## Regeneration and checks
 

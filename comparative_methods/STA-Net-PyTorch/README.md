@@ -1,5 +1,10 @@
 # STA-Net PyTorch comparison project
 
+> **STATUS: STOPPED（legacy method record）。** The frozen 70/70 strict five-fold
+> context aggregate is complete and retained read-only. Launch, tuning, within-subject,
+> and other unexecuted branches below are **ABANDONED**; commands here are not a current
+> experiment-flow entrypoint.
+
 This directory is the isolated home of the project's independent PyTorch
 STA-Net reimplementation. It contains the FGSA/EGTA model, unified-loader
 adapter, classification and regression task variants, launch configuration,
@@ -30,17 +35,18 @@ separate result tracks.
 - `sources/`: paper/code feasibility and provenance notes
 - `runs/`: smoke and formal-development training artifacts
 
-Launch all tasks from the repository root:
+Historical launch command (do not start a new queue):
 
 ```bash
 .venv/bin/python comparative_methods/STA-Net-PyTorch/launch_all.py
 ```
 
-The current training protocol creates deterministic subject-grouped
+The stopped training protocol created deterministic subject-grouped
 train/validation/reserved-test partitions. Reserved-test signals are not loaded.
-REFED target standardization is fit on training subjects only. These runs are
-development training runs until the shared cross-method protocol is frozen.
-The optimized protocol keeps one active task per GPU, uses record-grouped
+REFED target standardization was fit on training subjects only. These runs were
+development training runs under the historical cross-method protocol; the
+unexecuted launch/tuning paths below are abandoned.
+The historical optimized protocol kept one task per GPU, used record-grouped
 batches to preserve the unified loader's record cache, and emits validation
 metrics plus latest/best checkpoints after every epoch. Each task manifest pins
 the trainer, model, adapter, and resolved configuration hashes.
@@ -71,7 +77,10 @@ residual plots, and masked target-versus-prediction sequences. Figures are
 written as editable SVG and 300-DPI PNG; a suite overview compares all completed
 tasks without pooling incompatible endpoints.
 
-## Automated tuning and dual evaluation protocols
+## Historical automated tuning and dual evaluation protocols（ABANDONED extensions）
+
+The commands in this section are retained for provenance only and are not a
+current launch or authorization path.
 
 The tuning path uses task-metric checkpoint selection and five multi-fidelity
 rungs: 2, 8, 20, 40, and 100 epochs. Optuna TPE proposes configurations and a
@@ -101,8 +110,8 @@ reconstructed best historical validation checkpoint. It
 writes machine-readable CSV/JSON, a Markdown audit, and SVG/300-DPI PNG figures
 under the run's `analysis/` directory.
 
-The final MI/WG development round uses the frozen
-`configs/final_mi_wg_targeted.yaml` profile. It enqueues control-like, slow,
+The historical final MI/WG development round used the frozen
+`configs/final_mi_wg_targeted.yaml` profile. It historically enqueued control-like, slow,
 regularized, and slow-plus-regularized anchors, gives every trial at least 20
 epochs before pruning, and assigns MI/WG to separate GPUs:
 
@@ -133,8 +142,8 @@ accepts only public manifests and rejects exposed protected indices.
 `evaluate_protocol.py` is the only protected-fold consumer and requires both a
 hash-pinned freeze manifest and the explicit `--unlock-protected-test` flag.
 
-Run the separately labeled non-cross-subject protocol after its endpoint and
-task configurations are frozen:
+The separately labeled non-cross-subject protocol below is a historical,
+abandoned extension; do not launch it:
 
 ```bash
 .venv/bin/python comparative_methods/STA-Net-PyTorch/launch_within_subject.py \

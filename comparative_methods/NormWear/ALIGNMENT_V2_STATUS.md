@@ -1,5 +1,9 @@
 # NormWear adapter-alignment v2 status
 
+> **STATUS: STOPPED（历史 public-delivery record）。** 本文记录的 A0-A8/public scope
+> 已完成；后续 joint campaign 也已停止。下方 queue/locked 语句均为时点记录，不是
+> 当前 authorization；未执行 follow-up 已废弃。
+
 _Historical public-development snapshot. It is not a current status source; use
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
 statements below retain their time-local meaning._

@@ -1,4 +1,8 @@
-# Alignment configuration
+# Alignment configuration（STOPPED）
+
+> **STATUS: STOPPED.** The alignment and 90-job public-development configuration
+> below records a completed historical scope; it is not a current launch or
+> protected-evaluation authorization.
 
 `alignment_v2.yaml` preregisters the public-only support-matched cells and
 freezes the EEG/HbO/HbR, resampling, CWT, representation, and pooling boundary.

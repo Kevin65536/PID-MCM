@@ -1,4 +1,7 @@
-# Audited adapter
+# Audited adapter（STOPPED）
+
+> **STATUS: STOPPED.** The audited adapter and its public replay are complete;
+> this file is retained for evidence/replay and is not a current queue.
 
 `normwear.py` verifies and loads only the official checkpoint's frozen encoder,
 resamples canonical EEG/HbO/HbR to 65 Hz, executes the pinned optimized CWT,

@@ -1,11 +1,11 @@
 # Development and experiment guide
 
-_Active repository conventions, consolidated 2026-07-30_
+_Retained repository conventions, consolidated 2026-07-30; no active experiment sequence_
 
 This is the operational guide for code, tests, experiment launches, results,
-and documentation. Current execution and scientific verdicts are generated in
-[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md); stable experiment ordering lives
-in [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md).
+and documentation. Registered execution and scientific verdicts are generated in
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md); the clean-slate experiment
+entry and lifecycle overlay live in [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md).
 
 ## Repository boundaries
 
@@ -24,13 +24,13 @@ data/                        original datasets and derived caches (ignored)
 
 Reusable classes and functions belong in `src/`. Executable workflows belong
 under `experiments/` or the isolated comparison-method package that owns them.
-New physiology-semantic runs write below
+Any future versioned physiology-semantic runs write below
 `experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/`; comparison
 methods write only below their owning package. Archive discovery is always
 explicit: active tools do not recursively search or import
 `experiments/archive/`.
 
-The R1-P qualification surface is a dated evidence package. Keep its model,
+The R1-P qualification surface is a dated, stopped evidence package. Keep its model,
 scripts, registries, configuration, and tests together when revisiting that
 historical result; ordinary cleanup should not silently mix it with a new
 experiment generation.
@@ -77,16 +77,17 @@ experiment needs:
 - parser and shape tests;
 - dry-run or synthetic execution before measured data access.
 
-The observation–source v2 material is an exploratory design note, not an
+The observation–source v2 material is an abandoned design note, not an
 executable configuration or fixed architecture. Do not repurpose an E0–E2 or
-R-series YAML for it. Any candidate taken forward needs its own versioned
+R-series YAML for it. A future candidate would need its own versioned
 software, tensor-shape, split, and null checks on synthetic data first. A
 protected measured run additionally requires its owning protocol and separate
 explicit user authorization.
 
-The forward physiology-semantic implementation does not yet have a launcher.
-Add one only with the versioned implementation/config contract and its synthetic
-checks; archived E0–E2 launchers are not templates for the new generation.
+No forward physiology-semantic implementation or launcher is registered. Archived
+E0–E2 launchers are stopped/abandoned evidence and are not templates; a future
+launcher would require its own versioned implementation/config contract and
+synthetic checks.
 
 ## Evidence ladder
 
@@ -144,12 +145,11 @@ green; introduce a separate small fixture or revise the seal explicitly.
 ## Documentation
 
 [`docs/README.md`](docs/README.md) is the only documentation authority map.
-Current execution and scientific verdicts live in
-[`research_state/registry.json`](research_state/registry.json), which has exactly
-those two status axes. Do not copy current state, job counts, or next actions into
-hand-written README files.
+Registered execution and scientific verdicts live in
+[`research_state/registry.json`](research_state/registry.json). Do not copy
+historical state, job counts, or next actions into hand-written README files.
 
-When an experiment changes state, edit the corresponding current item in
+When a future registered experiment changes state, edit its corresponding item in
 `research_state/registry.json`, then run:
 
 ```bash

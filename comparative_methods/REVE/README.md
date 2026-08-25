@@ -1,5 +1,9 @@
 # REVE comparison workspace
 
+> **STATUS: STOPPED（legacy method record）。** REVE alignment, public delivery and
+> its later joint-campaign cell evaluation are complete. This workspace is retained
+> for evidence and replay only; no queue, launch, or protected follow-up here is current.
+
 _Project-level execution and scientific verdicts are generated in
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Public-development and
 data-boundary statements here describe the frozen implementation/evidence layer._

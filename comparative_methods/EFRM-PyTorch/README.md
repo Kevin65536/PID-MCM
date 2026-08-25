@@ -1,5 +1,10 @@
 # EFRM synchronous-data reproduction
 
+> **STATUS: STOPPED（legacy method record）。** EFRM LODO v2, public delivery and its
+> later joint-campaign cell evaluation are complete. This workspace is retained for
+> evidence and replay only; unexecuted full-finetune/transfer extensions are
+> **ABANDONED**, and no launch or protected follow-up here is current.
+
 _Project-level execution and scientific verdicts are generated in
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Protocol and implementation
 details here describe the frozen EFRM evidence layer._
@@ -47,13 +52,13 @@ completed on 2026-08-03. Inspect the retained status with:
 .venv/bin/python comparative_methods/EFRM-PyTorch/run_lodo_pretraining.py status
 ```
 
-The comparison-aligned public downstream phase is implemented by
+The comparison-aligned historical public downstream phase is implemented by
 [`run_downstream_public_v2.py`](run_downstream_public_v2.py). It unions only
 the five public manifests, verifies and freezes the checkpoint that excluded
 the target dataset, caches full-public paired embeddings, and trains only a
 fresh LayerNorm/Dropout/Linear probe. REFED retains its input and target masks
-and fits target scaling on the allowed training membership only. A smoke run
-can be launched with:
+and fits target scaling on the allowed training membership only. Historical
+smoke command (do not launch new work):
 
 ```bash
 .venv/bin/python comparative_methods/EFRM-PyTorch/run_downstream_public_v2.py \
@@ -65,8 +70,8 @@ can be launched with:
 The non-self-authorizing public matrix completed 105/105 serial jobs with no
 failures or retries. Its retained completion and A0-A8 summaries are
 [`matrix_completion_summary.json`](evidence/public_development_v2/matrix_completion_summary.json)
-and [`summary_final.json`](evidence/alignment_v2/summary_final.json). To
-re-materialize the same candidate definition, use:
+and [`summary_final.json`](evidence/alignment_v2/summary_final.json). For
+audit-only re-materialization of the same historical candidate definition, use:
 
 ```bash
 .venv/bin/python comparative_methods/EFRM-PyTorch/build_downstream_public_matrix_v2.py \
@@ -200,16 +205,16 @@ training subjects from all four datasets; validation subjects are used only
 for self-supervised stopping and downstream model selection. Reserved test
 subjects are never loaded.
 
-The active v2 formal path does not pretrain inside every outer fold. Instead,
+The stopped v2 formal path did not pretrain inside every outer fold. Instead,
 it trains one checkpoint per target dataset using all subjects from the other
-three datasets. The active target dataset is excluded in its entirety from
+three datasets. The target dataset was excluded in its entirety from
 representation pretraining, so the same frozen checkpoint can be reused across
 all five downstream folds without making the result transductive.
 
 A method-neutral full-target fold registry is mandatory. EFRM, the project
 mainline, STA-Net, and any other directly ranked method must consume identical
 eligible subjects, samples, outer test folds, labels, modalities, and
-endpoints. A global checkpoint pretrained on the active target dataset remains
+endpoints. A global checkpoint pretrained on the target dataset remains
 a `transductive_diagnostic` and cannot enter the inductive primary table.
 
 The downstream matrix matches STA-Net:
@@ -224,21 +229,22 @@ The downstream matrix matches STA-Net:
 | Visual motivation | RR/RF/FF/FR | paired 8 s | `efrm_sync_classification` |
 | REFED | 20-point valence/arousal sequence | paired 20 s | `efrm_sync_regression_adapter` |
 
-The active protocol requires frozen-backbone linear probing for all seven
-tasks and treats full fine-tuning as a secondary resource-contingent matrix.
+The stopped protocol required frozen-backbone linear probing for all seven
+tasks; its unexecuted full-fine-tuning extension is abandoned for this legacy
+flow.
 Classification selects an epoch by inner-validation macro-F1, then refits a
 fresh head on all outer-training subjects for that epoch count. REFED follows
 the same procedure with masked scaled RMSE. Protected results are opened only
 through the frozen protocol's explicit unlock path.
 
-The earlier public-development tuning plan follows the STA-Net policy: seed
+The earlier public-development tuning plan followed the STA-Net policy: seed
 42, 12 Optuna trials per task and transfer mode, 2/8/20/40/100-epoch rungs,
 and best validation checkpoint through each rung. It remains development
-evidence. The active v2 protocol uses downstream seeds 17, 42, and 73. Seed
+evidence. The stopped v2 protocol used downstream seeds 17, 42, and 73. Seed
 results are averaged inside each outer fold before fold aggregation, and seed
 dispersion is reported separately.
 
-### Active LODO full-target performance protocol
+### Stopped LODO full-target performance protocol
 
 The normative protocol and its machine-readable contract are:
 
@@ -296,7 +302,10 @@ replaced. They must be labeled
 v2 folds, and may not be selected task-by-task according to which protocol
 produces the higher score.
 
-### Public-development transfer runner
+### Historical public-development transfer runner（ABANDONED extensions）
+
+The launch examples in this section are retained for historical replay only; do
+not start the former transfer queue or its unexecuted full-finetune branch.
 
 `train_downstream.py` executes one public train/validation task without opening
 protected indices. It supports `linear_probe` and `full_finetune`, EEG-only,
@@ -311,8 +320,8 @@ Both current shared split schemas are accepted: index-addressed
 directory and verifies that every downstream validation subject was held out by
 the selected pretraining boundary.
 
-The detached queue launcher runs task matrices sequentially on each assigned
-GPU:
+Historically, the detached queue launcher ran task matrices sequentially on each
+assigned GPU; this former queue is abandoned and must not be restarted:
 
 ```bash
 .venv/bin/python comparative_methods/EFRM-PyTorch/launch_downstream.py start \
@@ -358,7 +367,7 @@ co-occurrence and does not identify direction, hemodynamic delay, or a
 physiological mechanism. Figure source arrays, pair metadata, SVG, 300-DPI PNG,
 and metric JSON are retained together.
 
-## Execution stages and gates
+## Historical execution stages and gates（STOPPED）
 
 1. **Protocol/preflight:** hash upstream, clean cache, event index, geometry,
    task contracts, public splits, channel inventories, eligible synchronized
@@ -380,7 +389,7 @@ and metric JSON are retained together.
 6. **Formal evaluation:** freeze configs and rerun pretraining per protected
    outer fold before the explicit shared-protocol test unlock.
 
-Current implementation status (2026-07-23): the independent model, unified
+Historical implementation status (2026-07-23): the independent model, unified
 adapter, seven-task heads, public-split boundary, CLIP evidence exporter,
 resumable ViT-base pretrainer, and post-hoc analysis tool are implemented.
 The first development run reached eight complete epochs and then stopped
@@ -408,9 +417,9 @@ Measured on an RTX 4090 with a true 32-pair contrastive matrix:
 | 16 | off | 11.89 GiB | 12.55 GiB | 21.9 s |
 | 8 | off, EEG + worst-case REFED | 9.12 GiB | 9.56 GiB | 28.0 s / 2 train + 1 validation batches |
 
-The development default is therefore batch 32, exact two-pass gradient cache,
-recompute chunk 8, BF16 autocast, and no activation checkpointing. This leaves
-substantial margin beside the active STA-Net jobs without paying the slower
+The historical development default was batch 32, exact two-pass gradient cache,
+recompute chunk 8, BF16 autocast, and no activation checkpointing. This left
+substantial margin beside the then-active STA-Net jobs without paying the slower
 checkpoint-recompute path. Batched attention masks exclude invalid channel/time
 tokens as keys and values without falling back to per-sample transformer loops.
 
@@ -427,7 +436,7 @@ hashes, CUDA peak memory, and validation-only CLIP evidence. Its two-pass
 gradient cache is regression-tested against the full contrastive-batch
 gradient before GPU training.
 
-### Detached launch and process audit
+### Historical detached launch and process audit（ABANDONED）
 
 Long training must not be started by invoking `train_pretrain.py` directly
 from a Codex PTY, SSH terminal, or other temporary execution cell. Use the
@@ -484,8 +493,8 @@ positive/negative CLIP separation, bidirectional retrieval, and embedding
 geometry. A stale `running` marker is classified separately from a completed
 run. The analyzer refuses artifacts that report an opened protected test.
 
-The current trainer exports one final validation batch per completed epoch and
+The historical trainer exported one final validation batch per completed epoch and
 overwrites the previous evidence. Consequently, the post-hoc tool labels saved
 retrieval results as batch diagnostics rather than full-validation estimates.
-Future formal runs should archive deterministic dataset/subject-stratified
-evidence per epoch before using alignment plots for generalization claims.
+Any future formal run belongs to a clean, separately versioned experiment flow;
+the legacy launch path here is not an instruction to resume.

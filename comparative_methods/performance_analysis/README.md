@@ -1,5 +1,9 @@
 # Comparator performance-degradation analyses
 
+> **STATUS: STOPPED.** The P0 synthesis is complete and retained as exploratory
+> evidence. Unexecuted mechanism follow-ups are **ABANDONED**; this directory is
+> an evidence index, not a current analysis queue or launch entrypoint.
+
 This package contains post-campaign mechanism analyses defined by
 `docs/comparisons/PERFORMANCE_DEGRADATION_ANALYSIS_PLAN_20260816.md`.
 The completed first-round synthesis is

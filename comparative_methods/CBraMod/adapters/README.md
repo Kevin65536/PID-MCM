@@ -1,4 +1,5 @@
-# B1 adapter queue
+# B1 adapter record（STOPPED）
 
-Pending: define EEG-only shape, exact 200-sample patching at 200 Hz,
-channel/mask handling, and frozen-encoder pooling without synthetic channels.
+The former B1 checklist (200-sample patching, channel/mask handling and pooling)
+was superseded by the completed A0-A8/public evidence. This file is retained as
+a historical record; no B1 queue remains.

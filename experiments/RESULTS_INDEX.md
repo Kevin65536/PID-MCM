@@ -22,18 +22,22 @@ use local payloads only when a report explicitly requires them.
 
 | Stage | Retained authority / artifact | Why it remains |
 | --- | --- | --- |
-| E0 final teacher revalidation | [`20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1`](runs/physiology_semantic_tokenizer/e0_teacher_validity/20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1/summary.md) | admitted development teacher surface and claim boundary |
-| E1 K128 health | [`20260722_e1_health_coupling_visual_report_v1`](runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260722_e1_health_coupling_visual_report_v1/summary.json) and retained multi-seed summaries | software/occupancy reference |
-| E2 weight calibration | [`20260723_e2_v4_training_gradient_weight_calibration_v1`](runs/physiology_semantic_tokenizer/e2_weight_calibration/20260723_e2_v4_training_gradient_weight_calibration_v1/analysis/summary.md) | explains frozen semantic-objective scale |
-| E2 final decision | [`20260723_e2_v4_semantic_objective_suite_v1/decision`](runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md) | no semantic row admitted; retain T0 |
-| R0-P | [`20260728_r1p_raw_lag_formal_v1`](runs/physiology_semantic_tokenizer/r0p_raw_lag_baseline/20260728_r1p_raw_lag_formal_v1/summary.json) | registered raw-lag negative result |
-| R1-D | [`20260728_e0_v3_reanalysis_v1`](runs/physiology_semantic_tokenizer/r1d_teacher_geometry/20260728_e0_v3_reanalysis_v1/summary.json) | exploratory correction geometry |
-| R1-P structure | [`20260728_r1p_bundle_qualification_structure_v2`](runs/physiology_semantic_tokenizer/r1p_structural_audit/20260728_r1p_bundle_qualification_structure_v2/AUDIT.md) | confirms formal bundle integrity |
-| R1-P formal panel | [`20260728_r1p_population_frozen_formal_v3`](runs/physiology_semantic_tokenizer/r1p_teacher_qualification/20260728_r1p_population_frozen_formal_v3/panel_summary.json) | G2 failure and final qualification decision |
-| R1-P post-formal | [`20260728_r1p_formal_v3_postformal_v1`](runs/physiology_semantic_tokenizer/r1p_cross_session_hemodynamic_adaptation/20260728_r1p_formal_v3_postformal_v1/summary.json) | failure interpretation without gate revision |
-| D1B | [`20260728_d1b_train_only_grid_v1`](runs/physiology_semantic_tokenizer/r1p_d1b_train_only_hyperparameter_seal/20260728_d1b_train_only_grid_v1/summary.json) | train-only evidence; validation remained undetermined |
-| R2-D formal | [`20260728_r2d_cj_seed20260728_formal_v1`](runs/physiology_semantic_tokenizer/r2_continuous_observability/20260728_r2d_cj_seed20260728_formal_v1/summary.json) | bilateral observability failure |
-| R2-D statistical audit | [`20260728_r1d_cj_seed20260728_v2_stat_audit`](runs/physiology_semantic_tokenizer/r2_continuous_observability_analysis/20260728_r1d_cj_seed20260728_v2_stat_audit/diagnostic_summary.json) | uncertainty and diagnostic reference |
+| E0 final teacher revalidation (stopped) | [`20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1`](runs/physiology_semantic_tokenizer/e0_teacher_validity/20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1/summary.md) | retained development teacher surface and claim boundary |
+| E1 K128 health (stopped) | [`20260722_e1_health_coupling_visual_report_v1`](runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260722_e1_health_coupling_visual_report_v1/summary.json) and retained multi-seed summaries | software/occupancy reference |
+| E2 weight calibration (stopped) | [`20260723_e2_v4_training_gradient_weight_calibration_v1`](runs/physiology_semantic_tokenizer/e2_weight_calibration/20260723_e2_v4_training_gradient_weight_calibration_v1/analysis/summary.md) | explains frozen semantic-objective scale |
+| E2 final decision (stopped) | [`20260723_e2_v4_semantic_objective_suite_v1/decision`](runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/decision/summary.md) | no semantic row admitted; T0 retained |
+| R0-P (stopped) | [`20260728_r1p_raw_lag_formal_v1`](runs/physiology_semantic_tokenizer/r0p_raw_lag_baseline/20260728_r1p_raw_lag_formal_v1/summary.json) | registered raw-lag negative result |
+| R1-D (stopped) | [`20260728_e0_v3_reanalysis_v1`](runs/physiology_semantic_tokenizer/r1d_teacher_geometry/20260728_e0_v3_reanalysis_v1/summary.json) | exploratory correction geometry |
+| R1-P structure (stopped) | [`20260728_r1p_bundle_qualification_structure_v2`](runs/physiology_semantic_tokenizer/r1p_structural_audit/20260728_r1p_bundle_qualification_structure_v2/AUDIT.md) | confirms formal bundle integrity |
+| R1-P formal panel (stopped) | [`20260728_r1p_population_frozen_formal_v3`](runs/physiology_semantic_tokenizer/r1p_teacher_qualification/20260728_r1p_population_frozen_formal_v3/panel_summary.json) | G2 failure and final qualification decision |
+| R1-P post-formal (stopped) | [`20260728_r1p_formal_v3_postformal_v1`](runs/physiology_semantic_tokenizer/r1p_cross_session_hemodynamic_adaptation/20260728_r1p_formal_v3_postformal_v1/summary.json) | failure interpretation without gate revision |
+| D1B (abandoned) | [`20260728_d1b_train_only_grid_v1`](runs/physiology_semantic_tokenizer/r1p_d1b_train_only_hyperparameter_seal/20260728_d1b_train_only_grid_v1/summary.json) | incomplete train-only evidence; validation remained undetermined and the lane is not continued |
+| R2-D formal (stopped) | [`20260728_r2d_cj_seed20260728_formal_v1`](runs/physiology_semantic_tokenizer/r2_continuous_observability/20260728_r2d_cj_seed20260728_formal_v1/summary.json) | bilateral observability failure |
+| R2-D statistical audit (stopped) | [`20260728_r1d_cj_seed20260728_v2_stat_audit`](runs/physiology_semantic_tokenizer/r2_continuous_observability_analysis/20260728_r1d_cj_seed20260728_v2_stat_audit/diagnostic_summary.json) | uncertainty and diagnostic reference |
+
+All E/R entries above are stopped historical evidence surfaces except D1B, which is
+an abandoned incomplete lane. They can be read or replayed where their exact
+artifacts remain, but they do not define a current queue.
 
 The compact decision snapshot is
 [`06_EXPERIMENT_LOG.md`](../docs/physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md);
@@ -43,26 +47,27 @@ The R1-P source/config/test package remains together as a dated result surface.
 
 ## Token Atlas
 
-Keep the frozen 2026-07-30 E2 T0 Core artifact:
+The frozen 2026-07-30 E2 T0 Core artifact remains retained:
 
 [`token_physiology_atlas_standard_loader_core_20260730`](runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/)
 
 It contains the manifest, summaries, 12 figures with sidecars/alt text, source
-tables, compact assignments, measurement cache, and sequence counts. It is
-development-only and did not open protected data. Future Statistical-tier work
-should reuse this frozen checkpoint/cache identity.
+tables, compact assignments, measurement cache, and sequence counts. It is a
+stopped development artifact and did not open protected data. The unexecuted
+Statistical-tier continuation in this lineage is abandoned; a new flow must define
+its own question and evidence contract.
 
 ## Comparison methods
 
 | Method | Retained surface | Policy |
 | --- | --- | --- |
-| STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 retained formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | recurring seven-task reference |
-| Joint protected campaign | tracked [`42-cell result report`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md), dated local (Git-ignored) 540-job status, unblind record, aggregate, and traceability manifest | complete; 22 ready-with-note, 12 rejected, 2 overlap-only, 6 unsupported; run payload remains ignored |
-| EFRM v2 | entire [`efrm_lodo_full_target_fivefold_v2`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/) run/protocol/status plus method runs and caches | complete; retained as frozen campaign evidence |
-| BIOT / CBraMod / REVE | source-fidelity and alignment evidence plus frozen public/protected campaign identities | complete; protected payload remains ignored |
-| BrainFusion / NormWear | reimplementation/adaptation evidence plus frozen public/protected campaign identities | complete; labels and track boundaries remain mandatory |
-| EFRM v1 | aggregate/status and lightweight tables/figures | historical different-estimand context |
-| UMAP | code, configs, README, design, and [historical UMAP note](../comparative_methods/EXPERIMENT_PLAN.md#umap) | diagnostic only; no old run directory retained |
+| STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 retained formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | **stopped** method-native historical reference |
+| Joint protected campaign | tracked [`42-cell result report`](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md), dated local (Git-ignored) 540-job status, unblind record, aggregate, and traceability manifest | **stopped**; 22 ready-with-note, 12 rejected, 2 overlap-only, 6 unsupported; run payload remains ignored |
+| EFRM v2 | entire [`efrm_lodo_full_target_fivefold_v2`](../comparative_methods/EFRM-PyTorch/runs/formal/efrm_lodo_full_target_fivefold_v2/) run/protocol/status plus method runs and caches | **stopped**; retained as frozen campaign evidence |
+| BIOT / CBraMod / REVE | source-fidelity and alignment evidence plus frozen public/protected campaign identities | **stopped**; protected payload remains ignored |
+| BrainFusion / NormWear | reimplementation/adaptation evidence plus frozen public/protected campaign identities | **stopped**; labels and track boundaries remain mandatory |
+| EFRM v1 | aggregate/status and lightweight tables/figures | **stopped** different-estimand context |
+| UMAP | code, configs, README, design, and [historical UMAP note](../comparative_methods/EXPERIMENT_PLAN.md#umap) | **abandoned** diagnostic candidate; no old run directory retained |
 
 The STA-Net checkpoints outside the latest formal run were older tuning,
 smoke, personalized, or earlier formal payloads. Their configs, manifests,
@@ -70,11 +75,13 @@ metrics, aggregates, logs, and figures remain.
 
 ## Croce validation
 
-Keep `croce_validation` design documents, scripts, reports, manifests,
-figures, and the expensive retained
-`cache/croce_local/highwl_v2/` surface. Historical archive NPZ payloads are
-rebuildable from the retained manifests/configuration and measured data. The
-redesigned Synthetic Phase 1 and Real Phase 2 have not started.
+The `croce_validation` design documents, scripts, reports, manifests, figures,
+and the expensive retained `cache/croce_local/highwl_v2/` surface are **stopped**
+evidence. Historical archive NPZ payloads are rebuildable from the retained
+manifests/configuration and measured data, but no regeneration is implied. The
+redesigned Synthetic Phase 1 and Real Phase 2 were not run and are **abandoned**;
+they do not form a current dependency lane. A future clean flow must establish a
+new owner, protocol, and evidence identity.
 
 ## Historical source/observation generation
 

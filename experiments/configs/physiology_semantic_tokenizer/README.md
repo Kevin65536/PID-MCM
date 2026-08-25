@@ -1,16 +1,22 @@
 # Physiology-semantic tokenizer configurations
 
-This directory contains executable experiment contracts. Generated variants,
-local tuning files, run outputs and abandoned preregistries are intentionally
-excluded from Git.
+This directory retains executable experiment contracts from the stopped R-series.
+Generated variants, local tuning files, run outputs and abandoned preregistries are
+intentionally excluded from Git.
 
-## Current boundary
+> **Lifecycle (2026-08-25): stopped / abandoned.** The retained E0–E2 and R-series
+> configurations and evidence are stopped replay surfaces. Unexecuted continuation
+> paths are abandoned; this directory does not define a current experiment queue.
+> A future clean flow must publish a new versioned contract rather than reuse these
+> files.
+
+## Retained historical boundary
 
 The E0–E2 and failed post-R2 development YAMLs are historical and have been
-moved out of this active config surface. New work must not infer a forward
-contract from them.
-The current R-series conclusion is `do_not_enter_r2_p`: no VQ or token
-co-occurrence experiment is authorized.
+moved out of this config surface. They are stopped records; new work must not
+infer a forward contract from them. The R-series stopped at
+`do_not_enter_r2_p`; no VQ or token co-occurrence continuation is authorized by
+these records.
 
 The theory/architecture principles are frozen in
 [`METHOD_RATIONALE.md`](../../../docs/METHOD_RATIONALE.md). The
@@ -28,16 +34,16 @@ tensor-shape, split, and null checks. Protected cohorts require the owning
 protocol plus separate, explicit user authorization and are never opened by a
 config flag.
 
-The versioned R-series surface is deliberately limited to:
+The retained R-series surface is deliberately limited to:
 
 | File | Purpose | Status |
 | --- | --- | --- |
-| `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | Completed; primary result negative |
-| `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | Completed; structural audit passed |
-| `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | Formal-v3 did not qualify |
-| `r1p_teacher_perturbation_registry.json` | Three finite train-only G4 stress bundles | Completed |
-| `r2d_continuous_observability.yaml` | One-seed development continuous observability | Completed; bilateral endpoint failed |
-| `token_physiology_atlas.yaml` | Versioned descriptive analysis contract for an already trained tokenizer | Development-only; does not authorize a new VQ or coupling experiment |
+| `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | **Stopped**; completed, primary result negative |
+| `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | **Stopped**; completed, structural audit passed |
+| `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | **Stopped**; formal-v3 did not qualify |
+| `r1p_teacher_perturbation_registry.json` | Three finite train-only G4 stress bundles | **Stopped**; completed |
+| `r2d_continuous_observability.yaml` | One-seed development continuous observability | **Stopped**; completed, bilateral endpoint failed |
+| `token_physiology_atlas.yaml` | Versioned descriptive analysis contract for an already trained tokenizer | **Stopped** development-only replay; does not authorize a new VQ or coupling experiment |
 
 Two matching evidence contracts live under
 `docs/physiology_semantic_tokenizer/architecture/`:
@@ -45,19 +51,21 @@ Two matching evidence contracts live under
 `r1p_prevalidation_seal.json`. They are required to replay the corresponding
 formal scripts and must not be edited retrospectively.
 
-## Execution contract
+## Retired execution contract
 
-Every new versioned config must have a parser test, shape and split assertions,
-a dry-run or synthetic execution path, and an output namespace below:
+The following requirements describe the stopped R-series replay surface. They do
+not authorize a new run or define the clean flow's future contract. Any replacement
+must carry its own parser test, shape and split assertions, synthetic path, and
+output namespace below:
 
 ```text
 experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/
 ```
 
-Subjects 01–18 are the development-fit cohort, subjects 19–23 are
-development pure-apply, and subjects 24–29 remain protected. A config flag
-cannot relax this boundary. Teacher-supervised runs also require exact
-registry and seal identities; teacher-free runs must set all teacher-derived
+The retained R-series snapshot used subjects 01–18 as the development-fit cohort,
+subjects 19–23 as development pure-apply, and subjects 24–29 as protected. A
+config flag could not relax that boundary. Teacher-supervised replay requires the
+exact registry and seal identities; teacher-free replay sets all teacher-derived
 loss weights to zero.
 
 The consolidated methods, results, interpretation and stop decision are in

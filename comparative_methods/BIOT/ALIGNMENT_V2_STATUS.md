@@ -1,10 +1,14 @@
 # BIOT adapter-alignment v2 status
 
+> **STATUS: STOPPED（历史 public-delivery record）。** 本文记录的 A0-A8/public scope
+> 已完成；后续 joint campaign 也已停止。下方 queue/locked 语句均为时点记录，不是
+> 当前 authorization；未执行 follow-up 已废弃。
+
 _Historical public-development chronology ending 2026-07-31. It is not a current
 status source; use [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and
 data-boundary statements below retain their time-local meaning._
 
-At the pre-A8 checkpoint, BIOT was the only active new comparison method. Its six supported
+At the pre-A8 checkpoint, BIOT was the then-active new comparison method. Its six supported
 classification cells have completed full-public adapter replay and pass A0–A7.
 REFED regression is preregistered as unsupported because the frozen BIOT
 adapter cannot preserve its semantically real partial terminal time support.
@@ -12,12 +16,12 @@ No protected manifest or array was opened.
 
 | Task | Unique public samples | Pre-A8 disposition |
 | --- | ---: | --- |
-| Motor imagery | 1,740 | A0–A7 pass; A8 pending |
-| Mental arithmetic | 1,740 | A0–A7 pass; A8 pending |
-| WG | 1,560 | A0–A7 pass; A8 pending |
-| N-back | 702 | A0–A7 pass; A8 pending |
-| DSR | 8,980 | A0–A7 pass; A8 pending |
-| Visual | 7,720 | A0–A7 pass; A8 pending |
+| Motor imagery | 1,740 | A0–A8 pass; historical scope stopped |
+| Mental arithmetic | 1,740 | A0–A8 pass; historical scope stopped |
+| WG | 1,560 | A0–A8 pass; historical scope stopped |
+| N-back | 702 | A0–A8 pass; historical scope stopped |
+| DSR | 8,980 | A0–A8 pass; historical scope stopped |
+| Visual | 7,720 | A0–A8 pass; historical scope stopped |
 | REFED regression | — | unsupported: `BIOT_NO_PARTIAL_TIME_MASK_CONTRACT` |
 
 The retained machine evidence is in [`evidence/alignment_v2`](evidence/alignment_v2),
@@ -49,6 +53,6 @@ The candidate 90-job matrix is serial (`max_concurrent_jobs=1`), has zero
 automatic retries, retains failures, and is explicitly not self-authorizing.
 The separate reviewed launch manifest authorized only this public matrix and
 kept protected evaluation and CBraMod work unauthorized during execution. The
-matrix is now complete, so the delivery queue has explicitly advanced to
-CBraMod. BIOT has no live job; its deferred protected evaluation remains locked
-and may not run concurrently with the active delivery method.
+matrix is now complete; the historical delivery queue then advanced to CBraMod.
+BIOT has no live job. The old protected-locked/deferred wording is time-local and
+does not authorize a rerun; final joint-campaign evidence is recorded separately.

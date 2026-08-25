@@ -35,12 +35,20 @@ def test_current_registry_is_lightweight_and_views_are_readable():
     assert "| Item | Status | Conclusion | Evidence | Next | Updated |" in status
     assert "## Evidence registry" not in status
     assert "主方法实验日志" in status
-    assert "依赖：" in status
+    assert "已停止（此前已完成）" in status
+    assert "已废弃（未完成且不再开展）" in status
+    terminal_rows = [
+        line
+        for line in status.splitlines()
+        if line.startswith("| ")
+        and line.count("|") >= 7
+        and ("已停止（此前已完成）" in line or "已废弃（未完成且不再开展）" in line)
+    ]
+    assert terminal_rows
+    assert all("| — | 2026-08-25 |" in line for line in terminal_rows)
 
     readme = render_readme_block(registry)
-    assert "### Next steps" in readme
-    next_section = readme.split("### Next steps", 1)[1].split("\n\n", 1)[0]
-    assert 1 <= len([line for line in next_section.splitlines() if line.startswith("- ")]) <= 3
+    assert "### Next steps" not in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -54,19 +62,21 @@ def test_current_registry_is_lightweight_and_views_are_readable():
 def test_execution_and_scientific_verdict_remain_independent():
     current = _current_by_entity(_registry())
 
-    assert current["main.r1p"]["execution"] == "completed"
+    assert current["main.r1p"]["execution"] == "stopped"
     assert current["main.r1p"]["scientific_verdict"] == "rejected"
 
-    assert current["main.d1b"]["execution"] == "failed"
+    assert current["main.d1b"]["execution"] == "abandoned"
     assert current["main.d1b"]["scientific_verdict"] == "inconclusive"
 
-    assert current["main.future_vq"]["execution"] == "blocked"
+    assert current["main.future_vq"]["execution"] == "abandoned"
     assert current["main.future_vq"]["scientific_verdict"] == "unreviewed"
 
-    assert current["comparison.campaign"]["execution"] == "completed"
+    assert current["comparison.campaign"]["execution"] == "stopped"
     assert current["comparison.campaign"]["scientific_verdict"] == "mixed"
-    assert current["comparison.efrm"]["execution"] == "completed"
+    assert current["comparison.efrm"]["execution"] == "stopped"
     assert current["comparison.efrm"]["scientific_verdict"] == "mixed"
+
+    assert all(record.get("next_step") is None for record in current.values())
 
 
 def test_comparison_method_totals_match_the_campaign_aggregate():
@@ -114,6 +124,29 @@ def test_registry_rejects_scientific_verdict_before_execution():
         validate_registry(registry, repo_root=PROJECT_ROOT)
 
 
+def test_registry_rejects_scientific_verdict_for_abandoned_work():
+    registry = copy.deepcopy(_registry())
+    record = _current_by_entity(registry)["atlas.statistical"]
+    record["scientific_verdict"] = "qualified"
+
+    with pytest.raises(ProjectStateError, match="abandoned work cannot"):
+        validate_registry(registry, repo_root=PROJECT_ROOT)
+
+
+def test_stopped_work_requires_complete_progress_and_no_next_step():
+    registry = copy.deepcopy(_registry())
+    record = _current_by_entity(registry)["comparison.campaign"]
+    record["progress"]["completed"] -= 1
+
+    with pytest.raises(ProjectStateError, match="stopped execution requires completed == total"):
+        validate_registry(registry, repo_root=PROJECT_ROOT)
+
+    record["progress"]["completed"] += 1
+    record["next_step"] = "旧队列"
+    with pytest.raises(ProjectStateError, match="stopped execution cannot carry next_step"):
+        validate_registry(registry, repo_root=PROJECT_ROOT)
+
+
 def test_registry_rejects_mixed_verdict_without_mixed_outcomes():
     registry = copy.deepcopy(_registry())
     campaign = next(
@@ -143,17 +176,17 @@ def test_evidence_drift_is_only_an_audit_failure():
 
 def test_current_record_can_be_updated_in_place_without_supersedes():
     registry = copy.deepcopy(_registry())
-    record = next(item for item in registry["records"] if item["entity"] == "atlas.statistical")
+    record = _current_by_entity(registry)["main.data_contract"]
     record["summary"] = "状态摘要可在当前记录中直接更新。"
-    record.pop("supersedes")
-    record.pop("depends_on")
+    record.pop("supersedes", None)
+    record.pop("depends_on", None)
 
     validate_registry(registry, repo_root=PROJECT_ROOT)
 
 
 def test_effective_snapshot_timestamp_follows_a_current_record_update():
     registry = copy.deepcopy(_registry())
-    record = next(item for item in registry["records"] if item["entity"] == "atlas.statistical")
+    record = _current_by_entity(registry)["atlas.statistical"]
     record["updated_at"] = "2026-09-01"
 
     validate_registry(registry, repo_root=PROJECT_ROOT)
@@ -166,15 +199,13 @@ def test_effective_snapshot_timestamp_follows_a_current_record_update():
 
 def test_superseding_record_replaces_exactly_one_current_state():
     registry = copy.deepcopy(_registry())
-    previous = next(
-        item for item in registry["records"] if item["entity"] == "atlas.statistical"
-    )
+    previous = _current_by_entity(registry)["atlas.statistical"]
     replacement = copy.deepcopy(previous)
     replacement.update(
         {
-            "state_id": "atlas.statistical@2026-08-17.reviewed",
+            "state_id": "atlas.statistical@2026-08-26.reviewed",
             "supersedes": [previous["state_id"]],
-            "updated_at": "2026-08-17T09:00:00+08:00",
+            "updated_at": "2026-08-26T09:00:00+08:00",
         }
     )
     registry["records"].append(replacement)
@@ -187,9 +218,7 @@ def test_superseding_record_replaces_exactly_one_current_state():
 
 def test_optional_supersedes_cannot_replace_a_newer_snapshot_with_an_older_one():
     registry = copy.deepcopy(_registry())
-    previous = next(
-        item for item in registry["records"] if item["entity"] == "atlas.statistical"
-    )
+    previous = _current_by_entity(registry)["atlas.statistical"]
     replacement = copy.deepcopy(previous)
     replacement.update(
         {
@@ -206,7 +235,7 @@ def test_optional_supersedes_cannot_replace_a_newer_snapshot_with_an_older_one()
 
 def test_registry_rejects_supersedes_cycle_and_missing_current_state():
     registry = copy.deepcopy(_registry())
-    first = next(item for item in registry["records"] if item["entity"] == "atlas.full")
+    first = _current_by_entity(registry)["atlas.full"]
     second = copy.deepcopy(first)
     second.update(
         {

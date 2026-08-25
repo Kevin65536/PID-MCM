@@ -1,6 +1,10 @@
 # Adapter 对齐门控 v2
 
-_生效日期：2026-07-31。适用于尚未冻结的新对比单元；不回开已经完成的
+> **ROLE: FROZEN CONTRACT（2026 legacy）。** 本文只保留数据边界、gate 定义和
+> 历史证据语义；2026 serial delivery queue 已 STOPPED，未执行的延后路径已
+> ABANDONED。它不授权新的实验流。
+
+_历史生效日期：2026-07-31。适用于 2026 年尚未冻结的对比单元；不回开已经完成的
 protected evaluation，也不改变正在执行的冻结协议。机器合同见
 [`adapter_alignment_gate_contract_v2.yaml`](adapter_alignment_gate_contract_v2.yaml)。
 本文定义门控，不维护当前方法状态；当前 execution/scientific verdict 见
@@ -18,17 +22,16 @@ patch/token、通道顺序、几何编码、池化和源方法声明的固定变
 这一定义解决两个相反风险：只对齐 shape 会把不同长度上下文或伪造通道藏起来；
 把所有上游预处理和 tokenization 强制做成相同又会破坏 named method 的复现边界。
 
-## 新方法严格串行落地
+## 历史新方法严格串行落地（已停止）
 
-每个采用本合同的协议版本只允许一个 active delivery method。串行范围包括 adapter
-实现与审核、public preflight/development、协议冻结和该新方法的正式执行；前一方法
-未形成终态前，不提前实现或试跑队列中的下一种方法。
+2026 年采用本合同的协议版本只允许一个 active delivery method。串行范围包括
+adapter 实现与审核、public preflight/development、协议冻结和正式执行；该历史
+queue 已 STOPPED，未执行的延后工作已 ABANDONED。
 
-协议生效前已经运行的 EFRM LODO v2 冻结训练可以继续，但它是不可修改的后台协议，
-不阻塞新方法代码落地。STA-Net 同样只保留已完成结果。2026 队列采用的冻结顺序为
-BIOT、CBraMod、REVE、BrainFusion、NormWear；其完成记录已迁入统一 registry。若某一
-方法 blocked，则暂停该版本队列处理 blocker，不能静默跳过。任何延后的正式执行都
-不得与 active delivery method 并发。
+协议生效前已经运行的 EFRM LODO v2 冻结训练是已完成且停止的后台证据，不能被本
+文档重新启动；STA-Net 同样只保留已完成结果。2026 历史队列的冻结顺序为 BIOT、
+CBraMod、REVE、BrainFusion、NormWear，完成记录已迁入统一 registry。任何延后的
+正式执行均不属于当前流；若重新开展，必须在干净新流中升版并单独定义。
 
 ## 数据集特征对门控的约束
 

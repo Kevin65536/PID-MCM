@@ -1,13 +1,17 @@
 # REVE adapter-alignment v2 status
 
+> **STATUS: STOPPED（历史 public-delivery record）。** 本文记录的 A0-A8/public scope
+> 已完成；后续 joint campaign 也已停止。下方 queue/locked 语句均为时点记录，不是
+> 当前 authorization；未执行 follow-up 已废弃。
+
 _Historical public-development snapshot. It is not a current status source; use
 [`docs/PROJECT_STATUS.md`](../../docs/PROJECT_STATUS.md). Queue and data-boundary
 statements below retain their time-local meaning._
 
-REVE has reached its public-development terminal state in the serial queue.
+REVE reached its public-development terminal state in the historical serial queue.
 All six supported classification cells pass A0–A8, REFED remains preregistered
-unsupported, and protected evaluation remains separately locked. The active
-delivery method has advanced to BrainFusion.
+unsupported, and protected evaluation remains separately locked at this snapshot.
+The historical queue then advanced to BrainFusion; no active delivery remains.
 
 ## Retained public evidence
 
@@ -59,5 +63,6 @@ The compact completion evidence is
 [`evidence/public_development_v2/matrix_completion_summary.json`](evidence/public_development_v2/matrix_completion_summary.json),
 and the terminal cell bundle is
 [`evidence/alignment_v2/summary_final.json`](evidence/alignment_v2/summary_final.json).
-No protected manifest or array was opened. REVE protected execution is not
-authorized and may not overlap BrainFusion, now the sole active delivery method.
+No protected manifest or array was opened in this public snapshot. The former
+protected/queue concurrency rule is time-local and does not authorize a rerun;
+final joint-campaign evidence is recorded separately.
