@@ -18,7 +18,7 @@ experiments/configs/physiology_semantic_tokenizer/*
 experiments/logs
 experiments/results
 experiments/probe_results
-experiments/archive
+/experiments/archive/
 experiments/comparison_reports
 
 reference_repository

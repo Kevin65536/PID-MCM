@@ -1,9 +1,0 @@
-_base_: "./gate1_debug.yaml"
-
-experiment:
-  name: "s2_phase1_gate1_diag_coupling_off"
-  description: "Phase 1 Gate1 diagnostic control with coupling disabled"
-
-loss:
-  coupling:
-    weight: 0.0

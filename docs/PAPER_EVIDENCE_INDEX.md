@@ -29,9 +29,6 @@ specified:
 - [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): v1 QC → frozen theory/architecture
   boundary → versioned implementation and synthetic checks → optional public
   development → separately preregister any holdout.
-- [`physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md`](physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md):
-  frozen 2026-07-25 SD-SVQ/R-series v1 design and gate definitions; it is historical
-  context and is not the current Methods owner.
 - [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md),
   [`comparative_methods/README.md`](../comparative_methods/README.md), and
   [`comparative_methods/ASSET_STATUS.md`](../comparative_methods/ASSET_STATUS.md):
@@ -114,8 +111,6 @@ pre-freeze snapshots and are not implementation-facing evidence.
   preserve replaceable implementation candidates from before the current freeze.
   Their optional-grammar wording is superseded by `METHOD_RATIONALE.md`. The
   schematic contains **no measured values** and is not a Methods target.
-- [`shared_driver_semantic_return_plan.svg`](physiology_semantic_tokenizer/figures/plans/shared_driver_semantic_return_plan.svg)
-  is a historical pre-gate return-plan figure, not a report of a completed run.
 - [`experiment_plan.svg`](figures/experiment_plan.svg),
   [`experiment_plan.png`](figures/experiment_plan.png),
   [`alt text`](figures/experiment_plan.alt.txt), and its

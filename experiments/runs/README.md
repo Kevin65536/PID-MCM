@@ -1,13 +1,14 @@
-# Active-design generated results
+# Retained and future generated results
 
-This root contains current-design physiology-semantic evidence:
+This root contains the allowlisted evidence needed by current reports, seals, and
+the frozen T0 Atlas, and is also the output root for a future versioned method:
 
 ```text
 experiments/runs/physiology_semantic_tokenizer/
 ```
 
-It includes valid completed, negative, failed, and aborted runs. “Active
-design” does not mean scientifically promoted.
+Superseded experiment generations live only in the local Git-ignored archive.
+Directory presence never means scientific promotion or data authorization.
 
 Reader rules:
 

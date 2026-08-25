@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-08-14; payload-pruning record retained from
+_Evidence surface updated 2026-08-25; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -83,8 +83,8 @@ resolved configs, manifests, metric logs, summaries, CSV/JSON tables, figures,
 and reports. Two X3 causal-exchange checkpoints are retained because this is
 the most frequently referenced audited control:
 
-- [`seed20260651/best_model.pt`](archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/tokenizer_interventions/k128_dim128_x3_causal_exchange_seed20260651/checkpoints/best_model.pt)
-- [`seed20260652/best_model.pt`](archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/tokenizer_interventions/k128_dim128_x3_causal_exchange_seed20260652/checkpoints/best_model.pt)
+- `archive/pre_forward_implementation_20260824/snapshot/experiments/archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/tokenizer_interventions/k128_dim128_x3_causal_exchange_seed20260651/checkpoints/best_model.pt`
+- `archive/pre_forward_implementation_20260824/snapshot/experiments/archive/pre_physiology_semantic_20260701/runs/tokenizer_cross_modal_exchange/20260626_173718_causal_cross_adapter_v1/tokenizer_interventions/k128_dim128_x3_causal_exchange_seed20260652/checkpoints/best_model.pt`
 
 All other archived `.pt` and `.npz` payloads were removed. Their conclusions
 remain readable and comparable, but exact checkpoint/array replay is no longer

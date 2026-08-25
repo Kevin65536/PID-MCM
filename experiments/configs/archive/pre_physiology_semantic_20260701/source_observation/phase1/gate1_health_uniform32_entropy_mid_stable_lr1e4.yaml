@@ -1,8 +1,0 @@
-_base_: "./gate1_health_uniform32_entropy_mid.yaml"
-
-experiment:
-  name: "s2_phase1_gate1_health_uniform32_entropy_mid_stable_lr1e4"
-  description: "Phase 1 Gate1 stability run with moderate entropy pressure and lower learning rate"
-
-training:
-  learning_rate: 0.0001

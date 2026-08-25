@@ -1,16 +1,15 @@
 # Experiment workspace
 
-_Configs, executable workflows, active evidence, and explicit archives_
+_Current contracts, executable workflows, and retained evidence_
 
 ## Directory roles
 
 | Path | Role |
 | --- | --- |
-| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | versioned E0–E2, R-series, and analysis contracts |
-| `scripts/` | training, qualification, evaluation, analysis, and figure entrypoints |
-| [`runs/`](runs/README.md) | active-design generated evidence |
-| [`archive/`](archive/) | historical generated evidence; never default-discovered |
-| `configs/archive/`, `scripts/archive/` | explicit compatibility surfaces |
+| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | retained frozen R-series and analysis contracts |
+| `scripts/` | retained qualification/evaluation plus current state and figure tools |
+| [`runs/`](runs/README.md) | retained generated evidence and future run root |
+| `archive/` | local superseded generations; Git-ignored and never default-discovered |
 | [`RESULTS_INDEX.md`](RESULTS_INDEX.md) | retained-result map and pruning record |
 
 Comparison methods own their code, configs, runs, and caches below
@@ -26,9 +25,8 @@ This workspace does not maintain a second status summary. Query the generated
 .venv/bin/python experiments/scripts/project_state.py show --format agent
 ```
 
-Launcher availability is an implementation fact, not evidence that a scientific
-prerequisite has passed. Live-process checks must still be performed immediately
-before touching generated run or cache directories.
+Live-process checks must be performed immediately before touching generated run
+or cache directories.
 
 ## Frozen method boundary and implementation candidates
 

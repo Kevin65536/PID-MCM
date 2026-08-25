@@ -15,7 +15,7 @@ tests/                       unit, integration, contract, and evidence tests
 experiments/configs/         reviewed executable experiment contracts
 experiments/scripts/         launch, evaluation, and analysis entrypoints
 experiments/runs/            active generated results (ignored by Git)
-experiments/archive/         historical generated evidence (ignored by Git)
+experiments/archive/         local superseded generations (ignored by Git)
 comparative_methods/         isolated comparison-method implementations
 croce_validation/            physical-model validation and derived caches
 docs/                        active contracts, status, evidence, and history
@@ -27,8 +27,8 @@ under `experiments/` or the isolated comparison-method package that owns them.
 New physiology-semantic runs write below
 `experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/`; comparison
 methods write only below their owning package. Archive discovery is always
-explicit: active tools do not recursively search `experiments/archive/`, and
-compatibility code/configuration remains in its dated namespace.
+explicit: active tools do not recursively search or import
+`experiments/archive/`.
 
 The R1-P qualification surface is a dated evidence package. Keep its model,
 scripts, registries, configuration, and tests together when revisiting that
@@ -84,19 +84,9 @@ software, tensor-shape, split, and null checks on synthetic data first. A
 protected measured run additionally requires its owning protocol and separate
 explicit user authorization.
 
-Use the owning launcher. For the physiology-semantic namespace:
-
-```bash
-bash experiments/scripts/launch_training_nohup.sh \
-  --task physiology-semantic-tokenizer \
-  --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml \
-  --dry-run
-```
-
-This launcher can replay the E0–E2-compatible runtime. Launcher availability does
-not change the execution state or scientific verdict in the unified registry;
-inspect the generated status before defining a new VQ generation. It does not
-implement the observation–source exploration map.
+The forward physiology-semantic implementation does not yet have a launcher.
+Add one only with the versioned implementation/config contract and its synthetic
+checks; archived E0–E2 launchers are not templates for the new generation.
 
 ## Evidence ladder
 

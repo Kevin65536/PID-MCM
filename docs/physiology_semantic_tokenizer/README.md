@@ -1,61 +1,27 @@
-# Physiology-semantic generation archive
+# Physiology-semantic retained evidence
 
-_Frozen design and evidence index; decision snapshot recorded 2026-07-30_
+This directory keeps current visualization sources and the dated E0–E2/R-series
+decision evidence that still anchors reports. Superseded plans, diagnostics, code,
+configs, tests, and local run generations were moved to the single Git-ignored
+pre-forward-implementation archive. They are historical, not current instructions.
 
-This directory preserves the E0–E2 and 2026-07-25 SD-SVQ/R-series generation.
-It is not an instruction to continue the originally planned sequence.
+The generation ended with no E2 semantic row admitted, negative R0-P, failed R1-P
+physical qualification, failed bilateral R2-D observability, and undetermined D1B.
+Current state is generated in [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md); the
+forward scientific boundary is owned by
+[`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
 
-The archive remains historical and its YAML/runtime plans are not current
-contracts. The co-located
-[`observation–source exploration note`](architecture/observation_source_exploration_v2.json)
-and [`framework visualization`](figures/plans/observation_source_exploration_v2.svg)
-are pre-freeze candidate snapshots; they do not override the current frozen
-principles in [`METHOD_RATIONALE.md`](../METHOD_RATIONALE.md), define a runtime,
-or authorize measured or protected data access.
+## Retained entrypoints
 
-The generation ended with:
-
-```text
-E0–E2 = complete; no E2 semantic row admitted
-R0-P = negative
-R1-P = formal physical qualification failed
-R2-D = bilateral observability failed
-D1B = scientifically undetermined
-R2-P and R3–R7 = blocked
-```
-
-Current project status is generated in
-[`../PROJECT_STATUS.md`](../PROJECT_STATUS.md); stable dependency order is in
-[`../EXPERIMENT_PLAN.md`](../EXPERIMENT_PLAN.md).
-
-## Frozen generation documents
-
-| Document | Role now |
+| Document | Role |
 | --- | --- |
-| [`02_TARGET_ARCHITECTURE.md`](02_TARGET_ARCHITECTURE.md) | proposed SD-SVQ architecture that was not promoted |
-| [`04_IMPLEMENTATION_VALIDATION_PLAN.md`](04_IMPLEMENTATION_VALIDATION_PLAN.md) | correctness plan for that generation |
-| [`05_EXPERIMENT_DESIGN.md`](05_EXPERIMENT_DESIGN.md) | preregistered R0–R7 ordering and gates |
-| [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) | dated decision snapshot for this generation |
-| [`07_CODE_MIGRATION_PLAN.md`](07_CODE_MIGRATION_PLAN.md) | frozen migration plan, partly implemented before stop |
-| [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) | shared Draw.io/SVG style, ownership, and historical-overlay guide |
-| [`09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md) | dated full data-quality evidence |
+| [`06_EXPERIMENT_LOG.md`](06_EXPERIMENT_LOG.md) | dated E0–E2/R0–R2 decision snapshot |
+| [`08_ARCHITECTURE_VISUALIZATION.md`](08_ARCHITECTURE_VISUALIZATION.md) | maintained Draw.io/SVG ownership and checks |
+| [`09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md`](09_DATA_QUALITY_HOMER2_ALIGNMENT_AUDIT.md) | full data-quality evidence |
+| [`analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md`](analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) | integrated R-series methods and results |
+| [`architecture/observation_source_exploration_v2.json`](architecture/observation_source_exploration_v2.json) | replaceable pre-freeze candidate snapshot |
 
-Method interpretation has been consolidated into
-[`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md), and active data rules into
-[`../DATA_CONTRACT.md`](../DATA_CONTRACT.md).
-
-## Result evidence
-
-The complete R-series synthesis is
-[`analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md`](analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
-Dated `analysis/` reports preserve E0/E1/E2 results, corrections, qualification
-panels, and negative outcomes. Preregistrations, configs, reports, and manifests
-retain the context needed to interpret those snapshots.
-
-The retained E2 T0 checkpoint has a completed development-only
-[Token Physiology Atlas](../analysis/TOKEN_PHYSIOLOGY_ATLAS.md). That
-description does not reopen SD-SVQ/VQ admission.
-
-Comparison experiments are governed separately by
-[`../comparisons/PROTOCOL.md`](../comparisons/PROTOCOL.md) and
-the generated [comparison status](../PROJECT_STATUS.md#对比实验).
+The retained E2 T0 checkpoint has a development-only
+[Token Physiology Atlas](../analysis/TOKEN_PHYSIOLOGY_ATLAS.md). Comparison
+experiments remain governed separately by
+[`../comparisons/PROTOCOL.md`](../comparisons/PROTOCOL.md).

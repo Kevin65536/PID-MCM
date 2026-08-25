@@ -6,8 +6,9 @@ excluded from Git.
 
 ## Current boundary
 
-The E0–E2 generation is historical. Its tracked YAML files remain available
-for exact replay, but new work must not infer an R-series contract from them.
+The E0–E2 and failed post-R2 development YAMLs are historical and have been
+moved out of this active config surface. New work must not infer a forward
+contract from them.
 The current R-series conclusion is `do_not_enter_r2_p`: no VQ or token
 co-occurrence experiment is authorized.
 
@@ -15,9 +16,9 @@ The theory/architecture principles are frozen in
 [`METHOD_RATIONALE.md`](../../../docs/METHOD_RATIONALE.md). The
 observation–source v2 map is a pre-freeze implementation snapshot only; no
 executable YAML exists yet. The
-historical YAML/runtime surface is for exact replay and compatibility checks,
-not a template for a new candidate. Do not reuse an old YAML by changing its
-experiment ID, target, or output path. The replaceable design note is
+historical YAML/runtime surface is not a template for a new candidate. Do not
+reuse an old YAML by changing its experiment ID, target, or output path. The
+replaceable design note is
 [`observation_source_exploration_v2.json`](../../../docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json).
 
 No architecture or matrix is fixed by that note; it does not override the
@@ -62,4 +63,4 @@ loss weights to zero.
 The consolidated methods, results, interpretation and stop decision are in
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-_Last updated: 2026-08-22_
+_Last updated: 2026-08-25_

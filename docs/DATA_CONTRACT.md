@@ -59,9 +59,9 @@ that succeeds only because two arrays currently share an ordering is invalid.
 
 ### v1 patch target (historical)
 
-The implemented v1 observation screen is retained as a reproducible historical
-surface. Its producer is src/data/ssm_observation_targets.py and its provenance
-schema is ssm_modality_observation_teacher_v1. It extracts an array shaped
+The implemented v1 observation screen is retained as historical evidence. Its
+former producer path, `src/data/ssm_observation_targets.py`, is now archived; its
+provenance schema is `ssm_modality_observation_teacher_v1`. It extracts an array shaped
 [sample, token, feature] from ten 2 s positions. EEG features are selected
 channel-by-band patch log-power; fNIRS samples inside each patch are flattened
 into the feature axis. A full-rank observation-space AR smoother then operates

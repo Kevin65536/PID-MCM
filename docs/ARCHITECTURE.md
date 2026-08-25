@@ -13,7 +13,7 @@ active. Use these three layers:
 | --- | --- | --- |
 | Active implementation | `src/`, active `tests/`, `experiments/scripts/` and reviewed configs, method-owned comparison code | read and change through the owning package |
 | Local/generated | `data/`, `runs/`, `cache/`, `checkpoints/`, `upstream/`, `.tmp/` | do not recursively discover; write only to an existing owner root |
-| Frozen/history | dated reports, `archive/`, compatibility namespaces, completed comparison campaign files | explicit-path, read-only unless a versioned migration is the task |
+| Frozen/history | dated reports, the local ignored archive, completed comparison campaign files | explicit-path, read-only unless a versioned migration is the task |
 
 A bulk move of frozen comparison code would invalidate recorded paths and source
 hashes, so future cleanup must create a new version instead of layering shims over
@@ -68,7 +68,7 @@ and its
 [`Draw.io source`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.drawio)
 are exploratory visual projections, not a runtime or frozen target. Draw.io owns
 their visual layout; the JSON and registry remain the implementation and state
-authorities. Historical shared-driver/SD-SVQ diagrams remain pre-gate evidence.
+authorities.
 
 ![Quick runtime overview (presentation draft)](physiology_semantic_tokenizer/figures/physiology_semantic_runtime_overview.svg)
 
@@ -177,7 +177,6 @@ flowchart LR
 | `src/tokenizers/shared_driver_semantic_vq.py` | R2 diagnostic model component; not promoted runtime |
 | `src/inference/adaptive_neurovascular_ssm.py` | Croce/Balloon-inspired adaptive five-state RTS joint candidate; E0 offline development supervision accepted, R1-P population-frozen qualification rejected; not a qualified future teacher |
 | `src/analysis/token_*` and `physiological_patch_features.py` | Token Physiology Atlas |
-| `src/compatibility/pre_physiology_semantic_20260701/` | explicit historical checkpoint/replay surface |
 
 Executable training, qualification, evaluation, and rendering workflows live
 under `experiments/`. Comparison methods remain isolated below

@@ -45,7 +45,7 @@ Start with the [generated project status](docs/PROJECT_STATUS.md),
 ```text
 src/                    active reusable library code
 tests/                  default software and shared-contract tests
-experiments/            main-method configs/workflows; local runs and explicit archives
+experiments/            current configs/workflows plus retained local evidence
 comparative_methods/    method owners plus frozen comparison history; see its README
 croce_validation/       isolated physical-model validation and derived caches
 docs/                   authority map, concise contracts, and dated history
@@ -67,21 +67,11 @@ source .venv/bin/activate
 python -m pytest --collect-only -q
 ```
 
-The existing physiology-semantic launcher can replay the E0–E2-compatible
-runtime:
+There is no forward-method training launcher yet. A new implementation must own
+its versioned config, synthetic checks, split contract, and output namespace rather
+than repurposing an E0–E2 entrypoint.
 
-```bash
-bash experiments/scripts/launch_training_nohup.sh \
-  --task physiology-semantic-tokenizer \
-  --config experiments/configs/physiology_semantic_tokenizer/p2_p5_software_smoke.yaml \
-  --dry-run
-```
-
-Launcher availability does not change the scientific prerequisites recorded in the
-unified state. A replay should preserve the original experiment configuration; a
-new method generation should define its own split and analysis plan.
-
-Historical negative and failed results are evidence, not clutter. Large
-rebuildable arrays/checkpoints may be pruned only according to
-[`experiments/RESULTS_INDEX.md`](experiments/RESULTS_INDEX.md), and no directory
-used by a live process may be cleaned.
+Superseded code, configs, tests, plans, and local runs were moved to one
+Git-ignored archive generation. Frozen evidence paths and the retained surfaces in
+[`experiments/RESULTS_INDEX.md`](experiments/RESULTS_INDEX.md) remain in place;
+no directory used by a live process may be cleaned.

@@ -1,9 +1,0 @@
-_base_: "./highwl_v2_gpu_bench_bs128.yaml"
-
-experiment:
-  name: "bench_highwl_v2_bs256_full_loss"
-  description: "Short GPU throughput benchmark: active full-loss config, batch size 256."
-
-training:
-  batch_size: 256
-

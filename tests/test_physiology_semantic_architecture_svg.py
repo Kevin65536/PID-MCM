@@ -36,14 +36,6 @@ EXPLORATION_ALT_PATH = PROJECT_ROOT / (
 EXPLORATION_SPEC_SOURCE = (
     "docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json"
 )
-REGISTERED_PLANS = [
-    "measurement_first_input_contract_plan",
-    "physical_teacher_gradient_entry_plan",
-    "shared_driver_semantic_return_plan",
-    "shared_state_reconstruction_bound_plan",
-]
-
-
 def _load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -66,19 +58,6 @@ def _drawio_cells(root):
         for cell in root.iter("mxCell")
         if "id" in cell.attrib
     }
-
-
-def test_existing_plan_svgs_are_deterministic_and_not_stale():
-    spec = _spec()
-    for plan_id in REGISTERED_PLANS:
-        changes_path = PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
-        svg_path = PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/figures/plans/{plan_id}.svg"
-        assert svg_path.read_text(encoding="utf-8") == render_svg(
-            spec,
-            _load(changes_path),
-            spec_source=SPEC_SOURCE,
-            changes_source=f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json",
-        )
 
 
 def test_runtime_renderer_preserves_baseline_content_and_exposes_visual_axes():
@@ -163,102 +142,6 @@ def test_edges_have_stable_accessible_ids_and_orthogonal_paths():
         path = next(child for child in group if child.tag.endswith("path") and child.attrib.get("marker-end"))
         assert " L " in path.attrib["d"]
         assert " C " not in path.attrib["d"]
-
-
-def test_existing_v1_plan_gets_dynamic_callouts_without_source_changes():
-    plan_id = "measurement_first_input_contract_plan"
-    changes_path = PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
-    changes = _load(changes_path)
-    before = copy.deepcopy(changes)
-    root = _xml(render_svg(_spec(), changes))
-    assert changes == before
-    assert root.find(".//*[@id='node-optional_target_bank']").attrib["data-change-kind"] == "add"
-    assert root.find(".//*[@id='callout-node-optional_target_bank']") is not None
-    assert int(root.attrib["height"]) > int(_spec()["height"])
-
-
-def test_registered_plan_labels_keep_historical_roles_visible():
-    expected = {
-        "measurement_first_input_contract_plan": (
-            "Merged Historical Overlay · Measurement-First Input Contract",
-            "MERGED HISTORICAL OVERLAY",
-        ),
-        "physical_teacher_gradient_entry_plan": (
-            "Superseded Historical Plan · Coupling-Aware Foundation Pipeline",
-            "SUPERSEDED HISTORICAL PLAN",
-        ),
-        "shared_driver_semantic_return_plan": (
-            "Historical Pre-Gate Plan · Shared-Driver Semantic VQ",
-            "HISTORICAL PRE-GATE PLAN",
-        ),
-        "shared_state_reconstruction_bound_plan": (
-            "Diagnostic-Only Historical Overlay · Shared-State Reconstruction Bound",
-            "DIAGNOSTIC-ONLY HISTORICAL OVERLAY",
-        ),
-    }
-    namespace = {"svg": "http://www.w3.org/2000/svg"}
-    for plan_id, (title, banner_prefix) in expected.items():
-        changes_path = PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
-        changes = _load(changes_path)
-        root = _xml(render_svg(_spec(), changes))
-        assert root.find("svg:title", namespace).text == title
-        boundary = root.find(".//*[@id='evidence-boundary']")
-        assert boundary is not None
-        assert "".join(boundary.itertext()).startswith(banner_prefix)
-
-
-def test_physical_teacher_plan_keeps_preservation_discovery_and_certificate_distinct():
-    plan_id = "physical_teacher_gradient_entry_plan"
-    changes = _load(
-        PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
-    )
-    root = _xml(render_svg(_spec(), changes))
-    namespace = {"svg": "http://www.w3.org/2000/svg"}
-    assert root.find("svg:title", namespace).text == (
-        "Superseded Historical Plan · Coupling-Aware Foundation Pipeline"
-    )
-    assert root.find(".//*[@id='evidence-boundary']") is not None
-    assert root.find(".//*[@id='node-coupling_shaper']").attrib["data-implementation"] == "planned"
-    assert root.find(".//*[@id='node-p6_coupling']").attrib["data-evidence"] == "blocked"
-    assert root.find(".//*[@id='edge-shaper--eeg-gradient']").attrib["data-edge-style"] == (
-        "gradient"
-    )
-    assert root.find(".//*[@id='edge-foundation--certificate']").attrib[
-        "data-edge-style"
-    ] == "evaluation"
-
-
-def test_shared_driver_return_plan_keeps_independent_k128_and_scoped_external_evaluation():
-    plan_id = "shared_driver_semantic_return_plan"
-    changes = _load(
-        PROJECT_ROOT / f"docs/physiology_semantic_tokenizer/architecture/{plan_id}.json"
-    )
-    root = _xml(render_svg(_spec(), changes))
-    namespace = {"svg": "http://www.w3.org/2000/svg"}
-    assert root.find("svg:title", namespace).text == (
-        "Historical Pre-Gate Plan · Shared-Driver Semantic VQ"
-    )
-    assert root.find(".//*[@id='node-eeg_quantizer']").attrib["data-implementation"] == (
-        "implemented"
-    )
-    assert root.find(".//*[@id='node-fnirs_quantizer']").attrib["data-implementation"] == (
-        "implemented"
-    )
-    assert root.find(".//*[@id='node-eeg_context']").attrib["data-implementation"] == (
-        "planned"
-    )
-    assert root.find(".//*[@id='node-semantic_losses']").attrib["data-implementation"] == (
-        "planned"
-    )
-    assert root.find(".//*[@id='node-eeg_residual']").attrib["data-implementation"] == (
-        "removed"
-    )
-    assert root.find(".//*[@id='node-p6_coupling']").attrib["data-evidence"] == "blocked"
-    assert root.find(".//*[@id='node-consumers-title']").text == "R6A development evaluator"
-    assert root.find(".//*[@id='node-p6_coupling-title']").text == "R6B prospective cutoff"
-    assert root.find(".//*[@id='edge-export--p6_coupling']").attrib[
-        "data-edge-style"
-    ] == "evaluation"
 
 
 def test_validation_rejects_bad_replacement_unknown_endpoint_and_duplicate_ids():

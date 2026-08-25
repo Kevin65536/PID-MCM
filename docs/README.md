@@ -36,9 +36,9 @@ paper-facing evidence routes are listed in
 ## Frozen and historical evidence
 
 [`physiology_semantic_tokenizer/README.md`](physiology_semantic_tokenizer/README.md)
-indexes the 2026-07-25 SD-SVQ proposal, its preregistration, and dated E0/E1/E2/R
-reports. Those documents preserve the generation that was actually tested; they
-are not active instructions to proceed past a failed gate.
+indexes the retained E0/E1/E2/R decision and evidence reports. Superseded design,
+code, config, test, and run generations are in one local Git-ignored archive and
+are not active instructions.
 
 The 2026-08-22 theory note is now superseded as a method-boundary source. Its
 candidate branches remain optional implementation ideas, not runtime or
