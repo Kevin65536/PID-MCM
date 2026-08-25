@@ -1,0 +1,788 @@
+{
+  "schema": "physiology_semantic_architecture_v2",
+  "title": "PST-DISCOVERY-v1 · 生理语义 Tokenizer 实验计划",
+  "subtitle": "先资格化 physical teacher，再验证连续 source/observation，条件式引入 VQ 与 coupling prior；下游任务不参与选择",
+  "banner": "PLANNED · 只授权 P0 synthetic/software checks · measured/protected 数据保持关闭 · 所有晋级均由 subject-level held-out gate 决定",
+  "source": "docs/EXPERIMENT_PLAN.md",
+  "width": 1920,
+  "height": 1120,
+  "footer_y": 1120,
+  "sections": [
+    {
+      "id": "main_path",
+      "label": "唯一主路径 · 按 gate 顺序推进",
+      "description": "",
+      "x": 30,
+      "y": 155,
+      "width": 1860,
+      "height": 190
+    },
+    {
+      "id": "teacher",
+      "label": "1 · Physical teacher",
+      "description": "同一冻结端点下比较；选择最简单的通过者",
+      "x": 30,
+      "y": 370,
+      "width": 600,
+      "height": 540
+    },
+    {
+      "id": "tokenizer",
+      "label": "2 · Source / Observation tokenizer",
+      "description": "连续先行、source 先量化、observation 量化仅在接口确有需要时进入",
+      "x": 660,
+      "y": 370,
+      "width": 600,
+      "height": 540
+    },
+    {
+      "id": "coupling",
+      "label": "3 · Coupling prior",
+      "description": "先证明冻结表示含增量信息，再允许一个 coupling 项进入 source 路径",
+      "x": 1290,
+      "y": 370,
+      "width": 600,
+      "height": 540
+    },
+    {
+      "id": "diagnostics",
+      "label": "旁路实验 · diagnostics/<probe-id>",
+      "description": "继承 parent/split/teacher/token identities · decision_eligibility=false · 新假设必须升级协议版本",
+      "x": 30,
+      "y": 930,
+      "width": 1860,
+      "height": 170
+    }
+  ],
+  "nodes": [
+    {
+      "id": "p0",
+      "label": "P0 · Contract + Synthetic",
+      "details": [
+        "freeze split / margins / horizon",
+        "joins / masks / nulls / gradients"
+      ],
+      "role": "data",
+      "visual": "shared",
+      "scope": "governance",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 55,
+      "y": 210,
+      "width": 250,
+      "height": 110
+    },
+    {
+      "id": "teacher_qualified",
+      "label": "Qualified teacher",
+      "details": [
+        "最简候选通过 T-G0…T-G4",
+        "continuous target + calibrated σ²"
+      ],
+      "role": "teacher",
+      "visual": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 360,
+      "y": 210,
+      "width": 250,
+      "height": 110
+    },
+    {
+      "id": "continuous_tokenizer",
+      "label": "Continuous B0 / B1",
+      "details": [
+        "observation reconstruction",
+        "source trajectory retention"
+      ],
+      "role": "encoder",
+      "visual": "shared",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 665,
+      "y": 210,
+      "width": 250,
+      "height": 110
+    },
+    {
+      "id": "conditional_vq",
+      "label": "Conditional Q-S / Q-O",
+      "details": [
+        "source 先量化；observation 可选",
+        "VQ 失败则保留连续表示"
+      ],
+      "role": "quantizer",
+      "visual": "source",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 970,
+      "y": 210,
+      "width": 250,
+      "height": 110
+    },
+    {
+      "id": "coupling_screen",
+      "label": "C0 → conditional C1 / C2",
+      "details": [
+        "先 frozen q0/q1 screen",
+        "coupling 梯度仅进入 source"
+      ],
+      "role": "objective",
+      "visual": "coupling",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1275,
+      "y": 210,
+      "width": 250,
+      "height": 110
+    },
+    {
+      "id": "freeze",
+      "label": "Freeze tokenizer + evidence",
+      "details": [
+        "有 / 无 coupling 均可形成结果",
+        "连续通过而 VQ 失败：不强迫离散",
+        "下游任务不参与本轮选择"
+      ],
+      "role": "interface",
+      "visual": "selected",
+      "scope": "export",
+      "implementation": "planned",
+      "evidence": "blocked",
+      "x": 1580,
+      "y": 202,
+      "width": 285,
+      "height": 125
+    },
+    {
+      "id": "t0",
+      "label": "T0 · Native",
+      "details": [
+        "测量坐标 + 噪声",
+        "无动力学控制"
+      ],
+      "role": "data",
+      "visual": "shared",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 55,
+      "y": 430,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "t1",
+      "label": "T1 · Self LDS / RTS",
+      "details": [
+        "单模态动态基线",
+        "无跨模态输入"
+      ],
+      "role": "teacher",
+      "visual": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 235,
+      "y": 430,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "t2",
+      "label": "T2 · Croce SMC",
+      "details": [
+        "Croce-faithful 参照",
+        "不视为 ground truth"
+      ],
+      "role": "teacher",
+      "visual": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 55,
+      "y": 585,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "t3",
+      "label": "T3 · Adaptive RTS",
+      "details": [
+        "当前修改模型",
+        "同一冻结端点评估"
+      ],
+      "role": "teacher",
+      "visual": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 235,
+      "y": 585,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "teacher_gate",
+      "label": "Teacher gate",
+      "details": [
+        "T-G0…T-G4",
+        "最简通过者"
+      ],
+      "role": "evaluator",
+      "visual": "neutral",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 55,
+      "y": 745,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "t4",
+      "label": "T4 · Spatial",
+      "details": [
+        "fNIRS 1→2→4 pairs",
+        "EEG 6→12；条件扩展"
+      ],
+      "role": "encoder",
+      "visual": "teacher",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 235,
+      "y": 745,
+      "width": 160,
+      "height": 110
+    },
+    {
+      "id": "uncertainty",
+      "label": "Uncertainty gate",
+      "details": [
+        "variance 分量分离",
+        "log score / CRPS",
+        "coverage"
+      ],
+      "role": "evaluator",
+      "visual": "neutral",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 415,
+      "y": 745,
+      "width": 190,
+      "height": 125
+    },
+    {
+      "id": "b0",
+      "label": "B0-O",
+      "details": [
+        "连续 observation",
+        "测量空间重建基线"
+      ],
+      "role": "encoder",
+      "visual": "observation",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 685,
+      "y": 430,
+      "width": 170,
+      "height": 110
+    },
+    {
+      "id": "b1",
+      "label": "B1-SO",
+      "details": [
+        "共享 local stem",
+        "source / observation heads"
+      ],
+      "role": "latent",
+      "visual": "shared",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "n_a",
+      "x": 875,
+      "y": 430,
+      "width": 170,
+      "height": 110
+    },
+    {
+      "id": "qs",
+      "label": "Q-S",
+      "details": [
+        "仅量化 source",
+        "EMA-VQ · K=128"
+      ],
+      "role": "quantizer",
+      "visual": "source",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 685,
+      "y": 590,
+      "width": 170,
+      "height": 110
+    },
+    {
+      "id": "qo",
+      "label": "Q-O · optional",
+      "details": [
+        "仅在全离散接口必要时",
+        "不得牺牲测量信息"
+      ],
+      "role": "quantizer",
+      "visual": "observation",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 875,
+      "y": 590,
+      "width": 170,
+      "height": 110
+    },
+    {
+      "id": "tokenizer_gate",
+      "label": "Tokenizer gate",
+      "details": [
+        "S/O fidelity",
+        "uncertainty / code health",
+        "最低码率；不强迫 VQ"
+      ],
+      "role": "evaluator",
+      "visual": "neutral",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 875,
+      "y": 745,
+      "width": 250,
+      "height": 125
+    },
+    {
+      "id": "c0",
+      "label": "C0 · Frozen q0 / q1",
+      "details": [
+        "fNIRS innovation",
+        "无 tokenizer gradient",
+        "lag / pairing / spatial nulls"
+      ],
+      "role": "evaluator",
+      "visual": "coupling",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1315,
+      "y": 430,
+      "width": 235,
+      "height": 125
+    },
+    {
+      "id": "c0_gate",
+      "label": "Incremental gate",
+      "details": [
+        "subject-equal Δ score",
+        "必须胜过 q0 与全部 nulls",
+        "无增量即停止"
+      ],
+      "role": "evaluator",
+      "visual": "coupling",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1570,
+      "y": 430,
+      "width": 285,
+      "height": 125
+    },
+    {
+      "id": "c1",
+      "label": "C1 · Source shaper",
+      "details": [
+        "lag-balanced",
+        "+ fNIRS residual",
+        "EEG source gradient"
+      ],
+      "role": "objective",
+      "visual": "coupling",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1315,
+      "y": 630,
+      "width": 170,
+      "height": 125
+    },
+    {
+      "id": "c2",
+      "label": "C2 · Uncertainty",
+      "details": [
+        "T-G4 后启用",
+        "clipped precision",
+        "unweighted check"
+      ],
+      "role": "objective",
+      "visual": "coupling",
+      "scope": "training_only",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1505,
+      "y": 630,
+      "width": 170,
+      "height": 125
+    },
+    {
+      "id": "coupling_decision",
+      "label": "Coupling decision",
+      "details": [
+        "PASS：含先验",
+        "FAIL：无先验",
+        "保留 tokenizer"
+      ],
+      "role": "interface",
+      "visual": "selected",
+      "scope": "export",
+      "implementation": "planned",
+      "evidence": "guarded",
+      "x": 1695,
+      "y": 630,
+      "width": 160,
+      "height": 125
+    },
+    {
+      "id": "diag_teacher",
+      "label": "Teacher 旁路",
+      "details": [
+        "识别 / 校准 / 空间问题定位 · 不晋级"
+      ],
+      "role": "lifecycle",
+      "visual": "boundary",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "blocked",
+      "x": 55,
+      "y": 1000,
+      "width": 540,
+      "height": 90
+    },
+    {
+      "id": "diag_tokenizer",
+      "label": "Tokenizer 旁路",
+      "details": [
+        "routing / reconstruction / code health · 单因素"
+      ],
+      "role": "lifecycle",
+      "visual": "boundary",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "blocked",
+      "x": 690,
+      "y": 1000,
+      "width": 540,
+      "height": 90
+    },
+    {
+      "id": "diag_coupling",
+      "label": "Coupling 旁路",
+      "details": [
+        "lag / null / gradient conflict · 不改主 estimand"
+      ],
+      "role": "lifecycle",
+      "visual": "boundary",
+      "scope": "evaluation",
+      "implementation": "planned",
+      "evidence": "blocked",
+      "x": 1325,
+      "y": 1000,
+      "width": 540,
+      "height": 90
+    }
+  ],
+  "edges": [
+    {
+      "id": "main-p0-teacher",
+      "from": "p0",
+      "to": "teacher_qualified",
+      "style": "guarded"
+    },
+    {
+      "id": "main-teacher-continuous",
+      "from": "teacher_qualified",
+      "to": "continuous_tokenizer",
+      "style": "guarded"
+    },
+    {
+      "id": "main-continuous-vq",
+      "from": "continuous_tokenizer",
+      "to": "conditional_vq",
+      "style": "guarded"
+    },
+    {
+      "id": "main-vq-coupling",
+      "from": "conditional_vq",
+      "to": "coupling_screen",
+      "style": "guarded"
+    },
+    {
+      "id": "main-coupling-freeze",
+      "from": "coupling_screen",
+      "to": "freeze",
+      "style": "guarded"
+    },
+    {
+      "id": "teacher-drilldown",
+      "from": "teacher_qualified",
+      "to": "t0",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top",
+        "via": [
+          [485, 355],
+          [135, 355]
+        ]
+      }
+    },
+    {
+      "id": "t0-t1",
+      "from": "t0",
+      "to": "t1",
+      "style": "data"
+    },
+    {
+      "id": "t1-t2",
+      "from": "t1",
+      "to": "t2",
+      "style": "data",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top",
+        "via": [
+          [315, 563],
+          [135, 563]
+        ]
+      }
+    },
+    {
+      "id": "t1-t3",
+      "from": "t1",
+      "to": "t3",
+      "style": "data",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "t2-gate",
+      "from": "t2",
+      "to": "teacher_gate",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "t3-gate",
+      "from": "t3",
+      "to": "teacher_gate",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "teacher-gate-uncertainty",
+      "from": "teacher_gate",
+      "to": "uncertainty",
+      "style": "evaluation",
+      "route": {
+        "from_side": "top",
+        "to_side": "top",
+        "via": [
+          [135, 720],
+          [510, 720]
+        ]
+      }
+    },
+    {
+      "id": "teacher-gate-t4",
+      "from": "teacher_gate",
+      "to": "t4",
+      "style": "guarded"
+    },
+    {
+      "id": "t4-uncertainty",
+      "from": "t4",
+      "to": "uncertainty",
+      "style": "evaluation"
+    },
+    {
+      "id": "continuous-drilldown",
+      "from": "continuous_tokenizer",
+      "to": "b0",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "b0-b1",
+      "from": "b0",
+      "to": "b1",
+      "style": "data"
+    },
+    {
+      "id": "b1-qs",
+      "from": "b1",
+      "to": "qs",
+      "style": "guarded",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "vq-drilldown",
+      "from": "conditional_vq",
+      "to": "qs",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top",
+        "via": [
+          [1095, 355],
+          [770, 355]
+        ]
+      }
+    },
+    {
+      "id": "qs-qo",
+      "from": "qs",
+      "to": "qo",
+      "style": "guarded"
+    },
+    {
+      "id": "qs-tokenizer-gate",
+      "from": "qs",
+      "to": "tokenizer_gate",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "qo-tokenizer-gate",
+      "from": "qo",
+      "to": "tokenizer_gate",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "coupling-drilldown",
+      "from": "coupling_screen",
+      "to": "c0",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "c0-c0-gate",
+      "from": "c0",
+      "to": "c0_gate",
+      "style": "evaluation"
+    },
+    {
+      "id": "c0-gate-c1",
+      "from": "c0_gate",
+      "to": "c1",
+      "label": "PASS",
+      "style": "guarded",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "c0-gate-decision",
+      "from": "c0_gate",
+      "to": "coupling_decision",
+      "label": "FAIL",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "c1-c2",
+      "from": "c1",
+      "to": "c2",
+      "style": "guarded"
+    },
+    {
+      "id": "c1-decision",
+      "from": "c1",
+      "to": "coupling_decision",
+      "style": "evaluation",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "bottom",
+        "via": [
+          [1400, 795],
+          [1775, 795]
+        ]
+      }
+    },
+    {
+      "id": "c2-decision",
+      "from": "c2",
+      "to": "coupling_decision",
+      "style": "evaluation"
+    },
+    {
+      "id": "teacher-diagnostic",
+      "from": "teacher_gate",
+      "to": "diag_teacher",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "tokenizer-diagnostic",
+      "from": "tokenizer_gate",
+      "to": "diag_tokenizer",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    },
+    {
+      "id": "coupling-diagnostic",
+      "from": "coupling_decision",
+      "to": "diag_coupling",
+      "style": "control",
+      "route": {
+        "from_side": "bottom",
+        "to_side": "top"
+      }
+    }
+  ]
+}

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Render the maintained physiology-semantic architecture specification as SVG.
+"""Render physiology-semantic architecture specifications as accessible SVG.
 
-The renderer deliberately separates four concepts that the v1 diagram collapsed:
-functional role, runtime scope, implementation state, and scientific evidence.
-Plan overlays are composed as proposed after-state views without mutating the
-canonical specification.
+The visual language mirrors the Draw.io-owned detailed candidate architecture:
+color follows modality/content, while scientific state remains explicit in text
+and metadata. Plan overlays do not mutate the canonical specification.
 """
 
 from __future__ import annotations
@@ -35,41 +34,54 @@ OVERLAY_SCHEMAS = {
     "physiology_semantic_architecture_changes_v2",
 }
 
-ROLE_STYLE = {
-    "data": ("#E9F2FF", "#7AA6D8", "#233A55"),
-    "encoder": ("#FFF4D6", "#D6A84B", "#493815"),
-    "latent": ("#F1ECFA", "#9482C4", "#352B52"),
-    "quantizer": ("#E5F6EF", "#63A58B", "#214C3D"),
-    "objective": ("#FFF4D6", "#D6A84B", "#493815"),
-    "lifecycle": ("#F1F5F9", "#94A3B8", "#334155"),
-    "interface": ("#E5F6EF", "#63A58B", "#214C3D"),
-    "evaluator": ("#FDECEC", "#D98A8A", "#6B2F37"),
-    "teacher": ("#F3E8FF", "#A578C7", "#2F2540"),
+VISUAL_STYLE = {
+    "neutral": ("#FFFFFF", "#98A2B3", "#475467"),
+    "shared": ("#EEF8F4", "#2F9C77", "#17664E"),
+    "teacher": ("#F5F0FF", "#7B56D8", "#4E2D9A"),
+    "source": ("#F2F7FF", "#3B73E8", "#234D9B"),
+    "observation": ("#F0FBFA", "#168C83", "#116A63"),
+    "coupling": ("#FFF7E8", "#F28B2B", "#A7520B"),
+    "selected": ("#EDF9EF", "#25A84A", "#167231"),
+    "boundary": ("#FFF7F5", "#E06C5F", "#9A3D32"),
+}
+
+# Legacy JSON has no ``visual`` field; this fallback is compatibility, not a style contract.
+LEGACY_ROLE_VISUAL = {
+    "data": "shared",
+    "teacher": "teacher",
+    "encoder": "source",
+    "latent": "source",
+    "quantizer": "source",
+    "objective": "coupling",
+    "lifecycle": "neutral",
+    "interface": "selected",
+    "evaluator": "neutral",
 }
 
 EDGE_STYLE = {
-    "data": ("#5B8DBD", "", "solid data flow"),
-    "training": ("#9365C0", "9 6", "training-only supervision"),
-    "gradient": ("#D39A2C", "3 5", "gradient path"),
-    "control": ("#7E8C9C", "12 5 3 5", "lifecycle control"),
-    "evaluation": ("#C55E73", "5 5", "frozen evaluation"),
-    "guarded": ("#C58A20", "12 6", "guarded transition"),
-    "blocked": ("#94A3B8", "3 6", "blocked transition"),
-    "removed": ("#D56B78", "4 5", "removed relationship"),
+    "data": ("#3B73E8", "", "solid data flow"),
+    "training": ("#7B56D8", "9 6", "training-only supervision"),
+    "gradient": ("#F28B2B", "5 4", "gradient path"),
+    "control": ("#667085", "6 5", "lifecycle control"),
+    "evaluation": ("#98A2B3", "5 5", "frozen evaluation"),
+    "guarded": ("#F28B2B", "", "guarded transition"),
+    "blocked": ("#98A2B3", "5 5", "blocked transition"),
+    "removed": ("#E06C5F", "4 5", "removed relationship"),
 }
 
 CHANGE_STYLE = {
-    "add": ("#15803D", "A"),
-    "modify": ("#1D4ED8", "M"),
-    "remove": ("#9F1239", "R"),
+    "add": ("#25A84A", "A"),
+    "modify": ("#3B73E8", "M"),
+    "remove": ("#E06C5F", "R"),
 }
 
-VALID_ROLE = set(ROLE_STYLE)
+VALID_ROLE = set(LEGACY_ROLE_VISUAL)
+VALID_VISUAL = set(VISUAL_STYLE)
 VALID_SCOPE = {"inference", "training_only", "export", "evaluation", "governance"}
 VALID_IMPLEMENTATION = {"implemented", "planned", "removed"}
 VALID_EVIDENCE = {"admitted", "guarded", "blocked", "n_a"}
 VALID_SIDES = {"left", "right", "top", "bottom"}
-REPLACE_FIELDS = {"label", "details", "role", "scope", "implementation", "evidence"}
+REPLACE_FIELDS = {"label", "details", "role", "visual", "scope", "implementation", "evidence"}
 LAYOUT_FIELDS = {"x", "y", "width", "height"}
 EDGE_REPLACE_FIELDS = {"label", "style", "route", "label_at"}
 LEGACY_LAYOUT_SCALE = 1.2
@@ -154,6 +166,8 @@ def _validate_node(node: Mapping[str, Any], width: int, content_bottom: int) -> 
     normalized = _normalize_node(node)
     if normalized["role"] not in VALID_ROLE:
         raise ValueError(f"Unsupported role {normalized['role']!r}")
+    if normalized.get("visual", LEGACY_ROLE_VISUAL[normalized["role"]]) not in VALID_VISUAL:
+        raise ValueError(f"Unsupported visual style {normalized.get('visual')!r}")
     if normalized["scope"] not in VALID_SCOPE:
         raise ValueError(f"Unsupported scope {normalized['scope']!r}")
     if normalized["implementation"] not in VALID_IMPLEMENTATION:
@@ -204,7 +218,7 @@ def _validate(spec: Mapping[str, Any], changes: Mapping[str, Any] | None = None)
     if spec.get("schema") not in SPEC_SCHEMAS:
         raise ValueError("Unsupported architecture specification schema")
     width = int(spec["width"])
-    content_bottom = int(spec.get("footer_y", spec["height"] - 80))
+    content_bottom = int(spec.get("footer_y", spec["height"]))
     nodes = [_normalize_node(node) for node in spec.get("nodes", [])]
     for node in nodes:
         _validate_node(node, width, content_bottom)
@@ -471,8 +485,8 @@ def _render_edge(edge: Mapping[str, Any], node_map: Mapping[str, Mapping[str, An
         label_width = max(36, min(260, 8 + len(label_text) * 6.6))
         label = (
             f'<g class="edge-label" transform="translate({x:.1f},{y:.1f})">'
-            f'<rect x="{-label_width / 2:.1f}" y="-13" width="{label_width:.1f}" height="20" rx="7"/>'
-            f'<text x="0" y="1">{escape(label_text)}</text></g>'
+            f'<rect x="{-label_width / 2:.1f}" y="-13" width="{label_width:.1f}" height="20" rx="7" fill="#FFFFFF" stroke="#CDD5DB" stroke-width="1" opacity=".96"/>'
+            f'<text x="0" y="1" text-anchor="middle" fill="#34424E">{escape(label_text)}</text></g>'
         )
     description = str(edge.get("_change_note", edge.get("label", meaning)))
     return (
@@ -487,38 +501,18 @@ def _render_edge(edge: Mapping[str, Any], node_map: Mapping[str, Mapping[str, An
 
 def _render_node(node: Mapping[str, Any]) -> str:
     role = str(node["role"])
+    visual = str(node.get("visual", LEGACY_ROLE_VISUAL[role]))
     scope = str(node["scope"])
     implementation = str(node["implementation"])
     evidence = str(node["evidence"])
-    fill, accent, text_color = ROLE_STYLE[role]
+    fill, accent, text_color = VISUAL_STYLE[visual]
     x, y = float(node["x"]), float(node["y"])
     width, height = float(node["width"]), float(node["height"])
-    border_dash = ' stroke-dasharray="8 5"' if implementation == "planned" else ""
     opacity = "0.45" if implementation == "removed" else "1"
     details = list(node.get("details", []))
     detail_lines = "".join(
-        f'<tspan x="{x + 18:.1f}" dy="17">{escape(str(line))}</tspan>' for line in details
+        f'<tspan x="{x + width / 2:.1f}" dy="17">{escape(str(line))}</tspan>' for line in details
     )
-    evidence_badge = ""
-    if evidence != "n_a":
-        badge_fill = {"admitted": "#166534", "guarded": "#92400E", "blocked": "#4B5563"}[evidence]
-        badge_width = 18 + len(evidence.upper()) * 7
-        evidence_badge = (
-            f'<rect x="{x + width - badge_width - 12:.1f}" y="{y + height - 27:.1f}" width="{badge_width:.1f}" height="19" rx="9.5" fill="{badge_fill}"/>'
-            f'<text x="{x + width - badge_width / 2 - 12:.1f}" y="{y + height - 13:.1f}" class="micro-badge">{evidence.upper()}</text>'
-        )
-    implementation_badge = ""
-    if implementation != "implemented":
-        badge_fill = "#15803D" if implementation == "planned" else "#9F1239"
-        badge_width = 18 + len(implementation.upper()) * 7
-        implementation_badge = (
-            f'<rect x="{x + 12:.1f}" y="{y + height - 27:.1f}" width="{badge_width:.1f}" height="19" rx="9.5" fill="{badge_fill}"/>'
-            f'<text x="{x + 12 + badge_width / 2:.1f}" y="{y + height - 13:.1f}" class="micro-badge">{implementation.upper()}</text>'
-        )
-    else:
-        implementation_badge = (
-            f'<text x="{x + 16:.1f}" y="{y + height - 12:.1f}" class="scope-label">{escape(scope.replace("_", " ").upper())}</text>'
-        )
     change_kind = node.get("_change_kind")
     change_overlay = ""
     change_attrs = ""
@@ -554,16 +548,16 @@ def _render_node(node: Mapping[str, Any]) -> str:
         description_parts.append(str(node["_change_note"]))
     node_id = _safe_xml_id(str(node["id"]))
     return (
-        f'<g id="node-{node_id}" class="node role-{escape(role)}" data-role="{escape(role)}" data-scope="{escape(scope)}" '
+        f'<g id="node-{node_id}" class="node visual-{escape(visual)}" data-role="{escape(role)}" data-visual="{escape(visual)}" data-scope="{escape(scope)}" '
         f'data-implementation="{escape(implementation)}" data-evidence="{escape(evidence)}" data-status="{escape(evidence if evidence != "n_a" else implementation)}"'
         f'{canonical_attrs}{change_attrs} opacity="{opacity}" role="group" '
         f'aria-labelledby="node-{node_id}-title node-{node_id}-desc">'
         f'<title id="node-{node_id}-title">{escape(str(node["label"]))}</title>'
         f'<desc id="node-{node_id}-desc">{escape("; ".join(description_parts))}</desc>'
-        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="16" fill="{fill}" stroke="{accent}" stroke-width="2"{border_dash}/>'
-        f'<text x="{x + 16:.1f}" y="{y + 29:.1f}" class="node-title" fill="{text_color}">{escape(str(node["label"]))}</text>'
-        f'<text x="{x + 16:.1f}" y="{y + 42:.1f}" class="node-detail" fill="#5F6B7A">{detail_lines}</text>'
-        f'{implementation_badge}{evidence_badge}{change_overlay}</g>'
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" rx="16" fill="{fill}" stroke="{accent}" stroke-width="2"/>'
+        f'<text x="{x + width / 2:.1f}" y="{y + 29:.1f}" class="node-title" fill="{text_color}">{escape(str(node["label"]))}</text>'
+        f'<text x="{x + width / 2:.1f}" y="{y + 42:.1f}" class="node-detail" fill="{text_color}">{detail_lines}</text>'
+        f'{change_overlay}</g>'
     )
 
 
@@ -573,7 +567,7 @@ def _render_sections(sections: Iterable[Mapping[str, Any]]) -> str:
         description = str(section.get("description", ""))
         rendered.append(
             f'<g id="section-{escape(str(section["id"]))}">'
-            f'<rect x="{section["x"]}" y="{section["y"]}" width="{section["width"]}" height="{section["height"]}" rx="16" class="section-box"/>'
+            f'<rect x="{section["x"]}" y="{section["y"]}" width="{section["width"]}" height="{section["height"]}" rx="18" class="section-box" fill="#FAFBFD" stroke="#667085" stroke-width="2"/>'
             f'<text x="{section["x"] + 18}" y="{section["y"] + 31}" class="section-title">{escape(str(section["label"]))}</text>'
             + (
                 f'<text x="{section["x"] + 18}" y="{section["y"] + 52}" class="section-description">{escape(description)}</text>'
@@ -583,32 +577,6 @@ def _render_sections(sections: Iterable[Mapping[str, Any]]) -> str:
             + "</g>"
         )
     return "".join(rendered)
-
-
-def _render_legend(y: int) -> str:
-    roles = ["data", "teacher", "encoder", "latent", "quantizer", "objective", "interface", "evaluator"]
-    role_items = []
-    x = 190
-    for role in roles:
-        fill, accent, _ = ROLE_STYLE[role]
-        role_items.append(
-            f'<rect x="{x}" y="{y - 15}" width="18" height="18" rx="4" fill="{fill}" stroke="{accent}"/>'
-            f'<text x="{x + 25}" y="{y}" class="legend-label">{role}</text>'
-        )
-        x += 105 if role not in {"quantizer", "objective"} else 125
-    return (
-        f'<g id="legend"><text x="40" y="{y}" class="legend-title">Functional role</text>{"".join(role_items)}'
-        f'<text x="40" y="{y + 35}" class="legend-title">Line / state</text>'
-        f'<path d="M 190 {y + 30} L 235 {y + 30}" stroke="#526272" stroke-width="2.2" marker-end="url(#arrow-data)"/>'
-        f'<text x="245" y="{y + 35}" class="legend-label">inference/data</text>'
-        f'<path d="M 365 {y + 30} L 410 {y + 30}" stroke="#7A54A3" stroke-width="2.2" stroke-dasharray="9 6" marker-end="url(#arrow-training)"/>'
-        f'<text x="420" y="{y + 35}" class="legend-label">training only</text>'
-        f'<rect x="550" y="{y + 19}" width="46" height="20" rx="10" fill="#166534"/><text x="573" y="{y + 34}" class="micro-badge">ADMITTED</text>'
-        f'<rect x="675" y="{y + 19}" width="46" height="20" rx="10" fill="#92400E"/><text x="698" y="{y + 34}" class="micro-badge">GUARDED</text>'
-        f'<rect x="800" y="{y + 19}" width="46" height="20" rx="10" fill="#4B5563"/><text x="823" y="{y + 34}" class="micro-badge">BLOCKED</text>'
-        f'<rect x="925" y="{y + 18}" width="74" height="23" rx="7" fill="none" stroke="#15803D" stroke-width="2" stroke-dasharray="7 4"/><text x="1008" y="{y + 35}" class="legend-label">planned</text>'
-        f'</g>'
-    )
 
 
 def _wrap_callout(note: str, width: int = 96) -> list[str]:
@@ -670,7 +638,7 @@ def render_svg(
     view, records = _compose_view(prepared_spec, prepared_changes)
     width = int(view["width"])
     base_height = int(view["height"])
-    footer_y = int(view.get("footer_y", base_height - 80))
+    content_bottom = int(view.get("footer_y", base_height))
     callout_svg = ""
     canvas_height = base_height
     if records:
@@ -679,7 +647,7 @@ def render_svg(
     callout_block = f"  {callout_svg}\n" if callout_svg else ""
     nodes = [dict(node) for node in view["nodes"]]
     for node in nodes:
-        _validate_node(node, width, footer_y)
+        _validate_node(node, width, content_bottom)
     _validate_node_overlaps(nodes)
     node_map = {str(node["id"]): node for node in nodes}
     metadata = {
@@ -695,8 +663,8 @@ def render_svg(
     banner_svg = ""
     if banner:
         banner_svg = (
-            f'<g id="evidence-boundary"><rect x="40" y="96" width="{width - 80}" height="43" rx="10" class="banner-box"/>'
-            f'<text x="58" y="123" class="banner-text">{escape(banner)}</text></g>'
+            f'<g id="evidence-boundary"><rect x="40" y="96" width="{width - 80}" height="43" rx="16" class="banner-box" fill="#FFF4E5" stroke="#F28B2B" stroke-width="2"/>'
+            f'<text x="{width / 2:.1f}" y="123" class="banner-text" fill="#B85B08">{escape(banner)}</text></g>'
         )
     banner_block = f"  {banner_svg}\n" if banner_svg else ""
     marker_defs = "".join(
@@ -712,23 +680,19 @@ def render_svg(
   <defs>{marker_defs}</defs>
   <style>
     text {{ font-family: Helvetica, "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", Arial, sans-serif; }}
-    .page-title {{ font-size: 28px; font-weight: 700; fill: #1F2937; }}
-    .page-subtitle {{ font-size: 14px; fill: #5F6B7A; }}
-    .banner-box {{ fill: #F1F5F9; stroke: #CBD5E1; stroke-width: 1.2; }}
-    .banner-text {{ font-size: 12px; font-weight: 700; fill: #475569; }}
-    .section-box {{ fill: #FBFCFE; stroke: #B9C9D8; stroke-width: 1.5; stroke-dasharray: 6 6; }}
-    .section-title {{ font-size: 15px; font-weight: 700; fill: #51687D; }}
-    .section-description {{ font-size: 12px; fill: #5F6B7A; }}
-    .node-title {{ font-size: 15px; font-weight: 700; }}
-    .node-detail {{ font-size: 12.5px; }}
-    .scope-label {{ font-size: 9.5px; font-weight: 750; fill: #53616D; letter-spacing: .35px; }}
-    .micro-badge {{ font-size: 8.5px; font-weight: 800; text-anchor: middle; fill: #FFFFFF; }}
+    .page-title {{ font-size: 28px; font-weight: 700; fill: #172033; }}
+    .page-subtitle {{ font-size: 13px; fill: #4B5565; }}
+    .banner-box {{ fill: #FFF4E5; stroke: #F28B2B; stroke-width: 2; }}
+    .banner-text {{ font-size: 12px; font-weight: 700; fill: #B85B08; text-anchor: middle; }}
+    .section-box {{ fill: #FAFBFD; stroke: #667085; stroke-width: 2; }}
+    .section-title {{ font-size: 20px; font-weight: 700; fill: #303846; }}
+    .section-description {{ font-size: 12px; fill: #475467; }}
+    .node-title {{ font-size: 13px; font-weight: 700; text-anchor: middle; }}
+    .node-detail {{ font-size: 10.5px; text-anchor: middle; }}
     .edge-label rect {{ fill: #FFFFFF; stroke: #CDD5DB; stroke-width: 1; opacity: .96; }}
     .edge-label text {{ font-size: 10.5px; text-anchor: middle; fill: #34424E; }}
     .change-badge {{ font-size: 10px; font-weight: 850; text-anchor: middle; fill: #FFFFFF; }}
-    .legend-title {{ font-size: 12px; font-weight: 750; fill: #34424E; }}
-    .legend-label {{ font-size: 10.5px; fill: #465661; }}
-    .callout-panel {{ fill: #FBFCFE; stroke: #B9C9D8; stroke-width: 1.4; }}
+    .callout-panel {{ fill: #FAFBFD; stroke: #667085; stroke-width: 1.4; }}
     .callout-title {{ font-size: 17px; font-weight: 750; fill: #2D3A45; }}
     .callout-object {{ font-size: 12px; font-weight: 750; fill: #2D3A45; }}
     .callout-note {{ font-size: 11.5px; fill: #53616D; }}
@@ -739,7 +703,6 @@ def render_svg(
 {banner_block}  {section_svg}
   <g id="edges">{edge_svg}</g>
   <g id="nodes">{node_svg}</g>
-  {_render_legend(footer_y)}
 {callout_block}</svg>
 '''
 

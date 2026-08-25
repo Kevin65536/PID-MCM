@@ -46,34 +46,18 @@ coupling-free tokenizer may still be retained.
 
 ## Experiment flow
 
-```mermaid
-flowchart LR
-    accTitle: PST-DISCOVERY-v1 staged experiment flow
-    accDescr: Software and synthetic checks precede teacher selection, continuous source and observation qualification, conditional quantization, and an optional coupling-prior test. Failed questions can open diagnostic side paths, but diagnostics cannot promote the main flow.
+![PST-DISCOVERY-v1 staged experiment plan](physiology_semantic_tokenizer/figures/pst_discovery_v1_experiment_plan.svg)
 
-    P0["P0 contract + synthetic checks"] --> T["T teacher family<br/>and spatial support"]
-    T --> U["U uncertainty calibration"]
-    U --> B0["B0 observation-only<br/>continuous reference"]
-    B0 --> B1["B1 continuous<br/>source + observation"]
-    B1 --> Qs["Q-S quantize source"]
-    Qs -. "optional fully discrete interface" .-> Qo["Q-O quantize observation"]
-    Qs --> C0["C0 frozen q0/q1<br/>coupling screen"]
-    Qo --> C0
-    C0 --> C1["C1 one-term source<br/>coupling shaper"]
-    C1 --> F["Freeze tokenizer + evidence"]
+[Editable figure source](physiology_semantic_tokenizer/architecture/pst_discovery_v1_experiment_plan.json) ·
+[standalone SVG](physiology_semantic_tokenizer/figures/pst_discovery_v1_experiment_plan.svg) ·
+[visual style reference](physiology_semantic_tokenizer/figures/physiology_semantic_architecture.svg)
 
-    T -. "unresolved teacher question" .-> D["diagnostics/&lt;probe_id&gt;<br/>not decision-eligible"]
-    U -. "calibration failure" .-> D
-    B1 -. "routing or reconstruction failure" .-> D
-    Qs -. "rate/health failure" .-> D
-    C0 -. "no incremental information" .-> F0["Freeze without coupling prior"]
-    C1 -. "fidelity or health regression" .-> F0
-    D -. "new hypothesis requires next contract" .-> P0
-```
+The upper spine is the only promotion path. The three detailed panels expose the
+teacher, tokenizer, and coupling candidate ladders; the bottom lane contains
+diagnostic children that are explicitly not decision-eligible.
 
-The dotted return is a future protocol transition, not an in-run retry. A
-diagnostic can explain a failure or motivate `v2`; it cannot be pooled into the
-`v1` promotion estimate.
+The bottom diagnostic lane can explain a failure or motivate `v2`; it is not an
+in-run retry and cannot be pooled into the `v1` promotion estimate.
 
 ## Common estimand and statistical contract
 
@@ -446,12 +430,3 @@ not rewrite hashed or dated evidence; linked reports remain the evidence owners.
 Neither `stopped` nor `abandoned` evidence authorizes or determines a row in
 `PST-DISCOVERY-v1`. Historical plans preserve their original wording for
 reproducibility.
-
-## Historical visualization (2026-08-14)
-
-The `experiment_plan*` files below are retained for navigation only. They are
-not inputs to this protocol or the current registry.
-
-- [Historical SVG](figures/experiment_plan.svg) · [PNG export](figures/experiment_plan.png)
-- [Alt text](figures/experiment_plan.alt.txt) · [source JSON](figures/experiment_plan_status.json)
-- [render manifest](figures/experiment_plan.manifest.json)

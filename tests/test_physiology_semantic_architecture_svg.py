@@ -36,6 +36,17 @@ EXPLORATION_ALT_PATH = PROJECT_ROOT / (
 EXPLORATION_SPEC_SOURCE = (
     "docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json"
 )
+DISCOVERY_SPEC_PATH = PROJECT_ROOT / (
+    "docs/physiology_semantic_tokenizer/architecture/pst_discovery_v1_experiment_plan.json"
+)
+DISCOVERY_SVG_PATH = PROJECT_ROOT / (
+    "docs/physiology_semantic_tokenizer/figures/pst_discovery_v1_experiment_plan.svg"
+)
+DISCOVERY_SPEC_SOURCE = (
+    "docs/physiology_semantic_tokenizer/architecture/pst_discovery_v1_experiment_plan.json"
+)
+
+
 def _load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -46,6 +57,10 @@ def _spec():
 
 def _exploration_spec():
     return _load(EXPLORATION_SPEC_PATH)
+
+
+def _discovery_spec():
+    return _load(DISCOVERY_SPEC_PATH)
 
 
 def _xml(svg: str):
@@ -85,6 +100,30 @@ def test_runtime_renderer_preserves_baseline_content_and_exposes_visual_axes():
     assert {f"node-{node_id}" for node_id in required}.issubset(xml_ids)
     assert root.find(".//*[@id='node-trainer_gate']").attrib["data-status"] == "guarded"
     assert root.find(".//*[@id='node-p6_coupling']").attrib["data-status"] == "blocked"
+
+
+def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
+    rendered = render_svg(_discovery_spec(), spec_source=DISCOVERY_SPEC_SOURCE)
+    assert rendered == DISCOVERY_SVG_PATH.read_text(encoding="utf-8")
+    root = _xml(rendered)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    assert root.find("svg:title", namespace).text.startswith("PST-DISCOVERY-v1")
+    assert "measured/protected 数据保持关闭" in rendered
+    assert 'class="banner-box" fill="#FFF4E5"' in rendered
+    assert "Functional role" not in rendered
+    assert "micro-badge" not in rendered
+    required = {
+        "node-p0",
+        "node-teacher_qualified",
+        "node-continuous_tokenizer",
+        "node-conditional_vq",
+        "node-coupling_screen",
+        "node-freeze",
+        "node-diag_teacher",
+        "node-diag_tokenizer",
+        "node-diag_coupling",
+    }
+    assert required <= {element.attrib.get("id") for element in root.iter()}
 
 
 def test_legacy_geometry_is_expanded_in_memory_without_mutating_design_source():
@@ -180,7 +219,7 @@ def test_validation_rejects_bad_replacement_unknown_endpoint_and_duplicate_ids()
         (EXPLORATION_DRAWIO_PATH, EXPLORATION_SVG_PATH),
     ],
 )
-def test_drawio_owned_svgs_embed_current_source_and_shared_style(drawio_path, svg_path):
+def test_drawio_owned_svgs_embed_current_source(drawio_path, svg_path):
     source_root = ET.parse(drawio_path).getroot()
     svg_root = _xml(svg_path.read_text(encoding="utf-8"))
     embedded_root = ET.fromstring(svg_root.attrib["content"])
@@ -201,18 +240,26 @@ def test_drawio_owned_svgs_embed_current_source_and_shared_style(drawio_path, sv
     if drawio_path == DRAWIO_PATH:
         assert "Optional contribution probe" in values
         assert "architecture remains revisable" in values
+        assert "fillColor=#F2F7FF;strokeColor=#3B73E8" in styles
+        assert "fillColor=#FFF4F6;strokeColor=#FF5067" in styles
+        assert "fillColor=#F0FBFA;strokeColor=#168C83" in styles
+        assert "fillColor=#FFF7E8;strokeColor=#F28B2B" in styles
+        assert "fillColor=#F5F0FF;strokeColor=#7B56D8" in styles
 
 
-def test_renderer_uses_the_shared_drawio_visual_language():
-    svg = render_svg(_spec(), spec_source=SPEC_SOURCE)
+def test_renderer_mirrors_the_detailed_architecture_visual_language():
+    svg = render_svg(_discovery_spec(), spec_source=DISCOVERY_SPEC_SOURCE)
     assert 'font-family: Helvetica' in svg
-    assert '.banner-box { fill: #F1F5F9; stroke: #CBD5E1;' in svg
-    assert '.section-box { fill: #FBFCFE; stroke: #B9C9D8;' in svg
+    assert '.banner-box { fill: #FFF4E5; stroke: #F28B2B;' in svg
+    assert '.section-box { fill: #FAFBFD; stroke: #667085;' in svg
+    assert 'class="section-box" fill="#FAFBFD"' in svg
     assert 'rx="16"' in svg
-    assert '#E9F2FF' in svg
-    assert '#FFF4D6' in svg
-    assert '#F1ECFA' in svg
-    assert '#E5F6EF' in svg
+    assert '#F2F7FF' in svg
+    assert '#F5F0FF' in svg
+    assert '#FFF7E8' in svg
+    assert '#EDF9EF' in svg
+    assert "Functional role" not in svg
+    assert "micro-badge" not in svg
 
 
 def test_v2_exploration_visual_and_alt_text_are_distinct_from_runtime():

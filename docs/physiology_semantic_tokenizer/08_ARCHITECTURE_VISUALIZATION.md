@@ -1,6 +1,6 @@
 # Architecture visualization standard
 
-_Ownership and maintenance contract for stopped runtime and abandoned candidate views_
+_Ownership and maintenance contract for current and historical architecture views_
 
 ## Maintained views
 
@@ -25,18 +25,23 @@ owned by [`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
 
 ## Visual and semantic contract
 
-- white canvas, Helvetica/CJK sans-serif fallbacks, flat pastel cards, no shadows;
-- color indicates functional role, while text and line style redundantly show
-  scope, implementation, and evidence state;
-- `implemented`, `planned`, and `removed` are historical renderer labels and must remain visually distinct;
-- `admitted`, `guarded`, `blocked`, and `n_a` are evidence labels, not inferred
-  from color;
+- [`architecture/physiology_semantic_architecture.drawio`](architecture/physiology_semantic_architecture.drawio)
+  and its exact exported SVG are the sole current visual-style reference;
+- white canvas, Helvetica/CJK sans-serif fallbacks, flat pastel cards, no shadows,
+  solid rounded macro-panels, centered card text, and left-aligned panel headings;
+- color identifies modality or pathway content: EEG/source blue, fNIRS coral,
+  observation teal, teacher purple, coupling orange, retained output green, and
+  neutral notes gray; color does not encode implementation or evidence status;
+- scientific state is written in the title/banner and accessible descriptions;
+  dashed outlines are reserved for an explicit guarded boundary or diagnostic,
+  not repeated as per-node status pills or a functional-role legend;
 - stable node/edge IDs, accessible title/description, and orthogonal edge routes;
 - Draw.io-owned SVGs embed the editable diagram and must not be hand-edited.
 
-The Python renderer still accepts an in-memory v2 overlay for validation and a
-future versioned design. No tracked historical overlay is part of the active
-surface, and no new overlay is registered.
+The stopped runtime and abandoned exploration figures preserve their historical
+appearance and are not style references. They are not rewritten in place. The
+Python renderer mirrors the current reference for code-native plans and still
+accepts in-memory v2 overlays without changing scientific state.
 
 ## Regeneration and checks
 
@@ -52,6 +57,10 @@ drawio --export --format svg --embed-diagram \
 drawio --export --format svg --embed-diagram \
   --output docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg \
   docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.drawio
+
+.venv/bin/python experiments/scripts/render_physiology_semantic_architecture.py \
+  --spec docs/physiology_semantic_tokenizer/architecture/pst_discovery_v1_experiment_plan.json \
+  --output docs/physiology_semantic_tokenizer/figures/pst_discovery_v1_experiment_plan.svg
 
 .venv/bin/python -m pytest -q tests/test_physiology_semantic_architecture_svg.py
 ```

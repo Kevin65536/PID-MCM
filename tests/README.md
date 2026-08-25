@@ -18,7 +18,7 @@ artifacts. Run those only with the exact evidence restored:
 | R0/R1/R2 (stopped) | `test_r0p_*`, `test_build_r1*`, `test_qualify_r1p_*`, `test_r2d_*` | regression coverage for stopped sealed preregistration, no-leakage, and negative-result records |
 | Croce/solver (stopped) | `test_croce_*`, `test_benchmark_solver_optimizations.py` | regression coverage for the stopped physical-model/cache implementation |
 | Infrastructure | `test_archive_isolation.py`, `test_project_state.py` | archive boundary and unified state |
-| Figures | `test_physiology_semantic_architecture_svg.py`, `test_experiment_plan_svg.py` | source/provenance consistency |
+| Figures | `test_physiology_semantic_architecture_svg.py` | source/provenance consistency |
 
 These rows describe regression coverage for retained evidence, not an experiment
 queue or authorization to launch a new lane. Ordinary tests use temporary,

@@ -114,11 +114,6 @@ figures are abandoned pre-freeze snapshots and are not current Methods evidence.
   boundary.
   Their optional-grammar wording is superseded by `METHOD_RATIONALE.md`. The
   schematic contains **no measured values** and is not a Methods target.
-- [`experiment_plan.svg`](figures/experiment_plan.svg),
-  [`experiment_plan.png`](figures/experiment_plan.png),
-  [`alt text`](figures/experiment_plan.alt.txt), and its
-  [`manifest`](figures/experiment_plan.manifest.json) are the 2026-08-14 plan
-  snapshot.
 - [`project_workflow_progress.svg`](project_workflow_progress.svg) is the optional
   historical four-lane snapshot dated 2026-08-16. Its completed nodes are now
   **stopped**, and its planned/blocked nodes are **abandoned**; labels such as

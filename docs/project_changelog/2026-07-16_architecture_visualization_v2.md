@@ -6,6 +6,10 @@
 
 ---
 
+> Historical record, not current style guidance. The role/status palette described
+> below was retired on 2026-08-25; the current style owner is
+> [`physiology_semantic_architecture.drawio`](../physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.drawio).
+
 ## Change
 
 Improved the drawing and maintenance system for the existing physiology-semantic tokenizer architecture without changing its design or experiment plans:
