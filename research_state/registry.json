@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-25",
+  "updated_at": "2026-08-25T17:42:34+08:00",
   "tracks": [
     {
       "id": "main",
@@ -32,7 +32,7 @@
       "id": "e.data_contract",
       "label": "统一数据合同",
       "path": "docs/DATA_CONTRACT.md",
-      "sha256": "80f2f05ab8dbf6f37a1958cb844a12081a58854c1f7c19fb3d3144debb7ae437",
+      "sha256": "fcaad69b46c14a7597c350c5e74b1d8b125c129e34a8aff7ac45489c14b3e438",
       "role": "data_contract"
     },
     {
@@ -223,6 +223,13 @@
       "path": "docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json",
       "sha256": "dcb4eeff22e2830534c03f851435d933714fe69ea547a8dca8c83e4a65351ac3",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.experiment_plan",
+      "label": "PST-DISCOVERY-v1 实验设计协议",
+      "path": "docs/EXPERIMENT_PLAN.md",
+      "sha256": "b00fdaa7384dcce009a4fa6f3e857c50317bfd469468f1930aed2b58e6ba1ca9",
+      "role": "protocol"
     }
   ],
   "records": [
@@ -1218,6 +1225,32 @@
         "main.observation_source_exploration",
         "main.ssm_observation_qc"
       ],
+      "headline": true
+    },
+    {
+      "state_id": "main.program@2026-08-25.tokenizer-discovery-v1",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按 physical teacher、连续 source/observation、条件式 VQ、可选 coupling prior 的顺序发现 tokenizer；不使用下游任务端点，尚未授权 measured/protected 运行。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.method_rationale",
+        "e.data_contract"
+      ],
+      "supersedes": [
+        "main.program@2026-08-25.abandoned"
+      ],
+      "updated_at": "2026-08-25T17:42:34+08:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "next_step": "建立一个 executable contract 并完成 P0 synthetic/software checks；measured/protected 保持关闭。",
       "headline": true
     },
     {

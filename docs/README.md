@@ -2,18 +2,18 @@
 
 _Authority index. Registered execution and scientific verdicts are generated from the
 machine-readable research-state registry. The method-rationale and architecture
-documents are retained claim-boundary and implementation records; there is no
-active experiment sequence. The 2026-08-22 [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
-is an abandoned candidate snapshot. The clean-slate entry is
-[`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md), and paper-facing evidence routes are
-listed in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
+documents are retained claim-boundary and implementation records. The planned
+`PST-DISCOVERY-v1` sequence is owned by
+[`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md); the 2026-08-22 [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
+remains an abandoned candidate snapshot. Paper-facing evidence routes are listed
+in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 
 ## Authority documents
 
 | Question | Authority |
 | --- | --- |
 | What lifecycle is recorded for each track? | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) (generated) |
-| Where is the clean-slate experiment entry? | [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md) (no active sequence) |
+| Where is the planned clean-slate experiment sequence? | [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md) (`PST-DISCOVERY-v1`; no measured run authorized) |
 | What rationale and evidence support the scientific conclusion? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) |
 | Where should paper Methods, Results, Discussion, and Figures take material from? | [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md) |
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
@@ -85,9 +85,9 @@ component.
   [`../research_state/registry.json`](../research_state/registry.json) and its
   generated [`PROJECT_STATUS.md`](PROJECT_STATUS.md). Hand-written documents
   explain methods, evidence, and interpretation.
-- The lifecycle overlay and the intentionally empty experiment entry are owned by
-  [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md); do not copy historical next actions
-  into README/STATUS pages.
+- The lifecycle overlay and current planned sequence are owned by
+  [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md); do not hand-maintain parallel stage
+  state or next-action lists outside the registry-generated views.
 - For a future registry update, edit its owning item and run `validate`, then
   `render`. Evidence and audit checks are optional extras when preparing a
   paper-ready frozen result.

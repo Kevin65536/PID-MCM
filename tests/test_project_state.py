@@ -48,7 +48,8 @@ def test_current_registry_is_lightweight_and_views_are_readable():
     assert all("| — | 2026-08-25 |" in line for line in terminal_rows)
 
     readme = render_readme_block(registry)
-    assert "### Next steps" not in readme
+    assert "### Next steps" in readme
+    assert "P0 synthetic/software checks" in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -76,7 +77,11 @@ def test_execution_and_scientific_verdict_remain_independent():
     assert current["comparison.efrm"]["execution"] == "stopped"
     assert current["comparison.efrm"]["scientific_verdict"] == "mixed"
 
-    assert all(record.get("next_step") is None for record in current.values())
+    assert current["main.program"]["execution"] == "planned"
+    assert current["main.program"]["scientific_verdict"] == "unreviewed"
+    assert {
+        entity for entity, record in current.items() if record.get("next_step")
+    } == {"main.program"}
 
 
 def test_comparison_method_totals_match_the_campaign_aggregate():
