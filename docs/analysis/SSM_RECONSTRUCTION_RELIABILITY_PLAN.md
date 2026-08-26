@@ -141,7 +141,8 @@ Every completed cell produces:
 - bootstrap draws in NPZ form;
 - resolved config, split inventory, source/data hashes, software identity, and
   `protected_open=false` in the manifest;
-- SVG and PNG figures, source tables, a figure provenance record, and alt text;
+- one figure format per figure (PNG by default, or SVG when explicitly
+  requested) and source tables;
 - a summary that binds every numeric statement to the generated artifacts.
 
 Default figures use aligned panels rather than dual axes, show the estimator
