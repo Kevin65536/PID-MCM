@@ -26,13 +26,22 @@ The intended final object is the smallest tokenizer that jointly satisfies:
    the observation/source-history baseline without harming the first three
    properties.
 
-The physical teacher's primary task is denoising, not EEG-only cross-modal
-translation. From aligned noisy EEG, HbO, and HbR observations it estimates an
-operational shared neural driver `r(t)`, a posterior denoised trajectory for
-each modality, and the observation-minus-trajectory residual. Neither `r(t)`
-nor the denoised trajectory is ground truth, and the residual is only a
-noise/artifact candidate until the clean-reference, masking, null, and
-calibration checks below support that interpretation.
+The physical teacher's primary task is a physiology-constrained decomposition,
+not pointwise observation copying or EEG-only cross-modal translation. From
+aligned noisy EEG, HbO, and HbR observations it estimates an operational shared
+neural driver `r(t)`, named hemodynamic states, an observation-space posterior,
+and modality-specific or systemic nuisance/residual components. The shared
+driver, physiological states, and separated noise are estimates rather than
+ground truth and become decision-eligible only after the physical,
+identifiability, corruption, null, and calibration checks below.
+
+Observation-space reconstruction remains useful for posterior predictive
+checking and for locating failure, but it is not the primary definition of a
+good physical teacher. A candidate is not rejected solely because its point
+MSE/NRMSE, R², or PCC is worse than persistence or a time-shift control.
+Non-finite trajectories, physical-boundary violations, non-identifiable
+physiological claims, systematic posterior-predictive failure, or failed
+uncertainty calibration still reject the candidate.
 
 The nine forward principles in
 [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#frozen-theory-and-architecture-contract-unimplemented)
@@ -42,10 +51,12 @@ not redefine them.
 
 "Optimal" is deliberately lexicographic rather than a weighted total score:
 
-1. pass every required source and observation fidelity gate;
-2. pass uncertainty, stability, and codebook-health floors;
-3. among passers, use the lowest token rate and simplest model;
-4. use held-out proper score only as the final tie-breaker.
+1. qualify the teacher on physical identity, identifiability, robustness, null,
+   and calibration gates;
+2. pass every required source and observation fidelity gate;
+3. pass uncertainty, stability, and codebook-health floors;
+4. among passers, use the lowest token rate and simplest model;
+5. use held-out proper score only as the final tie-breaker.
 
 A strong result in one modality cannot compensate for failure in the other. If
 continuous representations pass but VQ fails, the result is "no discrete
@@ -116,22 +127,26 @@ and candidate families are either descriptive or controlled with a predeclared
 max-statistic/closed-testing procedure. No best patch, lag, channel set, seed, or
 checkpoint may be chosen after confirmation data are viewed.
 
-The practical non-inferiority margins `delta_T`, `delta_S`, `delta_O`, and
-`delta_H` are intentionally unresolved here: each must be estimated from
-synthetic recovery, measurement repeatability, or fit-only technical repeats and
-then frozen before the corresponding confirmation run. A percentage chosen
-after seeing held-out results is not an admissible margin.
+The practical margins `delta_T`, `delta_S`, `delta_O`, and `delta_H` are
+intentionally unresolved here: each must be estimated from synthetic recovery,
+measurement repeatability, or fit-only technical repeats and then frozen before
+the corresponding confirmation run. For the teacher, `delta_T` governs shared
+driver/state robustness and calibration, not superiority of pointwise
+observation reconstruction. A percentage chosen after seeing held-out results
+is not an admissible margin.
 
 ## P0: software and synthetic qualification
 
 P0 is mandatory before measured data. One synthetic generator must emit known
-`r(t)`, clean EEG/HbO/HbR trajectories, observation operators, and a known
-delayed EEG-to-fNIRS relation. It then injects heteroscedastic noise and
-controlled modality-specific artifacts--spikes, drift, steps, bursts or
-high-frequency contamination, and dropout--while retaining the clean reference,
-artifact mask, and severity. Full-input, masked/held-out, and missing-modality
-replays must use the same generator. The smallest runnable check must
-demonstrate:
+`r(t)`, extended Balloon states `s/f/v/p/q`, the true parameters and operators,
+and clean EEG/HbO/HbR trajectories under an explicit
+`p/q -> HbT/HbO/HbR` concentration map (plus the recorded optical operator when
+the input coordinate is optical density) and known EEG-to-fNIRS delay. It then
+injects heteroscedastic noise and controlled modality-specific or systemic artifacts--spikes, drift,
+steps, bursts or high-frequency contamination, and dropout--while retaining the
+clean reference, nuisance component, artifact mask, and severity. Full-input,
+masked/held-out, and missing-modality replays must use the same generator. The
+smallest runnable check must demonstrate:
 
 - continuous target construction before patching/tokenization;
 - exact canonical-key joins and distinct measurement, teacher, uncertainty,
@@ -139,51 +154,173 @@ demonstrate:
 - no cross-modal read before either main tokenizer emits its representation;
   the offline joint teacher is the declared fit-fold-only exception and emits
   detached modality-specific targets;
-- recovery of known `r(t)` and clean modality trajectories, attenuation of the
-  injected artifacts without excessive clean-signal distortion, and failure on
-  independent/time-shift/spatial nulls;
+- the resting equilibrium, positive physiological states, stable integration,
+  valid oxygen extraction, Balloon-compartment inflow/outflow, total-Hb and
+  deoxy-Hb balances, and the explicit hemodynamic/optical observation map; these
+  checks
+  do not turn the model into a full oxygen-diffusion or CMRO2 model;
+- prior-predictive support plus simulation-based calibration, profile-likelihood
+  or equivalent identifiability checks, and multi-start sensitivity for every
+  parameter allowed to vary;
+- recovery of known `r(t)` and named physiological states, attenuation of
+  injected artifacts, and failure on independent/time-shift/pairing/spatial
+  nulls; observation-space MSE and correlation remain descriptive;
 - residual agreement with injected corruption on artifact support and absence
   of systematic clean-signal removal off that support;
 - calibrated predictive intervals, with uncertainty increasing under stronger
   corruption, masking, or missing input;
 - branch and coupling gradient allowlists;
-- config/target/summary serialization, deterministic hashes, atomic publication,
-  and an explicit incomplete-run state.
+- config/target/summary serialization, atomic publication, and an explicit
+  incomplete-run state.
 
 Only P0 is authorized by this design. Measured smoke work requires the later
 executable contract; protected evaluation requires a separate explicit request.
 
 ## T: physical-teacher selection
 
-### Candidate ladder
+### Selection principle and candidate range
 
-The teacher comparison is sequential, not a Cartesian product.
+The comparison is a staged ladder, not a Cartesian model search. Controls and
+mechanism references cannot become the physical teacher merely by winning a
+reconstruction metric. The first promotion candidate is the smallest robust
+nonlinear Balloon model with explicit observation operators.
 
-| ID | Candidate | Question | Promotion role |
+| ID | Candidate | Frozen question | Role |
 | --- | --- | --- | --- |
-| `T0-native` | measured continuous coordinate plus a simple fit-fold noise/smoothing model | Does the interface and score beat a no-dynamics reference? | control only |
-| `T1-self` | modality-specific linear LDS/RTS, fitted separately to EEG and fNIRS | How much denoising is available without cross-modal information? | single-modality attribution baseline |
-| `T2-croce` | paper-faithful Croce-2017 SMC reference, kept distinct from the repository's modified solver | Does the joint posterior recover known `r(t)` and clean EEG/HbO/HbR trajectories while separating injected corruption beyond `T1-self`? | privileged physical candidate |
-| `T3-adaptive` | current bounded/adaptive RTS/AR family, explicitly versioned as an improvement rather than "exact Croce" | Do adaptive joint dynamics improve the same frozen denoising, shared-driver, residual, and calibration endpoints? | competing physical candidate |
-| `T4-spatial` | nested local-channel extension of the simplest passing `T2`/`T3` family | Is additional local spatial support necessary? | conditional refinement |
+| `T0-native` | measured coordinates with persistence, time-shift, and fit-fold smoothing controls | How much apparent recovery requires no latent physiology? | predictive control; never promoted |
+| `T1-self` | independent EEG and fNIRS linear LDS/RTS models | How much smoothing and uncertainty calibration is available without a shared state? | single-modality attribution control |
+| `T2a-croce-pf` | paper-faithful Croce-2017 nonlinear particle-filter mechanism | Which published Croce behaviours reproduce under the same synthetic contract? | fixed mechanism reference; not the default teacher |
+| `T2b-adaptive-legacy` | current bounded adaptive Croce-like RTS/AR implementation | Which current results survive the new physical and identifiability tests? | historical regression baseline; never relabelled as exact Croce |
+| `T3a-balloon-robust` | constrained nonlinear `r/s/f/v/p/q` extended Balloon state model, explicit EEG and fNIRS optical observations, masks, and fixed-degree-of-freedom Student-t observation noise | Can the model recover an identifiable shared drive and plausible physiological states while isolating corruption? | **primary promotion candidate** |
+| `T3b-systemic` | `T3a` plus one low-dimensional fNIRS systemic/extracerebral nuisance factor | Does a frozen residual/PPC failure specifically improve without absorbing `r(t)`? | conditional extension after its predeclared `T-P3`/`T-G4` trigger |
+| `T3c-hierarchical` | partial pooling of only parameters already identifiable in `T3a` | Does cross-subject pooling improve stability without prior domination? | conditional extension only after `T-P2` identifiability and a frozen cross-subject stability failure |
+| `T4-dcm-lite` | two-stage EEG neural-state to Balloon/optical fNIRS model; fNIRS cannot retroactively rewrite the EEG neural state | Does a more conventional directed interpretation support the same physiology? | interpretability reference, not a joint-teacher promotion arm |
+| `T5-spatial` | local geometry extension of the simplest `T3` model passing `T-G0`--`T-G4` | Is additional local spatial support necessary after physiology qualifies? | final conditional refinement at `T-G5` |
 
-`T4-spatial` starts from one HbO/HbR pair plus six nearest EEG channels, then
+Gamma-HRF/delay controls, Factorial/SLDS noise branches, switching regimes,
+heteroscedastic process models, Gaussian-process dynamics, and full neural-mass
+models remain diagnostics. They are not part of the first promotion ladder.
+`T3a` does not simultaneously add switching, hierarchy, spatial structure, and
+multiple nuisance factors.
+
+`T5-spatial` starts from one HbO/HbR pair plus six nearest EEG channels, then
 tests two and at most four local fNIRS pairs with at most twelve EEG channels,
 subject to actual channel support. It reuses the existing adjacency/geometry
 owners. A geometry-aware linear observation operator and covariance are tested
 before any graph neural network. Template geometry supports adjacency and
 qualitative topology only, not exact cross-modal distance or co-registration.
 
-Channel sets are selected on fit data without labels. Added channels are retained
-only if they improve the held-out per-channel proper score, survive channel-drop
-and geometry-permutation nulls, and do not degrade uncertainty calibration or
-stability. Otherwise the smaller local model wins. An all-scalp model is not part
-of the main ladder.
+Channel sets are selected on fit data without labels. Added channels are
+retained only if they improve a frozen posterior-predictive or proper-score
+endpoint, survive channel-drop and geometry-permutation nulls, and do not
+degrade calibration or state stability. Otherwise the smaller local model wins.
+An all-scalp model is not part of this generation.
+
+### Physiological state and parameter contract
+
+The initial `T3a` continuous-time core follows the normalized Balloon dynamics
+of [Friston et al. (2000)](https://www.fil.ion.ucl.ac.uk/spm/doc/papers/karl_nonlinear.pdf)
+and the total-Hb/optics extension of
+[Tak et al. (2015)](https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf).
+Those papers define the model family; their fitted prior means are not treated
+as universal human measurement ranges.
+
+```text
+ds/dt       = r - kappa * s - gamma * (f - 1)
+df/dt       = s
+f_out       = v^(1/alpha)
+tau * dv/dt = f - f_out
+tau * dp/dt = (f - f_out) * p / v
+tau * dq/dt = f * E(f, E0) / E0 - f_out * q / v
+E(f, E0)    = 1 - (1 - E0)^(1/f)
+
+domain: f > 0; 0 < E0 < 1; 0 < E(f, E0) < 1
+rest:   r = s = 0; f = v = p = q = 1
+```
+
+Here `r` is the effective operational forcing obtained after absorbing the
+usual neural-efficacy factor into the shared driver; it is not measured firing.
+`s = df/dt` is the vasoactive signal; `f` is inflow normalized to rest; `v` is
+normalized venous Balloon volume; and `p/q` are the normalized total-Hb/deoxy-Hb
+model coordinates of that compartment. With time in seconds, `f/v/p/q` are
+dimensionless, `s` has units s^-1, `r` and `gamma` have units s^-2, `kappa`
+has units s^-1, and `tau` has units s. `tau` is the resting transit constant
+`V0/F0` of the modeled venous Balloon, not whole-region or whole-brain mean
+transit time. `alpha` is its dimensionless outflow-volume exponent. A numeric
+prior from another state/time scaling is usable only after its unit conversion
+is recorded; copying a published coefficient labelled only as a "rate" into
+this parameterization is a `T-P0` failure.
+
+The fNIRS forward model must be explicit rather than learned through arbitrary
+signed gains:
+
+```text
+delta_HbT = P0 * (p - 1)
+delta_HbR = Q0 * (q - 1)
+delta_HbO = delta_HbT - delta_HbR
+```
+
+`P0` and `Q0` are positive baseline scales. If the declared measurement
+coordinate is raw optical density, the above concentrations additionally pass
+through the recorded wavelength-specific extinction, sensitivity/pathlength,
+and cortical-mixing operator. If the coordinate is a released HbO/HbR export,
+that optical-density transform is not applied a second time; its recorded
+preprocessing/normalization transform is part of the observation operator.
+Without those baselines and the recorded optical lineage, `p/q` remain
+dimensionless model coordinates and cannot be relabelled as absolute Hb
+concentrations. EEG has its own declared observation operator.
+
+The parameter contract separates three kinds of restriction:
+
+- **Hard mathematical/physical boundaries:** `kappa`, `gamma`, `tau`, and
+  `alpha` are positive; `0 < E0 < 1`; `f`, `v`, `p`, `q`, and `f_out` remain
+  positive; `E(f,E0)` remains in `(0,1)` at every step; `P0 > 0`, `Q0 > 0`,
+  and the mapped absolute HbT/HbR/HbO values remain nonnegative with HbR not
+  exceeding HbT. The resting equilibrium, compartment balances, units,
+  finite integration, and stability checks must pass. These are validity
+  conditions, not fitted medical ranges.
+- **Neural-drive gauge:** set the baseline of `r` to zero, fix its sign so a
+  positive drive increases `s`, normalize its scale by one predeclared
+  fit-fold rule, and fix one EEG observation loading. The conventional
+  `epsilon` factor is absorbed into `r`; no separate neural-efficacy parameter
+  is fitted or reported as measured physiology.
+- **Soft source-backed priors:** every numeric prior and plausible-response
+  interval must record its units, compartment, species/population and challenge
+  condition, primary source, and prior parameterization in the executable
+  contract. A posterior pressed against a bound or unchanged from its prior is
+  not evidence that the parameter was measured.
+- **Initial free-parameter limit:** keep `alpha`, `E0`, `gamma`, `P0/Q0`, and
+  the optical scale fixed, externally calibrated, or explicitly
+  non-interpreted; fit only `kappa` and `tau` until `T-P2` supports additional
+  identifiability. `p` has no separate free dynamic parameter in `T3a`. Add one
+  parameter at a time, never a correlated block.
+
+Names must not overstate what the equations identify. `kappa` and `gamma` are
+lumped model coefficients, not direct molecular vasodilation rates; `E0` is the
+resting oxygen extraction fraction, not an oxygen dissociation rate. Without
+absolute flow/volume and optical calibration, the experiment cannot claim
+absolute OEF, CMRO2, or an oxygen dissociation rate. Such quantities remain
+outside the result vocabulary even when the latent trajectory looks plausible.
+
+### Teacher test sequence
+
+| Stage | Test items | Promotion consequence |
+| --- | --- | --- |
+| `T-P0 semantics/physics` | state names, equations, units, gauge, observation map, equilibrium, positivity, finite/stable integration, and parameter-source ledger | any violation is `FAIL` before fitting |
+| `T-P1 prior predictive` | draw prior trajectories across the frozen design; check plausible amplitudes/delays, boundary contact, solver failures, and prior sensitivity | unsupported priors or implausible mass dynamics block the candidate |
+| `T-P2 identifiability` | simulation-based calibration, rank/coverage diagnostics, profile likelihood or equivalent posterior geometry, multi-start recovery, and parameter/state confounding | non-identifiable parameters are fixed/removed; stable `r` alone earns only state-level status |
+| `T-P3 known-truth corruption` | recover `r/s/f/v/p/q`, separate known artifacts/nuisance, preserve clean off-artifact morphology, vary severity/masks/missing modalities, and run independent/time-shift/pairing/spatial nulls | qualifies shared-state and noise-separation claims; point reconstruction metrics remain descriptive |
+| `T-P4 measured development` | posterior-predictive checks, residual temporal/spectral structure, modality ablations, leave-one-trial/subject-out stability, and prior-to-posterior movement | permitted only after an executable measured-data contract; no protected access |
+| `T-P5 comparison/spatial` | compare the simplest surviving models by predictive score, calibration, complexity, perturbation stability, and spatial/channel nulls | select the smallest fully qualified teacher; otherwise stop |
+
+The current authorized P0 software/synthetic scope covers `T-P0` through
+`T-P3` and the known-clean synthetic portion of `T-G4`. Final `T-G4`, `T-P4`,
+`T-G5`, and `T-P5` require the later executable measured-data contract; this
+plan does not open measured or protected data.
 
 ### Teacher outputs and uncertainty convention
 
-All candidates publish the same observation-space fields, independent of
-teacher family:
+All candidates publish common observation and diagnostic fields:
 
 ```text
 trajectory_mean
@@ -192,57 +329,64 @@ epistemic_variance
 total_variance = aleatoric_variance + epistemic_variance
 observation_values
 innovation = observation_values - trajectory_mean
-named masks
-coordinate/channel identities
-fit, source, code, geometry, parameter, and calibration hashes
+nuisance_mean / nuisance_variance, when the candidate declares a nuisance state
+named masks and coordinate/channel identities
+fit, model/config, parameter, and calibration identities
 ```
 
-Decision-eligible joint candidates additionally publish:
+Physiological candidates additionally publish, with explicit state names:
 
 ```text
-shared_driver_mean
-shared_driver_variance
+shared_driver_mean / shared_driver_variance
+physiological_state_mean / physiological_state_variance
+parameter_posterior_summary
+parameter_identifiability_status
+physical_check_status
 ```
 
-`shared_driver_mean` is the operational `r(t)` estimate. `trajectory_mean` is
-the posterior denoised estimate in each EEG/HbO/HbR observation coordinate, not
-a claim of clean ground truth. `innovation` is retained as an explicit residual
-and may be described as separated noise/artifact only to the extent supported by
-the gates below.
+`shared_driver_mean` is the operational `r(t)` estimate.
+`physiological_state_mean` contains only states actually present and identified
+in the fitted model. `trajectory_mean` is an observation-space posterior
+prediction, not a clean-ground-truth claim. `innovation` may be described as
+separated noise/artifact only to the extent supported by `T-P3`; otherwise it
+remains a residual.
 
-The new contract uses **variance**, not an ambiguous `uncertainty` scalar. The
+The contract uses **variance**, not an ambiguous `uncertainty` scalar. The
 legacy adapter mixes variance-like summaries while the current loss divides by
 that field without a log-variance term; therefore its uncertainty-weighting
 switch is not admitted evidence for this generation.
 
-Calibration is fit-fold-only and frozen before application. The primary
-uncertainty endpoints are Gaussian log score and CRPS on known-clean synthetic
-coordinates and prespecified masked real coordinates. 50/80/95% interval
-coverage and width, standardized residuals, PIT, and risk-versus-uncertainty
-monotonicity are required diagnostics. Same-point joint-posterior coverage is
-descriptive because the observation was consumed by the smoother. Aleatoric and
-epistemic components remain separate in the artifact and report.
+Calibration is fit-fold-only and frozen before application. Primary uncertainty
+endpoints are predictive log score and CRPS on known-clean synthetic coordinates
+and prespecified masked real coordinates. 50/80/95% interval coverage and width,
+standardized residuals, PIT, and risk-versus-uncertainty monotonicity are
+required diagnostics. Same-point joint-posterior coverage is descriptive
+because the observation was consumed by the smoother. Aleatoric and epistemic
+components remain separate in the artifact and report.
 
 ### Teacher gate
 
 | Gate | Required evidence |
 | --- | --- |
-| `T-G0 contract` | lineage, fold, masks, units, sign/gauge, finite support, no label use or protected dereference |
-| `T-G1 synthetic` | known `r(t)` and clean EEG/HbO/HbR recovery, calibrated intervals, stable numerics, and declared null failure across frozen corruption severities and partial missing-support patterns |
-| `T-G2 joint denoising` | against the semi-synthetic clean reference, the joint candidate improves clean-signal error/SNR over the corrupted input, is non-inferior to `T1-self` in every required coordinate and superior on the frozen balanced primary endpoint, attenuates artifacts, and keeps off-artifact morphology distortion within frozen `delta_T` |
-| `T-G3 state/residual adequacy` | prespecified masked-block reconstruction beats history/systemic and time/pairing nulls; `r(t)` stays within a frozen perturbation margin under prescribed corruption of one modality while the paired modality remains intact; residual/artifact agreement and the expected sign/delay relation pass without systematic clean-signal leakage |
-| `T-G4 calibration` | log score, CRPS, interval calibration, and uncertainty-risk monotonicity pass on known-clean or masked coordinates for every admitted output; same-point joint reconstruction is descriptive only |
-| `T-G5 spatial/stability` | any added-channel gain survives spatial nulls and seed/fold/channel perturbation without worse calibration |
+| `T-G0 physical contract` | lineage, folds, masks, state/operator identity, units, sign/gauge, equilibrium, positivity, finite/stable integration, no label use, and no protected dereference |
+| `T-G1 prior/synthetic validity` | source-frozen priors have plausible prior-predictive support; synthetic `r/s/f/v/p/q` and observations are generated without extraction, boundary, compartment-balance, or optical-map failure across the frozen design |
+| `T-G2 identifiability` | SBC/coverage, posterior geometry or profile checks, and multi-start recovery support every reported state/parameter; prior-dominated or mutually confounded quantities cannot receive physiological labels |
+| `T-G3 shared-state/noise adequacy` | `r(t)` and admitted states remain within frozen perturbation limits; known artifacts enter nuisance/residual rather than the physiological state; off-artifact leakage stays below its frozen bound; independent/time-shift/pairing/spatial null inputs do not yield a qualified shared state |
+| `T-G4 calibration/PPC` | predictive log score, CRPS, interval calibration, uncertainty-risk monotonicity, and prespecified temporal/spectral posterior-predictive checks pass; MSE/NRMSE/R²/PCC and same-point reconstruction are descriptive only |
+| `T-G5 measured/spatial stability` | measured modality ablations and subject/fold/seed/channel perturbations preserve the admitted claims; any spatial gain survives channel and geometry nulls without worse calibration |
 
-The simplest joint candidate passing all gates becomes the frozen training
-target producer. It is privileged, label-blind, fit-fold-only, and training-only;
-it is never a tokenizer inference input or ground truth. EEG-only and fNIRS-only
-reruns are required attribution ablations for modality contribution,
-missing-modality degradation, and artifact propagation. Failure to reconstruct
-an omitted modality in those ablations does not by itself reject a qualified
-joint denoising teacher. If no joint candidate passes `T-G2`--`T-G4`,
-source-tokenizer development stops; reconstruction work may continue only as a
-diagnostic.
+Only the simplest `T3` candidate passing all applicable gates becomes the
+frozen training-target producer. It is privileged, label-blind, fit-fold-only,
+and training-only; it is never a tokenizer inference input or ground truth.
+EEG-only and fNIRS-only reruns are attribution and missing-modality ablations,
+not requirements that EEG reconstruct omitted HbO/HbR or vice versa.
+
+Qualification has three explicit outcomes. Passing the full gate yields a
+physical teacher. A robust `r(t)` with non-identifiable physiological parameters
+is a state-only diagnostic and cannot support parameter-level interpretation.
+A model that only smooths observations remains a baseline. If no `T3` candidate
+passes `T-G0`--`T-G4`, source-tokenizer development stops; reconstruction work
+may continue only as a diagnostic.
 
 ## B/Q: source and observation tokenizer
 
@@ -439,24 +583,31 @@ explicitly unresolved and block measured execution:
 
 1. the exact nonprotected dataset and subject/record split providing a genuinely
    fresh confirmation set;
-2. numeric `delta_T`, `delta_S`, `delta_O`, and `delta_H` margins, including
-   teacher artifact attenuation, clean-signal distortion, and `r(t)`
-   perturbation limits;
-3. the single primary coupling horizon or integrated horizon definition and its
+2. the source-frozen soft priors, fixed versus free parameter list, parameter
+   identifiability/SBC criteria, and numerical `r(t)` or physiological-state
+   perturbation limits for `T-G1`--`T-G3`;
+3. numeric `delta_S`, `delta_O`, and `delta_H` margins plus the single primary
+   coupling horizon or integrated horizon definition and its
    family-wise null procedure;
 4. maximum training steps/checkpoint rule and the measured-run compute budget;
-5. the final continuous target schema/version implementing the shared-driver,
-   denoised-trajectory, residual, and variance fields above;
+5. the final continuous target schema/version implementing the named shared
+   driver, physiological states, nuisance/residual, trajectory, parameter
+   summary, identifiability, physical-check, and variance fields above;
 6. the frozen corruption library and severity grid, masked-block schedule,
-   missing-modality schedule, and clean-reference generator parameters.
+   missing-modality schedule, prior-predictive design, and clean-reference
+   generator parameters.
 
-The next authorized implementation step is therefore P0 plus one executable
-contract. It is not a Croce real-data run, a VQ sweep, or a protected evaluation.
+The next authorized implementation step is therefore the `T3a-balloon-robust`
+P0 implementation plus one executable synthetic/software contract, with
+`T0-native`, `T1-self`, `T2a-croce-pf`, `T2b-adaptive-legacy`, and
+`T4-dcm-lite` as the frozen comparison panel. `T3b`, `T3c`, and `T5` enter only
+after their declared trigger. This is not a Croce real-data run, a VQ sweep, or
+a protected evaluation.
 
 ## Historical lifecycle boundary
 
 The following table remains a lifecycle overlay for the superseded flow. It does
-not rewrite hashed or dated evidence; linked reports remain the evidence owners.
+not rewrite dated evidence; linked reports remain the evidence owners.
 
 | Historical item | Lifecycle | Evidence or retained plan | Retained use |
 | --- | --- | --- | --- |

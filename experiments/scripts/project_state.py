@@ -38,17 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate = subparsers.add_parser(
-        "validate", help="lightweight schema, links, and state-invariant check"
-    )
-    validate.add_argument(
-        "--audit",
-        action="store_true",
-        help="also verify every evidence SHA-256 (slower and stricter)",
-    )
-
     subparsers.add_parser(
-        "audit", help="validate the registry and verify all retained evidence SHA-256 values"
+        "validate", help="lightweight schema, links, and state-invariant check"
     )
 
     show = subparsers.add_parser("show", help="print the current projection without writing")
@@ -64,11 +55,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="fail when generated views are stale; do not write",
     )
-    render.add_argument(
-        "--audit",
-        action="store_true",
-        help="also verify evidence SHA-256 values before rendering",
-    )
     return parser
 
 
@@ -77,12 +63,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         registry_path = args.registry.resolve()
         registry = load_registry(registry_path)
-        audit_mode = args.command == "audit" or bool(getattr(args, "audit", False))
-        validate_registry(registry, repo_root=REPO_ROOT, audit=audit_mode)
+        validate_registry(registry, repo_root=REPO_ROOT)
 
-        if args.command in {"validate", "audit"}:
+        if args.command == "validate":
             print(
-                f"{'audited' if audit_mode else 'valid'} {registry['schema']}: "
+                f"valid {registry['schema']}: "
                 f"{len(registry['records'])} records, "
                 f"{len(current_snapshot(registry)['records'])} current entities"
             )

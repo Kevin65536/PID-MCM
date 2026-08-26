@@ -1,8 +1,8 @@
 {
   "schema": "physiology_semantic_architecture_v2",
   "title": "PST-DISCOVERY-v1 · 生理语义 Tokenizer 实验计划",
-  "subtitle": "先验证联合 EEG+HbO+HbR 后验去噪，再验证连续 source/observation，条件式引入 VQ 与 coupling prior；下游任务不参与选择",
-  "banner": "PLANNED · 只授权 P0 synthetic/software checks · measured/protected 数据保持关闭 · 所有晋级均由 subject-level held-out gate 决定",
+  "subtitle": "先验证生理状态、参数合同与可辨识性，再检验共享驱动和噪声分离；轨迹重建误差仅作描述，之后才进入 tokenizer 与 coupling prior",
+  "banner": "PLANNED · 只授权 P0 synthetic/software checks · measured/protected 数据保持关闭 · P0 由物理/合成 gate 决定，后续 measured 才使用 subject-level held-out gate",
   "source": "docs/EXPERIMENT_PLAN.md",
   "width": 1920,
   "height": 1120,
@@ -20,7 +20,7 @@
     {
       "id": "teacher",
       "label": "1 · 物理教师",
-      "description": "离线 fit-fold 联合去噪是主资格目标；单模态仅作归因消融；选择最简单的通过者",
+      "description": "先验与可辨识性优先；鲁棒 Balloon 为主候选；Croce/adaptive 仅作机制与历史对照",
       "x": 30,
       "y": 370,
       "width": 600,
@@ -59,8 +59,8 @@
       "id": "p0",
       "label": "P0 · 合同 + 合成验证",
       "details": [
-        "已知 r(t) + 干净参考",
-        "受控伪影 / 掩码 / 缺失模态"
+        "已知 r/s/f/v/p/q + 参数真值",
+        "先验预测 / SBC / 伪影 / null"
       ],
       "role": "data",
       "visual": "shared",
@@ -74,10 +74,11 @@
     },
     {
       "id": "teacher_qualified",
-      "label": "合格联合教师",
+      "label": "生理教师资格（待验证）",
       "details": [
-        "joint EEG+HbO+HbR 后验",
-        "r(t) / 去噪重建 / 残差"
+        "可辨识 r + s/f/v/p/q",
+        "P0 先过 T-G0~3",
+        "T-G4/5 完整门待 measured 合同"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -87,7 +88,7 @@
       "x": 360,
       "y": 210,
       "width": 250,
-      "height": 110
+      "height": 125
     },
     {
       "id": "continuous_tokenizer",
@@ -160,10 +161,10 @@
     },
     {
       "id": "t0",
-      "label": "T0 · Native",
+      "label": "T0 · 观测基线",
       "details": [
-        "测量坐标 + 噪声",
-        "无动力学控制"
+        "持久 / 时间移位 / 平滑",
+        "预测控制 · 不晋级"
       ],
       "role": "data",
       "visual": "shared",
@@ -177,10 +178,10 @@
     },
     {
       "id": "t1",
-      "label": "T1 · Self LDS / RTS",
+      "label": "T1 · 独立 LDS / RTS",
       "details": [
-        "仅 EEG / 仅 fNIRS",
-        "归因与缺失模态消融"
+        "独立 EEG / fNIRS LDS",
+        "单模态归因控制"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -194,10 +195,10 @@
     },
     {
       "id": "t2",
-      "label": "T2 · Croce SMC",
+      "label": "T2a/b · Croce 参照",
       "details": [
-        "Croce-faithful 联合 SMC",
-        "干净参考去噪"
+        "T2a · 论文式 PF",
+        "T2b · 旧 adaptive 基线"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -211,10 +212,11 @@
     },
     {
       "id": "t3",
-      "label": "T3 · Adaptive joint RTS",
+      "label": "T3a · 鲁棒 Balloon",
       "details": [
-        "联合后验去噪",
-        "r(t) / 重建 / 残差"
+        "r/s/f/v/p/q",
+        "显式光学 · Student-t",
+        "主晋级候选"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -224,14 +226,14 @@
       "x": 235,
       "y": 585,
       "width": 160,
-      "height": 110
+      "height": 125
     },
     {
       "id": "teacher_gate",
-      "label": "联合去噪门槛",
+      "label": "物理与可辨识门",
       "details": [
-        "T-G0/1 合同 · 合成",
-        "T-G2/3 去噪 · r/残差"
+        "T-G0/1 物理合同 · 先验",
+        "T-G2 SBC / profile / 可辨识"
       ],
       "role": "evaluator",
       "visual": "neutral",
@@ -244,13 +246,15 @@
       "height": 110
     },
     {
-      "id": "t4",
-      "label": "T4 · Spatial",
+      "id": "conditional_teacher_extensions",
+      "label": "条件扩展",
       "details": [
-        "fNIRS 1→2→4 pairs",
-        "EEG 6→12；条件扩展"
+        "T3b · 残差/PPC 失败",
+        "T3c · ID通过但跨人不稳",
+        "T5 · T-G4通过",
+        "逐个加入 · 重走 gate"
       ],
-      "role": "encoder",
+      "role": "teacher",
       "visual": "teacher",
       "scope": "training_only",
       "implementation": "planned",
@@ -258,15 +262,15 @@
       "x": 235,
       "y": 745,
       "width": 160,
-      "height": 110
+      "height": 140
     },
     {
       "id": "uncertainty",
-      "label": "不确定性与稳定性门槛",
+      "label": "状态、噪声与校准门",
       "details": [
-        "T-G4 不确定性校准",
-        "T-G5 稳定性 / 空间性",
-        "对数分数 / CRPS / 覆盖率"
+        "T-G3/4 r · 噪声 · 校准",
+        "T-G5 T5 空间 / 稳定性",
+        "MSE / R² 仅描述"
       ],
       "role": "evaluator",
       "visual": "neutral",
@@ -456,9 +460,9 @@
     },
     {
       "id": "diag_teacher",
-      "label": "Teacher 旁路",
+      "label": "Teacher 解释旁路",
       "details": [
-        "半合成伪影 / 掩码重建 · r 稳健 / 残差 · 不晋级"
+        "HRF / DCM-lite / SLDS · 解释性对照 · 不晋级"
       ],
       "role": "lifecycle",
       "visual": "boundary",
@@ -613,15 +617,15 @@
       }
     },
     {
-      "id": "teacher-gate-t4",
-      "from": "teacher_gate",
-      "to": "t4",
+      "id": "uncertainty-conditional-extension",
+      "from": "uncertainty",
+      "to": "conditional_teacher_extensions",
       "style": "guarded"
     },
     {
-      "id": "t4-uncertainty",
-      "from": "t4",
-      "to": "uncertainty",
+      "id": "conditional-extension-regate",
+      "from": "conditional_teacher_extensions",
+      "to": "teacher_gate",
       "style": "evaluation"
     },
     {

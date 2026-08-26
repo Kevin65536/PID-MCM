@@ -89,8 +89,7 @@ component.
   [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md); do not hand-maintain parallel stage
   state or next-action lists outside the registry-generated views.
 - For a future registry update, edit its owning item and run `validate`, then
-  `render`. Evidence and audit checks are optional extras when preparing a
-  paper-ready frozen result.
+  `render`. File hashes are not part of the project-state contract.
 - Protocol and data-access constraints stay in their owning contracts. A passing
   software test does not override a failed scientific gate.
 - Preregistrations, manifests, and result reports are dated snapshots; if a

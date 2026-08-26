@@ -66,8 +66,8 @@ provenance schema is `ssm_modality_observation_teacher_v1`. It extracts an array
 channel-by-band patch log-power; fNIRS samples inside each patch are flattened
 into the feature axis. A full-rank observation-space AR smoother then operates
 on the ten positions. This is not a continuous 10 Hz target and does not satisfy
-the exploratory interface below. Existing v1 results must retain their original
-schema and source hashes.
+the exploratory interface below. Existing v1 results retain their original
+schema and provenance records.
 
 ### Observation–source candidate target (exploratory; no reader yet)
 
@@ -94,7 +94,7 @@ Each modality m publishes one record with these fields:
 | coordinate_names / component_roles | [C_m] strings | stable order, channel identity, band or HbO/HbR role |
 | masks | named boolean arrays | measured, teacher, uncertainty, innovation, and any token/lag masks below |
 | teacher_mode | enum | native_baseline, self, or privileged_joint; native_baseline records the identity comparison arm and is not a dynamic-teacher claim |
-| fit provenance | manifest object | fit fold, parameter hash, target/code hash, source hash, and label-use=false |
+| fit provenance | manifest object | fit fold, parameter/config identity, target/code version, source identity, and label-use=false |
 
 EEG observation construction is defined at the continuous coordinate level:
 
@@ -166,7 +166,7 @@ channel selection, EEG envelope/scaling parameters, fNIRS model-coordinate
 normalizers, baseline templates if learned, teacher dynamics and Q/R/H/A (or
 Croce parameters), uncertainty calibration, target projections, fine/coarse
 aggregation, codebooks, and grammar parameters. Record the fold identifier,
-subject/record inventory, source and software hashes, and parameter hashes.
+subject/record inventory, source and software versions, and parameter/config IDs.
 Apply the frozen objects to validation and held-out rows without refitting.
 Task labels are excluded from teacher fitting; if a downstream private adapter
 uses labels, that use is recorded separately and does not alter the
@@ -220,7 +220,7 @@ provenance tuple before any fold scaling:
 | Provenance field | Required value |
 | --- | --- |
 | source family | Single-Trial optical intensity, or released chromophore export for REFED/Visual/Simultaneous |
-| source path/record and hash | immutable dataset-native identifier and source hash |
+| source path/record | stable dataset-native identifier and source location |
 | native sampling rate and units | recorded rate and unit (for example optical intensity, optical density, concentration, or dimensionless export); never inferred from the canonical rate |
 | transformation contract | optical-density/MBLL or released-HbO/HbR lineage, component roles, filter/resampling steps, and software/schema version |
 | model coordinate | fold-fitted centering/scaling and the resulting coordinate name; this does not erase the native source |
@@ -299,7 +299,7 @@ arrays.
 Every derived cache records:
 
 - schema and branch version;
-- source paths/identifiers and hashes;
+- source paths/identifiers;
 - transformation and software identity;
 - sample/join-key inventory;
 - shapes, sampling rates, units/coordinates, channel roles, and masks;
@@ -308,7 +308,7 @@ Every derived cache records:
 
 Any cache using the exploratory continuous-target interface must additionally
 record its schema, teacher_mode, time grid, trajectory/uncertainty/
-innovation field versions, every named mask, fit-fold and parameter hashes,
+innovation field versions, every named mask, fit-fold and parameter/config IDs,
 native fNIRS provenance tuple, and whether the target was self or privileged
 joint. A cache without these fields remains a v1/legacy sidecar and cannot be
 joined under this candidate interface.
@@ -324,7 +324,7 @@ The post-DSR unified audit traversed all 22,952 then-admitted windows and
 confirmed finite loading and stable Simultaneous channel signatures. It also
 preserved explicit warnings and blockers rather than turning a successful
 loader pass into scientific validation. The exact counts remain a dated cache
-snapshot; formal protocols must record fresh inventory and hashes.
+snapshot; formal protocols must record a fresh inventory and versioned identities.
 
 The active data layer is ready for the implemented STA-Net and EFRM adapters.
 That readiness establishes a software/data contract only. It does not qualify

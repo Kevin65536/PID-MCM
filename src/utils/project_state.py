@@ -11,7 +11,6 @@ project-state axes and are not interpreted by this module.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -99,7 +98,7 @@ INTENT_LABELS = {
 
 _TOP_LEVEL_FIELDS = {"schema", "updated_at", "tracks", "evidence", "records"}
 _TRACK_FIELDS = {"id", "label", "order", "headline_entity"}
-_EVIDENCE_FIELDS = {"id", "path", "sha256", "role", "label"}
+_EVIDENCE_FIELDS = {"id", "path", "role", "label"}
 _RECORD_FIELDS = {
     "state_id",
     "entity",
@@ -123,7 +122,6 @@ _RECORD_FIELDS = {
 _PROGRESS_FIELDS = {"completed", "total", "unit"}
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _STATE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*@[0-9]{4}-[0-9]{2}-[0-9]{2}(?:\.[a-z0-9_-]+)?$")
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ProjectStateError(ValueError):
@@ -162,14 +160,6 @@ def _parse_timestamp(value: Any, context: str) -> datetime:
     return parsed
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _validate_relative_path(value: Any, context: str) -> PurePosixPath:
     if not isinstance(value, str) or not value:
         raise ProjectStateError(f"{context}: path must be a non-empty string")
@@ -198,15 +188,8 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> dict[str, Any]:
 def validate_registry(
     registry: Mapping[str, Any],
     repo_root: Path = REPO_ROOT,
-    *,
-    audit: bool = False,
 ) -> None:
-    """Validate the compact current-state registry.
-
-    Daily validation checks links and status semantics but deliberately does not
-    re-hash every evidence document.  Use ``audit=True`` for a publication/freeze
-    check of the optional SHA-256 values retained in the registry.
-    """
+    """Validate links and status semantics in the compact current-state registry."""
 
     _unknown_fields(registry, _TOP_LEVEL_FIELDS, "registry")
     _require_fields(registry, _TOP_LEVEL_FIELDS, "registry")
@@ -269,16 +252,6 @@ def validate_registry(
         absolute = repo_root / relative
         if not absolute.is_file():
             raise ProjectStateError(f"{context}.path: evidence file is missing: {relative}")
-        if audit:
-            expected_hash = source.get("sha256")
-            if not isinstance(expected_hash, str) or not _SHA256_RE.fullmatch(expected_hash):
-                raise ProjectStateError(f"{context}.sha256: audit requires lowercase SHA-256")
-            actual_hash = _sha256(absolute)
-            if actual_hash != expected_hash:
-                raise ProjectStateError(
-                    f"{context}.sha256: evidence drift for {relative}; "
-                    f"expected {expected_hash}, found {actual_hash}"
-                )
         evidence_paths.add(relative.as_posix())
         evidence_by_id[evidence_id] = source
 

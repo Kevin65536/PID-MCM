@@ -16,9 +16,9 @@ active. Use these three layers:
 | Local/generated | `data/`, `runs/`, `cache/`, `checkpoints/`, `upstream/`, `.tmp/` | do not recursively discover; write only to an existing owner root |
 | Frozen/history | dated reports, the local ignored archive, completed comparison campaign files | explicit-path, read-only unless a versioned migration is the task |
 
-A bulk move of frozen comparison code would invalidate recorded paths and source
-hashes, so future cleanup must create a new version instead of layering shims over
-the old one.
+A bulk move of frozen comparison code would invalidate recorded paths and result
+references, so future cleanup must create a new version instead of layering shims
+over the old one.
 
 ## Runtime scope and version boundary
 

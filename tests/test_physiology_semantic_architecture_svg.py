@@ -111,10 +111,22 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
     assert "measured/protected 数据保持关闭" in rendered
     assert 'class="banner-box" fill="#FFF4E5"' in rendered
     for phrase in (
-        "joint EEG+HbO+HbR 后验",
-        "仅 EEG / 仅 fNIRS",
-        "T-G2/3 去噪 · r/残差",
-        "T-G4 不确定性校准",
+        "可辨识 r + s/f/v/p/q",
+        "独立 EEG / fNIRS LDS",
+        "T2a/b · Croce 参照",
+        "T2a · 论文式 PF",
+        "T2b · 旧 adaptive 基线",
+        "T3a · 鲁棒 Balloon",
+        "显式光学 · Student-t",
+        "主晋级候选",
+        "T3b · 残差/PPC 失败",
+        "T3c · ID通过但跨人不稳",
+        "T5 · T-G4通过",
+        "逐个加入 · 重走 gate",
+        "T-G2 SBC / profile / 可辨识",
+        "T-G5 T5 空间 / 稳定性",
+        "MSE / R² 仅描述",
+        "HRF / DCM-lite / SLDS",
     ):
         assert phrase in rendered
     assert "Functional role" not in rendered
@@ -126,6 +138,7 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
         "node-conditional_vq",
         "node-coupling_screen",
         "node-freeze",
+        "node-conditional_teacher_extensions",
         "node-diag_teacher",
         "node-diag_tokenizer",
         "node-diag_coupling",

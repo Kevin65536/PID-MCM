@@ -157,9 +157,8 @@ When a future registered experiment changes state, edit its corresponding item i
 .venv/bin/python experiments/scripts/project_state.py render
 ```
 
-Dated reports preserve what was known at the time. Extra evidence and audit checks
-are optional when preparing a paper-ready frozen result; they are not required for
-ordinary progress updates.
+Dated reports preserve what was known at the time. Current state uses stable paths,
+versions, and dates; file hashes are not a project requirement.
 
 Generated reports, manuscript exports, and literature PDFs are communication
 or reference assets, not active implementation authority.

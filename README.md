@@ -5,13 +5,13 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：按 physical teacher、连续 source/observation、条件式 VQ、可选 coupling prior 的顺序发现 tokenizer；不使用下游任务端点，尚未授权 measured/protected 运行。
+- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：本代 physical teacher 以生理合同、参数可辨识性和共享状态/噪声分离为首要资格；T3a 鲁棒非线性 Balloon 是主晋级候选，Croce PF、旧 adaptive、独立 LDS/RTS 与 DCM-lite 固定为对照，轨迹 MSE 仅作描述；measured/protected 保持关闭。
 - **Token Atlas**（Atlas Statistical tier）— 已废弃（未完成且不再开展） / 尚未判定：Statistical tier 尚未运行；本旧分析支路废弃，不再开展。
 - **对比实验**（六方法联合正式 campaign）— 已停止（此前已完成） / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
-- **主方法** — 建立一个 executable contract 并完成 P0 synthetic/software checks；measured/protected 保持关闭。
+- **主方法** — 建立 T3a-balloon-robust 的 P0 executable synthetic/software contract，冻结 source-backed priors 与可辨识性阈值，并完成 T-P0 至 T-P3；measured/protected 保持关闭。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->
@@ -53,7 +53,7 @@ data/                   immutable measured inputs and owner-local derived caches
 Generated payloads are ignored by Git. Active tools do not recursively search
 archives, upstream mirrors, caches, checkpoints, or run trees, and comparison
 packages write only to their own run roots. Frozen paths stay in place when reports
-or hashes depend on them; directory cleanup is versioned rather than hidden behind
+depend on them; directory cleanup is versioned rather than hidden behind
 compatibility layers.
 
 ## Environment and checks

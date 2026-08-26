@@ -49,7 +49,8 @@ def test_current_registry_is_lightweight_and_views_are_readable():
 
     readme = render_readme_block(registry)
     assert "### Next steps" in readme
-    assert "P0 synthetic/software checks" in readme
+    assert "T3a-balloon-robust" in readme
+    assert "T-P0 至 T-P3" in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -170,13 +171,11 @@ def test_registry_accepts_a_date_only_snapshot_timestamp():
     validate_registry(registry, repo_root=PROJECT_ROOT)
 
 
-def test_evidence_drift_is_only_an_audit_failure():
-    registry = copy.deepcopy(_registry())
-    registry["evidence"][0]["sha256"] = "0" * 64
-
-    validate_registry(registry, repo_root=PROJECT_ROOT)
-    with pytest.raises(ProjectStateError, match="evidence drift"):
-        validate_registry(registry, repo_root=PROJECT_ROOT, audit=True)
+def test_evidence_entries_use_path_only():
+    assert all(
+        set(source) == {"id", "label", "path", "role"}
+        for source in _registry()["evidence"]
+    )
 
 
 def test_current_record_can_be_updated_in_place_without_supersedes():
