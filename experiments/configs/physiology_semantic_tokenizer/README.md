@@ -1,14 +1,13 @@
 # Physiology-semantic tokenizer configurations
 
-This directory retains executable experiment contracts from the stopped R-series.
-Generated variants, local tuning files, run outputs and abandoned preregistries are
-intentionally excluded from Git.
+This directory contains the active synthetic T3a P0 contract and retained
+contracts from the stopped R-series. Generated variants, local tuning files,
+run outputs and abandoned preregistries are intentionally excluded from Git.
 
-> **Lifecycle (2026-08-25): stopped / abandoned.** The retained E0–E2 and R-series
-> configurations and evidence are stopped replay surfaces. Unexecuted continuation
-> paths are abandoned; this directory does not define a current experiment queue.
-> A future clean flow must publish a new versioned contract rather than reuse these
-> files.
+> **Lifecycle (2026-08-26): one active synthetic contract.**
+> `t3a_balloon_robust_p0.yaml` is synthetic-only and cannot open measured or
+> protected data. The retained E0–E2 and R-series configurations remain stopped
+> replay surfaces; unexecuted continuation paths remain abandoned.
 
 ## Retained historical boundary
 
@@ -21,7 +20,7 @@ these records.
 The theory/architecture principles are frozen in
 [`METHOD_RATIONALE.md`](../../../docs/METHOD_RATIONALE.md). The
 observation–source v2 map is a pre-freeze implementation snapshot only; no
-executable YAML exists yet. The
+executable tokenizer-training YAML exists yet. The
 historical YAML/runtime surface is not a template for a new candidate. Do not
 reuse an old YAML by changing its experiment ID, target, or output path. The
 replaceable design note is
@@ -34,10 +33,11 @@ tensor-shape, split, and null checks. Protected cohorts require the owning
 protocol plus separate, explicit user authorization and are never opened by a
 config flag.
 
-The retained R-series surface is deliberately limited to:
+The version-controlled configuration surface is deliberately limited to:
 
 | File | Purpose | Status |
 | --- | --- | --- |
+| `t3a_balloon_robust_p0.yaml` | Synthetic physics, identifiability, corruption, null, calibration and visualization contract | **Active synthetic P0**; measured/protected inputs disabled |
 | `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | **Stopped**; completed, primary result negative |
 | `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | **Stopped**; completed, structural audit passed |
 | `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | **Stopped**; formal-v3 did not qualify |
@@ -71,4 +71,4 @@ loss weights to zero.
 The consolidated methods, results, interpretation and stop decision are in
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-08-26_

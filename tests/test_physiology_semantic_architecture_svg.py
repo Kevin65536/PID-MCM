@@ -108,6 +108,7 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
     root = _xml(rendered)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     assert root.find("svg:title", namespace).text.startswith("PST-DISCOVERY-v1")
+    assert "P0 SUITE READY" in rendered
     assert "measured/protected 数据保持关闭" in rendered
     assert 'class="banner-box" fill="#FFF4E5"' in rendered
     for phrase in (
@@ -117,7 +118,7 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
         "T2a · 论文式 PF",
         "T2b · 旧 adaptive 基线",
         "T3a · 鲁棒 Balloon",
-        "显式光学 · Student-t",
+        "Tak Eq.3 · tau_v=0 · Student-t",
         "主晋级候选",
         "T3b · 残差/PPC 失败",
         "T3c · ID通过但跨人不稳",
@@ -144,6 +145,7 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
         "node-diag_coupling",
     }
     assert required <= {element.attrib.get("id") for element in root.iter()}
+    assert root.find(".//*[@id='node-p0']").attrib["data-implementation"] == "implemented"
 
 
 def test_legacy_geometry_is_expanded_in_memory_without_mutating_design_source():

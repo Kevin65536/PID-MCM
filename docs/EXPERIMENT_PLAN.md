@@ -197,6 +197,13 @@ nonlinear Balloon model with explicit observation operators.
 | `T4-dcm-lite` | two-stage EEG neural-state to Balloon/optical fNIRS model; fNIRS cannot retroactively rewrite the EEG neural state | Does a more conventional directed interpretation support the same physiology? | interpretability reference, not a joint-teacher promotion arm |
 | `T5-spatial` | local geometry extension of the simplest `T3` model passing `T-G0`--`T-G4` | Is additional local spatial support necessary after physiology qualifies? | final conditional refinement at `T-G5` |
 
+The executable synthetic P0 panel is intentionally smaller:
+`T0-native`, `T1-self`, `T2b-adaptive-legacy`, and
+`T3a-balloon-robust`. `T2a-croce-pf` and `T4-dcm-lite` remain frozen design
+references until a contract-faithful adapter exists; they must not appear as
+tested or unavailable rows manufactured from `NaN`. This P0 qualifies the
+primary candidate and its current controls, not the later `T-P5` comparison.
+
 Gamma-HRF/delay controls, Factorial/SLDS noise branches, switching regimes,
 heteroscedastic process models, Gaussian-process dynamics, and full neural-mass
 models remain diagnostics. They are not part of the first promotion ladder.
@@ -230,7 +237,7 @@ ds/dt       = r - kappa * s - gamma * (f - 1)
 df/dt       = s
 f_out       = v^(1/alpha)
 tau * dv/dt = f - f_out
-tau * dp/dt = (f - f_out) * p / v
+tau * dp/dt = f - f_out * p / v
 tau * dq/dt = f * E(f, E0) / E0 - f_out * q / v
 E(f, E0)    = 1 - (1 - E0)^(1/f)
 
@@ -250,6 +257,12 @@ transit time. `alpha` is its dimensionless outflow-volume exponent. A numeric
 prior from another state/time scaling is usable only after its unit conversion
 is recorded; copying a published coefficient labelled only as a "rate" into
 this parameterization is a `T-P0` failure.
+
+This initial model fixes Tak et al.'s viscoelastic time constant `tau_v` to
+zero, so `f_out = v^(1/alpha)`. It is therefore the smallest explicit
+total-Hb extension needed for `T3a`, not a claim to reproduce the paper's full
+viscoelastic model. A nonzero `tau_v` is admitted only as a later one-parameter
+extension after the initial state and parameter contract is identifiable.
 
 The fNIRS forward model must be explicit rather than learned through arbitrary
 signed gains:
@@ -308,7 +321,7 @@ outside the result vocabulary even when the latent trajectory looks plausible.
 | --- | --- | --- |
 | `T-P0 semantics/physics` | state names, equations, units, gauge, observation map, equilibrium, positivity, finite/stable integration, and parameter-source ledger | any violation is `FAIL` before fitting |
 | `T-P1 prior predictive` | draw prior trajectories across the frozen design; check plausible amplitudes/delays, boundary contact, solver failures, and prior sensitivity | unsupported priors or implausible mass dynamics block the candidate |
-| `T-P2 identifiability` | simulation-based calibration, rank/coverage diagnostics, profile likelihood or equivalent posterior geometry, multi-start recovery, and parameter/state confounding | non-identifiable parameters are fixed/removed; stable `r` alone earns only state-level status |
+| `T-P2 identifiability` | simulation-based calibration using the declared EKF-Laplace posterior-CDF approximation, rank/coverage diagnostics, fixed-other-parameter objective slices as the initial posterior-geometry check, multi-start recovery, and parameter/state confounding | non-identifiable parameters are fixed/removed; stable `r` alone earns only state-level status; exact posterior SBC is required if the Laplace approximation itself fails calibration |
 | `T-P3 known-truth corruption` | recover `r/s/f/v/p/q`, separate known artifacts/nuisance, preserve clean off-artifact morphology, vary severity/masks/missing modalities, and run independent/time-shift/pairing/spatial nulls | qualifies shared-state and noise-separation claims; point reconstruction metrics remain descriptive |
 | `T-P4 measured development` | posterior-predictive checks, residual temporal/spectral structure, modality ablations, leave-one-trial/subject-out stability, and prior-to-posterior movement | permitted only after an executable measured-data contract; no protected access |
 | `T-P5 comparison/spatial` | compare the simplest surviving models by predictive score, calibration, complexity, perturbation stability, and spatial/channel nulls | select the smallest fully qualified teacher; otherwise stop |
@@ -317,6 +330,11 @@ The current authorized P0 software/synthetic scope covers `T-P0` through
 `T-P3` and the known-clean synthetic portion of `T-G4`. Final `T-G4`, `T-P4`,
 `T-G5`, and `T-P5` require the later executable measured-data contract; this
 plan does not open measured or protected data.
+
+The synthetic `T-G4` screen uses Student-t interval/proper-score calibration
+plus lag-one autocorrelation and normalized-spectrum errors of the posterior
+mean. Those two reconstruction-shape diagnostics are not full posterior-
+predictive simulations and are not labelled PPC in the executable output.
 
 ### Teacher outputs and uncertainty convention
 
@@ -576,10 +594,10 @@ Do not reactivate or rename an E0--E2/R-series YAML, archived source/observation
 runner, or old coupling suite. There is no need for a manager, plugin layer,
 parallel results root, or separate authorization file.
 
-## Unresolved before an executable contract
+## Unresolved before a measured contract
 
-The design is complete at the hypothesis/gate level. The following values remain
-explicitly unresolved and block measured execution:
+The synthetic P0 contract is executable. The following values remain
+explicitly unresolved and block measured execution, not synthetic P0:
 
 1. the exact nonprotected dataset and subject/record split providing a genuinely
    fresh confirmation set;
@@ -590,19 +608,21 @@ explicitly unresolved and block measured execution:
    coupling horizon or integrated horizon definition and its
    family-wise null procedure;
 4. maximum training steps/checkpoint rule and the measured-run compute budget;
-5. the final continuous target schema/version implementing the named shared
+5. the measured-data continuous target schema/version implementing the named shared
    driver, physiological states, nuisance/residual, trajectory, parameter
    summary, identifiability, physical-check, and variance fields above;
-6. the frozen corruption library and severity grid, masked-block schedule,
-   missing-modality schedule, prior-predictive design, and clean-reference
-   generator parameters.
+6. any measured-data corruption/masking schedule and clean-reference definition.
 
-The next authorized implementation step is therefore the `T3a-balloon-robust`
-P0 implementation plus one executable synthetic/software contract, with
-`T0-native`, `T1-self`, `T2a-croce-pf`, `T2b-adaptive-legacy`, and
-`T4-dcm-lite` as the frozen comparison panel. `T3b`, `T3c`, and `T5` enter only
-after their declared trigger. This is not a Croce real-data run, a VQ sweep, or
-a protected evaluation.
+The `T3a-balloon-robust` P0 implementation, frozen synthetic generator,
+corruption/null schedule, common output tables, gates, and Chinese renderer now
+live in
+[`t3a_balloon_robust_p0.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml),
+[`evaluate_t3a_balloon_robust_p0.py`](../experiments/evaluate_t3a_balloon_robust_p0.py),
+and
+[`render_t3a_balloon_robust_p0.py`](../experiments/scripts/render_t3a_balloon_robust_p0.py).
+The next step is a formal synthetic P0 run and gate interpretation. `T3b`,
+`T3c`, and `T5` enter only after their declared trigger. This is not a Croce
+real-data run, a VQ sweep, or a protected evaluation.
 
 ## Historical lifecycle boundary
 

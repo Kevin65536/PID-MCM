@@ -1225,6 +1225,32 @@
       "headline": true
     },
     {
+      "state_id": "main.program@2026-08-26.p0-suite-ready",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "T3a 鲁棒 Balloon 的 synthetic P0 模型、独立生成器、当前对照适配器、完整性门禁和中文可视化已实现；仅完成 smoke 诊断，T3a 尚未获得教师资格，measured/protected 保持关闭。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.method_rationale",
+        "e.data_contract"
+      ],
+      "supersedes": [
+        "main.program@2026-08-25.tokenizer-discovery-v1"
+      ],
+      "updated_at": "2026-08-26T19:00:00+08:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "next_step": "运行一次正式 synthetic P0 并按 T-P0 至 T-P3 与 synthetic-T-G4 判读；未通过前不进入 measured/protected 数据。",
+      "headline": true
+    },
+    {
       "state_id": "main.e0@2026-08-25.stopped",
       "entity": "main.e0",
       "label": "E0 物理 teacher",

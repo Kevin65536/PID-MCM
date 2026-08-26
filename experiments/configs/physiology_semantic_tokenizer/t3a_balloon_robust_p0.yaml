@@ -1,0 +1,164 @@
+schema: t3a_balloon_robust_p0_v1
+
+experiment:
+  name: t3a_balloon_robust_p0
+  scope: synthetic_only
+  measured_data_enabled: false
+  protected_data_enabled: false
+  seed: 20260826
+
+simulation:
+  sampling_hz: 4.0
+  duration_s: 120.0
+  replicates: 12
+  prior_predictive_draws: 32
+  severity_levels: [0.0, 0.5, 1.0, 1.5]
+  state_process_noise: false
+  truth_parameter_design: bounded_prior_draw
+
+physiology:
+  # Minimal Tak-style total-Hb Balloon model. The viscoelastic extension is
+  # deliberately fixed off (tau_v = 0 s), so f_out = v^(1/alpha).
+  fixed:
+    alpha: 0.32
+    e0: 0.32
+    gamma: 0.32
+    p0: 1.0
+    q0: 0.35
+    tau_v_s: 0.0
+  truth:
+    kappa_per_s: 0.64
+    tau_s: 2.0
+  free:
+    kappa_per_s:
+      bounds: [0.20, 1.50]
+      prior_mean: 0.64
+      prior_sd: 0.20
+    tau_s:
+      bounds: [0.50, 5.00]
+      prior_mean: 2.00
+      prior_sd: 0.75
+  source_ledger:
+    model_family:
+      primary_source: "Tak et al., NeuroImage 111 (2015), equations 2-5"
+      url: "https://doi.org/10.1016/j.neuroimage.2015.02.035"
+      scope: "normalized venous-compartment Balloon dynamics; tau_v fixed to zero"
+      species: human_application_with_model_priors
+      population: not_a_universal_human_reference_range
+      challenge: synthetic_P0
+    alpha:
+      unit: dimensionless
+      role: fixed
+      compartment: normalized_venous_balloon
+      primary_source_ref: model_family
+      context: "Tak et al. model setting; not asserted as a universal human range"
+    e0:
+      unit: dimensionless
+      role: fixed
+      compartment: resting_oxygen_extraction_fraction
+      primary_source_ref: model_family
+      context: "resting oxygen extraction fraction in the normalized synthetic model"
+    gamma:
+      unit: s^-2
+      role: fixed
+      compartment: lumped_flow_autoregulation
+      primary_source_ref: model_family
+      context: "lumped autoregulatory coefficient, not a molecular rate"
+    kappa:
+      unit: s^-1
+      role: free
+      compartment: lumped_vasoactive_signal_decay
+      primary_source_ref: model_family
+      context: "lumped signal-decay coefficient; bounds are a synthetic design range"
+    tau:
+      unit: s
+      role: free
+      compartment: normalized_venous_balloon
+      primary_source_ref: model_family
+      context: "modeled venous V0/F0 transit constant; not whole-brain transit time"
+    p0_q0:
+      unit: normalized_concentration
+      role: fixed_non_absolute
+      compartment: synthetic_HbT_HbR_observation_scale
+      primary_source_ref: model_family
+      context: "synthetic observation scales only; no absolute concentration claim"
+
+driver:
+  decay_per_s: 0.45
+  diffusion_sd_per_sqrt_s: 0.08
+  pulse_amplitude: 0.12
+
+observation:
+  coordinates: [EEG, HbO, HbR]
+  fnirs_coordinate: normalized_delta_concentration
+  optical_transform: not_applicable_synthetic_direct_concentration
+  eeg_loading: 1.0
+  eeg_offset: 0.0
+  student_t_df: 5.0
+  scale:
+    EEG: 0.080
+    HbO: 0.025
+    HbR: 0.015
+  process_sd:
+    r: 0.080
+    s: 0.010
+    log_f: 0.006
+    log_v: 0.004
+    log_p: 0.004
+    log_q: 0.004
+
+inference:
+  multistarts: 4
+  starts:
+    - [0.32, 1.00]
+    - [0.64, 2.00]
+    - [1.00, 3.25]
+    - [1.35, 4.50]
+  max_iterations: 60
+  irls_iterations: 3
+  profile_points: 9
+  finite_difference_step: 0.0001
+
+stress_tests:
+  artifact_families: [spike, drift, step, high_frequency_burst, dropout]
+  artifact_scopes:
+    spike: eeg_only
+    high_frequency_burst: eeg_only
+    drift: fnirs_only
+    step: systemic_fnirs
+    dropout: composite_missing
+  nulls: [independent, time_shift, pairing]
+  time_shift_s: 20.0
+  dropout_fraction: 0.15
+
+# Synthetic qualification bounds; these are not medical reference ranges.
+gates:
+  max_solver_fail_fraction: 0.0
+  max_boundary_contact_fraction: 0.0
+  min_response_amplitude: 0.001
+  max_response_amplitude: 0.50
+  min_delay_s: 0.0
+  max_delay_s: 20.0
+  min_sbc_replicates: 8
+  min_sbc_ks_pvalue: 0.05
+  min_parameter_coverage_95: 0.75
+  max_multistart_spread_fraction: 0.10
+  max_driver_nrmse: 1.0
+  max_off_artifact_distortion: 0.35
+  min_artifact_attenuation: 0.0
+  max_artifact_residual_relative_rmse: 1.0
+  min_uncertainty_increase_artifact: 0.0
+  min_uncertainty_increase_missing: 0.0
+  min_predictive_coverage_95: 0.75
+  max_predictive_coverage_95: 1.0
+  min_uncertainty_risk_spearman: 0.20
+  max_normalized_crps: 2.0
+  max_standardized_nll: 3.0
+  max_reconstruction_temporal_acf_error: 0.50
+  max_reconstruction_spectral_shape_error: 0.10
+  max_null_driver_correlation: 0.35
+
+visualization:
+  enabled: true
+  language: zh_CN
+  dpi: 160

@@ -2,7 +2,7 @@
   "schema": "physiology_semantic_architecture_v2",
   "title": "PST-DISCOVERY-v1 · 生理语义 Tokenizer 实验计划",
   "subtitle": "先验证生理状态、参数合同与可辨识性，再检验共享驱动和噪声分离；轨迹重建误差仅作描述，之后才进入 tokenizer 与 coupling prior",
-  "banner": "PLANNED · 只授权 P0 synthetic/software checks · measured/protected 数据保持关闭 · P0 由物理/合成 gate 决定，后续 measured 才使用 subject-level held-out gate",
+  "banner": "P0 SUITE READY · 仅 synthetic/software checks · 尚未获得教师资格 · measured/protected 数据保持关闭 · 后续 measured 才使用 subject-level held-out gate",
   "source": "docs/EXPERIMENT_PLAN.md",
   "width": 1920,
   "height": 1120,
@@ -59,13 +59,13 @@
       "id": "p0",
       "label": "P0 · 合同 + 合成验证",
       "details": [
-        "已知 r/s/f/v/p/q + 参数真值",
-        "先验预测 / SBC / 伪影 / null"
+        "已实现 r/s/f/v/p/q + 参数真值",
+        "先验预测 / 近似 SBC / 伪影 / null"
       ],
       "role": "data",
       "visual": "shared",
       "scope": "governance",
-      "implementation": "planned",
+      "implementation": "implemented",
       "evidence": "guarded",
       "x": 55,
       "y": 210,
@@ -215,7 +215,7 @@
       "label": "T3a · 鲁棒 Balloon",
       "details": [
         "r/s/f/v/p/q",
-        "显式光学 · Student-t",
+        "Tak Eq.3 · tau_v=0 · Student-t",
         "主晋级候选"
       ],
       "role": "teacher",

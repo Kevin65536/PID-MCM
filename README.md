@@ -5,13 +5,13 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：本代 physical teacher 以生理合同、参数可辨识性和共享状态/噪声分离为首要资格；T3a 鲁棒非线性 Balloon 是主晋级候选，Croce PF、旧 adaptive、独立 LDS/RTS 与 DCM-lite 固定为对照，轨迹 MSE 仅作描述；measured/protected 保持关闭。
+- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：T3a 鲁棒 Balloon 的 synthetic P0 模型、独立生成器、当前对照适配器、完整性门禁和中文可视化已实现；仅完成 smoke 诊断，T3a 尚未获得教师资格，measured/protected 保持关闭。
 - **Token Atlas**（Atlas Statistical tier）— 已废弃（未完成且不再开展） / 尚未判定：Statistical tier 尚未运行；本旧分析支路废弃，不再开展。
 - **对比实验**（六方法联合正式 campaign）— 已停止（此前已完成） / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
-- **主方法** — 建立 T3a-balloon-robust 的 P0 executable synthetic/software contract，冻结 source-backed priors 与可辨识性阈值，并完成 T-P0 至 T-P3；measured/protected 保持关闭。
+- **主方法** — 运行一次正式 synthetic P0 并按 T-P0 至 T-P3 与 synthetic-T-G4 判读；未通过前不进入 measured/protected 数据。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->
