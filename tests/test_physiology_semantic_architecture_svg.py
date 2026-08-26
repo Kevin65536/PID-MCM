@@ -110,6 +110,13 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
     assert root.find("svg:title", namespace).text.startswith("PST-DISCOVERY-v1")
     assert "measured/protected 数据保持关闭" in rendered
     assert 'class="banner-box" fill="#FFF4E5"' in rendered
+    for phrase in (
+        "joint EEG+HbO+HbR 后验",
+        "仅 EEG / 仅 fNIRS",
+        "T-G2/3 去噪 · r/残差",
+        "T-G4 不确定性校准",
+    ):
+        assert phrase in rendered
     assert "Functional role" not in rendered
     assert "micro-badge" not in rendered
     required = {

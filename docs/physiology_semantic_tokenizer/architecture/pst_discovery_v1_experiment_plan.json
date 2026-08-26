@@ -1,7 +1,7 @@
 {
   "schema": "physiology_semantic_architecture_v2",
   "title": "PST-DISCOVERY-v1 · 生理语义 Tokenizer 实验计划",
-  "subtitle": "先资格化 physical teacher，再验证连续 source/observation，条件式引入 VQ 与 coupling prior；下游任务不参与选择",
+  "subtitle": "先验证联合 EEG+HbO+HbR 后验去噪，再验证连续 source/observation，条件式引入 VQ 与 coupling prior；下游任务不参与选择",
   "banner": "PLANNED · 只授权 P0 synthetic/software checks · measured/protected 数据保持关闭 · 所有晋级均由 subject-level held-out gate 决定",
   "source": "docs/EXPERIMENT_PLAN.md",
   "width": 1920,
@@ -19,8 +19,8 @@
     },
     {
       "id": "teacher",
-      "label": "1 · Physical teacher",
-      "description": "同一冻结端点下比较；选择最简单的通过者",
+      "label": "1 · 物理教师",
+      "description": "离线 fit-fold 联合去噪是主资格目标；单模态仅作归因消融；选择最简单的通过者",
       "x": 30,
       "y": 370,
       "width": 600,
@@ -57,10 +57,10 @@
   "nodes": [
     {
       "id": "p0",
-      "label": "P0 · Contract + Synthetic",
+      "label": "P0 · 合同 + 合成验证",
       "details": [
-        "freeze split / margins / horizon",
-        "joins / masks / nulls / gradients"
+        "已知 r(t) + 干净参考",
+        "受控伪影 / 掩码 / 缺失模态"
       ],
       "role": "data",
       "visual": "shared",
@@ -74,10 +74,10 @@
     },
     {
       "id": "teacher_qualified",
-      "label": "Qualified teacher",
+      "label": "合格联合教师",
       "details": [
-        "最简候选通过 T-G0…T-G4",
-        "continuous target + calibrated σ²"
+        "joint EEG+HbO+HbR 后验",
+        "r(t) / 去噪重建 / 残差"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -179,8 +179,8 @@
       "id": "t1",
       "label": "T1 · Self LDS / RTS",
       "details": [
-        "单模态动态基线",
-        "无跨模态输入"
+        "仅 EEG / 仅 fNIRS",
+        "归因与缺失模态消融"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -196,8 +196,8 @@
       "id": "t2",
       "label": "T2 · Croce SMC",
       "details": [
-        "Croce-faithful 参照",
-        "不视为 ground truth"
+        "Croce-faithful 联合 SMC",
+        "干净参考去噪"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -211,10 +211,10 @@
     },
     {
       "id": "t3",
-      "label": "T3 · Adaptive RTS",
+      "label": "T3 · Adaptive joint RTS",
       "details": [
-        "当前修改模型",
-        "同一冻结端点评估"
+        "联合后验去噪",
+        "r(t) / 重建 / 残差"
       ],
       "role": "teacher",
       "visual": "teacher",
@@ -228,10 +228,10 @@
     },
     {
       "id": "teacher_gate",
-      "label": "Teacher gate",
+      "label": "联合去噪门槛",
       "details": [
-        "T-G0…T-G4",
-        "最简通过者"
+        "T-G0/1 合同 · 合成",
+        "T-G2/3 去噪 · r/残差"
       ],
       "role": "evaluator",
       "visual": "neutral",
@@ -262,11 +262,11 @@
     },
     {
       "id": "uncertainty",
-      "label": "Uncertainty gate",
+      "label": "不确定性与稳定性门槛",
       "details": [
-        "variance 分量分离",
-        "log score / CRPS",
-        "coverage"
+        "T-G4 不确定性校准",
+        "T-G5 稳定性 / 空间性",
+        "对数分数 / CRPS / 覆盖率"
       ],
       "role": "evaluator",
       "visual": "neutral",
@@ -458,7 +458,7 @@
       "id": "diag_teacher",
       "label": "Teacher 旁路",
       "details": [
-        "识别 / 校准 / 空间问题定位 · 不晋级"
+        "半合成伪影 / 掩码重建 · r 稳健 / 残差 · 不晋级"
       ],
       "role": "lifecycle",
       "visual": "boundary",

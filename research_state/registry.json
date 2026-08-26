@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-25T19:45:46+08:00",
+  "updated_at": "2026-08-26T10:59:27+08:00",
   "tracks": [
     {
       "id": "main",
@@ -228,7 +228,7 @@
       "id": "e.experiment_plan",
       "label": "PST-DISCOVERY-v1 实验设计协议",
       "path": "docs/EXPERIMENT_PLAN.md",
-      "sha256": "d2147a2306f7e60e20b9a59bc9cae1cff6431d913c1be60f9ca60dd830a3f943",
+      "sha256": "d22a191ba08a5be79a09dfeae234fea0144e8725940f2f4025e2011e342d25dd",
       "role": "protocol"
     }
   ],

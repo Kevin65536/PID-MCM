@@ -1,6 +1,6 @@
 # Experiment sequencing
 
-_Owning protocol: `PST-DISCOVERY-v1` · state: planned · 2026-08-25_
+_Owning protocol: `PST-DISCOVERY-v1` · state: planned · 2026-08-26_
 
 This is the single current experiment-design owner for the next
 physiology-semantic tokenizer generation. The plan is limited to physical-teacher
@@ -18,13 +18,21 @@ surface remain closed.
 
 The intended final object is the smallest tokenizer that jointly satisfies:
 
-1. `source` retains a qualified continuous teacher trajectory from the same
-   modality;
+1. `source` retains the same-modality slice of a qualified offline joint
+   EEG+HbO+HbR teacher trajectory;
 2. `observation` retains modality-specific measured information;
 3. quantization, if admitted, does not materially degrade either function;
 4. an optional coupling prior improves a held-out cross-modal proper score over
    the observation/source-history baseline without harming the first three
    properties.
+
+The physical teacher's primary task is denoising, not EEG-only cross-modal
+translation. From aligned noisy EEG, HbO, and HbR observations it estimates an
+operational shared neural driver `r(t)`, a posterior denoised trajectory for
+each modality, and the observation-minus-trajectory residual. Neither `r(t)`
+nor the denoised trajectory is ground truth, and the residual is only a
+noise/artifact candidate until the clean-reference, masking, null, and
+calibration checks below support that interpretation.
 
 The nine forward principles in
 [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#frozen-theory-and-architecture-contract-unimplemented)
@@ -116,17 +124,28 @@ after seeing held-out results is not an admissible margin.
 
 ## P0: software and synthetic qualification
 
-P0 is mandatory before measured data. One synthetic generator must cover known
-latent trajectories, heteroscedastic noise, missing support, local spatial
-topology, and a known delayed EEG-to-fNIRS relation. The smallest runnable check
-must demonstrate:
+P0 is mandatory before measured data. One synthetic generator must emit known
+`r(t)`, clean EEG/HbO/HbR trajectories, observation operators, and a known
+delayed EEG-to-fNIRS relation. It then injects heteroscedastic noise and
+controlled modality-specific artifacts--spikes, drift, steps, bursts or
+high-frequency contamination, and dropout--while retaining the clean reference,
+artifact mask, and severity. Full-input, masked/held-out, and missing-modality
+replays must use the same generator. The smallest runnable check must
+demonstrate:
 
 - continuous target construction before patching/tokenization;
 - exact canonical-key joins and distinct measurement, teacher, uncertainty,
   innovation, token, and lag masks;
 - no cross-modal read before either main tokenizer emits its representation;
-- known-state recovery and failure on independent/time-shift/spatial nulls;
-- calibrated predictive intervals under the declared uncertainty convention;
+  the offline joint teacher is the declared fit-fold-only exception and emits
+  detached modality-specific targets;
+- recovery of known `r(t)` and clean modality trajectories, attenuation of the
+  injected artifacts without excessive clean-signal distortion, and failure on
+  independent/time-shift/spatial nulls;
+- residual agreement with injected corruption on artifact support and absence
+  of systematic clean-signal removal off that support;
+- calibrated predictive intervals, with uncertainty increasing under stronger
+  corruption, masking, or missing input;
 - branch and coupling gradient allowlists;
 - config/target/summary serialization, deterministic hashes, atomic publication,
   and an explicit incomplete-run state.
@@ -143,9 +162,9 @@ The teacher comparison is sequential, not a Cartesian product.
 | ID | Candidate | Question | Promotion role |
 | --- | --- | --- | --- |
 | `T0-native` | measured continuous coordinate plus a simple fit-fold noise/smoothing model | Does the interface and score beat a no-dynamics reference? | control only |
-| `T1-self` | modality-specific linear LDS/RTS, fitted separately to EEG and fNIRS | Does temporal structure help without privileged cross-modal information? | minimum dynamic baseline |
-| `T2-croce` | paper-faithful Croce-2017 SMC reference, kept distinct from the repository's modified solver | Does the physical joint model recover known and held-out measurements beyond `T1-self`? | privileged physical candidate |
-| `T3-adaptive` | current bounded/adaptive RTS/AR family, explicitly versioned as an improvement rather than "exact Croce" | Do the adaptive dynamics improve the same frozen endpoints? | competing physical candidate |
+| `T1-self` | modality-specific linear LDS/RTS, fitted separately to EEG and fNIRS | How much denoising is available without cross-modal information? | single-modality attribution baseline |
+| `T2-croce` | paper-faithful Croce-2017 SMC reference, kept distinct from the repository's modified solver | Does the joint posterior recover known `r(t)` and clean EEG/HbO/HbR trajectories while separating injected corruption beyond `T1-self`? | privileged physical candidate |
+| `T3-adaptive` | current bounded/adaptive RTS/AR family, explicitly versioned as an improvement rather than "exact Croce" | Do adaptive joint dynamics improve the same frozen denoising, shared-driver, residual, and calibration endpoints? | competing physical candidate |
 | `T4-spatial` | nested local-channel extension of the simplest passing `T2`/`T3` family | Is additional local spatial support necessary? | conditional refinement |
 
 `T4-spatial` starts from one HbO/HbR pair plus six nearest EEG channels, then
@@ -163,8 +182,8 @@ of the main ladder.
 
 ### Teacher outputs and uncertainty convention
 
-All candidates publish the same continuous artifact, independent of teacher
-family:
+All candidates publish the same observation-space fields, independent of
+teacher family:
 
 ```text
 trajectory_mean
@@ -172,11 +191,24 @@ aleatoric_variance
 epistemic_variance
 total_variance = aleatoric_variance + epistemic_variance
 observation_values
-innovation
+innovation = observation_values - trajectory_mean
 named masks
 coordinate/channel identities
 fit, source, code, geometry, parameter, and calibration hashes
 ```
+
+Decision-eligible joint candidates additionally publish:
+
+```text
+shared_driver_mean
+shared_driver_variance
+```
+
+`shared_driver_mean` is the operational `r(t)` estimate. `trajectory_mean` is
+the posterior denoised estimate in each EEG/HbO/HbR observation coordinate, not
+a claim of clean ground truth. `innovation` is retained as an explicit residual
+and may be described as separated noise/artifact only to the extent supported by
+the gates below.
 
 The new contract uses **variance**, not an ambiguous `uncertainty` scalar. The
 legacy adapter mixes variance-like summaries while the current loss divides by
@@ -184,26 +216,33 @@ that field without a log-variance term; therefore its uncertainty-weighting
 switch is not admitted evidence for this generation.
 
 Calibration is fit-fold-only and frozen before application. The primary
-uncertainty endpoint is held-out Gaussian log score; CRPS, 50/80/95% interval
+uncertainty endpoints are Gaussian log score and CRPS on known-clean synthetic
+coordinates and prespecified masked real coordinates. 50/80/95% interval
 coverage and width, standardized residuals, PIT, and risk-versus-uncertainty
-monotonicity are required diagnostics. Aleatoric and epistemic components remain
-separate in the artifact and report.
+monotonicity are required diagnostics. Same-point joint-posterior coverage is
+descriptive because the observation was consumed by the smoother. Aleatoric and
+epistemic components remain separate in the artifact and report.
 
 ### Teacher gate
 
 | Gate | Required evidence |
 | --- | --- |
 | `T-G0 contract` | lineage, fold, masks, units, sign/gauge, finite support, no label use or protected dereference |
-| `T-G1 synthetic` | known-state recovery, calibrated intervals, stable numerics, and declared null failure |
-| `T-G2 prediction` | subject-equal held-out measurement-space proper score is non-inferior for every required EEG/HbO/HbR coordinate; joint same-point reconstruction alone cannot pass |
-| `T-G3 physical adequacy` | independent-modality application and held-out innovation beat phase/history/systemic and time/pairing nulls; required coordinates pass conjunctively |
-| `T-G4 calibration` | log score and interval calibration pass for every coordinate admitted to source supervision |
+| `T-G1 synthetic` | known `r(t)` and clean EEG/HbO/HbR recovery, calibrated intervals, stable numerics, and declared null failure across frozen corruption severities and partial missing-support patterns |
+| `T-G2 joint denoising` | against the semi-synthetic clean reference, the joint candidate improves clean-signal error/SNR over the corrupted input, is non-inferior to `T1-self` in every required coordinate and superior on the frozen balanced primary endpoint, attenuates artifacts, and keeps off-artifact morphology distortion within frozen `delta_T` |
+| `T-G3 state/residual adequacy` | prespecified masked-block reconstruction beats history/systemic and time/pairing nulls; `r(t)` stays within a frozen perturbation margin under prescribed corruption of one modality while the paired modality remains intact; residual/artifact agreement and the expected sign/delay relation pass without systematic clean-signal leakage |
+| `T-G4 calibration` | log score, CRPS, interval calibration, and uncertainty-risk monotonicity pass on known-clean or masked coordinates for every admitted output; same-point joint reconstruction is descriptive only |
 | `T-G5 spatial/stability` | any added-channel gain survives spatial nulls and seed/fold/channel perturbation without worse calibration |
 
-The simplest candidate passing all gates becomes the frozen training teacher. A
-joint teacher remains a privileged target-side ablation and is never an inference
-input or ground truth. If no candidate passes `T-G2`--`T-G4`, source-tokenizer
-development stops; reconstruction work may continue only as a diagnostic.
+The simplest joint candidate passing all gates becomes the frozen training
+target producer. It is privileged, label-blind, fit-fold-only, and training-only;
+it is never a tokenizer inference input or ground truth. EEG-only and fNIRS-only
+reruns are required attribution ablations for modality contribution,
+missing-modality degradation, and artifact propagation. Failure to reconstruct
+an omitted modality in those ablations does not by itself reject a qualified
+joint denoising teacher. If no joint candidate passes `T-G2`--`T-G4`,
+source-tokenizer development stops; reconstruction work may continue only as a
+diagnostic.
 
 ## B/Q: source and observation tokenizer
 
@@ -400,12 +439,16 @@ explicitly unresolved and block measured execution:
 
 1. the exact nonprotected dataset and subject/record split providing a genuinely
    fresh confirmation set;
-2. numeric `delta_T`, `delta_S`, `delta_O`, and `delta_H` margins;
+2. numeric `delta_T`, `delta_S`, `delta_O`, and `delta_H` margins, including
+   teacher artifact attenuation, clean-signal distortion, and `r(t)`
+   perturbation limits;
 3. the single primary coupling horizon or integrated horizon definition and its
    family-wise null procedure;
 4. maximum training steps/checkpoint rule and the measured-run compute budget;
-5. the final continuous target schema/version implementing the variance fields
-   above.
+5. the final continuous target schema/version implementing the shared-driver,
+   denoised-trajectory, residual, and variance fields above;
+6. the frozen corruption library and severity grid, masked-block schedule,
+   missing-modality schedule, and clean-reference generator parameters.
 
 The next authorized implementation step is therefore P0 plus one executable
 contract. It is not a Croce real-data run, a VQ sweep, or a protected evaluation.

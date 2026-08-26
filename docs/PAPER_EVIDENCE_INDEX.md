@@ -27,9 +27,9 @@ specified:
   token hierarchies, and an earlier optional-grammar projection. It is not a
   Methods contract and does not override the retained endpoint/proper-score/null
   kernel.
-- [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): lifecycle overlay for the
-  stopped historical flow and the intentionally empty clean-slate entry; it
-  contains no active sequence.
+- [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): current planned clean-slate
+  sequence plus the lifecycle overlay for the stopped historical flow; it does
+  not authorize measured or protected execution.
 - [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md),
   [`comparative_methods/README.md`](../comparative_methods/README.md), and
   [`comparative_methods/ASSET_STATUS.md`](../comparative_methods/ASSET_STATUS.md):
