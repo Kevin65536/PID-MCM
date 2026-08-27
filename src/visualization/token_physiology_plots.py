@@ -36,7 +36,7 @@ INSUFFICIENT_SUPPORT_COLOR = "#D9D9D9"
 SUPPORTED_COLOR = "#0072B2"
 REFERENCE_COLOR = "#333333"
 _SUPPORTED_FORMATS = ("png", "pdf", "svg")
-_MANIFEST_SCHEMA = "token_physiology_figure_manifest_v1"
+_MANIFEST_SCHEMA = "token_physiology_figure_manifest_v2"
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,6 @@ class FigureArtifacts:
 
     figure_paths: tuple[Path, ...]
     manifest_path: Path | None
-    alt_text_path: Path | None
 
 
 def _as_1d(
@@ -847,7 +846,6 @@ def build_figure_manifest(
     staged_outputs: Sequence[tuple[Path, Path, str]],
     *,
     dpi: int,
-    alt_text_path: Path | None,
     provenance: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Build the JSON-serialisable manifest used by the atomic exporter."""
@@ -885,7 +883,6 @@ def build_figure_manifest(
             "opaque_background": True,
             "bbox_inches": None,
             "outputs": outputs,
-            "alt_text_file": alt_text_path.name if alt_text_path else None,
         },
         "software": {
             "python": platform.python_version(),
@@ -905,7 +902,6 @@ def save_figure_atomic(
     *,
     formats: Sequence[str] | str | None = None,
     dpi: int = 300,
-    alt_text: str | None = None,
     provenance: Mapping[str, Any] | None = None,
     write_manifest: bool = True,
 ) -> FigureArtifacts:
@@ -914,8 +910,8 @@ def save_figure_atomic(
     ``output`` may be a stem or include one of the supported suffixes.  Passing
     ``formats=("png", "pdf", "svg")`` writes all three representations.  The
     exporter preserves the figure's physical page size (``bbox_inches=None``)
-    and uses an opaque white background.  If supplied, ``alt_text`` is written
-    to ``<stem>.alt.txt``; the optional manifest is ``<stem>.manifest.json``.
+    and uses an opaque white background.  The optional manifest is
+    ``<stem>.manifest.json``.
 
     Existing regular files, directories, or symlinks cause a preflight
     :class:`FileExistsError`.  There is deliberately no overwrite switch.
@@ -930,23 +926,15 @@ def save_figure_atomic(
     dpi = int(dpi)
     if dpi <= 0:
         raise ValueError("dpi must be positive")
-    if alt_text is not None:
-        alt_text = str(alt_text).strip()
-        if not alt_text:
-            raise ValueError("alt_text must be non-empty when provided")
-
     stem.parent.mkdir(parents=True, exist_ok=True)
     figure_targets = tuple(
         _target_with_suffix(stem, format_name)
         for format_name in normalised_formats
     )
-    alt_target = _target_with_suffix(stem, "alt.txt") if alt_text else None
     manifest_target = (
         _target_with_suffix(stem, "manifest.json") if write_manifest else None
     )
     all_targets = list(figure_targets)
-    if alt_target is not None:
-        all_targets.append(alt_target)
     if manifest_target is not None:
         all_targets.append(manifest_target)
     existing = [
@@ -958,7 +946,6 @@ def save_figure_atomic(
 
     staged_paths: list[Path] = []
     staged_outputs: list[tuple[Path, Path, str]] = []
-    staged_alt: Path | None = None
     staged_manifest: Path | None = None
     try:
         save_rc = {
@@ -992,17 +979,11 @@ def save_figure_atomic(
                 )
                 staged_outputs.append((staged, target, format_name))
 
-        if alt_target is not None and alt_text is not None:
-            staged_alt = _stage_path(stem.parent, stem.name, ".alt.txt.tmp")
-            staged_paths.append(staged_alt)
-            _write_text_staged(staged_alt, f"{alt_text}\n")
-
         if manifest_target is not None:
             manifest = build_figure_manifest(
                 figure,
                 staged_outputs,
                 dpi=dpi,
-                alt_text_path=alt_target,
                 provenance=provenance,
             )
             staged_manifest = _stage_path(
@@ -1025,8 +1006,6 @@ def save_figure_atomic(
 
         for staged, target, _ in staged_outputs:
             _publish_without_overwrite(staged, target)
-        if staged_alt is not None and alt_target is not None:
-            _publish_without_overwrite(staged_alt, alt_target)
         if staged_manifest is not None and manifest_target is not None:
             _publish_without_overwrite(staged_manifest, manifest_target)
     finally:
@@ -1037,7 +1016,6 @@ def save_figure_atomic(
     return FigureArtifacts(
         figure_paths=figure_targets,
         manifest_path=manifest_target,
-        alt_text_path=alt_target,
     )
 
 

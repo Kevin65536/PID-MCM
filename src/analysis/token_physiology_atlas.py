@@ -1866,7 +1866,7 @@ def _prepare_figure_targets(
     force: bool,
 ) -> None:
     targets = [Path(f"{stem}.{fmt}") for fmt in formats]
-    targets.extend((Path(f"{stem}.manifest.json"), Path(f"{stem}.alt.txt")))
+    targets.append(Path(f"{stem}.manifest.json"))
     existing = [path for path in targets if path.exists() or path.is_symlink()]
     if existing and not force:
         raise FileExistsError(
@@ -1960,11 +1960,6 @@ def _write_figures(
                 support_stem,
                 formats=formats,
                 dpi=dpi,
-                alt_text=(
-                    f"Bar chart of assigned patch counts for all {len(token_ids)} "
-                    f"{modality.upper()} tokens in {split}; hatched bars fail the "
-                    "registered count or subject support gate."
-                ),
                 provenance={
                     **provenance,
                     "visualization": {
@@ -1977,11 +1972,8 @@ def _write_figures(
             )
             plt.close(figure)
             produced.extend(artifacts.figure_paths)
-            produced.extend(
-                path
-                for path in (artifacts.manifest_path, artifacts.alt_text_path)
-                if path is not None
-            )
+            if artifacts.manifest_path is not None:
+                produced.append(artifacts.manifest_path)
 
             ranked = sorted(
                 range(len(token_ids)),
@@ -2011,12 +2003,6 @@ def _write_figures(
                 heatmap_stem,
                 formats=formats,
                 dpi=dpi,
-                alt_text=(
-                    f"Zero-centered heatmap of standardized physiological feature "
-                    f"enrichment for {len(selected_ids)} highest-support "
-                    f"{modality.upper()} tokens in {split}. Grey hatching denotes "
-                    "insufficient support and crosses denote missing estimates."
-                ),
                 provenance={
                     **provenance,
                     "visualization": {
@@ -2040,11 +2026,8 @@ def _write_figures(
             )
             plt.close(figure)
             produced.extend(artifacts.figure_paths)
-            produced.extend(
-                path
-                for path in (artifacts.manifest_path, artifacts.alt_text_path)
-                if path is not None
-            )
+            if artifacts.manifest_path is not None:
+                produced.append(artifacts.manifest_path)
 
             feature_candidates = (
                 ("channel_mean/log_relative_power_alpha",)
@@ -2084,13 +2067,6 @@ def _write_figures(
                     embedding_stem,
                     formats=formats,
                     dpi=dpi,
-                    alt_text=(
-                        f"PCA projection of {modality.upper()} codebook vectors in "
-                        f"{split}, colored by subject-equal standardized enrichment "
-                        f"of {feature_name}. Upward and downward triangles encode "
-                        "positive and negative supported values; large grey X marks "
-                        "insufficient support and small grey x marks missing estimates."
-                    ),
                     provenance={
                         **provenance,
                         "visualization": {
@@ -2113,11 +2089,8 @@ def _write_figures(
                 )
                 plt.close(figure)
                 produced.extend(artifacts.figure_paths)
-                produced.extend(
-                    path
-                    for path in (artifacts.manifest_path, artifacts.alt_text_path)
-                    if path is not None
-                )
+                if artifacts.manifest_path is not None:
+                    produced.append(artifacts.manifest_path)
     return produced
 
 

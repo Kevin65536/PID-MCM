@@ -108,8 +108,7 @@ figures are abandoned pre-freeze snapshots and are not current Methods evidence.
   frozen architecture target.
 - [`observation_source_exploration_v2.svg`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg),
   its tracked design note
-  [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json),
-  and [`alt text`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt)
+  [`observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
   preserve replaceable implementation candidates from before the retained
   boundary.
   Their optional-grammar wording is superseded by `METHOD_RATIONALE.md`. The

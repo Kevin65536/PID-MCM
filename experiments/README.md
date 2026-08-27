@@ -37,8 +37,8 @@ It uses synthetic data only and exercises `T0-native`, `T1-self`,
 small software diagnostic and render its Chinese figures with:
 
 ```bash
-.venv/bin/python experiments/evaluate_t3a_balloon_robust_p0.py --smoke --output-dir /tmp/t3a-balloon-p0-smoke
-.venv/bin/python experiments/scripts/render_t3a_balloon_robust_p0.py --run-dir /tmp/t3a-balloon-p0-smoke
+.venv/bin/python experiments/evaluate_t3a_balloon_robust_p0.py --smoke --output-dir experiments/runs/physiology_semantic_tokenizer/t3a_balloon_robust_p0/20260827_smoke_v1
+.venv/bin/python experiments/scripts/render_t3a_balloon_robust_p0.py --run-dir experiments/runs/physiology_semantic_tokenizer/t3a_balloon_robust_p0/20260827_smoke_v1
 ```
 
 `--smoke` can never qualify the model. A formal synthetic P0 uses the same

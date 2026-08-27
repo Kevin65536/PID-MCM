@@ -147,7 +147,7 @@ below the existing physiology-semantic run root. Analysis writes:
 - the 16-cell simultaneous interval table and bootstrap draws;
 - matched/deranged swap tables with the exact derangement registry;
 - private-leakage and latent-rank diagnostics;
-- manifest-bound SVG/PNG figures, source tables, and alt text;
+- manifest-bound SVG/PNG figures and source tables;
 - a summary containing negative, null, failed, and inconclusive cells as well
   as positive cells.
 

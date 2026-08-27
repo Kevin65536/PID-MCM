@@ -86,8 +86,7 @@ not a future target:
 - [`observation_source_exploration_v2.drawio`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.drawio)
   owns the editable visual layout and shared project figure style.
 - [`observation_source_exploration_v2.svg`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
-  is the exported framework figure, with
-  [`alt text`](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt).
+  is the exported framework figure.
 
 The JSON owns only the snapshot content; this Mermaid view is a compact reader
 aid. Neither overrides the frozen boundary above or defines an implementation:

@@ -78,7 +78,6 @@ figures:
   dpi: 180
   top_tokens: 24
   write_manifest: true
-  write_alt_text: true
   overwrite: false
 
 cache:

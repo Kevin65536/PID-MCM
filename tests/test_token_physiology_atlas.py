@@ -569,11 +569,7 @@ def test_figure_sidecars_record_selection_color_scale_and_marker_semantics(
     assert codebook_spec["projection"] == "centered unscaled PCA via SVD"
     assert codebook_spec["embedding_shape"] == [3, 4]
     assert "% variance" in codebook_manifest["figure"]["axes"][0]["xlabel"]
-    alt_text = codebook_stem.with_suffix(".alt.txt").read_text(
-        encoding="utf-8"
-    )
-    assert "large grey X" in alt_text
-    assert "small grey x" in alt_text
+    assert not list(figure_dir.glob("*.alt.txt"))
 
 
 def test_protected_test_export_is_rejected_without_explicit_authorization(

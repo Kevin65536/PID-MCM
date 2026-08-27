@@ -113,7 +113,7 @@ Keep the smallest package that preserves the scientific conclusion and normal
 comparison use:
 
 - resolved configuration, split/registry identities, manifests, summaries,
-  tables, figures, alt text, and decision records;
+  tables, figures, and decision records;
 - a checkpoint only when it is still needed for an active run, a recurring
   analysis, a consumer interface, or an irreplaceable reference;
 - raw predictions or arrays only when the reported result cannot be audited or

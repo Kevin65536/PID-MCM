@@ -169,7 +169,7 @@ An Atlas run atomically publishes:
   state-association, sequence, and lag tables;
 - stability and information-ledger records;
 - PNG/SVG figures as requested;
-- per-figure source/manifest data and `.alt.txt` descriptions.
+- per-figure source and manifest data.
 
 The manifest records source hashes, split, tier, thresholds, units/transform,
 software identity, protected-test state, wall time, artifact inventory, and

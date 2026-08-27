@@ -142,7 +142,7 @@ def test_codebook_embedding_uses_labels_colorbar_and_marker_redundancy():
         plt.close(fig)
 
 
-def test_atomic_export_writes_formats_manifest_alt_text_and_refuses_overwrite(
+def test_atomic_export_writes_formats_manifest_and_refuses_overwrite(
     tmp_path: Path,
 ):
     fig, ax = plt.subplots(layout="constrained")
@@ -155,10 +155,6 @@ def test_atomic_export_writes_formats_manifest_alt_text_and_refuses_overwrite(
             stem,
             formats=("png", "pdf", "svg"),
             dpi=120,
-            alt_text=(
-                "Line plot of amplitude over time. Amplitude increases "
-                "monotonically from zero to one."
-            ),
             provenance={
                 "source": "synthetic test data",
                 "uncertainty": "none; raw observations",
@@ -170,15 +166,12 @@ def test_atomic_export_writes_formats_manifest_alt_text_and_refuses_overwrite(
             ".svg",
         }
         assert all(path.is_file() and path.stat().st_size > 0 for path in artifacts.figure_paths)
-        assert artifacts.alt_text_path is not None
-        assert artifacts.alt_text_path.read_text(encoding="utf-8").startswith(
-            "Line plot"
-        )
+        assert not list(tmp_path.glob("*.alt.txt"))
         assert artifacts.manifest_path is not None
         manifest = json.loads(
             artifacts.manifest_path.read_text(encoding="utf-8")
         )
-        assert manifest["schema"] == "token_physiology_figure_manifest_v1"
+        assert manifest["schema"] == "token_physiology_figure_manifest_v2"
         assert manifest["figure"]["axes"][0]["xlabel"] == "Time (s)"
         assert len(manifest["export"]["outputs"]) == 3
         assert all(
@@ -191,7 +184,6 @@ def test_atomic_export_writes_formats_manifest_alt_text_and_refuses_overwrite(
                 fig,
                 stem,
                 formats=("png", "pdf", "svg"),
-                alt_text="A second description must not replace the first.",
             )
     finally:
         plt.close(fig)

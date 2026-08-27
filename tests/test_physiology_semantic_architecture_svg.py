@@ -30,9 +30,6 @@ EXPLORATION_DRAWIO_PATH = PROJECT_ROOT / (
 EXPLORATION_SVG_PATH = PROJECT_ROOT / (
     "docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg"
 )
-EXPLORATION_ALT_PATH = PROJECT_ROOT / (
-    "docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.alt.txt"
-)
 EXPLORATION_SPEC_SOURCE = (
     "docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json"
 )
@@ -284,14 +281,11 @@ def test_renderer_mirrors_the_detailed_architecture_visual_language():
     assert "micro-badge" not in svg
 
 
-def test_v2_exploration_visual_and_alt_text_are_distinct_from_runtime():
+def test_v2_exploration_visual_is_distinct_from_runtime():
     exploration = _exploration_spec()
     assert exploration["schema"] == "physiology_semantic_architecture_v2"
     assert EXPLORATION_DRAWIO_PATH.exists()
     assert EXPLORATION_SVG_PATH != SVG_PATH
-    alt = EXPLORATION_ALT_PATH.read_text(encoding="utf-8")
-    assert alt.startswith("Exploratory observation–source design note, not runtime:")
-    assert "No measured values are shown." in alt
 
 
 def test_v2_exploration_keeps_paths_independent_without_freezing_decomposition():

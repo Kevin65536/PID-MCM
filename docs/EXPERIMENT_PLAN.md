@@ -7,8 +7,8 @@ physiology-semantic tokenizer generation. The plan is limited to physical-teache
 qualification, source/observation tokenization, and coupling-prior retention. It
 does not use downstream task performance as a training or selection endpoint.
 
-This planning state does not authorize measured or protected-data access. There
-is no executable configuration or forward launcher yet. Before any measured run,
+The synthetic-only P0 launcher and configuration are ready for formal execution;
+measured and protected-data access remain closed. Before any measured run,
 the unresolved split registry, non-inferiority margins, primary lag/horizon, and
 compute budget listed below must be frozen in one executable contract and pass
 the software/synthetic gate. Subjects 24--29 and every protocol-owned protected

@@ -18,9 +18,8 @@ method freeze, or data authorization.
 
 The v2 exploration is an abandoned candidate, not a target architecture. Its semantic
 [`JSON note`](architecture/observation_source_exploration_v2.json), editable Draw.io
-source, exported SVG, and
-[`alt text`](figures/plans/observation_source_exploration_v2.alt.txt) preserve
-replaceable candidates from before the retained boundary. Retained principles are
+source, and exported SVG preserve replaceable candidates from before the retained
+boundary. Retained principles are
 owned by [`../METHOD_RATIONALE.md`](../METHOD_RATIONALE.md).
 
 ## Visual and semantic contract

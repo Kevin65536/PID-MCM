@@ -27,6 +27,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
+import yaml
 
 try:
     from scipy.stats import t as student_t
@@ -41,12 +42,12 @@ except ModuleNotFoundError:  # direct invocation from outside the repository
 
 
 MODEL_LABELS = {
-    "T3a-balloon-robust": "T3a Balloon-robust",
+    "T3a-balloon-robust": "T3a 鲁棒 Balloon",
     "T0-native": "T0 持续性基线",
     "T1-self": "T1 独立 LDS",
     "T2b-adaptive-legacy": "T2b 自适应旧基线",
-    "t3a_balloon_robust": "T3a Balloon-robust",
-    "t3a": "T3a Balloon-robust",
+    "t3a_balloon_robust": "T3a 鲁棒 Balloon",
+    "t3a": "T3a 鲁棒 Balloon",
     "joint": "联合观测",
     "eeg_only": "仅 EEG",
     "fnirs_only": "仅 fNIRS",
@@ -61,6 +62,24 @@ MODEL_COLORS = {
     "joint": "#0072B2",
     "eeg_only": "#009E73",
     "fnirs_only": "#CC79A7",
+}
+PANEL_MODELS = (
+    "T0-native",
+    "T1-self",
+    "T2b-adaptive-legacy",
+    "T3a-balloon-robust",
+)
+MODEL_LINESTYLES = {
+    "T0-native": (0, (3, 2)),
+    "T1-self": (0, (5, 2, 1, 2)),
+    "T2b-adaptive-legacy": (0, (1, 1)),
+    "T3a-balloon-robust": "-",
+}
+MODEL_MARKERS = {
+    "T0-native": "s",
+    "T1-self": "^",
+    "T2b-adaptive-legacy": "D",
+    "T3a-balloon-robust": "o",
 }
 NULL_LABELS = {
     "independent": "独立驱动",
@@ -103,6 +122,8 @@ CJK_STYLE = {
 }
 
 MANDATORY_STEMS = (
+    "典型片段_原始信号与四模型重建",
+    "跨模型观测重建_共同指标",
     "观测真值后验_轨迹",
     "生理状态真值后验_r_s_f_v_p_q",
     "噪声创新_伪影分离",
@@ -111,22 +132,6 @@ MANDATORY_STEMS = (
     "参数恢复_多起点_profile",
     "null_严重度性能",
 )
-
-# ``save_figure_atomic`` writes this text alongside each PNG as a small,
-# machine-readable alt-text sidecar.  Keep the descriptions factual: they
-# state what is plotted and the relevant uncertainty semantics, without
-# implying source-localized brain activity.
-ALT_TEXTS = {
-    "观测真值后验_轨迹": "三类观测的污染输入、合成干净真值、后验均值及 Student-t 95% 后验预测带；黄色区域标出注入伪影掩码。",
-    "生理状态真值后验_r_s_f_v_p_q": "T3a 的共享神经驱动 r 与血管状态 s、f、v、p、q 的合成真值、后验均值和条件高斯区间。",
-    "噪声创新_伪影分离": "观测与后验残差创新、注入伪影和可选干扰状态的时间序列；创新不自动等同于已分离噪声。",
-    "不确定性分解_观测状态": "EEG/HbO/HbR 观测和 r/s/f/v/p/q 状态的偶然、条件状态后验（epistemic*）与总方差时间序列。",
-    "校准_PIT_覆盖率": "Student-t 预测的 PIT、区间经验覆盖率、CRPS/NLL 等 proper score 及不确定性风险指标。",
-    "参数恢复_多起点_profile": "参数真值、估计误差、边界接触状态和固定另一参数的目标函数切片；边界主导参数不作生理解释。",
-    "null_严重度性能": "受控伪影严重度下的性能曲线、重复实验四分位距与实际导出的零假设对照分布。",
-    "通道空间关联_边界": "带真实 channel_id、几何坐标和关联值的通道级散点；该图不是全脑活动热图或源定位。",
-}
-
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
@@ -151,6 +156,13 @@ def _read_gates(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("gates.json 必须是 JSON 对象")
     return value
+
+
+def _read_gate_thresholds(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return dict(value.get("gates", {})) if isinstance(value, Mapping) else {}
 
 
 def _float(row: Mapping[str, Any], *keys: str, default: float = np.nan) -> float:
@@ -308,12 +320,17 @@ def _valid_array(
     return np.asarray([_bool(row, *keys, default=default) for row in rows], dtype=bool)
 
 
-def _artifact_mask(rows: Sequence[Mapping[str, Any]]) -> np.ndarray:
+def _artifact_mask(
+    rows: Sequence[Mapping[str, Any]],
+    component: str | None = None,
+) -> np.ndarray:
+    keys = (
+        (f"{component}_artifact_mask", f"artifact_mask_{component}", "artifact_mask", "corruption_mask", "mask")
+        if component
+        else ("artifact_mask", "corruption_mask", "mask")
+    )
     return np.asarray(
-        [
-            _bool(row, "artifact_mask", "corruption_mask", "mask", default=False)
-            for row in rows
-        ],
+        [_bool(row, *keys, default=False) for row in rows],
         dtype=bool,
     )
 
@@ -338,7 +355,6 @@ def _save(fig: Any, output_dir: Path, stem: str) -> Path:
         output_dir / stem,
         formats="png",
         dpi=300,
-        alt_text=ALT_TEXTS.get(stem, stem),
         write_manifest=False,
     )
     plt.close(fig)
@@ -358,8 +374,8 @@ def _shade_mask(axis: Any, time: np.ndarray, mask: np.ndarray) -> None:
 def _student_dof(rows: Sequence[Mapping[str, Any]], gates: Mapping[str, Any]) -> float:
     candidates: list[Any] = []
     for row in rows:
-        candidates.extend(row.get(key) for key in ("student_t_dof", "student_t_df", "dof", "nu"))
-    candidates.extend(gates.get(key) for key in ("student_t_dof", "student_t_df", "dof", "nu"))
+        candidates.extend(row.get(key) for key in ("student_nu", "student_t_dof", "student_t_df", "dof", "nu"))
+    candidates.extend(gates.get(key) for key in ("student_nu", "student_t_dof", "student_t_df", "dof", "nu"))
     for value in candidates:
         try:
             dof = float(value)
@@ -378,6 +394,32 @@ def _student_critical(dof: float) -> float:
         except Exception:
             pass
     return 1.96
+
+
+def _predictive_band(
+    calibration: Sequence[Mapping[str, Any]],
+    identity: tuple[str, str, str],
+    component: str,
+    gates: Mapping[str, Any],
+) -> tuple[float, str]:
+    replicate, scenario, model = identity
+    matched = [
+        row
+        for row in calibration
+        if _text(row, "model_id", "model") == model
+        and _text(row, "replicate_id", "replicate") == replicate
+        and _text(row, "group", "scenario_id", "scenario") == scenario
+        and _normalise_component(_text(row, "target", "component")) == component
+    ]
+    distribution = _text(matched[0], "distribution", default="") if matched else ""
+    is_student = distribution.lower().replace("_", "-") == "student-t"
+    if not distribution:
+        is_student = model in {"T3a-balloon-robust", "t3a_balloon_robust", "t3a"}
+    if is_student:
+        dof = _student_dof(matched, gates)
+        suffix = f"，ν={dof:g}" if np.isfinite(dof) else "，ν 未记录"
+        return _student_critical(dof), f"95% 后验预测带（Student-t{suffix}）"
+    return 1.96, "95% 后验预测带（Gaussian）"
 
 
 def _uncertainty_lookup(rows: Sequence[Mapping[str, Any]]) -> dict[tuple[tuple[str, str, str], float, str], dict[str, Any]]:
@@ -438,6 +480,9 @@ def _wide_trajectory_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, A
         current[f"{prefix}_mean"] = _float(row, "posterior_mean", "trajectory_mean", "mean")
         current[f"artifact_{prefix}"] = _float(row, "artifact", f"artifact_{prefix}")
         current[f"{prefix}_valid"] = _bool(row, "valid", "observation_valid", default=True)
+        current[f"{prefix}_artifact_mask"] = _bool(
+            row, "artifact_mask", "corruption_mask", "mask", default=False
+        )
         for variance_kind in ("aleatoric", "epistemic", "total"):
             value = _float(row, f"{variance_kind}_variance")
             if np.isfinite(value):
@@ -445,8 +490,6 @@ def _wide_trajectory_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             standard = _float(row, f"{variance_kind}_std")
             if np.isfinite(standard):
                 current[f"{prefix}_{variance_kind}_std"] = standard
-        if _bool(row, "artifact_mask", "corruption_mask", "mask", default=False):
-            current["artifact_mask"] = True
     output = list(grouped.values())
     output.sort(key=lambda row: _float(row, "time_s", default=0.0))
     return output
@@ -482,9 +525,184 @@ def _plot_band(
     axis.plot(time, mean, color=color, linewidth=1.25, label=label)
 
 
+def _clean_panel_rows(
+    trajectories: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[str, str], dict[str, list[dict[str, Any]]]]:
+    groups = _group_rows(trajectories)
+    clean_pairs = sorted({key[:2] for key in groups if key[1] == "clean"})
+    complete = [
+        pair for pair in clean_pairs
+        if all((pair[0], pair[1], model) in groups for model in PANEL_MODELS)
+    ]
+    pair = (complete or clean_pairs or [("", "")])[0]
+    return pair, {
+        model: _wide_trajectory_rows(groups.get((pair[0], pair[1], model), []))
+        for model in PANEL_MODELS
+    }
+
+
+def _plot_typical_segment(
+    trajectories: Sequence[Mapping[str, Any]],
+    output_dir: Path,
+) -> Path:
+    pair, selected = _clean_panel_rows(trajectories)
+    time_sets = [
+        {_time_key(_float(row, "time_s")) for row in rows}
+        for rows in selected.values()
+        if rows
+    ]
+    common_times = sorted(set.intersection(*time_sets)) if len(time_sets) == len(PANEL_MODELS) else []
+    if common_times:
+        center = 0.5 * (common_times[0] + common_times[-1])
+        half_width = min(10.0, 0.5 * (common_times[-1] - common_times[0]))
+        common_times = [time for time in common_times if center - half_width <= time <= center + half_width]
+    row_maps = {
+        model: {_time_key(_float(row, "time_s")): row for row in rows}
+        for model, rows in selected.items()
+    }
+    reference_model = next((model for model in PANEL_MODELS if row_maps[model]), PANEL_MODELS[0])
+    fig, axes = plt.subplots(3, 1, figsize=(14.0, 10.5), sharex=True, constrained_layout=True)
+    for axis, (prefix, title, label) in zip(axes, SIGNAL_SPECS, strict=True):
+        reference = [row_maps[reference_model][time] for time in common_times] if common_times else []
+        observed = _array(reference, f"{prefix}_obs", f"{prefix}_corrupted", f"{prefix}_observation")
+        truth = _array(reference, f"{prefix}_clean", f"{prefix}_truth", f"clean_{prefix}")
+        time = np.asarray(common_times, dtype=float)
+        if np.any(np.isfinite(observed)):
+            axis.plot(time, observed, color=CORRUPTED_COLOR, linewidth=1.0, alpha=0.85, label="原始含噪输入")
+        if np.any(np.isfinite(truth)):
+            axis.plot(time, truth, color=OBS_COLOR, linewidth=1.4, label="合成干净真值")
+        for model in PANEL_MODELS:
+            rows = [row_maps[model][current] for current in common_times] if common_times else []
+            mean = _array(rows, f"{prefix}_mean", f"{prefix}_posterior", f"{prefix}_estimate")
+            valid = _valid_array(rows, f"{prefix}_valid", "valid", default=True)
+            if np.any(np.isfinite(mean)):
+                axis.plot(
+                    time,
+                    np.where(valid, mean, np.nan),
+                    color=_model_color(model),
+                    linestyle=MODEL_LINESTYLES[model],
+                    marker=MODEL_MARKERS[model],
+                    markevery=max(len(time) // 10, 1),
+                    markersize=2.8,
+                    linewidth=1.15,
+                    label=_model_label(model),
+                )
+            else:
+                axis.text(0.99, 0.92 - 0.08 * PANEL_MODELS.index(model), f"{_model_label(model)}：NA", transform=axis.transAxes, ha="right", va="top", fontsize=7, color=MISSING_COLOR)
+        axis.set_title(title)
+        axis.set_ylabel(label)
+    axes[-1].set_xlabel("时间（秒）")
+    _style_axes(axes)
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.965), ncol=3, fontsize=8)
+    window = f"{common_times[0]:g}–{common_times[-1]:g} 秒" if common_times else "无四模型共同时间支持"
+    fig.suptitle(
+        "典型信号片段：原始输入、干净真值与四模型重建\n"
+        f"预先固定 clean / 重复 {pair[0]} / 记录居中 20 秒（实际 {window}）；未按模型表现选段",
+        fontsize=13,
+    )
+    return _save(fig, output_dir, "典型片段_原始信号与四模型重建")
+
+
+def _plot_cross_model_metrics(
+    rows: Sequence[Mapping[str, Any]],
+    output_dir: Path,
+) -> Path:
+    metric_specs = (
+        ("clean_nrmse", "相对干净真值 NRMSE ↓"),
+        ("truth_pcc", "与干净真值相关 PCC ↑"),
+        ("reconstruction_temporal_acf_error", "一阶自相关误差 ↓"),
+        ("reconstruction_spectral_shape_error", "归一化谱形误差 ↓"),
+    )
+    targets = ("eeg", "hbo", "hbr")
+    clean = [
+        row for row in rows
+        if _text(row, "scenario_id", "scenario", "group") == "clean"
+        and _normalise_component(_text(row, "target", "component")) in targets
+        and _text(row, "status", default="computed").lower() in {"computed", "ok", "pass"}
+    ]
+    fig, axes = plt.subplots(3, 4, figsize=(18.0, 11.5), sharex="col", constrained_layout=True)
+    column_values: dict[str, list[float]] = defaultdict(list)
+    for row_index, target in enumerate(targets):
+        for column, (metric, title) in enumerate(metric_specs):
+            axis = axes[row_index, column]
+            target_rows = [
+                row for row in clean
+                if _normalise_component(_text(row, "target", "component")) == target
+                and _metric_name(row) == metric
+                and np.isfinite(_float(row, "value"))
+            ]
+            for model_index, model in enumerate(PANEL_MODELS):
+                model_rows = [row for row in target_rows if _text(row, "model_id", "model") == model]
+                values = np.asarray([_float(row, "value") for row in model_rows], dtype=float)
+                values = values[np.isfinite(values)]
+                if not values.size:
+                    axis.text(model_index, 0.03 if metric != "truth_pcc" else -0.95, "NA", ha="center", va="bottom", fontsize=7, color=MISSING_COLOR)
+                    continue
+                jitter = np.linspace(-0.12, 0.12, len(values)) if len(values) > 1 else np.zeros(1)
+                axis.scatter(
+                    model_index + jitter,
+                    values,
+                    color=_model_color(model),
+                    marker=MODEL_MARKERS[model],
+                    s=21,
+                    alpha=0.55,
+                    linewidths=0.4,
+                    edgecolors="white",
+                )
+                q25, median, q75 = np.quantile(values, (0.25, 0.5, 0.75))
+                axis.vlines(model_index, q25, q75, color=_model_color(model), linewidth=2.4)
+                axis.hlines(median, model_index - 0.18, model_index + 0.18, color="#111111", linewidth=1.5)
+                column_values[metric].extend(values.tolist())
+            if metric == "clean_nrmse":
+                baseline_by_rep: dict[str, float] = {}
+                for row in clean:
+                    if (
+                        _normalise_component(_text(row, "target", "component")) == target
+                        and _metric_name(row) == "corrupted_nrmse"
+                    ):
+                        value = _float(row, "value")
+                        if np.isfinite(value):
+                            baseline_by_rep.setdefault(_text(row, "replicate_id", "replicate"), value)
+                if baseline_by_rep:
+                    baseline = float(np.median(list(baseline_by_rep.values())))
+                    axis.axhline(baseline, color=CORRUPTED_COLOR, linestyle="--", linewidth=1.0)
+                    column_values[metric].append(baseline)
+            axis.set_title(title if row_index == 0 else "")
+            axis.set_ylabel(_component_label(target) if column == 0 else "指标值")
+            axis.set_xticks(range(len(PANEL_MODELS)), [_model_label(model) for model in PANEL_MODELS], rotation=22, ha="right")
+    for column, (metric, _title) in enumerate(metric_specs):
+        if metric == "truth_pcc":
+            limits = (-1.05, 1.05)
+        else:
+            maximum = max(column_values.get(metric, [1.0]))
+            limits = (0.0, max(maximum * 1.08, 1e-6))
+        for axis in axes[:, column]:
+            axis.set_ylim(*limits)
+    _style_axes(axes.flat)
+    legend = (
+        *(
+            Line2D([], [], marker=MODEL_MARKERS[model], linestyle="none", color=_model_color(model), label=_model_label(model))
+            for model in PANEL_MODELS
+        ),
+        Line2D([], [], marker="o", linestyle="none", color="#555555", alpha=0.6, label="各重复实验"),
+        Line2D([], [], color="#111111", linewidth=1.5, label="中位数（竖线为 IQR）"),
+        Line2D([], [], color=CORRUPTED_COLOR, linestyle="--", label="原始输入 NRMSE 中位数"),
+    )
+    axes[0, -1].legend(handles=legend, loc="upper right", ncol=2, fontsize=6.5)
+    fig.suptitle(
+        "四模型共同观测任务的重建质量（无伪影 clean 场景）\n"
+        "EEG/HbO/HbR 分开比较；保留重复与离群值；不合并成综合分数，状态指标因坐标不等价而排除",
+        fontsize=13,
+    )
+    return _save(fig, output_dir, "跨模型观测重建_共同指标")
+
+
 def _plot_trajectories(
     trajectories: Sequence[Mapping[str, Any]],
     uncertainty: Sequence[Mapping[str, Any]],
+    calibration: Sequence[Mapping[str, Any]],
     output_dir: Path,
     gates: Mapping[str, Any],
 ) -> Path:
@@ -493,16 +711,14 @@ def _plot_trajectories(
     models = sorted(selected, key=_model_sort_key)
     models = models or [""]
     lookup = _uncertainty_lookup(uncertainty)
-    dof = _student_dof(uncertainty, gates)
-    critical = _student_critical(dof)
     fig, axes = plt.subplots(3, len(models), figsize=(6.2 * len(models), 10.0), squeeze=False, sharex="col", constrained_layout=True)
     for column, model in enumerate(models):
         rows = selected.get(model, [])
         time = _array(rows, "time_s")
         identity = _id_tuple(rows[0]) if rows else ("", "", model)
-        mask = _artifact_mask(rows)
         for row_index, (prefix, title, label) in enumerate(SIGNAL_SPECS):
             axis = axes[row_index, column]
+            critical, band_label = _predictive_band(calibration, identity, prefix, gates)
             observed = _array(rows, f"{prefix}_obs", f"{prefix}_corrupted", f"{prefix}_observation")
             clean = _array(rows, f"{prefix}_clean", f"{prefix}_truth", f"clean_{prefix}")
             mean = _array(rows, f"{prefix}_mean", f"{prefix}_posterior", f"{prefix}_estimate")
@@ -530,19 +746,18 @@ def _plot_trajectories(
                     color=_model_color(model),
                     label="后验均值",
                     critical=critical,
-                    band_label=f"95% 后验预测带（Student-t，{('ν=' + format(dof, 'g')) if np.isfinite(dof) else 'ν 未记录'}）",
+                    band_label=band_label,
                 )
-            _shade_mask(axis, time, mask)
+            _shade_mask(axis, time, _artifact_mask(rows, prefix))
             axis.set_ylabel(label)
             axis.set_title(_model_label(model) if row_index == 0 else "")
             _legend_if_handles(axis, loc="best", fontsize=7)
         axes[-1, column].set_xlabel("时间（秒）")
     _style_axes(axes.flat)
-    dof_text = f"ν={dof:g}" if np.isfinite(dof) else "ν 未记录"
     scenario = _id_tuple(next(iter(next(iter(selected_raw.values()))), {}))[1] if selected_raw else "未记录"
     fig.suptitle(
-        f"观测、干净真值与后验轨迹（Student-t，{dof_text}）\n"
-        f"场景：{scenario}；灰线为污染输入，黑线为合成干净真值；黄色区域仅表示注入伪影掩码",
+        "观测、干净真值与后验轨迹（区间按各模型声明分布计算）\n"
+        f"场景：{scenario}；灰线为污染输入，黑线为合成干净真值；黄色区域按模态表示注入伪影掩码",
         fontsize=13,
     )
     return _save(fig, output_dir, "观测真值后验_轨迹")
@@ -659,7 +874,6 @@ def _plot_noise_innovation(
     for column, model in enumerate(models):
         rows = selected.get(model, [])
         time = _array(rows, "time_s")
-        mask = _artifact_mask(rows)
         for row_index, (prefix, title, label) in enumerate(SIGNAL_SPECS):
             axis = axes[row_index, column]
             observed = _array(rows, f"{prefix}_obs", f"{prefix}_corrupted", f"{prefix}_observation")
@@ -678,7 +892,7 @@ def _plot_noise_innovation(
             if not any(np.any(np.isfinite(values)) for values in (artifact, nuisance, innovation)):
                 axis.text(0.5, 0.5, "该模型未输出可用诊断", transform=axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
             axis.axhline(0.0, color="#555555", linewidth=0.7)
-            _shade_mask(axis, time, mask)
+            _shade_mask(axis, time, _artifact_mask(rows, prefix))
             axis.set_ylabel(f"{label}\n残差量纲")
             axis.set_title(_model_label(model) if row_index == 0 else "")
             _legend_if_handles(axis, loc="best", fontsize=7)
@@ -794,6 +1008,8 @@ def _plot_calibration(
     output_dir: Path,
     gates: Mapping[str, Any],
 ) -> Path:
+    clean_rows = [row for row in rows if _text(row, "group", "scenario_id", "scenario") == "clean"]
+    rows = clean_rows or list(rows)
     dof = _student_dof(rows, gates)
     pit_bins: dict[tuple[str, str], dict[int, float]] = defaultdict(dict)
     pit_values: dict[tuple[str, str], list[float]] = defaultdict(list)
@@ -809,6 +1025,8 @@ def _plot_calibration(
         component = _normalise_component(_text(row, "component", "target", default="all"))
         key = (model, component)
         explicit_value = _float(row, "value", "estimate")
+        nominal_level = _float(row, "nominal_level", "nominal", "level")
+        score_row = not np.isfinite(nominal_level) or np.isclose(nominal_level, 0.95)
         entries: list[tuple[str, float, bool]] = []
         if np.isfinite(explicit_value):
             entries.append((_metric_name(row).lower(), explicit_value, False))
@@ -824,7 +1042,7 @@ def _plot_calibration(
                 ("uncertainty_risk_spearman", "uncertainty_risk_spearman", False),
             ):
                 value = _float(row, field_name)
-                if np.isfinite(value):
+                if np.isfinite(value) and (metric_name == "coverage" or score_row):
                     entries.append((metric_name, value, mean_pit))
         for metric, value, mean_pit in entries:
             match = re.search(r"(?:pit|hist)[^0-9]*([0-9]{1,2})$", metric)
@@ -847,33 +1065,53 @@ def _plot_calibration(
                 risk[key].append(value)
     fig, axes = plt.subplots(2, 2, figsize=(14.0, 10.0), constrained_layout=True)
     centers = np.linspace(0.05, 0.95, 10)
-    for key, bins in sorted(pit_bins.items()):
-        if bins:
-            values = [bins.get(index, np.nan) for index in range(10)]
-            axes[0, 0].plot(centers, values, marker="o", linewidth=1.1, label=f"{_model_label(key[0])} · {_component_label(key[1])}")
-    for key, values in sorted(pit_values.items()):
-        if values:
-            histogram, _ = np.histogram(values, bins=np.linspace(0.0, 1.0, 11))
-            axes[0, 0].plot(centers, histogram / max(len(values), 1), marker="o", linewidth=1.1, label=f"{_model_label(key[0])} · {_component_label(key[1])}")
-    for key, values in sorted(pit_means.items()):
-        finite = np.asarray(values, dtype=float)
-        finite = finite[np.isfinite(finite)]
-        if finite.size:
-            mean = float(np.mean(finite))
-            axes[0, 0].axvline(
-                mean,
-                color=_model_color(key[0]),
-                linestyle="-.",
-                linewidth=1.2,
-                label=f"{_model_label(key[0])} · {_component_label(key[1])} · 均值 PIT（非分布）",
-            )
-    axes[0, 0].axhline(0.1, color="#555555", linestyle="--", linewidth=0.9, label="均匀分布期望")
-    axes[0, 0].set(title="PIT 分布/导出均值（Student-t）", xlabel="PIT 分箱中心或均值位置", ylabel="箱内比例（均值线不代表分布）")
+    target_markers = {"eeg": "o", "hbo": "^", "hbr": "v", "all": "D"}
+    has_pit_distribution = bool(pit_bins or pit_values)
+    if has_pit_distribution:
+        for key, bins in sorted(pit_bins.items()):
+            if bins:
+                values = [bins.get(index, np.nan) for index in range(10)]
+                axes[0, 0].plot(centers, values, marker=target_markers.get(key[1], "o"), color=_model_color(key[0]), linewidth=1.1, label=_model_label(key[0]) if key[1] == "eeg" else None)
+        for key, values in sorted(pit_values.items()):
+            if values:
+                histogram, _ = np.histogram(values, bins=np.linspace(0.0, 1.0, 11))
+                axes[0, 0].plot(centers, histogram / max(len(values), 1), marker=target_markers.get(key[1], "o"), color=_model_color(key[0]), linewidth=1.1, label=_model_label(key[0]) if key[1] == "eeg" else None)
+        axes[0, 0].axhline(0.1, color="#555555", linestyle="--", linewidth=0.9, label="均匀分布期望")
+        axes[0, 0].set(title="PIT 分布", xlabel="PIT 分箱中心", ylabel="箱内比例")
+    else:
+        pit_models = [model for model in PANEL_MODELS if any(key[0] == model for key in pit_means)]
+        component_offsets = {"eeg": -0.18, "hbo": 0.0, "hbr": 0.18, "all": 0.0}
+        for key, values in sorted(pit_means.items()):
+            finite = np.asarray(values, dtype=float)
+            finite = finite[np.isfinite(finite)]
+            if not finite.size or key[0] not in pit_models:
+                continue
+            y = pit_models.index(key[0]) + component_offsets.get(key[1], 0.0)
+            jitter = np.linspace(-0.045, 0.045, len(finite)) if len(finite) > 1 else np.zeros(1)
+            axes[0, 0].scatter(finite, y + jitter, color=_model_color(key[0]), marker=target_markers.get(key[1], "o"), s=18, alpha=0.35)
+            median = float(np.median(finite))
+            axes[0, 0].vlines(median, y - 0.08, y + 0.08, color=_model_color(key[0]), linewidth=2.0)
+        axes[0, 0].axvline(0.5, color="#555555", linestyle="--", linewidth=0.9, label="理想均值 0.5")
+        axes[0, 0].set_yticks(range(len(pit_models)), [_model_label(model) for model in pit_models])
+        axes[0, 0].set_xlim(0.0, 1.0)
+        axes[0, 0].set(title="导出的均值 PIT（非 PIT 分布；○EEG △HbO ▽HbR）", xlabel="各重复的均值 PIT", ylabel="模型")
     for key, values in sorted(coverages.items()):
-        values = sorted(values)
-        axes[0, 1].plot([value[0] for value in values], [value[1] for value in values], marker="o", linewidth=1.1, label=f"{_model_label(key[0])} · {_component_label(key[1])}")
+        grouped: dict[float, list[float]] = defaultdict(list)
+        for nominal, value in values:
+            grouped[nominal].append(value)
+        xs = sorted(grouped)
+        medians = [float(np.median(grouped[x])) for x in xs]
+        lows = [float(np.quantile(grouped[x], 0.25)) for x in xs]
+        highs = [float(np.quantile(grouped[x], 0.75)) for x in xs]
+        color = _model_color(key[0])
+        for x in xs:
+            raw = grouped[x]
+            jitter = np.linspace(-0.006, 0.006, len(raw)) if len(raw) > 1 else np.zeros(1)
+            axes[0, 1].scatter(np.asarray(jitter) + x, raw, color=color, s=12, alpha=0.28)
+        axes[0, 1].plot(xs, medians, marker=target_markers.get(key[1], "o"), linewidth=1.1, color=color, linestyle=MODEL_LINESTYLES.get(key[0], "-"), label=_model_label(key[0]) if key[1] == "eeg" else None)
+        axes[0, 1].fill_between(xs, lows, highs, color=color, alpha=0.10, linewidth=0)
     axes[0, 1].plot([0, 1], [0, 1], color="#555555", linestyle="--", linewidth=0.9, label="理想校准")
-    axes[0, 1].set(title="区间覆盖率校准", xlabel="名义覆盖率", ylabel="经验覆盖率")
+    axes[0, 1].set(title="区间覆盖率校准（○EEG △HbO ▽HbR）", xlabel="名义覆盖率", ylabel="经验覆盖率")
     proper_names = sorted({metric for values in proper.values() for metric, _value in values})
     for key, values in sorted(proper.items()):
         grouped: dict[str, list[float]] = defaultdict(list)
@@ -886,25 +1124,26 @@ def _plot_calibration(
                     np.full(len(metric_values), index),
                     metric_values,
                     color=_model_color(key[0]),
+                    marker=target_markers.get(key[1], "o"),
                     alpha=0.75,
-                    label=f"{_model_label(key[0])} · {_component_label(key[1])}" if index == 0 else None,
+                    label=_model_label(key[0]) if index == 0 and key[1] == "eeg" else None,
                 )
     axes[1, 0].set_xticks(
         range(len(proper_names)),
         [{"crps": "CRPS", "nll": "负对数似然"}.get(name, name) for name in proper_names],
     )
-    axes[1, 0].set(title="恰当评分（越低越好）", xlabel="指标类别", ylabel="评分值")
+    axes[1, 0].set(title="恰当评分（越低越好；○EEG △HbO ▽HbR）", xlabel="指标类别", ylabel="评分值（各目标原单位，不跨目标比较）")
     for key, values in sorted(risk.items()):
-        axes[1, 1].scatter(np.arange(len(values)), values, color=_model_color(key[0]), alpha=0.75, label=f"{_model_label(key[0])} · {_component_label(key[1])}")
+        axes[1, 1].scatter(np.arange(len(values)), values, color=_model_color(key[0]), marker=target_markers.get(key[1], "o"), alpha=0.75, label=_model_label(key[0]) if key[1] == "eeg" else None)
     axes[1, 1].axhline(0.0, color="#555555", linestyle="--", linewidth=0.8)
-    axes[1, 1].set(title="不确定性—风险秩相关", xlabel="记录序号", ylabel="Spearman / 风险指标")
+    axes[1, 1].set(title="不确定性—风险秩相关（○EEG △HbO ▽HbR）", xlabel="重复实验序号", ylabel="Spearman / 风险指标")
     for axis in axes.flat:
         if not axis.lines and not axis.collections:
             axis.text(0.5, 0.5, "calibration.csv 未提供该指标", transform=axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
         _legend_if_handles(axis, loc="best", fontsize=7)
     _style_axes(axes.flat)
-    dof_text = f"ν={dof:g}" if np.isfinite(dof) else "ν 未记录"
-    fig.suptitle(f"Student-t 预测校准：PIT、覆盖率与 proper score（{dof_text}）", fontsize=13)
+    dof_text = f"；T3a Student-t ν={dof:g}" if np.isfinite(dof) else ""
+    fig.suptitle(f"无伪影（clean）场景预测校准：各模型声明分布的 PIT、覆盖率与恰当评分（proper score）{dof_text}", fontsize=13)
     return _save(fig, output_dir, "校准_PIT_覆盖率")
 
 
@@ -924,34 +1163,50 @@ def _plot_parameters(
 ) -> Path:
     grouped = _parameter_rows(rows)
     profile_grouped = _parameter_rows(profile_rows)
+    status_labels = {
+        "identifiable": "可辨识",
+        "identified": "可辨识",
+        "non_identifiable": "不可辨识",
+        "not_identifiable": "不可辨识",
+        "boundary": "边界接触",
+        "prior_dominated": "先验主导",
+        "not_computed": "未计算",
+    }
     names = sorted(grouped)
     fig = plt.figure(figsize=(16.0, max(7.0, 2.0 * max(len(names), 1))), constrained_layout=True)
     grid = fig.add_gridspec(1, 2, width_ratios=(1.0, 1.65))
     recovery_axis = fig.add_subplot(grid[0, 0])
     profile_grid = grid[0, 1].subgridspec(max(1, len(names)), 1)
+    xlabel = "参数值（原单位）"
     if not names:
         recovery_axis.text(0.5, 0.5, "parameter_recovery.csv 未提供参数", transform=recovery_axis.transAxes, ha="center", va="center")
     for index, name in enumerate(names):
         values = grouped[name]
-        truth = np.asarray([_float(row, "true", "true_value", "truth", "parameter_truth") for row in values], dtype=float)
-        estimate = np.asarray([_float(row, "estimate", "posterior_mean", "parameter_estimate") for row in values], dtype=float)
-        sd = np.asarray([_float(row, "sd", "std", "parameter_sd") for row in values], dtype=float)
-        lower = np.asarray([_float(row, "lower", "lower_bound", "prior_lower") for row in values], dtype=float)
-        upper = np.asarray([_float(row, "upper", "upper_bound", "prior_upper") for row in values], dtype=float)
-        finite_bounds = np.isfinite(lower) & np.isfinite(upper) & (upper > lower)
-        scale_low = float(np.nanmin(lower[finite_bounds])) if np.any(finite_bounds) else np.nan
-        scale_high = float(np.nanmax(upper[finite_bounds])) if np.any(finite_bounds) else np.nan
+        best = [row for row in values if _text(row, "start_id", default="best") in {"", "best"}]
+        starts = [row for row in values if row not in best]
+        profile_source = profile_grouped.get(name, values)
+        profile_points = [
+            (_float(row, "grid_value", "profile_value", "parameter_value"), _float(row, "delta_objective", "profile_delta", "profile_objective"))
+            for row in profile_source
+        ]
+        profile_points = [(x, y) for x, y in profile_points if np.isfinite(x) and np.isfinite(y)]
+        profile_x = np.asarray([point[0] for point in profile_points], dtype=float)
+        scale_low = float(np.min(profile_x)) if profile_x.size else np.nan
+        scale_high = float(np.max(profile_x)) if profile_x.size else np.nan
         if np.isfinite(scale_low) and np.isfinite(scale_high) and scale_high > scale_low:
             transform = lambda array: (array - scale_low) / (scale_high - scale_low)
-            xlabel = "参数值（共享先验范围归一化）"
+            xlabel = "参数值（profile 网格范围归一化）"
             lower_marker, upper_marker = 0.0, 1.0
         else:
             transform = lambda array: array
-            xlabel = "参数值（原单位）"
             lower_marker = upper_marker = np.nan
+        truth = np.asarray([_float(row, "true", "true_value", "truth", "parameter_truth") for row in best], dtype=float)
+        estimate = np.asarray([_float(row, "estimate", "posterior_mean", "parameter_estimate") for row in best], dtype=float)
+        sd = np.asarray([_float(row, "sd", "std", "parameter_sd") for row in best], dtype=float)
         finite_estimate = np.isfinite(estimate)
         if np.any(finite_estimate):
-            positions = np.full(np.count_nonzero(finite_estimate), index, dtype=float)
+            count = np.count_nonzero(finite_estimate)
+            positions = index + (np.linspace(-0.12, 0.12, count) if count > 1 else np.zeros(1))
             recovery_axis.errorbar(
                 transform(estimate[finite_estimate]),
                 positions,
@@ -961,41 +1216,52 @@ def _plot_parameters(
                 alpha=0.8,
                 label="估计 ± SD" if index == 0 else None,
             )
+        start_estimates = np.asarray([_float(row, "estimate", "posterior_mean", "parameter_estimate") for row in starts], dtype=float)
+        finite_starts = np.isfinite(start_estimates)
+        if np.any(finite_starts):
+            recovery_axis.scatter(
+                transform(start_estimates[finite_starts]),
+                np.full(np.count_nonzero(finite_starts), index),
+                marker="o",
+                facecolors="none",
+                edgecolors="#999999",
+                s=18,
+                alpha=0.55,
+                label="多起点估计" if index == 0 else None,
+            )
         finite_truth = np.isfinite(truth)
         if np.any(finite_truth):
             recovery_axis.scatter(transform(truth[finite_truth]), np.full(np.count_nonzero(finite_truth), index), marker="x", color="#D55E00", s=42, label="真值" if index == 0 else None)
         if np.isfinite(lower_marker):
             recovery_axis.axvline(lower_marker, color="#777777", linestyle=":", linewidth=0.7)
             recovery_axis.axvline(upper_marker, color="#777777", linestyle=":", linewidth=0.7)
-        statuses = sorted({_text(row, "identifiability_status", "status", default="未声明") for row in values})
+        statuses = sorted({
+            status_labels.get(
+                _text(row, "identifiability_status", "status", default="未声明").lower(),
+                _text(row, "identifiability_status", "status", default="未声明"),
+            )
+            for row in best
+        })
         recovery_axis.text(1.02, index, ";".join(statuses), transform=recovery_axis.get_yaxis_transform(), va="center", fontsize=7)
         profile_axis = fig.add_subplot(profile_grid[index, 0])
-        profile_source = profile_grouped.get(name, values)
-        profile_points = [
-            (_float(row, "grid_value", "profile_value", "parameter_value"), _float(row, "delta_objective", "profile_delta", "profile_objective"))
-            for row in profile_source
-        ]
-        profile_points = [(x, y) for x, y in profile_points if np.isfinite(x) and np.isfinite(y)]
         if profile_points:
             profile_points.sort()
             profile_axis.plot([point[0] for point in profile_points], [point[1] for point in profile_points], marker="o", linewidth=1.0, color="#0072B2")
             profile_axis.axhline(0.0, color="#555555", linestyle="--", linewidth=0.8)
         else:
             profile_axis.text(0.5, 0.5, "无 profile 数据", transform=profile_axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
-        true_value = _float(values[0], "true", "true_value", "truth", "parameter_truth")
-        lower_value = _float(values[0], "lower", "lower_bound", "prior_lower")
-        upper_value = _float(values[0], "upper", "upper_bound", "prior_upper")
+        true_value = _float(best[0], "true", "true_value", "truth", "parameter_truth") if best else np.nan
         if np.isfinite(true_value):
             profile_axis.axvline(true_value, color="#D55E00", linestyle="-", linewidth=0.9, label="真值")
-        if np.isfinite(lower_value):
-            profile_axis.axvline(lower_value, color="#777777", linestyle=":", linewidth=0.7)
-        if np.isfinite(upper_value):
-            profile_axis.axvline(upper_value, color="#777777", linestyle=":", linewidth=0.7)
+        if np.isfinite(scale_low):
+            profile_axis.axvline(scale_low, color="#777777", linestyle=":", linewidth=0.7)
+        if np.isfinite(scale_high):
+            profile_axis.axvline(scale_high, color="#777777", linestyle=":", linewidth=0.7)
         profile_axis.set_ylabel(name)
         profile_axis.grid(True, color=GRID_COLOR, linewidth=0.6)
     recovery_axis.set_yticks(np.arange(len(names)), names)
     recovery_axis.set_xlabel(xlabel if names else "参数值")
-    recovery_axis.set_title("真值/估计/边界")
+    recovery_axis.set_title("真值、最佳估计与多起点（边界取 profile 网格）")
     _legend_if_handles(recovery_axis, loc="best", fontsize=8)
     recovery_axis.grid(axis="x", color=GRID_COLOR, linewidth=0.6)
     fig.suptitle("参数恢复、边界接触与目标函数切片\n切片固定另一参数；边界/先验主导的参数不得获得生理解释", fontsize=13)
@@ -1016,28 +1282,29 @@ def _plot_null_severity(
     metrics: Sequence[Mapping[str, Any]],
     null_metrics: Sequence[Mapping[str, Any]],
     output_dir: Path,
+    gate_thresholds: Mapping[str, Any] | None = None,
 ) -> Path:
-    stress = [row for row in metrics if np.isfinite(_float(row, "severity"))]
-    selected_metrics: list[str] = []
-    for candidate in ("artifact_attenuation", "truth_nrmse", "off_artifact_distortion"):
-        for row in stress:
-            metric = _metric_name(row)
-            if candidate in metric.lower() and metric not in selected_metrics:
-                selected_metrics.append(metric)
-                break
-    if not selected_metrics:
-        selected_metrics = [_first_metric(stress, ("recovery", "attenuation", "nrmse"))]
-    selected_metrics = selected_metrics[:3]
+    gate_thresholds = gate_thresholds or {}
+    stress = [
+        row for row in metrics
+        if _float(row, "severity") > 0.0
+        and _text(row, "stress_case") not in {"", "clean", "null", "missing_eeg", "missing_fnirs"}
+        and _normalise_component(_text(row, "target", "component")) in {"eeg", "hbo", "hbr"}
+    ]
+    selected_metrics = (
+        ("artifact_attenuation", "伪影衰减率（越高越好）", "min_artifact_attenuation"),
+        ("artifact_residual_relative_rmse", "伪影残差相对 RMSE（越低越好）", "max_artifact_residual_relative_rmse"),
+        ("off_artifact_distortion", "伪影区外失真（越低越好）", "max_off_artifact_distortion"),
+    )
     fig, axes = plt.subplots(2, 2, figsize=(14.0, 10.0), constrained_layout=True)
-    for panel, metric in enumerate(selected_metrics):
+    for panel, (metric, metric_label, threshold_key) in enumerate(selected_metrics):
         axis = axes.flat[panel]
-        candidates = [row for row in stress if _metric_name(row) == metric]
-        models = sorted({_text(row, "model_id", "model", default="t3a_balloon_robust") for row in candidates})
+        candidates = [row for row in stress if _metric_name(row) == metric and np.isfinite(_float(row, "value"))]
         plotted_model = False
-        for model in models:
+        for model in PANEL_MODELS:
             by_severity: dict[float, list[float]] = defaultdict(list)
             for row in candidates:
-                if _text(row, "model_id", "model", default="t3a_balloon_robust") != model:
+                if _text(row, "model_id", "model") != model:
                     continue
                 severity = _float(row, "severity")
                 value = _float(row, "value")
@@ -1049,72 +1316,68 @@ def _plot_null_severity(
             medians = [float(np.median(by_severity[x])) for x in xs]
             lows = [float(np.quantile(by_severity[x], 0.25)) for x in xs]
             highs = [float(np.quantile(by_severity[x], 0.75)) for x in xs]
-            axis.plot(xs, medians, marker="o", color=_model_color(model), linewidth=1.1, label=_model_label(model))
-            axis.fill_between(xs, lows, highs, color=_model_color(model), alpha=0.14, linewidth=0, label="重复实验 IQR")
+            for severity in xs:
+                raw = by_severity[severity]
+                jitter = np.linspace(-0.025, 0.025, len(raw)) if len(raw) > 1 else np.zeros(1)
+                axis.scatter(np.asarray(jitter) + severity, raw, color=_model_color(model), marker=MODEL_MARKERS[model], s=11, alpha=0.10, linewidths=0)
+            axis.plot(xs, medians, marker=MODEL_MARKERS[model], linestyle=MODEL_LINESTYLES[model], color=_model_color(model), linewidth=1.2, label=_model_label(model))
+            axis.fill_between(xs, lows, highs, color=_model_color(model), alpha=0.10, linewidth=0)
             plotted_model = True
-        metric_label = {
-            "artifact_attenuation": "伪影衰减率",
-            "truth_nrmse": "相对真值归一化误差",
-            "off_artifact_distortion": "伪影区外失真",
-        }.get(metric, metric)
-        axis.set_title(f"严重度：{metric_label}")
+        threshold = _float(gate_thresholds, threshold_key)
+        if np.isfinite(threshold):
+            axis.axhline(threshold, color="#555555", linestyle="--", linewidth=0.9, label=f"本次资格阈值 {threshold:g}")
+        axis.set_title(metric_label)
         axis.set_xlabel("伪影严重度")
         axis.set_ylabel("指标值")
         if plotted_model:
             _legend_if_handles(axis, loc="best", fontsize=7)
         else:
             axis.text(0.5, 0.5, "metrics.csv 未提供该严重度指标", transform=axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
-    for panel in range(len(selected_metrics), 3):
-        axis = axes.flat[panel]
-        axis.set_title("严重度指标不可用")
-        axis.text(0.5, 0.5, "metrics.csv 未提供更多严重度指标", transform=axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
     null_axis = axes.flat[3]
-    exported_null_types = sorted({_text(row, "null_type", "null_id", default="null") for row in null_metrics if _text(row, "null_type", "null_id", default="")})
-    null_metric = _first_metric(null_metrics, ("recovery", "association", "nrmse", "pcc"))
-    null_rows = [row for row in null_metrics if _metric_name(row) == null_metric]
-    null_types = sorted({_text(row, "null_type", "null_id", default="null") for row in null_rows})
-    for index, null_type in enumerate(null_types):
-        values = np.asarray([_float(row, "value") for row in null_rows if _text(row, "null_type", "null_id", default="null") == null_type], dtype=float)
-        values = values[np.isfinite(values)]
-        if not len(values):
-            continue
-        jitter = np.linspace(-0.08, 0.08, len(values)) if len(values) > 1 else np.zeros(1)
-        null_axis.scatter(
-            np.full(len(values), index) + jitter,
-            values,
-            alpha=0.75,
-            s=24,
-            label=NULL_LABELS.get(null_type, null_type),
-        )
-        threshold = np.asarray([_float(row, "threshold") for row in null_rows if _text(row, "null_type", "null_id", default="null") == null_type], dtype=float)
-        threshold = threshold[np.isfinite(threshold)]
-        if len(threshold):
-            null_axis.plot([index - 0.2, index + 0.2], [float(np.median(threshold))] * 2, color="#D55E00", linewidth=1.2)
+    null_rows = [
+        row for row in null_metrics
+        if _metric_name(row) == "cross_modal_driver_correlation" and np.isfinite(_float(row, "value"))
+    ]
+    null_types = [value for value in ("independent", "time_shift", "pairing") if any(_text(row, "null_type", "null_id") == value for row in null_rows)]
+    null_models = [model for model in PANEL_MODELS if any(_text(row, "model_id", "model") == model for row in null_rows)]
+    offsets = np.linspace(-0.14, 0.14, len(null_models)) if len(null_models) > 1 else np.zeros(max(len(null_models), 1))
+    for model_index, model in enumerate(null_models):
+        labelled = False
+        for index, null_type in enumerate(null_types):
+            values = np.asarray([
+                abs(_float(row, "value")) for row in null_rows
+                if _text(row, "model_id", "model") == model
+                and _text(row, "null_type", "null_id") == null_type
+            ], dtype=float)
+            values = values[np.isfinite(values)]
+            if not values.size:
+                continue
+            center = index + offsets[model_index]
+            jitter = np.linspace(-0.035, 0.035, len(values)) if len(values) > 1 else np.zeros(1)
+            null_axis.scatter(center + jitter, values, color=_model_color(model), marker=MODEL_MARKERS[model], alpha=0.45, s=20)
+            null_axis.hlines(float(np.median(values)), center - 0.09, center + 0.09, color=_model_color(model), linewidth=2.0, label=None if labelled else _model_label(model))
+            labelled = True
     if not null_rows:
-        message = "null_metrics.csv 未提供可用数值"
-        if exported_null_types:
-            message += "\n已导出类型：" + "、".join(NULL_LABELS.get(value, value) for value in exported_null_types)
-        null_axis.text(0.5, 0.5, message, transform=null_axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
-    null_axis.axhline(0.0, color="#555555", linestyle="--", linewidth=0.8)
-    null_metric_label = {
-        "cross_modal_driver_correlation": "跨模态驱动相关",
-    }.get(null_metric, null_metric)
-    null_axis.set(title=f"零假设分布：{null_metric_label}", xlabel="零假设类型", ylabel="指标值")
+        null_axis.text(0.5, 0.5, "null_metrics.csv 未提供可用数值", transform=null_axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
+    thresholds = np.asarray([_float(row, "threshold") for row in null_rows], dtype=float)
+    thresholds = thresholds[np.isfinite(thresholds)]
+    if thresholds.size:
+        null_axis.axhline(float(np.median(thresholds)), color="#555555", linestyle="--", linewidth=0.9, label=f"资格阈值 {np.median(thresholds):g}")
+    null_axis.set(title="零假设下的 |共享驱动相关|（越低越好）", xlabel="零假设类型", ylabel="绝对相关")
     null_axis.set_xticks(
         range(len(null_types)),
         [NULL_LABELS.get(value, value) for value in null_types],
         rotation=18,
         ha="right",
     )
+    unavailable = [model for model in PANEL_MODELS if model not in null_models]
+    if unavailable:
+        null_axis.text(0.99, 0.98, "NA：" + "、".join(_model_label(model) for model in unavailable), transform=null_axis.transAxes, ha="right", va="top", fontsize=7, color=MISSING_COLOR)
     _legend_if_handles(null_axis, loc="best", fontsize=7)
     _style_axes(axes.flat)
-    if exported_null_types:
-        null_summary = "实际导出的零假设：" + "、".join(NULL_LABELS.get(value, value) for value in exported_null_types)
-    else:
-        null_summary = "未导出可用零假设类型"
     fig.suptitle(
-        "受控伪影严重度与零假设对照\n"
-        f"点为重复实验；{null_summary}；零假设结果仅作边界对照，不把它当作活动证据",
+        "四模型受控伪影鲁棒性与零假设边界\n"
+        "前三图在每个正严重度汇总该指标所有适用伪影族/观测目标，四模型使用相同支持；点为重复、线为中位数、带为 IQR；零假设不作为活动证据",
         fontsize=13,
     )
     return _save(fig, output_dir, "null_严重度性能")
@@ -1198,18 +1461,21 @@ def _render(run_dir: Path, output_dir: Path | None = None) -> Path:
     calibration = _read_csv(run_dir / "calibration.csv")
     null_metrics = _read_csv(run_dir / "null_metrics.csv")
     gates = _read_gates(run_dir / "gates.json")
+    gate_thresholds = _read_gate_thresholds(run_dir / "resolved_config.yaml")
     if output_dir is None:
         output_dir = run_dir / "figures" / "t3a_p0"
     output_dir = Path(output_dir)
     _prepare_output_dir(output_dir)
     outputs = [
-        _plot_trajectories(trajectories, uncertainty, output_dir, gates),
+        _plot_typical_segment(trajectories, output_dir),
+        _plot_cross_model_metrics(metrics, output_dir),
+        _plot_trajectories(trajectories, uncertainty, calibration, output_dir, gates),
         _plot_states(states, uncertainty, output_dir, gates),
         _plot_noise_innovation(trajectories, output_dir),
         _plot_uncertainty(uncertainty, states, output_dir, gates),
         _plot_calibration(calibration, output_dir, gates),
         _plot_parameters(parameter_recovery, output_dir, profile_likelihood),
-        _plot_null_severity(metrics, null_metrics, output_dir),
+        _plot_null_severity(metrics, null_metrics, output_dir, gate_thresholds),
     ]
     spatial = _plot_spatial_if_available(trajectories, states, output_dir)
     if spatial is not None:
@@ -1226,12 +1492,14 @@ def _render(run_dir: Path, output_dir: Path | None = None) -> Path:
         "",
         "## 证据边界",
         "",
+        "- 典型片段固定为 clean 场景最小重复编号的居中 20 秒，不按任一模型表现选段。",
+        "- 跨模型共同指标只比较 EEG/HbO/HbR clean 观测坐标；状态坐标不等价，不合并成综合分数。",
         "- 观测图区分干净真值、污染输入和后验均值；重建误差不是主要资格指标。",
         "- 状态图中的 `r` 是 operational effective forcing，`s/f/v/p/q` 只按声明的方程和单位解释。",
         "- `p/q` 是归一化血管室坐标；HbO/HbR 必须由显式 forward map 得到，不能互换命名。",
         "- 创新是观测减后验残差；在 T-P3 未支持前不能自动称为已分离噪声。",
         "- 不确定性图区分 aleatoric、epistemic 和 total variance；固定参数协方差不等于 epistemic。",
-        "- 校准图按 Student-t 预测分布解释；PIT/coverage 使用导出的 calibration.csv，不重新拟合。",
+        "- 校准图按各模型声明的 Gaussian/Student-t 预测分布解释；PIT/coverage 使用导出的 calibration.csv，不重新拟合。",
         "- 参数边界接触或先验主导只能标记为不可辨识，不能获得生理学标签。",
         "- severity 与 null 图保留重复实验和 null 类型；不把 null 结果当作活动证据。",
         "- 空间图（若生成）仅在同时存在 channel_id、有限几何坐标和真实关联值时绘制；它是通道坐标上的关联/权重散点，不是全脑活动热图，也不是源定位。",
@@ -1272,92 +1540,120 @@ def _synthetic_self_check() -> None:
     with tempfile.TemporaryDirectory(prefix="t3a_balloon_p0_visual_check_") as temp:
         run_dir = Path(temp)
         rng = np.random.default_rng(17)
-        times = np.arange(32, dtype=float) / 10.0 - 1.6
+        times = np.arange(48, dtype=float) / 2.0 - 12.0
         trajectory_rows: list[dict[str, Any]] = []
         state_rows: list[dict[str, Any]] = []
         uncertainty_rows: list[dict[str, Any]] = []
-        model = "t3a_balloon_robust"
-        for index, time in enumerate(times):
-            clean = {
-                "eeg": np.sin(time),
-                "hbo": 0.4 * np.cos(time),
-                "hbr": -0.2 * np.sin(time),
-            }
-            artifact = 0.8 if 10 <= index < 15 else 0.0
-            row = {
-                "replicate_id": "replicate_00",
-                "scenario_id": "severity_1",
-                "model_id": model,
-                "time_s": time,
-                "artifact_mask": 10 <= index < 15,
-            }
-            for prefix, value in clean.items():
-                row.update({
-                    f"{prefix}_clean": value,
-                    f"{prefix}_obs": value + artifact,
-                    f"{prefix}_mean": value + 0.1 * artifact,
-                    f"artifact_{prefix}": artifact,
-                    f"{prefix}_valid": True,
-                })
-            trajectory_rows.append(row)
-            state_values = {
-                "r": np.sin(time),
-                "s": 0.2 * np.cos(time),
-                "f": 1.0 + 0.05 * np.sin(time),
-                "v": 1.0 + 0.03 * np.cos(time),
-                "p": 1.0 + 0.02 * np.sin(time),
-                "q": 1.0 - 0.015 * np.sin(time),
-            }
-            for name, value in state_values.items():
-                state_rows.append({
-                    "replicate_id": "replicate_00",
-                    "scenario_id": "severity_1",
-                    "model_id": model,
-                    "time_s": time,
-                    "state_name": name,
-                    "truth": value,
-                    "posterior_mean": value + rng.normal(scale=0.01),
-                    "state_variance": 0.01,
-                    "state_valid": True,
-                    "unit": next(unit for state, _label, unit, _rest in STATE_SPECS if state == name),
-                })
-            for component in ("eeg", "hbo", "hbr", "r", "s", "f", "v", "p", "q"):
-                uncertainty_rows.append({
-                    "replicate_id": "replicate_00",
-                    "scenario_id": "severity_1",
-                    "model_id": model,
-                    "time_s": time,
-                    "component": component,
-                    "aleatoric_variance": 0.01,
-                    "epistemic_variance": 0.002,
-                    "total_variance": 0.012,
-                    "status": "ok",
-                    "student_t_dof": 4,
-                })
-        metric_rows = []
-        for severity in (0.0, 0.5, 1.0, 2.0):
-            for metric, value in (("artifact_attenuation", 0.8 - 0.1 * severity), ("r_recovery", 0.9 - 0.1 * severity), ("off_mask_nrmse", 0.1 + 0.02 * severity)):
-                metric_rows.append({"model_id": model, "scenario_id": f"severity_{severity:g}", "replicate_id": "replicate_00", "stress_case": "spike", "severity": severity, "component": "r", "metric": metric, "value": value, "support_n": 32, "status": "ok"})
-        parameter_rows = []
-        for name, truth, lower, upper in (("kappa", 0.7, 0.2, 1.5), ("gamma", 0.4, 0.1, 1.0), ("tau", 2.0, 0.5, 5.0), ("alpha", 0.32, 0.2, 0.6), ("E0", 0.4, 0.2, 0.7)):
+        for model_index, model in enumerate(PANEL_MODELS):
+            for scenario in ("clean", "spike_s1"):
+                for index, time in enumerate(times):
+                    clean = {"eeg": np.sin(time), "hbo": 0.4 * np.cos(time / 3.0), "hbr": -0.2 * np.sin(time / 3.0)}
+                    artifact = 0.8 if scenario != "clean" and 18 <= index < 25 else 0.0
+                    row = {
+                        "replicate_id": "replicate_00", "scenario_id": scenario,
+                        "model_id": model, "time_s": time,
+                        "eeg_artifact_mask": bool(artifact), "hbo_artifact_mask": False,
+                        "hbr_artifact_mask": False,
+                    }
+                    for prefix, value in clean.items():
+                        injected = artifact if prefix == "eeg" else 0.0
+                        row.update({
+                            f"{prefix}_clean": value,
+                            f"{prefix}_obs": value + 0.04 * np.sin(3.0 * time) + injected,
+                            f"{prefix}_mean": value + 0.01 * (model_index + 1) * np.cos(2.0 * time) + 0.12 * injected,
+                            f"artifact_{prefix}": injected,
+                            f"{prefix}_valid": True,
+                        })
+                    trajectory_rows.append(row)
+                    for component in ("eeg", "hbo", "hbr"):
+                        uncertainty_rows.append({
+                            "replicate_id": "replicate_00", "scenario_id": scenario,
+                            "model_id": model, "time_s": time, "component": component,
+                            "aleatoric_variance": 0.01 if model == "T3a-balloon-robust" else np.nan,
+                            "epistemic_variance": 0.002 if model == "T3a-balloon-robust" else np.nan,
+                            "total_variance": 0.012, "status": "computed",
+                        })
+            for index, time in enumerate(times):
+                state_values = {
+                    "r": np.sin(time), "s": 0.2 * np.cos(time),
+                    "f": 1.0 + 0.05 * np.sin(time), "v": 1.0 + 0.03 * np.cos(time),
+                    "p": 1.0 + 0.02 * np.sin(time), "q": 1.0 - 0.015 * np.sin(time),
+                }
+                supported = ("r",) if model == "T2b-adaptive-legacy" else tuple(state_values) if model == "T3a-balloon-robust" else ()
+                for name in supported:
+                    value = state_values[name]
+                    state_rows.append({
+                        "replicate_id": "replicate_00", "scenario_id": "clean", "model_id": model,
+                        "time_s": time, "state_name": name, "truth": value,
+                        "posterior_mean": value + rng.normal(scale=0.01), "state_variance": 0.01,
+                        "state_valid": True,
+                        "unit": next(unit for state, _label, unit, _rest in STATE_SPECS if state == name),
+                    })
+                    uncertainty_rows.append({
+                        "replicate_id": "replicate_00", "scenario_id": "clean", "model_id": model,
+                        "time_s": time, "component": name, "aleatoric_variance": np.nan,
+                        "epistemic_variance": 0.01, "total_variance": np.nan, "status": "conditional_state_only",
+                    })
+        metric_rows: list[dict[str, Any]] = []
+        for replicate in range(2):
+            for model_index, model in enumerate(PANEL_MODELS):
+                for target_index, target in enumerate(("EEG", "HbO", "HbR")):
+                    base = 0.08 + 0.025 * model_index + 0.01 * target_index + 0.005 * replicate
+                    for metric, value in (
+                        ("clean_nrmse", base), ("corrupted_nrmse", 0.18 + 0.01 * target_index),
+                        ("truth_pcc", 0.96 - base), ("reconstruction_temporal_acf_error", base / 3.0),
+                        ("reconstruction_spectral_shape_error", base / 8.0),
+                    ):
+                        metric_rows.append({"model_id": model, "scenario_id": "clean", "replicate_id": replicate, "stress_case": "clean", "severity": 0.0, "target": target, "metric": metric, "value": value, "status": "computed"})
+                    for severity in (0.5, 1.0):
+                        for metric, value in (
+                            ("artifact_attenuation", 0.7 - 0.08 * model_index - 0.05 * severity),
+                            ("artifact_residual_relative_rmse", 0.3 + 0.08 * model_index + 0.05 * severity),
+                            ("off_artifact_distortion", 0.08 + 0.02 * model_index + 0.02 * severity),
+                        ):
+                            if target == "EEG" or metric == "off_artifact_distortion":
+                                metric_rows.append({"model_id": model, "scenario_id": f"spike_s{severity:g}", "replicate_id": replicate, "stress_case": "spike", "severity": severity, "artifact_scope": "eeg_only", "target": target, "metric": metric, "value": value, "status": "computed"})
+        calibration_rows: list[dict[str, Any]] = []
+        for replicate in range(2):
+            for model in PANEL_MODELS:
+                for target in ("EEG", "HbO", "HbR"):
+                    for nominal in (0.5, 0.8, 0.95):
+                        calibration_rows.append({
+                            "model_id": model, "group": "clean", "replicate_id": f"replicate_{replicate:02d}",
+                            "target": target, "nominal_level": nominal, "empirical_coverage": nominal - 0.02,
+                            "pit": 0.5, "crps": 0.1, "nll": 0.3, "uncertainty_risk_spearman": 0.5,
+                            "distribution": "Student-t" if model == "T3a-balloon-robust" else "Gaussian",
+                            "student_nu": 4 if model == "T3a-balloon-robust" else None, "status": "computed",
+                        })
+        parameter_rows: list[dict[str, Any]] = []
+        profile_rows: list[dict[str, Any]] = []
+        for name, truth, lower, upper in (("kappa_per_s", 0.7, 0.2, 1.5), ("tau_s", 2.0, 0.5, 5.0)):
+            parameter_rows.append({"model_id": "T3a-balloon-robust", "replicate_id": 0, "parameter_name": name, "true_value": truth, "estimate": truth + 0.02, "sd": 0.03, "lower": truth - 0.06, "upper": truth + 0.06, "start_id": "best", "identifiability_status": "identified"})
+            for start_id, estimate in enumerate((truth - 0.05, truth + 0.08)):
+                parameter_rows.append({"model_id": "T3a-balloon-robust", "replicate_id": 0, "parameter_name": name, "true_value": truth, "estimate": estimate, "start_id": start_id, "identifiability_status": "start_success"})
             for grid_value in np.linspace(lower, upper, 5):
-                parameter_rows.append({"model_id": model, "replicate_id": "replicate_00", "parameter": name, "true": truth, "estimate": truth + 0.02, "sd": 0.03, "lower": lower, "upper": upper, "grid_value": grid_value, "delta_objective": (grid_value - truth) ** 2, "identifiability_status": "identified"})
-        calibration_rows = [{"model_id": model, "scenario_id": "severity_1", "component": "r", "metric": f"pit_bin_{index:02d}", "value": 0.1, "support_n": 32, "student_t_dof": 4} for index in range(10)]
-        calibration_rows.extend({"model_id": model, "scenario_id": "severity_1", "component": "r", "metric": "coverage", "value": level, "nominal_level": level, "support_n": 32, "student_t_dof": 4} for level in (0.5, 0.8, 0.95))
-        calibration_rows.extend(({"model_id": model, "scenario_id": "severity_1", "component": "r", "metric": metric, "value": value, "support_n": 32, "student_t_dof": 4} for metric, value in (("crps", 0.1), ("nll", 0.3), ("uncertainty_risk_spearman", 0.5))))
-        null_rows = [{"model_id": model, "null_id": null_type, "null_type": null_type, "replicate_id": f"replicate_{index:02d}", "component": "r", "metric": "r_recovery", "value": value, "threshold": 0.5, "status": "fail"} for null_type, value in (("independent_pairing", 0.1), ("time_shift", 0.05), ("spatial_permutation", 0.08)) for index in range(3)]
+                profile_rows.append({"model_id": "T3a-balloon-robust", "replicate_id": 0, "parameter_name": name, "grid_value": grid_value, "delta_objective": (grid_value - truth) ** 2, "status": "computed"})
+        null_rows = [
+            {"model_id": model, "null_type": null_type, "replicate_id": replicate, "metric": "cross_modal_driver_correlation", "value": value + 0.01 * replicate, "threshold": 0.35, "status": "computed"}
+            for model, value in (("T2b-adaptive-legacy", 0.12), ("T3a-balloon-robust", 0.08))
+            for null_type in ("independent", "time_shift", "pairing") for replicate in range(3)
+        ]
         _write_csv(run_dir / "trajectories.csv", trajectory_rows)
         _write_csv(run_dir / "states.csv", state_rows)
         _write_csv(run_dir / "uncertainty.csv", uncertainty_rows)
         _write_csv(run_dir / "metrics.csv", metric_rows)
         _write_csv(run_dir / "parameter_recovery.csv", parameter_rows)
+        _write_csv(run_dir / "profile_likelihood.csv", profile_rows)
         _write_csv(run_dir / "calibration.csv", calibration_rows)
         _write_csv(run_dir / "null_metrics.csv", null_rows)
         (run_dir / "gates.json").write_text(json.dumps({"student_t_dof": 4, "gates": {"T-P0": "PASS", "T-P1": "PASS", "T-P2": "PENDING", "T-P3": "PENDING"}}, ensure_ascii=False), encoding="utf-8")
+        stress_rows = [row for row in trajectory_rows if row["scenario_id"] == "spike_s1" and row["model_id"] == "T3a-balloon-robust"]
+        assert np.any(_artifact_mask(stress_rows, "eeg"))
+        assert not np.any(_artifact_mask(stress_rows, "hbo"))
         output = _render(run_dir)
         for stem in MANDATORY_STEMS:
             assert (output / f"{stem}.png").exists(), stem
-            assert (output / f"{stem}.alt.txt").exists(), stem
+        assert not list(output.glob("*.alt.txt"))
         assert not list(output.glob("*.manifest.json"))
         assert not (output / "通道空间关联_边界.png").exists()
         explanation = (output / "可视化说明.md").read_text(encoding="utf-8")
