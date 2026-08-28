@@ -1252,10 +1252,10 @@ def _observation_metrics(case: SyntheticCase, prediction: CandidatePrediction) -
         corrupted_nrmse = _nrmse(truth, observed, valid)
         artifact_nrmse = _nrmse(truth, estimate, artifact_mask & valid)
         attenuation = float(1.0 - artifact_nrmse / max(_nrmse(truth, observed, artifact_mask & valid), 1e-8)) if np.any(artifact_mask & valid) else float("nan")
-        innovation = observed - estimate
+        observation_residual = observed - estimate
         artifact_support = artifact_mask & valid
         artifact_relative_rmse = (
-            _rmse(case.artifact[:, channel], innovation, artifact_support)
+            _rmse(case.artifact[:, channel], observation_residual, artifact_support)
             / max(float(np.sqrt(np.mean(case.artifact[artifact_support, channel] ** 2))), 1e-8)
             if np.any(artifact_support)
             else float("nan")
@@ -1615,7 +1615,7 @@ def _profile_rows(
                         ((free.kappa - numerical.kappa_prior_mean) / numerical.kappa_prior_sd) ** 2
                         + ((free.tau - numerical.tau_prior_mean) / numerical.tau_prior_sd) ** 2
                     )
-                    objective_values[parameter_name].append(-float(result.innovation_log_likelihood) + prior_penalty)
+                    objective_values[parameter_name].append(-float(result.predictive_log_likelihood) + prior_penalty)
             for parameter_name, grid in grids.items():
                 values = np.asarray(objective_values[parameter_name], dtype=np.float64)
                 finite = np.isfinite(values)

@@ -150,7 +150,7 @@ smallest runnable check must demonstrate:
 
 - continuous target construction before patching/tokenization;
 - exact canonical-key joins and distinct measurement, teacher, uncertainty,
-  innovation, token, and lag masks;
+  observation-residual, token, and lag masks;
 - no cross-modal read before either main tokenizer emits its representation;
   the offline joint teacher is the declared fit-fold-only exception and emits
   detached modality-specific targets;
@@ -346,7 +346,7 @@ aleatoric_variance
 epistemic_variance
 total_variance = aleatoric_variance + epistemic_variance
 observation_values
-innovation = observation_values - trajectory_mean
+observation_residual = observation_values - trajectory_mean
 nuisance_mean / nuisance_variance, when the candidate declares a nuisance state
 named masks and coordinate/channel identities
 fit, model/config, parameter, and calibration identities
@@ -365,9 +365,9 @@ physical_check_status
 `shared_driver_mean` is the operational `r(t)` estimate.
 `physiological_state_mean` contains only states actually present and identified
 in the fitted model. `trajectory_mean` is an observation-space posterior
-prediction, not a clean-ground-truth claim. `innovation` may be described as
-separated noise/artifact only to the extent supported by `T-P3`; otherwise it
-remains a residual.
+prediction, not a clean-ground-truth claim. `observation_residual` may be
+described as separated noise/artifact only to the extent supported by `T-P3`;
+otherwise it remains an unassigned observation residual.
 
 The contract uses **variance**, not an ambiguous `uncertainty` scalar. The
 legacy adapter mixes variance-like summaries while the current loss divides by
@@ -495,7 +495,7 @@ become the entire representation record.
 
 Coupling is tested only after the marginal tokenizer is frozen. The primary
 representation-level estimand is the subject-equal held-out proper-score
-increment for measured fNIRS innovation:
+increment for measured fNIRS observation residual:
 
 ```text
 q0(Y_F(t+h) | H_F_observation, H_F_source, phase/time/systemic controls)

@@ -100,8 +100,8 @@ flowchart LR
     nir1 -. "candidate" .-> fs["modality-specific low-rank self teacher<br/>LDS/neural-SSM family; label-blind, fit-fold only"]
     eeg10 -. "optional" .-> jt["privileged joint Croce candidate<br/>fit-only / ablation"]
     nir1 -. "optional" .-> jt
-    es --> eo["EEG teacher output<br/>trajectory + uncertainty + innovation"]
-    fs --> fo["fNIRS teacher output<br/>trajectory + uncertainty + innovation"]
+    es --> eo["EEG teacher output<br/>trajectory + uncertainty + observation residual"]
+    fs --> fo["fNIRS teacher output<br/>trajectory + uncertainty + observation residual"]
     jt -. "offline target only;<br/>never inference input" .-> eo
     jt -. "offline target only;<br/>never inference input" .-> fo
     eo --> se["EEG source path S_E"]

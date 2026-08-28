@@ -178,7 +178,7 @@ def test_missing_aware_smoother_keeps_finite_state_and_increases_uncertainty():
     assert np.all(np.isfinite(missing.total_variance))
     assert not missing.trajectory_valid_mask.any()
     assert np.all(missing.total_variance.mean(axis=0) > full.total_variance.mean(axis=0))
-    assert np.all(missing.innovation_valid_mask == missing_mask)
+    assert np.all(missing.observation_residual_valid_mask == missing_mask)
 
 
 def test_known_truth_driver_recovery_and_variance_identity():
@@ -187,6 +187,11 @@ def test_known_truth_driver_recovery_and_variance_identity():
     simulation = simulate_balloon(_driver(120), parameters, config=config, add_noise=False)
     result = smooth_balloon(simulation.observations, parameters, config=config)
     assert result.state_names == STATE_NAMES
+    np.testing.assert_allclose(
+        result.observation_residual,
+        simulation.observations - result.observation_mean,
+    )
+    assert np.isfinite(result.predictive_log_likelihood)
     assert np.corrcoef(simulation.states[:, 0], result.state_mean[:, 0])[0, 1] > 0.9
     assert np.corrcoef(simulation.states[:, 4], result.state_mean[:, 4])[0, 1] > 0.85
     np.testing.assert_allclose(

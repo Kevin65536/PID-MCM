@@ -90,9 +90,9 @@ Each modality m publishes one record with these fields:
 | observation_values | [T,C_m] float32 | measured target coordinate consumed by the teacher; EEG is channel×band envelope, fNIRS is HbO/HbR model coordinate |
 | trajectory_mean | [T,C_m] float32 | posterior/teacher dynamic trajectory $\widetilde O_m(t)$; emitted only where teacher support is valid |
 | trajectory_uncertainty | [T,C_m] float32 | non-negative predictive standard deviation, or a declared diagonal/covariance representation; never an unlabelled scalar |
-| innovation | [T,C_m] float32 | observation_values - trajectory_mean on the innovation-valid support; no implicit zero fill |
+| observation_residual | [T,C_m] float32 | observation_values - trajectory_mean on the observation-residual-valid support; no implicit zero fill |
 | coordinate_names / component_roles | [C_m] strings | stable order, channel identity, band or HbO/HbR role |
-| masks | named boolean arrays | measured, teacher, uncertainty, innovation, and any token/lag masks below |
+| masks | named boolean arrays | measured, teacher, uncertainty, observation residual, and any token/lag masks below |
 | teacher_mode | enum | native_baseline, self, or privileged_joint; native_baseline records the identity comparison arm and is not a dynamic-teacher claim |
 | fit provenance | manifest object | fit fold, parameter/config identity, target/code version, source identity, and label-use=false |
 
@@ -149,15 +149,15 @@ The named masks are distinct even when their arrays happen to be equal:
 | teacher_valid_mask | [T,C_m] | the frozen teacher emitted a finite trajectory at this point |
 | uncertainty_valid_mask | [T,C_m] | uncertainty is finite, non-negative, and calibrated under the declared convention |
 | trajectory_valid_mask | [T,C_m] | observation/teacher target can be used for state loss; typically teacher_valid_mask intersected with observation support |
-| innovation_valid_mask | [T,C_m] | observation_valid_mask intersected with trajectory and uncertainty support |
+| observation_residual_valid_mask | [T,C_m] | observation_valid_mask intersected with trajectory and uncertainty support |
 | token_valid_mask | [N_token] | support after an explicitly declared aggregation from the continuous target; no padding is observed data |
 | endpoint_aligned_lag_mask | [N_source,N_target] | source endpoint t and target endpoint t+tau are both valid under the declared lag; same-position shortcut masks are forbidden |
 | causal_valid_mask | [T] | only required for a strict-cutoff/future estimand; a full-window offline teacher cannot be labelled causal |
 
 Losses and metrics consume the mask belonging to their tensor. Missing,
-unsupported, padded, and zero values are never interchangeable. Innovation is
-undefined where either observation or trajectory support is absent; it is not
-silently replaced by zero.
+unsupported, padded, and zero values are never interchangeable. Observation
+residual is undefined where either observation or trajectory support is absent;
+it is not silently replaced by zero.
 
 ### Fit-fold rules
 
@@ -308,10 +308,10 @@ Every derived cache records:
 
 Any cache using the exploratory continuous-target interface must additionally
 record its schema, teacher_mode, time grid, trajectory/uncertainty/
-innovation field versions, every named mask, fit-fold and parameter/config IDs,
-native fNIRS provenance tuple, and whether the target was self or privileged
-joint. A cache without these fields remains a v1/legacy sidecar and cannot be
-joined under this candidate interface.
+observation-residual field versions, every named mask, fit-fold and
+parameter/config IDs, native fNIRS provenance tuple, and whether the target was
+self or privileged joint. A cache without these fields remains a v1/legacy
+sidecar and cannot be joined under this candidate interface.
 
 Raw data is immutable. Rebuildable caches may be removed after their manifest,
 summary, and retained-result status are recorded. Never clean

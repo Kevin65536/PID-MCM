@@ -107,6 +107,8 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
     assert root.find("svg:title", namespace).text.startswith("PST-DISCOVERY-v1")
     assert "P0 SUITE READY" in rendered
     assert "measured/protected 数据保持关闭" in rendered
+    assert "fNIRS observation residual" in rendered
+    assert "fNIRS innovation" not in rendered
     assert 'class="banner-box" fill="#FFF4E5"' in rendered
     for phrase in (
         "可辨识 r + s/f/v/p/q",

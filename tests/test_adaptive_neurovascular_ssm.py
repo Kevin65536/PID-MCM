@@ -55,6 +55,7 @@ def test_joint_smoother_recovers_delayed_signal_without_erasing_eeg():
     assert result.observation_predictive_std.shape == (len(driver), 3)
     assert np.all(np.isfinite(result.observation_predictive_std))
     assert np.all(result.observation_predictive_std > 0.0)
+    assert np.isfinite(result.predictive_log_likelihood)
 
     gauge = measurement_aligned_state_gauge(result, fit)
     np.testing.assert_allclose(gauge.states[:, 2], result.hbo_reconstructed, atol=1e-10)

@@ -76,7 +76,7 @@ class AdaptiveSmootherResult:
     eeg_reconstructed: np.ndarray
     hbo_reconstructed: np.ndarray
     hbr_reconstructed: np.ndarray
-    innovation_log_likelihood: float
+    predictive_log_likelihood: float
     observation_mode: str = "unknown"
 
 
@@ -324,19 +324,19 @@ def rts_smoother(
         if np.any(available):
             design = observation[available]
             noise = observation_cov[np.ix_(available, available)]
-            innovation = values[index, available] - design @ mean
-            innovation_cov = design @ covariance @ design.T + noise
-            innovation_precision = np.linalg.pinv(innovation_cov)
-            gain = covariance @ design.T @ innovation_precision
-            mean = mean + gain @ innovation
+            predictive_residual = values[index, available] - design @ mean
+            predictive_covariance = design @ covariance @ design.T + noise
+            predictive_precision = np.linalg.pinv(predictive_covariance)
+            gain = covariance @ design.T @ predictive_precision
+            mean = mean + gain @ predictive_residual
             covariance = covariance - gain @ design @ covariance
             covariance = (covariance + covariance.T) * 0.5
-            sign, logdet = np.linalg.slogdet(innovation_cov)
+            sign, logdet = np.linalg.slogdet(predictive_covariance)
             if sign > 0:
                 log_likelihood += -0.5 * (
-                    len(innovation) * np.log(2.0 * np.pi)
+                    len(predictive_residual) * np.log(2.0 * np.pi)
                     + logdet
-                    + float(innovation @ innovation_precision @ innovation)
+                    + float(predictive_residual @ predictive_precision @ predictive_residual)
                 )
         filtered_mean[index] = mean
         filtered_cov[index] = covariance
@@ -558,7 +558,7 @@ def apply_adaptive_ssm(
         eeg_reconstructed=reconstruction[:, 0],
         hbo_reconstructed=reconstruction[:, 1] * fit.hbo_std + fit.hbo_mean,
         hbr_reconstructed=reconstruction[:, 2] * fit.hbr_std + fit.hbr_mean,
-        innovation_log_likelihood=log_likelihood,
+        predictive_log_likelihood=log_likelihood,
         observation_mode=mode,
     )
 

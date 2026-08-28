@@ -372,7 +372,7 @@
       "id": "c0",
       "label": "C0 · Frozen q0 / q1",
       "details": [
-        "fNIRS innovation",
+        "fNIRS observation residual",
         "无 tokenizer gradient",
         "lag / pairing / spatial nulls"
       ],

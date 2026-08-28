@@ -276,9 +276,9 @@ class BalloonSmootherResult:
     the latent state covariance at the fixed fitted parameters.  It excludes
     parameter-estimation covariance; the latter remains in
     :class:`BalloonFit.parameter_covariance` and is not silently folded into
-    predictive intervals.  ``innovation`` is the posterior reconstruction
-    residual ``observation - trajectory_mean`` after RTS smoothing; the
-    one-step predictive residual used for the fit score is kept internal.
+    predictive intervals.  ``observation_residual`` is
+    ``observation - trajectory_mean`` after RTS smoothing; the one-step
+    predictive residual used for the fit score is kept separate.
     """
 
     state_names: tuple[str, ...]
@@ -290,20 +290,20 @@ class BalloonSmootherResult:
     aleatoric_variance: np.ndarray
     epistemic_variance: np.ndarray
     total_variance: np.ndarray
-    innovation: np.ndarray
+    observation_residual: np.ndarray
     observation_mask: np.ndarray
     teacher_valid_mask: np.ndarray
     uncertainty_valid_mask: np.ndarray
     trajectory_valid_mask: np.ndarray
-    innovation_valid_mask: np.ndarray
-    innovation_log_likelihood: float
+    observation_residual_valid_mask: np.ndarray
+    predictive_log_likelihood: float
     physical_checks: Mapping[str, Any]
     parameters: BalloonParameters
     uncertainty_method: str = (
         "Student-t IRLS extended-Kalman Laplace approximation; "
         "epistemic excludes parameter covariance"
     )
-    innovation_kind: str = "posterior_reconstruction_residual"
+    observation_residual_kind: str = "observation_minus_posterior_trajectory"
 
     @property
     def state_std(self) -> np.ndarray:
@@ -773,16 +773,16 @@ def _observation_update(
         )
         effective_noise = np.diag(np.square(scales) / weights)
         design = observation_jacobian(mean, parameters, spec)[indices]
-        innovation_covariance = _project_psd(design @ prior_cov @ design.T + effective_noise)
+        predictive_covariance = _project_psd(design @ prior_cov @ design.T + effective_noise)
         try:
-            gain = prior_cov @ design.T @ np.linalg.pinv(innovation_covariance)
+            gain = prior_cov @ design.T @ np.linalg.pinv(predictive_covariance)
         except np.linalg.LinAlgError:
-            gain = prior_cov @ design.T @ np.linalg.pinv(innovation_covariance + np.eye(len(indices)) * 1e-8)
+            gain = prior_cov @ design.T @ np.linalg.pinv(predictive_covariance + np.eye(len(indices)) * 1e-8)
         # Iterated EKF correction: linearize h at the current iterate while
         # keeping one fixed prior.  Omitting H(m-prior) would repeatedly
         # apply the same nonlinear residual and over-count the observation.
-        linearized_innovation = residual + design @ (mean - prior_mean)
-        mean = prior_mean + gain @ linearized_innovation
+        linearized_residual = residual + design @ (mean - prior_mean)
+        mean = prior_mean + gain @ linearized_residual
         identity = np.eye(_STATE_DIM, dtype=np.float64)
         covariance = _project_psd(
             (identity - gain @ design) @ prior_cov @ (identity - gain @ design).T
@@ -1009,12 +1009,12 @@ def smooth_balloon(
         epistemic_variance.shape,
     ).copy()
     total_variance = aleatoric_variance + epistemic_variance
-    innovation = values - observation_mean
-    innovation[~mask] = np.nan
+    observation_residual = values - observation_mean
+    observation_residual[~mask] = np.nan
     teacher_valid = np.all(np.isfinite(state_mean), axis=1)
     uncertainty_valid = np.isfinite(total_variance) & (total_variance >= 0.0)
     trajectory_valid = mask & np.isfinite(observation_mean)
-    innovation_valid = trajectory_valid & uncertainty_valid
+    observation_residual_valid = trajectory_valid & uncertainty_valid
     checks = _physical_checks(state_mean, parameters)
     return BalloonSmootherResult(
         state_names=STATE_NAMES,
@@ -1026,13 +1026,13 @@ def smooth_balloon(
         aleatoric_variance=aleatoric_variance,
         epistemic_variance=epistemic_variance,
         total_variance=total_variance,
-        innovation=innovation,
+        observation_residual=observation_residual,
         observation_mask=mask,
         teacher_valid_mask=np.broadcast_to(teacher_valid[:, None], (steps, _STATE_DIM)).copy(),
         uncertainty_valid_mask=uncertainty_valid,
         trajectory_valid_mask=trajectory_valid,
-        innovation_valid_mask=innovation_valid,
-        innovation_log_likelihood=float(log_likelihood),
+        observation_residual_valid_mask=observation_residual_valid,
+        predictive_log_likelihood=float(log_likelihood),
         physical_checks=checks,
         parameters=parameters,
     )
@@ -1062,16 +1062,16 @@ def _objective(
             config=config,
             observation_mask=mask,
         )
-        if not np.isfinite(result.innovation_log_likelihood):
+        if not np.isfinite(result.predictive_log_likelihood):
             return 1.0e12
         if not include_prior:
-            return -float(result.innovation_log_likelihood)
+            return -float(result.predictive_log_likelihood)
         kappa, tau = float(vector[0]), float(vector[1])
         prior_penalty = 0.5 * (
             ((kappa - config.kappa_prior_mean) / config.kappa_prior_sd) ** 2
             + ((tau - config.tau_prior_mean) / config.tau_prior_sd) ** 2
         )
-        return -float(result.innovation_log_likelihood) + prior_penalty
+        return -float(result.predictive_log_likelihood) + prior_penalty
     except (FloatingPointError, ValueError, np.linalg.LinAlgError):
         return 1.0e12
 

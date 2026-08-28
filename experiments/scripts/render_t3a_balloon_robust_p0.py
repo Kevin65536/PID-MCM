@@ -126,7 +126,7 @@ MANDATORY_STEMS = (
     "跨模型观测重建_共同指标",
     "观测真值后验_轨迹",
     "生理状态真值后验_r_s_f_v_p_q",
-    "噪声创新_伪影分离",
+    "噪声观测残差_伪影分离",
     "不确定性分解_观测状态",
     "校准_PIT_覆盖率",
     "参数恢复_多起点_profile",
@@ -863,7 +863,7 @@ def _plot_states(
     return _save(fig, output_dir, "生理状态真值后验_r_s_f_v_p_q")
 
 
-def _plot_noise_innovation(
+def _plot_observation_residual(
     trajectories: Sequence[Mapping[str, Any]],
     output_dir: Path,
 ) -> Path:
@@ -880,16 +880,29 @@ def _plot_noise_innovation(
             posterior = _array(rows, f"{prefix}_mean", f"{prefix}_posterior", f"{prefix}_estimate")
             artifact = _array(rows, f"artifact_{prefix}", f"{prefix}_artifact", "artifact")
             nuisance = _array(rows, f"nuisance_{prefix}", f"{prefix}_nuisance", f"{prefix}_nuisance_mean")
-            innovation = _array(rows, f"innovation_{prefix}", f"{prefix}_innovation")
-            if not np.any(np.isfinite(innovation)):
-                innovation = observed - posterior
+            observation_residual = _array(
+                rows,
+                f"observation_residual_{prefix}",
+                f"{prefix}_observation_residual",
+            )
+            if not np.any(np.isfinite(observation_residual)):
+                observation_residual = observed - posterior
             if np.any(np.isfinite(artifact)):
                 axis.plot(time, artifact, color="#CC79A7", linewidth=1.0, label="注入伪影/干扰真值")
             if np.any(np.isfinite(nuisance)):
                 axis.plot(time, nuisance, color="#009E73", linewidth=1.0, label="后验干扰状态")
-            if np.any(np.isfinite(innovation)):
-                axis.plot(time, innovation, color="#D55E00", linewidth=1.0, label="创新（观测−后验）")
-            if not any(np.any(np.isfinite(values)) for values in (artifact, nuisance, innovation)):
+            if np.any(np.isfinite(observation_residual)):
+                axis.plot(
+                    time,
+                    observation_residual,
+                    color="#D55E00",
+                    linewidth=1.0,
+                    label="观测残差（观测−后验）",
+                )
+            if not any(
+                np.any(np.isfinite(values))
+                for values in (artifact, nuisance, observation_residual)
+            ):
                 axis.text(0.5, 0.5, "该模型未输出可用诊断", transform=axis.transAxes, ha="center", va="center", color=MISSING_COLOR)
             axis.axhline(0.0, color="#555555", linewidth=0.7)
             _shade_mask(axis, time, _artifact_mask(rows, prefix))
@@ -900,11 +913,11 @@ def _plot_noise_innovation(
     _style_axes(axes.flat)
     scenario = _id_tuple(next(iter(next(iter(selected_raw.values()))), {}))[1] if selected_raw else "未记录"
     fig.suptitle(
-        "噪声、伪影与创新诊断\n"
-        f"场景：{scenario}；创新仅是观测−后验残差；只有在 T-P3 支持后才可称为已分离噪声",
+        "噪声、伪影与观测残差诊断\n"
+        f"场景：{scenario}；观测残差只有在 T-P3 支持后才可称为已分离噪声",
         fontsize=13,
     )
-    return _save(fig, output_dir, "噪声创新_伪影分离")
+    return _save(fig, output_dir, "噪声观测残差_伪影分离")
 
 
 def _uncertainty_component_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -1471,7 +1484,7 @@ def _render(run_dir: Path, output_dir: Path | None = None) -> Path:
         _plot_cross_model_metrics(metrics, output_dir),
         _plot_trajectories(trajectories, uncertainty, calibration, output_dir, gates),
         _plot_states(states, uncertainty, output_dir, gates),
-        _plot_noise_innovation(trajectories, output_dir),
+        _plot_observation_residual(trajectories, output_dir),
         _plot_uncertainty(uncertainty, states, output_dir, gates),
         _plot_calibration(calibration, output_dir, gates),
         _plot_parameters(parameter_recovery, output_dir, profile_likelihood),
@@ -1497,7 +1510,7 @@ def _render(run_dir: Path, output_dir: Path | None = None) -> Path:
         "- 观测图区分干净真值、污染输入和后验均值；重建误差不是主要资格指标。",
         "- 状态图中的 `r` 是 operational effective forcing，`s/f/v/p/q` 只按声明的方程和单位解释。",
         "- `p/q` 是归一化血管室坐标；HbO/HbR 必须由显式 forward map 得到，不能互换命名。",
-        "- 创新是观测减后验残差；在 T-P3 未支持前不能自动称为已分离噪声。",
+        "- 观测残差是观测减后验轨迹；在 T-P3 未支持前不能称为已分离噪声。",
         "- 不确定性图区分 aleatoric、epistemic 和 total variance；固定参数协方差不等于 epistemic。",
         "- 校准图按各模型声明的 Gaussian/Student-t 预测分布解释；PIT/coverage 使用导出的 calibration.csv，不重新拟合。",
         "- 参数边界接触或先验主导只能标记为不可辨识，不能获得生理学标签。",

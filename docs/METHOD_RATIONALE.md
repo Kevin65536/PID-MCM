@@ -241,7 +241,7 @@ No next SD-SVQ run is supported by this snapshot. A restart would require:
   atomic publication before measured access;
 - explicit competition among phase/history/systemic and physiological
   explanations;
-- a target such as held-out innovation beyond task phase and fNIRS history,
+- a target such as held-out predictive residual beyond task phase and fNIRS history,
   rather than visual token co-occurrence.
 
 Only a newly qualified continuous target may reopen the decision about VQ.
