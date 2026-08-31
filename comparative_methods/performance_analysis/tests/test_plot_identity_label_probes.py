@@ -29,7 +29,7 @@ def test_aggregate_keeps_probe_estimands_and_local_chance() -> None:
     assert by_key[("biot", "subject_closed_set")]["n"] == 2
 
 
-def test_run_writes_png_pdf_source_manifest_and_alt_text(tmp_path: Path) -> None:
+def test_run_writes_png_pdf_source_and_manifest_without_alt_text(tmp_path: Path) -> None:
     source = tmp_path / "metrics.csv"
     rows = _rows()
     with source.open("w", encoding="utf-8", newline="") as handle:
@@ -41,6 +41,5 @@ def test_run_writes_png_pdf_source_manifest_and_alt_text(tmp_path: Path) -> None
     assert len(summary) == 6
     assert (output / "identity_probe_macro_f1.png").stat().st_size > 0
     assert (output / "identity_probe_macro_f1.pdf").stat().st_size > 0
-    assert "upper-bound identity-retention" in (output / "alt_text.txt").read_text(encoding="utf-8")
     assert (output / "figure_manifest.json").is_file()
-
+    assert not list(output.glob("*alt*text*"))

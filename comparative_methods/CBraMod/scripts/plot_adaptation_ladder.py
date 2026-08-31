@@ -3,7 +3,7 @@
 
 The source ``report.json`` is treated as immutable input.  The script writes
 two matched figures (epoch trajectory and final-score dot plot), a CSV data
-table, alt text, and a provenance manifest.  It never selects the best epoch:
+table, and a provenance manifest.  It never selects the best epoch:
 the displayed final point is always the fixed-budget final epoch.
 """
 
@@ -321,14 +321,10 @@ def run(report_path: Path, output_dir: Path) -> dict[str, Any]:
     if data_path.exists():
         raise FileExistsError(f"refusing to overwrite figure data: {data_path}")
     write_data_csv(data_path, trajectories)
-    alt_path = output_dir / "adaptation_ladder_alt_text.md"
-    if alt_path.exists():
-        raise FileExistsError(f"refusing to overwrite alt text: {alt_path}")
-    alt_path.write_text("# Alt text\n\n" + alt_text(report, finals) + "\n", encoding="utf-8")
     trajectory_files = export_figure(make_trajectory(report, trajectories), output_dir / "adaptation_ladder_epoch_trajectory")
     final_files = export_figure(make_final_dotplot(report, finals), output_dir / "adaptation_ladder_final_scores")
     manifest = {
-        "schema": "cbramod_adaptation_ladder_figure_manifest_v1",
+        "schema": "cbramod_adaptation_ladder_figure_manifest_v2",
         "status": "complete",
         "created_at": utc_now(),
         "figure_type": "static_scientific_diagnostic",
@@ -356,7 +352,7 @@ def run(report_path: Path, output_dir: Path) -> dict[str, Any]:
             "styles": CAPACITY_STYLE,
         },
         "data_table": {"path": portable(data_path), "sha256": sha256_file(data_path)},
-        "alt_text": {"path": portable(alt_path), "sha256": sha256_file(alt_path), "text": alt_text(report, finals)},
+        "alt_text": alt_text(report, finals),
         "figures": {
             "epoch_trajectory": trajectory_files,
             "final_scores": final_files,

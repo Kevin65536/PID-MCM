@@ -840,29 +840,6 @@ def _plot_report(
     plt.close(figure)
 
 
-def _alt_text(
-    run_id: str,
-    duplicate: Mapping[str, Any],
-    metric_rows: Sequence[Mapping[str, Any]],
-    permutation_rows: Sequence[Mapping[str, Any]],
-) -> str:
-    unique = next((row for row in metric_rows if row.get("view") == "unique_sample" and row.get("direction") == "eeg_to_fnirs" and row.get("relation") == "exact_pair"), None)
-    duplicate_rate = float(duplicate.get("false_negative_pair_rate_if_diagonal_only", 0.0))
-    lines = [
-        f"# Alt text: EFRM hierarchical alignment — {run_id}",
-        "",
-        "The figure has four panels. Top-left shows macro-query AUC for the exact synchronized pair against all negatives and four hierarchical negative relations, with EEG-to-fNIRS and fNIRS-to-EEG bars. Top-right shows the corresponding relation-restricted MRR. Bottom-left compares observed EEG-to-fNIRS MRR with subject-block and record-block permutation null means. Bottom-right shows positive-minus-hardest-negative cosine margins by relation.",
-        "",
-        f"The exported validation contains {duplicate['row_count']} rows but only {duplicate['unique_sample_count']} unique sample IDs; {duplicate['duplicate_row_count_excess']} rows are repeated. If the diagonal alone were treated as positive, the off-diagonal duplicate-positive pair rate would be {duplicate_rate:.6f}.",
-    ]
-    if unique:
-        lines.append(
-        f"After stable sample-ID de-duplication, exact-pair EEG-to-fNIRS AUC against all non-positive candidates is {float(unique['auc']):.4f}, MRR is {float(unique['mrr']):.4f}, and the hardest-negative margin is {float(unique['hardest_margin']):.4f}."
-        )
-    lines.append("The relation pools can overlap; they are mechanism diagnostics rather than a mutually exclusive partition. Block permutation p-values are exploratory and are computed on the unique-sample view.")
-    return "\n".join(lines) + "\n"
-
-
 def analyze_one(
     evidence: Evidence,
     output_dir: Path,
@@ -950,9 +927,6 @@ def analyze_one(
         json.dumps(_jsonable(metrics_json), indent=2, sort_keys=True), encoding="utf-8"
     )
     _plot_report(evidence.run_id, metric_rows, permutation_rows, output_dir / "hierarchical_alignment")
-    (output_dir / "alt_text.md").write_text(
-        _alt_text(evidence.run_id, duplicate, metric_rows, permutation_rows), encoding="utf-8"
-    )
     output_files = sorted(
         path
         for path in output_dir.iterdir()
@@ -1121,13 +1095,6 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             })
         root_manifest["input_count"] = len(root_manifest["inputs"])
         output_root.mkdir(parents=True, exist_ok=True)
-        (output_root / "alt_text.md").write_text(
-            "# Alt text: EFRM hierarchical alignment batch\n\n"
-            "This directory contains one duplicate-aware analysis per Stage-A full public-validation artifact. "
-            "Each run subdirectory has CSV/JSON metrics, PNG/PDF plots, and a run-specific alt-text description. "
-            "The primary view de-duplicates by stable sample_id; the sensitivity view retains all rows while excluding duplicate sample IDs from negative pools.\n",
-            encoding="utf-8",
-        )
         summary_lines = [
             "# EFRM hierarchical alignment analysis",
             "",

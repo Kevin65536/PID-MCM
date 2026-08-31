@@ -10,7 +10,7 @@ fields are represented as empty cells in the tidy table and are called out in
 the report/manifest.
 
 The command-line entry point writes a compact, review-ready bundle consisting
-of a tidy CSV, JSON summary, PNG/PDF figures, alt text, a provenance manifest,
+of a tidy CSV, JSON summary, PNG/PDF figures, a provenance manifest,
 and a Markdown report.
 """
 
@@ -922,29 +922,11 @@ def _markdown_report(
         "- `trajectory.{png,pdf}` — primary legible figure for the four formal Stage-A runs (short labels; colour and line-style redundancy).",
         "- `trajectory_all_runs.{png,pdf}` — supplementary all-selected-run figure.",
         "- `alignment_geometry.{png,pdf}` — checkpoint-level AUC/MRR and geometry diagnostics.",
-        "- `alt_text.txt` — figure descriptions including missingness.",
         "- `manifest.json` — provenance, field availability, and source hashes.",
         "- `summary.json` — machine-readable run-level summary.",
         "",
     ]
     return "\n".join(lines)
-
-
-def _alt_text() -> str:
-    return (
-        "trajectory.png: Three vertically stacked line panels show the observed validation EEG "
-        "reconstruction loss, validation fNIRS reconstruction loss, and validation CLIP loss for "
-        "the four formal LODO Stage-A runs. Short labels (exclude-ST, exclude-REFED, exclude-Sim, "
-        "exclude-Visual) use both colour and line style. Each point comes from a logged completed "
-        "epoch; no alignment metric is copied or interpolated onto these curves.\n\n"
-        "trajectory_all_runs.png: Supplementary version of the same three panels for all selected "
-        "development, paper-reference, formal Stage-A, and source-reference runs. Loss scales are "
-        "not a valid cross-run ranking.\n\n"
-        "alignment_geometry.png: Four panels summarize only checkpoint-level alignment JSON rows. "
-        "They show positive-vs-negative AUC, EEG/fNIRS centered effective rank, first-axis energy "
-        "fraction, and bidirectional retrieval MRR. Runs without an exported checkpoint alignment "
-        "summary are represented by the explicit no-data message rather than an imputed value."
-    )
 
 
 def run_analysis(
@@ -993,7 +975,6 @@ def run_analysis(
     _plot_trajectory(all_rows, output)
     _plot_formal_stage_a_trajectory(all_rows, output)
     _plot_alignment(all_rows, output)
-    (output / "alt_text.txt").write_text(_alt_text() + "\n", encoding="utf-8")
     report_path = output / "REPORT.md"
     report_path.write_text(_markdown_report(source_root, output, all_rows, inventories, summary), encoding="utf-8")
     manifest = {

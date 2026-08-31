@@ -767,7 +767,6 @@ def analyze_evidence(
             "relative_crop_offset_profile_png": str(output / "relative_crop_offset_profile.png"),
             "relative_crop_offset_profile_pdf": str(output / "relative_crop_offset_profile.pdf"),
             "figure_manifest": str(output / "figure_manifest.json"),
-            "alt_text": str(output / "alt_text.md"),
         },
     }
     (output / "analysis_metrics.json").write_text(
@@ -820,9 +819,8 @@ def analyze_evidence(
         f"Matched-query coverage spans {min(coverage_values):.3f} to {max(coverage_values):.3f} across the predefined grid. "
         "The zero-offset point is the synchronized/event-relative crop baseline and must not be read as a physiological lag peak; physical lag is not identifiable from crop_start_s."
     )
-    (output / "alt_text.md").write_text(f"# Figure alt text\n\n{alt_text}\n", encoding="utf-8")
     figure_manifest = {
-        "schema": "efrm_lag_figure_manifest_v1",
+        "schema": "efrm_lag_figure_manifest_v2",
         "public_validation_only": True,
         "protected_accessed": False,
         "figure_base": str(output / "relative_crop_offset_profile"),
@@ -833,7 +831,7 @@ def analyze_evidence(
             }
             for suffix in ("svg", "png", "pdf")
         },
-        "alt_text_path": str(output / "alt_text.md"),
+        "alt_text": alt_text,
         "null_permutations": int(null_permutations),
         "coverage_fraction_range": [min(coverage_values), max(coverage_values)],
         "physical_lag_identifiable": False,
@@ -939,19 +937,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(capability, indent=2, sort_keys=True, default=_jsonable), encoding="utf-8"
     )
     aggregate_figures = []
-    aggregate_alt = [
-        "# EFRM lag-alignment figure set",
-        "",
-        "All panels are public-validation-only relative crop-offset proxies. Each uses 100 same-record block permutations in this run. `crop_start_s` is event/source-window-relative, so a 0 s peak is not a physiological lag peak and physical lag is not identifiable.",
-        "",
-    ]
     for row in reports:
         metrics_path = Path(str(row["artifacts"]["figure_manifest"]))
         if not metrics_path.is_file():
             continue
         manifest = _read_json(metrics_path)
         aggregate_figures.append(manifest)
-        aggregate_alt.append(f"- `{_short_run_label(row.get('evidence', {}).get('run_id'), metrics_path.parent.name)}`: `{metrics_path.parent / 'alt_text.md'}`")
     (output_root / "figure_manifest.json").write_text(
         json.dumps({
             "schema": "efrm_lag_figure_set_manifest_v1",
@@ -961,7 +952,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "figures": aggregate_figures,
         }, indent=2, sort_keys=True), encoding="utf-8"
     )
-    (output_root / "alt_text.md").write_text("\n".join(aggregate_alt) + "\n", encoding="utf-8")
     (output_root / "README.md").write_text(
         "# EFRM lag-alignment capability\n\n"
         "This directory contains public-only relative-crop-offset proxy analyses. `crop_start_s` is not an absolute acquisition timestamp; physical EEG→fNIRS lag remains unidentifiable until the re-export contract in `capability_report.json` is satisfied.\n",

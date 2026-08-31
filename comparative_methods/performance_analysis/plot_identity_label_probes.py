@@ -213,16 +213,6 @@ def _write_manifest(output: Path, source_csv: Path, summary: Sequence[Mapping[st
         "caveat": "subject_closed_set is a row-split upper-bound identity-retention diagnostic and does not exclude record/session overlap",
     }
     (output / "figure_manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-    alt = (
-        "Three-panel figure of macro-F1 from public motor-imagery feature probes for BIOT, CBraMod, REVE, and NormWear. "
-        "The first panel uses strict subject-group holdout for task labels, the second uses strict subject-group holdout for three session labels, "
-        "and the third uses a closed-set subject-ID row split in which each subject contributes rows to both train and test. "
-        "Points show means and vertical bars show descriptive standard deviations across five folds or repeats. "
-        "Method colors and marker shapes are redundant. Short dotted segments show local chance: 0.50 for two task classes, 0.333 for three session classes, "
-        "and 1/23 or 1/29 for the subject-ID panels according to the method cache. "
-        "The subject-ID panel is an upper-bound identity-retention diagnostic because record/session overlap was not excluded."
-    )
-    (output / "alt_text.txt").write_text(alt + "\n", encoding="utf-8")
 
 
 def run(source_csv: Path, output: Path) -> list[dict[str, Any]]:

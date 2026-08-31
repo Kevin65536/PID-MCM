@@ -805,7 +805,7 @@ def plot_value_minus_b0_heatmap(
                 label = f"{record.delta_b0:+.3f}\n{_status_code(record.terminal)}"
                 color = "white" if abs(record.delta_b0) > 0.55 * max_abs else "#202020"
             ax.text(j, i, label, ha="center", va="center", fontsize=8, color=color)
-    # Keep the policy and interpretation note in the manifest/alt text so it
+    # Keep the policy and interpretation note in the manifest so it
     # cannot collide with rotated method labels in the raster figure.
     fig.subplots_adjust(left=0.17, right=0.90, top=0.90, bottom=0.24)
     if stem is None:
@@ -930,8 +930,8 @@ def plot_descriptive_decomposition(
     ax.set_title("Complete-case SS proportions", fontsize=11)
     ax.legend(frameon=False, fontsize=8)
     ax.grid(axis="y", color="#dddddd", lw=0.7)
-    # Caption-level policy and inferential caveats are kept in the manifest and
-    # alt text rather than drawn over a panel baseline.
+    # Caption-level policy and inferential caveats stay in the manifest rather
+    # than being drawn over a panel baseline.
     fig.subplots_adjust(left=0.09, right=0.97, top=0.88, bottom=0.18, hspace=0.58, wspace=0.28)
     png, pdf = _save_figure(fig, output_dir, "descriptive_decomposition")
     alt = (
@@ -951,28 +951,6 @@ def plot_descriptive_decomposition(
         "complete_case_methods": raw_components.get("n_methods"),
         "complete_case_tasks": raw_components.get("n_tasks"),
     }
-
-
-def _write_alt_text(path: Path, figures: Sequence[Mapping[str, Any]]) -> None:
-    lines = [
-        "# Figure alt text",
-        "",
-        "These figures are frozen descriptive/post-hoc summaries of the protected aggregate; "
-        "they do not encode significance tests and do not treat folds as independent subjects.",
-        "",
-    ]
-    for figure in figures:
-        lines.extend(
-            [
-                f"## {figure['figure_id']}",
-                "",
-                str(figure["alt_text"]),
-                "",
-                f"PNG: `{figure['png']}`; PDF: `{figure['pdf']}`.",
-                "",
-            ]
-        )
-    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def run_diagnostics(
@@ -1070,10 +1048,8 @@ def run_diagnostics(
         figures.append(plot_value_minus_b0_heatmap(records, output_dir, metric=metric))
     if "macro_f1" in {record.metric for record in records}:
         figures.append(plot_descriptive_decomposition(records, fold_rows, summary, output_dir, metric="macro_f1"))
-    _write_alt_text(output_dir / "figure_alt_text.md", figures)
-
     manifest = {
-        "schema": "global_diagnostics_figure_manifest_v1",
+        "schema": "global_diagnostics_figure_manifest_v2",
         "analysis_id": "20260816_p0_global_diagnostics",
         "created_by": "comparative_methods/performance_analysis/global_diagnostics.py",
         "protected_data_policy": "frozen descriptive/post-hoc; no tuning; folds are not independent subjects",
@@ -1095,7 +1071,6 @@ def run_diagnostics(
             "fold_level": "fold_level.csv",
             "descriptive_decomposition_csv": "descriptive_decomposition.csv",
             "descriptive_decomposition_json": "descriptive_decomposition.json",
-            "figure_alt_text": "figure_alt_text.md",
         },
         "method_order": _ordered_methods(records),
         "task_order_by_metric": {

@@ -924,8 +924,7 @@ def write_report(
         "within-subject is left as an explicit gap and marked ×/NA.",
         "",
         "Input paths and SHA-256 fingerprints are recorded in `analysis_manifest.json`.",
-        f"Figure outputs: {', '.join(f'`{Path(path).name}`' for path in figure_paths)}. "
-        "Alt text is in `bridge_protocols_alt_text.md`.",
+        f"Figure outputs: {', '.join(f'`{Path(path).name}`' for path in figure_paths)}.",
         "",
         "## Interpretation guardrail",
         "",
@@ -936,47 +935,6 @@ def write_report(
         "analysis plan.",
     ])
     (output / "REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def write_alt_text(path: Path, summary_rows: Sequence[Mapping[str, Any]]) -> None:
-    """Write a compact text alternative for the two-panel static figure."""
-
-    lookup = {(row["task"], row["protocol"]): row for row in summary_rows}
-    lines = [
-        "# Alt text — STA-Net protocol bridge",
-        "",
-        "Two-panel point-and-error-bar plot. The y values are subject-level means and",
-        "the error bars are 95% percentile bootstrap intervals over subjects. Marker",
-        "shapes distinguish trial-random (circle), group-safe within-subject (square),",
-        "and strict cross-subject (triangle). No connecting lines imply a causal path.",
-        "Short dashed horizontal segments show task-specific chance: 0.5 for binary",
-        "tasks, 1/3 for n-back, and 1/4 for Visual.",
-        "",
-        "Classification panel (macro-F1), values in protocol order trial-random /",
-        "group-safe within-subject / strict cross-subject:",
-    ]
-    for task in CLASSIFICATION_TASKS:
-        values = []
-        for protocol in PROTOCOL_ORDER:
-            row = lookup[(task, protocol)]
-            if protocol == "group_safe_within_subject" and not row["three_protocol_bridge_eligible"]:
-                values.append("NA (existing within run has 11/16 subjects)")
-            else:
-                values.append(f"{float(row['estimate_subject_mean']):.4f}")
-        lines.append(f"- {TASK_LABELS[task]} (B0={CHANCE_LEVELS[task]:.4f}): " + " / ".join(values))
-    refed = [
-        f"{float(lookup[('refed_regression', protocol)]['estimate_subject_mean']):.4f}"
-        for protocol in PROTOCOL_ORDER
-    ]
-    lines.extend([
-        "",
-        "Regression panel (subject-level CCC), in the same protocol order:",
-        f"- REFED regression (CCC=0 baseline): " + " / ".join(refed),
-        "",
-        "The Visual within-subject marker is explicitly absent and replaced by an x/NA",
-        "annotation; its value is retained only in the machine-readable context table.",
-    ])
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def run_analysis(
@@ -994,7 +952,6 @@ def run_analysis(
     write_csv(output_root / "context_only_metrics.csv", result["context_rows"])
     write_csv(output_root / "missing_and_noncomparable.csv", result["missing_rows"])
     figure_paths = _plot_bridge(result["summary_rows"], output_root / "bridge_protocols")
-    write_alt_text(output_root / "bridge_protocols_alt_text.md", result["summary_rows"])
     inputs = _input_files(fivefold_root, within_root, personalized_root)
     input_manifest = [
         {"path": str(path.resolve()), "sha256": sha256(path), "size_bytes": path.stat().st_size}
@@ -1008,7 +965,6 @@ def run_analysis(
         "missing_and_noncomparable.csv",
         "bridge_protocols.png",
         "bridge_protocols.pdf",
-        "bridge_protocols_alt_text.md",
         "bridge_protocol_summary.json",
         "analysis_manifest.json",
         "REPORT.md",

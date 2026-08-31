@@ -56,7 +56,6 @@ common_requirements:
       - source_data
       - transformation_code
       - figure_manifest
-      - alt_text
       - color_redundancy_when_multiple_series
       - explicit_missing_values
     formats: [png, pdf]

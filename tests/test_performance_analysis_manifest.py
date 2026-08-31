@@ -38,7 +38,8 @@ def test_p0_manifest_requires_fail_closed_and_figure_provenance() -> None:
         "capability_report"
     )
     figure_requirements = set(requirements["plots"]["require"])
-    assert {"source_data", "transformation_code", "figure_manifest", "alt_text"}.issubset(
+    assert {"source_data", "transformation_code", "figure_manifest"}.issubset(
         figure_requirements
     )
+    assert "alt_text" not in figure_requirements
     assert requirements["plots"]["target_journal"] == "unresolved"

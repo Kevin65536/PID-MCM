@@ -185,11 +185,11 @@ class GlobalDiagnosticsTests(unittest.TestCase):
                 "descriptive_decomposition.png",
                 "descriptive_decomposition.pdf",
                 "figure_manifest.json",
-                "figure_alt_text.md",
                 "analysis_manifest.json",
             ]
             for name in expected:
                 self.assertTrue((output_dir / name).exists(), name)
+            self.assertFalse(list(output_dir.glob("*alt*text*")))
             self.assertEqual(manifest["protected_data_policy"].split(";")[0], "frozen descriptive/post-hoc")
             table = (output_dir / "task_method_table.csv").read_text(encoding="utf-8")
             self.assertIn("cbramod,", table)
@@ -201,4 +201,3 @@ class GlobalDiagnosticsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

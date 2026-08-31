@@ -186,7 +186,6 @@ def test_end_to_end_bundle_declares_no_interpolation_and_writes_figures(tmp_path
         "summary.json",
         "manifest.json",
         "REPORT.md",
-        "alt_text.txt",
         "trajectory.png",
         "trajectory.pdf",
         "trajectory_all_runs.png",
@@ -195,3 +194,4 @@ def test_end_to_end_bundle_declares_no_interpolation_and_writes_figures(tmp_path
         "alignment_geometry.pdf",
     ):
         assert (output / filename).is_file(), filename
+    assert not list(output.glob("*alt*text*"))
