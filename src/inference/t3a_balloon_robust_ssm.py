@@ -13,10 +13,11 @@ current contract, ``tau * dp/dt = f - f_out * p / v``.  It is intentionally
 not the alternative ``(f-f_out)*p/v`` linearized form used by the old
 adaptive implementation.
 
-Only ``kappa`` and ``tau`` are fit.  ``alpha``, ``E0``, ``gamma``, ``P0``,
-``Q0`` and the neural-driver/noise gauges are held in
-:class:`BalloonFixedParameters` and must be supplied by the executable
-experiment contract.  ``process_std`` is interpreted as a transformed-state
+The module-level :func:`fit_balloon` API fits only ``kappa`` and ``tau``.
+Other physiology values remain in :class:`BalloonFixedParameters`; an
+experiment runner may compare staged fixed-parameter variants under its own
+explicit contract.  ``P0``, ``Q0`` and the neural-driver/noise gauges remain
+contract-supplied.  ``process_std`` is interpreted as a transformed-state
 continuous diffusion standard deviation (per square-root second); the
 discrete covariance used by the filter is ``Q = process_std**2 * dt``.
 """
@@ -60,6 +61,8 @@ class BalloonFixedParameters:
     student_nu: float = 5.0
     eeg_loading: float = 1.0
     eeg_offset: float = 0.0
+    # Kept at the end to preserve positional construction of older callers.
+    neurovascular_gain: float = 1.0
 
     def validate(self) -> None:
         """Validate hard mathematical and observation-contract boundaries."""
@@ -68,6 +71,7 @@ class BalloonFixedParameters:
             "alpha": self.alpha,
             "E0": self.E0,
             "gamma": self.gamma,
+            "neurovascular_gain": self.neurovascular_gain,
             "P0": self.P0,
             "Q0": self.Q0,
             "driver_decay_per_s": self.driver_decay_per_s,
@@ -77,8 +81,8 @@ class BalloonFixedParameters:
         }
         if any(not np.isfinite(float(value)) for value in values.values()):
             raise ValueError("fixed Balloon parameters must be finite")
-        if self.alpha <= 0.0 or self.gamma <= 0.0:
-            raise ValueError("alpha and gamma must be positive")
+        if self.alpha <= 0.0 or self.gamma <= 0.0 or self.neurovascular_gain <= 0.0:
+            raise ValueError("alpha, gamma, and neurovascular_gain must be positive")
         if not 0.0 < self.E0 < 1.0:
             raise ValueError("E0 must lie strictly between zero and one")
         if self.P0 <= 0.0 or self.Q0 <= 0.0:
@@ -258,6 +262,7 @@ class BalloonFit:
             "alpha": float(self.parameters.fixed.alpha),
             "E0": float(self.parameters.fixed.E0),
             "gamma": float(self.parameters.fixed.gamma),
+            "neurovascular_gain": float(self.parameters.fixed.neurovascular_gain),
             "P0": float(self.parameters.fixed.P0),
             "Q0": float(self.parameters.fixed.Q0),
             "driver_decay_per_s": float(self.parameters.fixed.driver_decay_per_s),
@@ -365,6 +370,13 @@ def transformed_to_physical(state: Sequence[float] | np.ndarray) -> np.ndarray:
     """Map transformed ``(r,s,log f,log v,log p,log q)`` to physical state."""
 
     values = _as_vector(state, _STATE_DIM, "transformed state")
+    return _transformed_to_physical_unchecked(values)
+
+
+def _transformed_to_physical_unchecked(state: np.ndarray) -> np.ndarray:
+    """Map a known-valid transformed state without repeated shape checks."""
+
+    values = np.asarray(state, dtype=np.float64)
     positive = _safe_exp(values[2:])
     if np.any(np.asarray(positive) <= 0.0):
         raise FloatingPointError("transformed Balloon state underflowed to a non-positive compartment")
@@ -413,8 +425,17 @@ def balloon_rhs(
     if not np.isfinite(dt) or dt <= 0.0:
         raise ValueError("dt must be finite and positive")
     z = _as_vector(transformed_state, _STATE_DIM, "transformed_state")
+    return _balloon_rhs_unchecked(z, parameters)
+
+
+def _balloon_rhs_unchecked(
+    transformed_state: np.ndarray,
+    parameters: BalloonParameters,
+) -> np.ndarray:
+    """Evaluate dynamics after the caller has validated parameters and shape."""
+
     fixed, free = parameters.fixed, parameters.free
-    r, s, f, v, p, q = transformed_to_physical(z)
+    r, s, f, v, p, q = _transformed_to_physical_unchecked(transformed_state)
     f_out = float(v ** (1.0 / fixed.alpha))
     E, dE_df, flow_extraction = _extraction(f, fixed.E0)
     tau = free.tau
@@ -423,7 +444,7 @@ def balloon_rhs(
     rhs = np.asarray(
         [
             -fixed.driver_decay_per_s * r,
-            r - free.kappa * s - fixed.gamma * (f - 1.0),
+            fixed.neurovascular_gain * r - free.kappa * s - fixed.gamma * (f - 1.0),
             s / f,
             d / (tau * v),
             p_balance / (tau * p),
@@ -446,8 +467,17 @@ def balloon_rhs_jacobian(
 
     parameters.validate()
     z = _as_vector(transformed_state, _STATE_DIM, "transformed_state")
+    return _balloon_rhs_jacobian_unchecked(z, parameters)
+
+
+def _balloon_rhs_jacobian_unchecked(
+    transformed_state: np.ndarray,
+    parameters: BalloonParameters,
+) -> np.ndarray:
+    """Evaluate dynamics Jacobian after the caller has validated inputs."""
+
     fixed, free = parameters.fixed, parameters.free
-    r, s, f, v, p, q = transformed_to_physical(z)
+    r, s, f, v, p, q = _transformed_to_physical_unchecked(transformed_state)
     alpha, tau = fixed.alpha, free.tau
     f_out = float(v ** (1.0 / alpha))
     E, dE_df, flow_extraction = _extraction(f, fixed.E0)
@@ -455,7 +485,7 @@ def balloon_rhs_jacobian(
     v_ratio = f_out / v
     jacobian = np.zeros((_STATE_DIM, _STATE_DIM), dtype=np.float64)
     jacobian[0, 0] = -fixed.driver_decay_per_s
-    jacobian[1, 0] = 1.0
+    jacobian[1, 0] = fixed.neurovascular_gain
     jacobian[1, 1] = -free.kappa
     jacobian[1, 2] = -fixed.gamma * f
     jacobian[2, 1] = 1.0 / f
@@ -480,10 +510,10 @@ def _rk4_step(
     parameters: BalloonParameters,
     step: float,
 ) -> np.ndarray:
-    k1 = balloon_rhs(state, parameters, dt=step)
-    k2 = balloon_rhs(state + 0.5 * step * k1, parameters, dt=step)
-    k3 = balloon_rhs(state + 0.5 * step * k2, parameters, dt=step)
-    k4 = balloon_rhs(state + step * k3, parameters, dt=step)
+    k1 = _balloon_rhs_unchecked(state, parameters)
+    k2 = _balloon_rhs_unchecked(state + 0.5 * step * k1, parameters)
+    k3 = _balloon_rhs_unchecked(state + 0.5 * step * k2, parameters)
+    k4 = _balloon_rhs_unchecked(state + step * k3, parameters)
     output = state + step * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
     if not np.all(np.isfinite(output)):
         raise FloatingPointError("RK4 Balloon transition produced non-finite state")
@@ -496,20 +526,20 @@ def _rk4_step_with_jacobian(
     step: float,
     tangent: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    k1_state = balloon_rhs(state, parameters, dt=step)
-    k1_tangent = balloon_rhs_jacobian(state, parameters, dt=step) @ tangent
+    k1_state = _balloon_rhs_unchecked(state, parameters)
+    k1_tangent = _balloon_rhs_jacobian_unchecked(state, parameters) @ tangent
     state_2 = state + 0.5 * step * k1_state
     tangent_2 = tangent + 0.5 * step * k1_tangent
-    k2_state = balloon_rhs(state_2, parameters, dt=step)
-    k2_tangent = balloon_rhs_jacobian(state_2, parameters, dt=step) @ tangent_2
+    k2_state = _balloon_rhs_unchecked(state_2, parameters)
+    k2_tangent = _balloon_rhs_jacobian_unchecked(state_2, parameters) @ tangent_2
     state_3 = state + 0.5 * step * k2_state
     tangent_3 = tangent + 0.5 * step * k2_tangent
-    k3_state = balloon_rhs(state_3, parameters, dt=step)
-    k3_tangent = balloon_rhs_jacobian(state_3, parameters, dt=step) @ tangent_3
+    k3_state = _balloon_rhs_unchecked(state_3, parameters)
+    k3_tangent = _balloon_rhs_jacobian_unchecked(state_3, parameters) @ tangent_3
     state_4 = state + step * k3_state
     tangent_4 = tangent + step * k3_tangent
-    k4_state = balloon_rhs(state_4, parameters, dt=step)
-    k4_tangent = balloon_rhs_jacobian(state_4, parameters, dt=step) @ tangent_4
+    k4_state = _balloon_rhs_unchecked(state_4, parameters)
+    k4_tangent = _balloon_rhs_jacobian_unchecked(state_4, parameters) @ tangent_4
     output = state + step * (k1_state + 2.0 * k2_state + 2.0 * k3_state + k4_state) / 6.0
     output_tangent = tangent + step * (
         k1_tangent + 2.0 * k2_tangent + 2.0 * k3_tangent + k4_tangent
@@ -564,7 +594,17 @@ def observation_map(
     values = _as_vector(state, _STATE_DIM, "state")
     if np.any(values[2:] <= 0.0):
         raise ValueError("observation map requires positive f, v, p, and q")
-    r, _, _, _, p, q = values
+    return _observation_map_unchecked(values, parameters, spec)
+
+
+def _observation_map_unchecked(
+    state: np.ndarray,
+    parameters: BalloonParameters,
+    spec: BalloonObservationSpec,
+) -> np.ndarray:
+    """Map a known-valid physical state without repeated contract checks."""
+
+    r, _, _, _, p, q = state
     delta_hbt = parameters.fixed.P0 * (p - 1.0)
     delta_hbr = parameters.fixed.Q0 * (q - 1.0)
     delta_hbo = delta_hbt - delta_hbr
@@ -601,13 +641,25 @@ def observation_jacobian(
     parameters.validate()
     spec = (observation_spec or BalloonObservationSpec()).resolved(parameters.fixed)
     z = _as_vector(transformed_state, _STATE_DIM, "transformed_state")
-    _, _, f, v, p, q = transformed_to_physical(z)
+    return _observation_jacobian_unchecked(z, parameters, spec)
+
+
+def _observation_jacobian_unchecked(
+    transformed_state: np.ndarray,
+    parameters: BalloonParameters,
+    spec: BalloonObservationSpec,
+) -> np.ndarray:
+    """Build the observation Jacobian without repeated contract checks."""
+
+    _, _, f, v, p, q = _transformed_to_physical_unchecked(transformed_state)
     del f, v
     jacobian = np.zeros((_OBS_DIM, _STATE_DIM), dtype=np.float64)
     jacobian[0, 0] = float(spec.eeg_loading)
     jacobian[1, 4] = parameters.fixed.P0 * p
     jacobian[1, 5] = -parameters.fixed.Q0 * q
     jacobian[2, 5] = parameters.fixed.Q0 * q
+    if not np.all(np.isfinite(jacobian)):
+        raise FloatingPointError("observation Jacobian produced non-finite values")
     return jacobian
 
 
@@ -739,7 +791,7 @@ def _observation_update(
     prior_state_mean, prior_state_covariance = transformed_gaussian_moments(
         prior_mean, prior_cov
     )
-    prior_prediction = observation_map(prior_state_mean, parameters, spec)[indices]
+    prior_prediction = _observation_map_unchecked(prior_state_mean, parameters, spec)[indices]
     observation_matrix = _observation_physical_matrix(parameters, spec)
     prior_observation_covariance = (
         observation_matrix @ prior_state_covariance @ observation_matrix.T
@@ -763,7 +815,9 @@ def _observation_update(
     mean = prior_mean.copy()
     covariance = prior_cov.copy()
     for _ in range(int(config.irls_iterations)):
-        predicted = observation_map(transformed_to_physical(mean), parameters, spec)[indices]
+        predicted = _observation_map_unchecked(
+            _transformed_to_physical_unchecked(mean), parameters, spec
+        )[indices]
         residual = y - predicted
         weights = student_t_irls_weights(
             residual,
@@ -772,7 +826,7 @@ def _observation_update(
             floor=float(config.irls_weight_floor),
         )
         effective_noise = np.diag(np.square(scales) / weights)
-        design = observation_jacobian(mean, parameters, spec)[indices]
+        design = _observation_jacobian_unchecked(mean, parameters, spec)[indices]
         predictive_covariance = _project_psd(design @ prior_cov @ design.T + effective_noise)
         try:
             gain = prior_cov @ design.T @ np.linalg.pinv(predictive_covariance)
@@ -885,8 +939,8 @@ def simulate_balloon(
     for index, value in enumerate(values):
         transformed = transformed.copy()
         transformed[0] = float(value)
-        states[index] = transformed_to_physical(transformed)
-        clean[index] = observation_map(states[index], parameters, spec)
+        states[index] = _transformed_to_physical_unchecked(transformed)
+        clean[index] = _observation_map_unchecked(states[index], parameters, spec)
         if index + 1 < len(values):
             transformed = rk4_transition(transformed, parameters, config)
     generator = rng if rng is not None else np.random.default_rng(0)
@@ -995,7 +1049,9 @@ def smooth_balloon(
         np.diagonal(state_covariance, axis1=1, axis2=2),
         0.0,
     )
-    observation_mean = np.vstack([observation_map(row, parameters, spec) for row in state_mean])
+    observation_mean = np.vstack(
+        [_observation_map_unchecked(row, parameters, spec) for row in state_mean]
+    )
     epistemic_variance = np.zeros((steps, _OBS_DIM), dtype=np.float64)
     observation_matrix = _observation_physical_matrix(parameters, spec)
     for index in range(steps):

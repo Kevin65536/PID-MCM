@@ -7,12 +7,20 @@ physiology-semantic tokenizer generation. The plan is limited to physical-teache
 qualification, source/observation tokenization, and coupling-prior retention. It
 does not use downstream task performance as a training or selection endpoint.
 
-The synthetic-only P0 launcher and configuration are ready for formal execution;
-measured and protected-data access remain closed. Before any measured run,
-the unresolved split registry, non-inferiority margins, primary lag/horizon, and
-compute budget listed below must be frozen in one executable contract and pass
-the software/synthetic gate. Subjects 24--29 and every protocol-owned protected
-surface remain closed.
+Two bounded SSM entry points are now registered. The synthetic P0 launcher
+remains the qualification path; the measured reconstruction/null launcher is a
+nonprotected development diagnostic with its own executable contract. The
+measured diagnostic uses only the registered development subjects, fits on
+subjects 01--18, applies frozen objects to subjects 19--23, and keeps subjects
+24--29 closed. Its outputs are exploratory reconstruction and null evidence;
+they are not clean truth, teacher qualification, or a physical-teacher claim.
+Protected data and every other protected surface remain closed.
+
+The measured diagnostic does not replace the synthetic qualification gates or
+authorize tokenizer promotion. Any future measured confirmation or physical
+teacher qualification still requires the unresolved margins, primary
+estimand, calibration, and compute decisions below to be frozen in a separate
+contract.
 
 ## Fixed question and decision target
 
@@ -173,8 +181,10 @@ smallest runnable check must demonstrate:
 - config/target/summary serialization, atomic publication, and an explicit
   incomplete-run state.
 
-Only P0 is authorized by this design. Measured smoke work requires the later
-executable contract; protected evaluation requires a separate explicit request.
+P0 remains the qualification path. The separately registered measured
+reconstruction/null diagnostic may run only on its nonprotected development
+split and remains decision-ineligible; it cannot open protected data or promote
+a teacher. Protected evaluation requires a separate explicit request.
 
 ## T: physical-teacher selection
 
@@ -233,7 +243,7 @@ Those papers define the model family; their fitted prior means are not treated
 as universal human measurement ranges.
 
 ```text
-ds/dt       = r - kappa * s - gamma * (f - 1)
+ds/dt       = beta * r - kappa * s - gamma * (f - 1)
 df/dt       = s
 f_out       = v^(1/alpha)
 tau * dv/dt = f - f_out
@@ -245,13 +255,14 @@ domain: f > 0; 0 < E0 < 1; 0 < E(f, E0) < 1
 rest:   r = s = 0; f = v = p = q = 1
 ```
 
-Here `r` is the effective operational forcing obtained after absorbing the
-usual neural-efficacy factor into the shared driver; it is not measured firing.
+Here `r` is the shared neural state in the fixed EEG loading/variance gauge; it
+is not measured firing. `beta` is a dimensionless effective neural-to-vascular
+gain in that gauge, not a molecular efficacy constant.
 `s = df/dt` is the vasoactive signal; `f` is inflow normalized to rest; `v` is
 normalized venous Balloon volume; and `p/q` are the normalized total-Hb/deoxy-Hb
 model coordinates of that compartment. With time in seconds, `f/v/p/q` are
-dimensionless, `s` has units s^-1, `r` and `gamma` have units s^-2, `kappa`
-has units s^-1, and `tau` has units s. `tau` is the resting transit constant
+dimensionless, `s` has units s^-1, `r` and `gamma` have units s^-2, `beta` is
+dimensionless, `kappa` has units s^-1, and `tau` has units s. `tau` is the resting transit constant
 `V0/F0` of the modeled venous Balloon, not whole-region or whole-brain mean
 transit time. `alpha` is its dimensionless outflow-volume exponent. A numeric
 prior from another state/time scaling is usable only after its unit conversion
@@ -302,11 +313,16 @@ The parameter contract separates three kinds of restriction:
   condition, primary source, and prior parameterization in the executable
   contract. A posterior pressed against a bound or unchanged from its prior is
   not evidence that the parameter was measured.
-- **Initial free-parameter limit:** keep `alpha`, `E0`, `gamma`, `P0/Q0`, and
-  the optical scale fixed, externally calibrated, or explicitly
-  non-interpreted; fit only `kappa` and `tau` until `T-P2` supports additional
-  identifiability. `p` has no separate free dynamic parameter in `T3a`. Add one
-  parameter at a time, never a correlated block.
+- **Measured exploratory release ladder:** retain `P0/Q0`, EEG loading, driver
+  scale, noise, and Student-t degrees of freedom as fit-cohort gauges. Compare
+  the fixed model first, then the single-parameter `beta`, `kappa`, and `tau`
+  fits, then `beta+kappa+tau`, followed by one-at-a-time additions of `gamma`
+  and `alpha`. Release `E0` only as a final strong-prior diagnostic because the
+  current standardized fNIRS coordinate cannot establish absolute OEF. Each
+  subject shares one parameter vector across independently reset trials. A
+  later stage cannot be retained merely for reconstruction gain when its
+  posterior is boundary-bound, prior-dominated, or compensatory. `p` has no
+  separate free dynamic parameter in `T3a`.
 
 Names must not overstate what the equations identify. `kappa` and `gamma` are
 lumped model coefficients, not direct molecular vasodilation rates; `E0` is the
@@ -594,13 +610,14 @@ Do not reactivate or rename an E0--E2/R-series YAML, archived source/observation
 runner, or old coupling suite. There is no need for a manager, plugin layer,
 parallel results root, or separate authorization file.
 
-## Unresolved before a measured contract
+## Unresolved before measured qualification or confirmation
 
-The synthetic P0 contract is executable. The following values remain
-explicitly unresolved and block measured execution, not synthetic P0:
+The synthetic P0 contract and the bounded measured diagnostic contract are
+executable. The following values remain unresolved for measured qualification
+or confirmation and do not change the diagnostic's exploratory status:
 
 1. the exact nonprotected dataset and subject/record split providing a genuinely
-   fresh confirmation set;
+   fresh confirmation set beyond the registered development diagnostic;
 2. the source-frozen soft priors, fixed versus free parameter list, parameter
    identifiability/SBC criteria, and numerical `r(t)` or physiological-state
    perturbation limits for `T-G1`--`T-G3`;
@@ -620,9 +637,19 @@ live in
 [`evaluate_t3a_balloon_robust_p0.py`](../experiments/evaluate_t3a_balloon_robust_p0.py),
 and
 [`render_t3a_balloon_robust_p0.py`](../experiments/scripts/render_t3a_balloon_robust_p0.py).
-The next step is a formal synthetic P0 run and gate interpretation. `T3b`,
-`T3c`, and `T5` enter only after their declared trigger. This is not a Croce
-real-data run, a VQ sweep, or a protected evaluation.
+The bounded measured reconstruction/null diagnostic is registered in
+[`t3_measured_reconstruction_null_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml)
+and
+[`evaluate_t3_measured_reconstruction_null.py`](../experiments/evaluate_t3_measured_reconstruction_null.py).
+It uses the canonical measured loader with `raw_with_ocular_artifact`, the
+01--18 fit / 19--23 population pure-apply split, and declared independent,
+pairing, and time-shift nulls. The measured non-circular time-shift comparison
+scores the paired and shifted targets only on their common finite support; its
+100-point support is not pooled with the 200-point independent/pairing nulls.
+Its result is a nonprotected exploratory
+diagnostic and is not a Croce/Balloon qualification, clean-ground-truth claim,
+or protected evaluation. `T3b`, `T3c`, and `T5` enter only after their declared
+triggers.
 
 ## Historical lifecycle boundary
 

@@ -112,9 +112,14 @@ must be labeled separately in tables and prose.
 
 ## Aggregation and uncertainty
 
-The aggregation path is exactly window/fold → subject → task cell. A subject's
-windows are combined before any group estimate, and subjects receive equal
-weight. Group intervals use 10,000 deterministic subject-bootstrap draws.
+The aggregation path is exactly window/fold → subject → task cell. For
+dimensionless window-level reliability metrics such as local-mask NRMSE, a
+subject's windows are combined by an explicitly reported arithmetic mean rather
+than concatenated into an artificial trajectory; subjects then receive equal
+weight. Additive sufficient statistics may instead be pooled when the cell
+contract says so. Group intervals use 10,000 deterministic subject-bootstrap
+draws when bootstrap intervals are claimed; descriptive diagnostics may report
+the subject median and IQR instead.
 
 Trajectory spread has three separately named meanings:
 
@@ -138,9 +143,10 @@ Every completed cell produces:
 
 - fold/window, subject, task-summary, and time-course CSV tables;
 - trajectories with observed, reconstructed, state SD, and predictive SD;
-- bootstrap draws in NPZ form;
-- resolved config, split inventory, source/data hashes, software identity, and
-  `protected_open=false` in the manifest;
+- bootstrap draws in NPZ form when inferential bootstrap intervals are claimed;
+- resolved config, split inventory, software/runtime identity, and
+  `protected_data_opened=false` in the manifest; file/data hashes are not part
+  of the project contract;
 - one figure format per figure (PNG by default, or SVG when explicitly
   requested) and source tables;
 - a summary that binds every numeric statement to the generated artifacts.

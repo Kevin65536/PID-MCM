@@ -136,21 +136,20 @@ def _git_payload() -> dict[str, Any]:
 
 def _load_trials(config: Mapping[str, Any]) -> tuple[dict[str, dict[str, list[Trial]]], list[dict[str, Any]]]:
     data_cfg = config["data"]
+    cache_root = Path(str(data_cfg["cache_root"]))
+    if not cache_root.is_absolute():
+        cache_root = REPO_ROOT / cache_root
     grouped: dict[str, dict[str, list[Trial]]] = {}
     contracts: list[dict[str, Any]] = []
     baseline_n = int(round(float(data_cfg["baseline_duration_s"]) * 10.0))
     for condition in data_cfg["conditions"]:
         dataset = UnifiedPhysiologyWindowDataset(
-            cache_root=data_cfg["cache_root"],
+            cache_root=cache_root,
             dataset_ids=(condition["dataset_id"],),
             window_duration_s=float(data_cfg["window_duration_s"]),
             window_offset_s=float(data_cfg["window_offset_s"]),
             eeg_signal_branch=str(condition["eeg_signal_branch"]),
         )
-        contracts.append({
-            "condition_id": condition["condition_id"],
-            **dataset.contract_summary(),
-        })
         allowed_subjects = {str(value) for value in condition["subjects"]}
         selected = []
         for index, ref in enumerate(dataset.windows):
@@ -161,6 +160,12 @@ def _load_trials(config: Mapping[str, Any]) -> tuple[dict[str, dict[str, list[Tr
             if str(ref.event.get("label")) != str(condition["target_label"]):
                 continue
             selected.append(index)
+        selected.sort(key=lambda index: (
+            dataset.windows[index].record.canonical_subject_id,
+            dataset.windows[index].record.base_record_id,
+            int(dataset.windows[index].event.get("event_index", -1)),
+            float(dataset.windows[index].window_offset_s),
+        ))
 
         per_subject: dict[str, list[Trial]] = defaultdict(list)
         for index in selected:
@@ -205,6 +210,12 @@ def _load_trials(config: Mapping[str, Any]) -> tuple[dict[str, dict[str, list[Tr
             if len(trials) < 3:
                 raise RuntimeError(f"{condition['condition_id']}:{subject} has only {len(trials)} trials")
         grouped[str(condition["condition_id"])] = dict(per_subject)
+        # Snapshot after selected records have been loaded so branch/fallback
+        # counters describe the data actually consumed by this run.
+        contracts.append({
+            "condition_id": condition["condition_id"],
+            **dataset.contract_summary(),
+        })
     return grouped, contracts
 
 

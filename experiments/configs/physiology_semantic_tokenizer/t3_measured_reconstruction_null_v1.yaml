@@ -1,0 +1,213 @@
+schema: t3_measured_reconstruction_null_v1
+
+experiment:
+  name: t3_measured_reconstruction_null_v1
+  scope: measured_development_exploratory
+  measured_data_enabled: true
+  protected_data_enabled: false
+  overwrite: false
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  window_duration_s: 20.0
+  window_offset_s: -5.0
+  baseline_duration_s: 5.0
+  task_duration_s: 10.0
+  conditions:
+    - condition_id: single_trial_ma_session_01
+      dataset_id: eeg_fnirs_single_trial
+      subjects:
+        - subject_01
+        - subject_02
+        - subject_03
+        - subject_04
+        - subject_05
+        - subject_06
+        - subject_07
+        - subject_08
+        - subject_09
+        - subject_10
+        - subject_11
+        - subject_12
+        - subject_13
+        - subject_14
+        - subject_15
+        - subject_16
+        - subject_17
+        - subject_18
+        - subject_19
+        - subject_20
+        - subject_21
+        - subject_22
+        - subject_23
+      fit_subjects:
+        - subject_01
+        - subject_02
+        - subject_03
+        - subject_04
+        - subject_05
+        - subject_06
+        - subject_07
+        - subject_08
+        - subject_09
+        - subject_10
+        - subject_11
+        - subject_12
+        - subject_13
+        - subject_14
+        - subject_15
+        - subject_16
+        - subject_17
+        - subject_18
+      validation_subjects:
+        - subject_19
+        - subject_20
+        - subject_21
+        - subject_22
+        - subject_23
+      protected_subjects:
+        - subject_24
+        - subject_25
+        - subject_26
+        - subject_27
+        - subject_28
+        - subject_29
+      record_id: session_01
+      target_label: MA
+      eeg_signal_branch: raw_with_ocular_artifact
+      max_trials_per_subject: 10
+
+analysis:
+  models: [T0, T1, T2b, T3a]
+  modes: [joint, center_masked_eeg, center_masked_fnirs, eeg_only, fnirs_only]
+  sampling_hz: 10.0
+  active_hbo_channels: 1
+  center_mask:
+    # The 20 s window starts at -5 s; mask the temporal centre (+3 to +7 s).
+    relative_start_s: 8.0
+    duration_s: 4.0
+  nulls: [independent, pairing, time_shift]
+  time_shift_s: 10.0
+  time_shift_circular: false
+  seed: 20260827
+  calibration:
+    eeg_loading: fit_sd_to_driver_target_sd
+    fnirs_common_scale: pooled_std_and_hbr_q001_physical_margin
+    observation_scale: robust_first_difference_student_t
+    driver_target_sd: 0.12
+    hbr_lower_margin: -0.25
+    observation_scale_floor:
+      EEG: 0.05
+      HbO: 0.0005
+      HbR: 0.0005
+
+ssm:
+  t2b:
+    prior_strength: 0.03
+    max_iterations: 60
+    q_scale_candidates: [0.5, 1.0, 2.0]
+    fnirs_noise_scale_candidates: [0.25, 0.5, 1.0, 2.0, 4.0]
+    balance_penalty: 0.25
+    max_flow_perturbation: 0.25
+  t3a:
+    fixed:
+      kappa_per_s: 0.64
+      tau_s: 2.0
+      alpha: 0.32
+      e0: 0.32
+      gamma: 0.32
+      neurovascular_gain: 1.0
+      driver_decay_per_s: 0.45
+      student_t_df: 5.0
+      eeg_offset: 0.0
+      process_std: [0.08, 0.01, 0.006, 0.004, 0.004, 0.004]
+    initial_state_std: [0.5, 0.5, 0.08, 0.08, 0.08, 0.08]
+    rk4_substeps: 2
+    irls_iterations: 3
+    irls_weight_floor: 0.05
+    parameter_fit:
+      # Each subject shares one parameter vector across trials; the smoother
+      # restarts independently at every trial boundary.
+      workers: 18
+      optimizer_max_iterations: 35
+      optimizer_ftol: 1.0e-6
+      optimizer_starts: 2
+      hessian_step: 0.02
+      heldout_trial_positions: [4, 9]
+      boundary_fraction: 0.01
+      max_stage_boundary_fraction: 0.25
+      max_stage_unidentifiable_fraction: 0.50
+      parameters:
+        beta:
+          label_zh: 神经血管耦合有效增益 β
+          unit_zh: 相对倍率
+          prior_mean: 1.0
+          prior_sd: 0.5
+          bounds: [0.25, 4.0]
+        kappa:
+          label_zh: 血管舒张信号衰减 κ
+          unit_zh: 每秒
+          prior_mean: 0.64
+          prior_sd: 0.20
+          bounds: [0.20, 1.50]
+        tau:
+          label_zh: 静息血液通过时间 τ
+          unit_zh: 秒
+          prior_mean: 2.0
+          prior_sd: 0.75
+          bounds: [0.50, 5.0]
+        gamma:
+          label_zh: 血流反馈系数 γ
+          unit_zh: 每平方秒
+          prior_mean: 0.32
+          prior_sd: 0.15
+          bounds: [0.10, 1.0]
+        alpha:
+          label_zh: 流出-容积指数 α
+          unit_zh: 无量纲
+          prior_mean: 0.32
+          prior_sd: 0.08
+          bounds: [0.15, 0.50]
+        E0:
+          label_zh: 静息氧提取分数 E0
+          unit_zh: 比例
+          prior_mean: 0.32
+          prior_sd: 0.08
+          bounds: [0.20, 0.55]
+      stages:
+        - id: M0_fixed
+          label_zh: M0 全固定
+          free: []
+          recommendation_eligible: true
+        - id: M1_beta
+          label_zh: M1 仅 β
+          free: [beta]
+          recommendation_eligible: true
+        - id: M1_kappa
+          label_zh: M1 仅 κ
+          free: [kappa]
+          recommendation_eligible: true
+        - id: M1_tau
+          label_zh: M1 仅 τ
+          free: [tau]
+          recommendation_eligible: true
+        - id: M2_beta_kappa_tau
+          label_zh: M2 β+κ+τ
+          free: [beta, kappa, tau]
+          recommendation_eligible: true
+        - id: M3_plus_gamma
+          label_zh: M3 再加 γ
+          free: [beta, kappa, tau, gamma]
+          recommendation_eligible: true
+        - id: M4_plus_alpha
+          label_zh: M4 再加 α
+          free: [beta, kappa, tau, gamma, alpha]
+          recommendation_eligible: true
+        - id: M5_plus_E0_diagnostic
+          label_zh: M5 再加 E0（诊断）
+          free: [beta, kappa, tau, gamma, alpha, E0]
+          recommendation_eligible: false
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/t3_measured_reconstruction_null
+  figure_dpi: 160

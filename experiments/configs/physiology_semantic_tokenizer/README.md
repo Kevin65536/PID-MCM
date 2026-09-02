@@ -1,13 +1,16 @@
 # Physiology-semantic tokenizer configurations
 
-This directory contains the active synthetic T3a P0 contract and retained
-contracts from the stopped R-series. Generated variants, local tuning files,
-run outputs and abandoned preregistries are intentionally excluded from Git.
+This directory contains the active synthetic T3a P0 contract, one bounded
+nonprotected measured diagnostic, and retained contracts from the stopped
+R-series. Generated variants, local tuning files, run outputs and abandoned
+preregistries are intentionally excluded from Git.
 
-> **Lifecycle (2026-08-26): one active synthetic contract.**
-> `t3a_balloon_robust_p0.yaml` is synthetic-only and cannot open measured or
-> protected data. The retained E0–E2 and R-series configurations remain stopped
-> replay surfaces; unexecuted continuation paths remain abandoned.
+> **Lifecycle (2026-08-27): one synthetic qualification contract plus one
+> measured exploratory diagnostic.** `t3a_balloon_robust_p0.yaml` remains the
+> synthetic qualification path. `t3_measured_reconstruction_null_v1.yaml` can
+> read only the declared nonprotected development split and is decision-
+> ineligible. Neither entry can open protected data. The retained E0–E2 and
+> R-series configurations remain stopped replay surfaces.
 
 ## Retained historical boundary
 
@@ -38,6 +41,7 @@ The version-controlled configuration surface is deliberately limited to:
 | File | Purpose | Status |
 | --- | --- | --- |
 | `t3a_balloon_robust_p0.yaml` | Synthetic physics, identifiability, corruption, null, calibration and visualization contract | **Active synthetic P0**; measured/protected inputs disabled |
+| `t3_measured_reconstruction_null_v1.yaml` | Real EEG/fNIRS center-mask reconstruction and independent/pairing/time-shift null diagnostic | **Active measured development diagnostic**; subjects 01–23 only, protected 24–29 closed, not qualification evidence |
 | `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | **Stopped**; completed, primary result negative |
 | `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | **Stopped**; completed, structural audit passed |
 | `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | **Stopped**; formal-v3 did not qualify |
@@ -71,4 +75,4 @@ loss weights to zero.
 The consolidated methods, results, interpretation and stop decision are in
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-_Last updated: 2026-08-26_
+_Last updated: 2026-08-27_

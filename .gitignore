@@ -16,6 +16,7 @@ experiments/configs/physiology_semantic_tokenizer/*
 !experiments/configs/physiology_semantic_tokenizer/probe_existing_lagged_predictability.yaml
 !experiments/configs/physiology_semantic_tokenizer/ssm_observation_target_screen.yaml
 !experiments/configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml
+!experiments/configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml
 experiments/logs
 experiments/results
 experiments/probe_results

@@ -82,6 +82,18 @@ def test_tak_p_balance_uses_minimal_tau_v_zero_equation():
     assert not np.isclose(expected_d_p, alternative_d_p)
 
 
+def test_neurovascular_gain_scales_driver_coupling_and_is_positive():
+    parameters = BalloonParameters(
+        fixed=BalloonFixedParameters(neurovascular_gain=1.7),
+        free=BalloonFreeParameters(kappa=0.65, tau=2.0),
+    )
+    state = physical_to_transformed((0.2, 0.0, 1.0, 1.0, 1.0, 1.0))
+    rhs = balloon_rhs(state, parameters)
+    np.testing.assert_allclose(rhs[1], 1.7 * 0.2)
+    with pytest.raises(ValueError, match="neurovascular_gain"):
+        BalloonFixedParameters(neurovascular_gain=0.0).validate()
+
+
 def test_observation_map_is_explicit_hbt_hbr_hbo_balance():
     parameters = _parameters()
     state = np.asarray((0.2, 0.0, 1.0, 1.0, 1.2, 0.8), dtype=np.float64)
