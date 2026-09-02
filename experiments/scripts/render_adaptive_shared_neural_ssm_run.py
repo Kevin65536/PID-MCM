@@ -212,7 +212,6 @@ def _save(fig: Any, output_dir: Path, stem: str) -> list[Path]:
         output_dir / stem,
         formats="png",
         dpi=240,
-        write_manifest=False,
     )
     plt.close(fig)
     return list(artifacts.figure_paths)
@@ -809,8 +808,6 @@ def _synthetic_self_check() -> None:
         assert (output / "选中通道分布.png").exists()
         assert (output / "共享驱动模态一致性.png").exists()
         assert not list(output.glob("*.svg"))
-        assert not list(output.glob("*.alt.txt"))
-        assert not list(output.glob("*.manifest.json"))
         assert (output / "可视化说明.md").exists()
     print("synthetic self-check passed")
 

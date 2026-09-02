@@ -15,7 +15,6 @@ import argparse
 import csv
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -181,40 +180,6 @@ def make_figure(summary: Sequence[Mapping[str, Any]]) -> mpl.figure.Figure:
     return fig
 
 
-def _write_manifest(output: Path, source_csv: Path, summary: Sequence[Mapping[str, Any]]) -> None:
-    manifest = {
-        "schema": "identity_label_probe_figure_manifest_v1",
-        "created_utc": datetime.now(timezone.utc).isoformat(),
-        "source_data": str(source_csv),
-        "source_transformations": [
-            "retain task=motor_imagery",
-            "retain probe in task/session/subject_closed_set",
-            "aggregate macro-F1 by method and probe",
-            "error bars are SD across existing folds/repeated row splits",
-            "chance for task=1/2; session=1/3; subject_closed_set=1/K with K=23 for BIOT/CBraMod/REVE and K=29 for NormWear",
-        ],
-        "methods": list(METHOD_ORDER),
-        "probes": list(PROBE_ORDER),
-        "encoding": {
-            "position": "mean macro-F1",
-            "error_bar": "descriptive SD",
-            "color_and_marker": "redundant method encoding",
-            "chance": "short dotted local segments",
-        },
-        "export": {
-            "figure_size_in": [13.0, 4.5],
-            "raster_dpi": 600,
-            "formats": ["png", "pdf"],
-            "bbox_inches": "tight",
-            "background": "opaque white",
-        },
-        "summary_rows": list(summary),
-        "protected_data": "not used; source metrics are public-only feature-cache probes",
-        "caveat": "subject_closed_set is a row-split upper-bound identity-retention diagnostic and does not exclude record/session overlap",
-    }
-    (output / "figure_manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-
-
 def run(source_csv: Path, output: Path) -> list[dict[str, Any]]:
     metrics = _read_csv(source_csv)
     summary = aggregate(metrics)
@@ -229,7 +194,6 @@ def run(source_csv: Path, output: Path) -> list[dict[str, Any]]:
     fig.savefig(output / "identity_probe_macro_f1.png", dpi=600, facecolor="white", bbox_inches="tight", pad_inches=0.05)
     fig.savefig(output / "identity_probe_macro_f1.pdf", facecolor="white", bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
-    _write_manifest(output, source_csv, summary)
     return summary
 
 

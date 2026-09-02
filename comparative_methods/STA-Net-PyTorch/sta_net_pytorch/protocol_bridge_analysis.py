@@ -20,10 +20,8 @@ import csv
 import hashlib
 import json
 import math
-import subprocess
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -154,14 +152,6 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(jsonable(rows))
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def finite(value: Any) -> float | None:
@@ -763,35 +753,6 @@ def _plot_bridge(summary_rows: Sequence[Mapping[str, Any]], output_stem: Path) -
     return [str(png), str(pdf)]
 
 
-def _git_revision() -> str | None:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, check=True,
-            capture_output=True, text=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
-
-
-def _input_files(
-    fivefold_root: Path, within_root: Path, personalized_root: Path
-) -> list[Path]:
-    paths: list[Path] = []
-    for root in (fivefold_root, within_root, personalized_root):
-        if not root.exists():
-            continue
-        for path in sorted(root.rglob("protected_predictions.npz")):
-            paths.append(path)
-        for name in (
-            "protocol_freeze_manifest.json", "aggregate/summary.json",
-            "aggregate/subject_metrics.csv", "aggregate/protocol_audit.json",
-        ):
-            candidate = root / name
-            if candidate.is_file():
-                paths.append(candidate)
-    return paths
-
-
 def write_report(
     output: Path,
     result: Mapping[str, Any],
@@ -923,7 +884,6 @@ def write_report(
         "they are drawn as short local dashed segments rather than one global line. Visual",
         "within-subject is left as an explicit gap and marked ×/NA.",
         "",
-        "Input paths and SHA-256 fingerprints are recorded in `analysis_manifest.json`.",
         f"Figure outputs: {', '.join(f'`{Path(path).name}`' for path in figure_paths)}.",
         "",
         "## Interpretation guardrail",
@@ -952,48 +912,8 @@ def run_analysis(
     write_csv(output_root / "context_only_metrics.csv", result["context_rows"])
     write_csv(output_root / "missing_and_noncomparable.csv", result["missing_rows"])
     figure_paths = _plot_bridge(result["summary_rows"], output_root / "bridge_protocols")
-    inputs = _input_files(fivefold_root, within_root, personalized_root)
-    input_manifest = [
-        {"path": str(path.resolve()), "sha256": sha256(path), "size_bytes": path.stat().st_size}
-        for path in inputs
-    ]
-    output_names = (
-        "bridge_subject_metrics.csv",
-        "bridge_protocol_summary.csv",
-        "bridge_eligibility.csv",
-        "context_only_metrics.csv",
-        "missing_and_noncomparable.csv",
-        "bridge_protocols.png",
-        "bridge_protocols.pdf",
-        "bridge_protocol_summary.json",
-        "analysis_manifest.json",
-        "REPORT.md",
-    )
-    manifest = {
-        "schema": "sta_net_protocol_bridge_analysis_v1",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "analysis_date": "2026-08-16",
-        "analysis_role": "read_only_post_hoc_protocol_bridge_audit",
-        "protected_predictions_retrained": False,
-        "protected_predictions_modified": False,
-        "primary_metrics": PRIMARY_METRIC,
-        "aggregation_unit": "subject_level_mean",
-        "bootstrap": {"unit": "subject", "draws": 10000, "seed": 20260816, "interval": "percentile_95"},
-        "inputs": {
-            "fivefold_root": str(fivefold_root.resolve()),
-            "within_subject_root": str(within_root.resolve()),
-            "personalized_root": str(personalized_root.resolve()),
-        },
-        "input_files": input_manifest,
-        "git_revision": _git_revision(),
-        "figure_paths": figure_paths,
-        "output_files": [str((output_root / name).resolve()) for name in output_names],
-        "inventories": result["inventories"],
-        "personalized_inventory": result["personalized_inventory"],
-    }
     write_json(output_root / "bridge_protocol_summary.json", {
         "schema": "sta_net_protocol_bridge_summary_v1",
-        "analysis_manifest": str((output_root / "analysis_manifest.json").resolve()),
         "eligibility": result["eligibility_rows"],
         "summary": result["summary_rows"],
         "noncomparable": result["missing_rows"],
@@ -1003,8 +923,6 @@ def run_analysis(
         fivefold_root=fivefold_root, within_root=within_root,
         personalized_root=personalized_root, figure_paths=figure_paths,
     )
-    # Write the manifest last so its output inventory includes every deliverable.
-    write_json(output_root / "analysis_manifest.json", manifest)
     return {
         "status": "completed",
         "output_root": str(output_root.resolve()),

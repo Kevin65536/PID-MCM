@@ -13,6 +13,7 @@ from experiments.evaluate_t3_measured_reconstruction_null import (
     _matched_null_metrics,
     _masked_metrics,
     _null_inputs,
+    _parameter_values,
     _physical_check_status,
     _replace_parameter_values,
     _shift_non_circular,
@@ -20,6 +21,11 @@ from experiments.evaluate_t3_measured_reconstruction_null import (
     _write_json,
     load_config,
     validate_config,
+)
+from experiments.scripts.render_t3_measured_parameter_effects import (
+    _curve_rows,
+    _require_source,
+    _stage_vectors,
 )
 from src.inference.t3a_balloon_robust_ssm import BalloonConfig, BalloonObservationSpec, BalloonParameters
 
@@ -160,3 +166,66 @@ def test_boundary_fit_reports_status_without_covariance_index_error() -> None:
     beta = next(row for row in result["parameter_rows"] if row["parameter"] == "beta")
     assert beta["boundary_status"] == "BOUNDARY"
     assert np.isnan(beta["posterior_sd_laplace"])
+
+
+def test_parameter_effect_renderer_keeps_stage_and_curve_identity() -> None:
+    base = BalloonParameters()
+    base_values = _parameter_values(base)
+    rows = []
+    for subject, kappa in (("subject_01", 0.4), ("subject_02", 0.8)):
+        for name, value in base_values.items():
+            rows.append({
+                "subject": subject,
+                "split": "fit",
+                "fit_scope": "eight_trials_fit_two_trials_internal_holdout",
+                "stage": "M1_kappa",
+                "parameter": name,
+                "estimate": kappa if name == "kappa" else value,
+                "is_free": name == "kappa",
+            })
+    population, subjects = _stage_vectors(base, rows, "M1_kappa")
+    assert population["kappa"] == pytest.approx(0.6)
+    assert subjects["subject_01"]["kappa"] == pytest.approx(0.4)
+    assert population["tau"] == pytest.approx(base_values["tau"])
+
+    trial = Trial(
+        condition_id="single_trial_ma_session_01",
+        dataset_id="eeg_fnirs_single_trial",
+        subject="subject_19",
+        record_id="session_01",
+        event_index=1,
+        eeg=np.zeros((5, 1)),
+        fnirs=np.zeros((5, 2)),
+        fnirs_channel_names=("x_HbO", "x_HbR"),
+        fnirs_roles=("HbO", "HbR"),
+        eeg_artifact_fraction=0.0,
+    )
+    item = PreparedTrial(trial, np.arange(5.0), np.arange(5.0) + 1, np.arange(5.0) - 1)
+    input_values = np.column_stack((item.eeg_driver, item.hbo, item.hbr))
+    input_values[2, 1] = np.nan
+    curve = _curve_rows(
+        item,
+        np.arange(5.0),
+        np.asarray([False, False, True, False, False]),
+        "test",
+        "center_masked_fnirs",
+        "HbO",
+        "test curve",
+        {"input": input_values, "estimate": np.zeros((5, 3)), "predictive_std": np.ones((5, 3))},
+        population,
+    )
+    assert len(curve) == 5
+    assert {row["target"] for row in curve} == {"HbO"}
+    assert curve[2]["input_standardized"] is None
+
+
+def test_parameter_effect_renderer_rejects_protected_source_before_loading(tmp_path: Path) -> None:
+    _write_json(tmp_path / "manifest.json", {
+        "schema": "t3_measured_reconstruction_null_v1",
+        "analysis_kind": "staged_subject_parameter_fit",
+        "completion_status": "complete",
+        "protected_data_opened": True,
+        "protected_data_enabled": False,
+    })
+    with pytest.raises(ValueError, match="protected data access"):
+        _require_source(tmp_path)

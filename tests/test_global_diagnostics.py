@@ -167,7 +167,7 @@ class GlobalDiagnosticsTests(unittest.TestCase):
             )
             self.assertIn("not an inferential", components["unit_note"])
 
-    def test_run_writes_tables_figures_manifest_and_explicit_missing_cells(self):
+    def test_run_writes_tables_figures_and_explicit_missing_cells(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             aggregate_dir = self._write_sealed_aggregate(root)
@@ -184,19 +184,16 @@ class GlobalDiagnosticsTests(unittest.TestCase):
                 "value_minus_b0_heatmap.pdf",
                 "descriptive_decomposition.png",
                 "descriptive_decomposition.pdf",
-                "figure_manifest.json",
-                "analysis_manifest.json",
             ]
             for name in expected:
                 self.assertTrue((output_dir / name).exists(), name)
-            self.assertFalse(list(output_dir.glob("*alt*text*")))
+            self.assertFalse(list(output_dir.glob("*manifest*")))
             self.assertEqual(manifest["protected_data_policy"].split(";")[0], "frozen descriptive/post-hoc")
             table = (output_dir / "task_method_table.csv").read_text(encoding="utf-8")
             self.assertIn("cbramod,", table)
             self.assertIn("true", table)
-            manifest_json = json.loads((output_dir / "figure_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest_json["n_missing_or_unsupported_cells"], 1)
-            self.assertEqual(len(manifest_json["figures"]), 2)
+            self.assertEqual(manifest["n_missing_or_unsupported_cells"], 1)
+            self.assertEqual(len(manifest["figures"]), 2)
 
 
 if __name__ == "__main__":

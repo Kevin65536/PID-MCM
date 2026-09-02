@@ -13,11 +13,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
-import json
 import math
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -52,27 +49,6 @@ MODEL_PARAMS = {
 }
 
 
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.write_text(
-        json.dumps(_jsonable(payload), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     values = list(rows)
     if not values:
@@ -86,14 +62,6 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(values)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def select_best_variance_folds(fold_metrics_path: Path, count: int = 2) -> list[dict[str, Any]]:
@@ -473,7 +441,6 @@ def run(run_dir: Path) -> list[Path]:
     selection_rows: list[dict[str, Any]] = []
     trajectory_rows: list[dict[str, Any]] = []
     channel_rows: list[dict[str, Any]] = []
-    replay_checks: list[dict[str, Any]] = []
     for metric in selected:
         key = (metric["condition_id"], metric["subject"], metric["heldout_trial"])
         stored = saved[key]
@@ -483,15 +450,6 @@ def run(run_dir: Path) -> list[Path]:
         metric["record_id"] = str(replay["trial"].record_id)
         metric["fold_seed"] = int(replay["fold_seed"])
         selection_rows.append(metric)
-        replay_checks.append(
-            {
-                "sample_rank": metric["sample_rank"],
-                "condition_id": metric["condition_id"],
-                "subject": metric["subject"],
-                "heldout_trial": metric["heldout_trial"],
-                **replay["replay_checks"],
-            }
-        )
         sample = {
             "time_s": stored["time_s"],
             "truth": stored["truth"],
@@ -540,73 +498,14 @@ def run(run_dir: Path) -> list[Path]:
     trajectories_output = run_dir / "best_variance_full_trajectories.csv"
     channels_output = run_dir / "best_variance_channel_trajectories.csv"
     summary_path = run_dir / "best_variance_full_trajectory_summary.md"
-    manifest_path = run_dir / "best_variance_full_trajectory_manifest.json"
     _write_csv(selection_path, selection_rows)
     _write_csv(trajectories_output, trajectory_rows)
     _write_csv(channels_output, channel_rows)
     figures = _plot(selected, samples, run_dir / "figures")
     summary_path.write_text(_summary_markdown(selected), encoding="utf-8")
 
-    sources = [config_path, fold_metrics_path, trajectories_path, Path(evaluator.__file__), Path(__file__)]
     outputs = [selection_path, trajectories_output, channels_output, summary_path, *figures]
-    manifest = {
-        "schema": "best_variance_full_trajectory_comparison_v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "parent_run": str(run_dir.relative_to(REPO_ROOT)),
-        "selection_rule": {
-            "validation": "leave_one_trial",
-            "model": "croce_joint",
-            "hrf_mode": "canonical",
-            "eligibility": "finite positive variance_ratio and PCC > 0",
-            "ranking": "ascending abs(log(variance_ratio))",
-            "count": 2,
-        },
-        "state_provenance": {
-            "neural_driver_joint": "exact saved formal-v3 trajectory",
-            "eeg_power_pc1_observation": "exact fold replay of formal-v3 model input",
-            "observed_and_reconstructed_hbo": "exact saved formal-v3 trajectories",
-            "vasoactive_signal_s_and_normalized_blood_flow_f": (
-                "deterministic canonical Croce-dynamics companion replay; not formal-v3 posterior states"
-            ),
-            "croce_model_params": MODEL_PARAMS,
-            "initial_companion_state": [0.0, 0.0, 0.0, 0.0],
-        },
-        "selected_samples": selection_rows,
-        "replay_checks": replay_checks,
-        "input_hashes": [{"path": str(path.relative_to(REPO_ROOT)), "sha256": _sha256(path)} for path in sources],
-        "output_hashes": [{"path": str(path.relative_to(run_dir)), "sha256": _sha256(path)} for path in outputs],
-        "artifacts": [str(path.relative_to(run_dir)) for path in outputs],
-        "claim_boundary": [
-            "variance-ratio sample selection only",
-            "negative R2 examples are not successful pointwise fNIRS recovery",
-            "s and f are deterministic companion states, not posterior estimates from formal-v3",
-            "s and f magnitudes are not calibrated physical vasodilation or cerebral blood flow",
-        ],
-    }
-    _write_json(manifest_path, manifest)
-
-    parent_manifest_path = run_dir / "manifest.json"
-    parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
-    artifact_names = [str(path.relative_to(run_dir)) for path in [*outputs, manifest_path]]
-    parent_manifest["artifacts"] = list(dict.fromkeys([*parent_manifest.get("artifacts", []), *artifact_names]))
-    parent_manifest.setdefault("posthoc_analyses", {})["best_variance_full_trajectories"] = {
-        "manifest": str(manifest_path.relative_to(run_dir)),
-        "selection_rule": "min abs(log(variance_ratio)) among positive-PCC Croce-joint held-out folds",
-        "selected_samples": [
-            {
-                "condition_id": row["condition_id"],
-                "subject": row["subject"],
-                "heldout_trial": row["heldout_trial"],
-                "variance_ratio": row["variance_ratio"],
-                "r2": row["r2"],
-                "pcc": row["pcc"],
-            }
-            for row in selected
-        ],
-    }
-    parent_manifest["manifest_updated_at"] = datetime.now(timezone.utc).isoformat()
-    _write_json(parent_manifest_path, parent_manifest)
-    return [*outputs, manifest_path, parent_manifest_path]
+    return outputs
 
 
 def parse_args() -> argparse.Namespace:

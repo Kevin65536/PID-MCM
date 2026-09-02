@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""Create an auditable figure set for the CBraMod public pilot.
+"""Create a figure set for the CBraMod public pilot.
 
 The source ``report.json`` is treated as immutable input.  The script writes
-two matched figures (epoch trajectory and final-score dot plot), a CSV data
-table, and a provenance manifest.  It never selects the best epoch:
+two matched figures (epoch trajectory and final-score dot plot) and a CSV data
+table.  It never selects the best epoch:
 the displayed final point is always the fixed-budget final epoch.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-import platform
 import sys
 from typing import Any, Mapping
 
@@ -44,23 +42,12 @@ CAPACITY_STYLE: dict[str, dict[str, Any]] = {
 }
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
 
 
 def portable(path: Path) -> str:
@@ -282,19 +269,6 @@ def make_final_dotplot(report: Mapping[str, Any], rows: list[dict[str, Any]]) ->
     return fig
 
 
-def alt_text(report: Mapping[str, Any], final: list[dict[str, Any]]) -> str:
-    scores = "; ".join(f"{CAPACITY_STYLE[row['capacity']]['label']} {row['final_validation_macro_f1']:.3f}" for row in final)
-    return (
-        f"Two-panel figure for the CBraMod {report['task']} outer-fold {report['outer_fold']} public pilot. "
-        "The left panel shows validation macro-F1 over five fixed training epochs for six adaptation capacities; "
-        "color, line style, and marker shape redundantly identify each capacity, and open markers denote the fixed final epoch. "
-        "The right panel shows the corresponding final epoch scores as labeled dots. "
-        f"Final macro-F1 scores are: {scores}. "
-        "The dashed horizontal reference is the majority-class macro-F1 of 0.333. "
-        "This is a single-fold public pilot; validation was recorded descriptively and was not used for model or epoch selection."
-    )
-
-
 def export_figure(fig: plt.Figure, path: Path) -> dict[str, Any]:
     png = path.with_suffix(".png")
     pdf = path.with_suffix(".pdf")
@@ -323,67 +297,14 @@ def run(report_path: Path, output_dir: Path) -> dict[str, Any]:
     write_data_csv(data_path, trajectories)
     trajectory_files = export_figure(make_trajectory(report, trajectories), output_dir / "adaptation_ladder_epoch_trajectory")
     final_files = export_figure(make_final_dotplot(report, finals), output_dir / "adaptation_ladder_final_scores")
-    manifest = {
-        "schema": "cbramod_adaptation_ladder_figure_manifest_v2",
-        "status": "complete",
-        "created_at": utc_now(),
-        "figure_type": "static_scientific_diagnostic",
-        "audience": "manuscript/supplement diagnostic; publisher requirements pending",
-        "source_report": {"path": portable(report_path), "sha256": sha256_file(report_path)},
-        "source_contract": {
-            "task": report["task"],
-            "outer_fold": report["outer_fold"],
-            "train_sample_count": report["train_sample_count"],
-            "validation_sample_count": report["validation_sample_count"],
-            "fixed_budget": report["fixed_budget"],
-            "validation_used_for_selection": False,
-            "protected_test_opened": report["protected_test_opened"],
-            "claim_boundary": report["claim_boundary"],
-        },
-        "transformations": [
-            "read epoch-level validation macro-F1 from report.json",
-            "plot final fixed-budget epoch; no epoch or capacity selection",
-            "use majority-class macro-F1=1/3 as a declared reference line",
-        ],
-        "palette": {
-            "name": "Okabe-Ito-inspired redundant qualitative palette",
-            "color_not_sufficient": True,
-            "redundant_encodings": ["line_style", "marker_shape", "legend_label"],
-            "styles": CAPACITY_STYLE,
-        },
-        "data_table": {"path": portable(data_path), "sha256": sha256_file(data_path)},
-        "alt_text": alt_text(report, finals),
+    return {
+        "figure_data": portable(data_path),
         "figures": {
             "epoch_trajectory": trajectory_files,
             "final_scores": final_files,
         },
-        "render": {
-            "matplotlib": matplotlib.__version__,
-            "python": platform.python_version(),
-            "backend": matplotlib.get_backend(),
-            "figsize_inches": {"epoch_trajectory": [7.4, 5.3], "final_scores": [7.4, 5.3]},
-            "font_family": matplotlib.rcParams.get("font.family"),
-            "pdf_fonttype": matplotlib.rcParams.get("pdf.fonttype"),
-            "background": "opaque white",
-        },
-        "manual_review": {
-            "layout_engine": "manual_subplots_adjust",
-            "overlap_check": "manual_view_image_completed",
-            "reviewed_files": [
-                "adaptation_ladder_epoch_trajectory.png",
-                "adaptation_ladder_final_scores.png",
-                "adaptation_ladder_epoch_trajectory.pdf",
-                "adaptation_ladder_final_scores.pdf",
-            ],
-            "notes": "No legend, annotation, or axis-label overlap observed at rendered PNG size; open final markers are not best-epoch highlights.",
-        },
         "protected_test_opened": False,
     }
-    manifest_path = output_dir / "figure_manifest.json"
-    if manifest_path.exists():
-        raise FileExistsError(f"refusing to overwrite figure manifest: {manifest_path}")
-    write_json(manifest_path, manifest)
-    return manifest
 
 
 def parse_args() -> argparse.Namespace:

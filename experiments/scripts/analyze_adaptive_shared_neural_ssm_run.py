@@ -5,10 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
-import json
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -36,14 +33,6 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _driver_compromise(rows: Sequence[Mapping[str, str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -191,42 +180,6 @@ def run(run_dir: Path) -> None:
         "",
     ])
     (run_dir / "adaptive_posthoc_summary.md").write_text("\n".join(lines), encoding="utf-8")
-    artifacts = [
-        "driver_compromise_fold_metrics.csv",
-        "driver_compromise_subject_metrics.csv",
-        "local_global_contrast.csv",
-        "parameter_identifiability_audit.csv",
-        "adaptive_posthoc_summary.md",
-    ]
-    manifest = {
-        "schema": "adaptive_shared_neural_ssm_posthoc_v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "run_dir": str(run_dir),
-        "input_hashes": [
-            {"path": name, "sha256": _sha256(run_dir / name)}
-            for name in ("trajectories.csv", "subject_metrics.csv", "fit_parameters.csv")
-        ] + [{"path": str(Path(__file__).resolve()), "sha256": _sha256(Path(__file__).resolve())}],
-        "artifacts": artifacts,
-        "claim_boundary": [
-            "post-hoc diagnostics, not preregistered endpoints",
-            "driver shift quantifies fNIRS influence but not causal neural identification",
-            "fitted physiological parameter values are not independently identifiable",
-        ],
-    }
-    (run_dir / "adaptive_posthoc_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-
-    main_manifest_path = run_dir / "manifest.json"
-    main_manifest = json.loads(main_manifest_path.read_text(encoding="utf-8"))
-    for artifact in [*artifacts, "adaptive_posthoc_manifest.json"]:
-        if artifact not in main_manifest["artifacts"]:
-            main_manifest["artifacts"].append(artifact)
-    main_manifest["posthoc_analyses"] = {
-        "adaptive_driver_compromise": {
-            "manifest": "adaptive_posthoc_manifest.json",
-            "summary": "adaptive_posthoc_summary.md",
-        }
-    }
-    main_manifest_path.write_text(json.dumps(main_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def parse_args() -> argparse.Namespace:

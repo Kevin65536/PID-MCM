@@ -570,7 +570,6 @@ shares the parent's data/split/teacher/code identities and lives at:
 ```text
 experiments/runs/physiology_semantic_tokenizer/tokenizer_discovery_v1/
   <immutable-run-id>/
-    manifest.json
     resolved_config.yaml
     summary.json
     metrics.csv

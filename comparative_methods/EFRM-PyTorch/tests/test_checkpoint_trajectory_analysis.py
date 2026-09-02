@@ -177,14 +177,13 @@ def test_end_to_end_bundle_declares_no_interpolation_and_writes_figures(tmp_path
     root = tmp_path / "pretraining"
     _write_run(root, "synthetic_stage_a", include_analysis=True)
     output = tmp_path / "output"
-    manifest = run_analysis(root, output)
-    assert manifest["alignment_epoch_interpolation"] is False
-    assert manifest["model_checkpoints_loaded"] is False
-    assert manifest["similarity_matrices_loaded"] is False
+    summary = run_analysis(root, output)
+    assert summary["alignment_epoch_interpolation"] is False
+    assert summary["model_checkpoints_loaded"] is False
+    assert summary["similarity_matrices_loaded"] is False
     for filename in (
         "efrm_checkpoint_trajectory_tidy.csv",
         "summary.json",
-        "manifest.json",
         "REPORT.md",
         "trajectory.png",
         "trajectory.pdf",

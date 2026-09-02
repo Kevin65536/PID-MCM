@@ -308,7 +308,7 @@ def main() -> None:
         entry["sha256"] = {
             path: hashlib.sha256((run_dir / path).read_bytes()).hexdigest() for path in entry["artifacts"]
         }
-    manifest = {
+    audit = {
         "schema": f"{summary.get('schema', 'physiology_semantic_e0_v2')}_visual_audit",
         "figures": entries,
         "review_checklist": [
@@ -327,7 +327,7 @@ def main() -> None:
             and summary.get("validation", {}).get("machine_validation_pass", False)
         ),
     }
-    (run_dir / "visual_audit_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (run_dir / "visual_review.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

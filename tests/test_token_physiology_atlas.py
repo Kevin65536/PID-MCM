@@ -351,7 +351,6 @@ def test_build_no_plots_writes_standard_atlas_and_reuses_measurement_cache(
 
     assert result == first_output.resolve()
     expected_artifacts = {
-        "manifest.json",
         "summary.json",
         "stability.json",
         "information_ledger.json",
@@ -386,14 +385,7 @@ def test_build_no_plots_writes_standard_atlas_and_reuses_measurement_cache(
     assert summary["protected_test_opened"] is False
     assert _cache_statuses(summary) == {"miss"}
 
-    manifest = json.loads(
-        (first_output / "manifest.json").read_text(encoding="utf-8")
-    )
-    assert manifest["schema"] == ATLAS_SCHEMA_VERSION
-    assert manifest["completed"] is True
-    assert manifest["raw_patches_copied_to_atlas"] is False
-    inventory = {row["path"] for row in manifest["artifacts"]}
-    assert expected_artifacts - {"manifest.json"} <= inventory
+    assert not (first_output / "manifest.json").exists()
     ledger = json.loads(
         (first_output / "information_ledger.json").read_text(encoding="utf-8")
     )
@@ -522,7 +514,7 @@ def test_build_no_plots_writes_standard_atlas_and_reuses_measurement_cache(
         )
 
 
-def test_figure_sidecars_record_selection_color_scale_and_marker_semantics(
+def test_figures_are_written_without_sidecars(
     tmp_path,
 ):
     train = _write_synthetic_v3_export(
@@ -542,34 +534,12 @@ def test_figure_sidecars_record_selection_color_scale_and_marker_semantics(
     )
 
     figure_dir = output / "figures"
-    heatmap_manifest = json.loads(
-        (figure_dir / "train_eeg_phenotype_heatmap.manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    heatmap_spec = heatmap_manifest["provenance"]["visualization"]
-    assert heatmap_spec["kind"] == "hard_token_phenotype_heatmap"
-    assert len(heatmap_spec["selected_token_ids"]) == 3
-    assert heatmap_spec["color_scale"]["center"] == 0.0
+    assert (figure_dir / "train_eeg_phenotype_heatmap.png").is_file()
     assert (
-        heatmap_spec["color_scale"]["vmin"]
-        == -heatmap_spec["color_scale"]["vmax"]
-    )
-
-    codebook_stem = (
-        figure_dir
-        / "train_eeg_codebook_channel_mean_log_relative_power_alpha"
-    )
-    codebook_manifest = json.loads(
-        codebook_stem.with_suffix(".manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    codebook_spec = codebook_manifest["provenance"]["visualization"]
-    assert codebook_spec["projection"] == "centered unscaled PCA via SVD"
-    assert codebook_spec["embedding_shape"] == [3, 4]
-    assert "% variance" in codebook_manifest["figure"]["axes"][0]["xlabel"]
-    assert not list(figure_dir.glob("*.alt.txt"))
+        figure_dir / "train_eeg_codebook_channel_mean_log_relative_power_alpha.png"
+    ).is_file()
+    assert not list(figure_dir.glob("*.txt"))
+    assert not list(figure_dir.glob("*.json"))
 
 
 def test_protected_test_export_is_rejected_without_explicit_authorization(
@@ -753,19 +723,7 @@ def test_compact_assignment_export_references_verified_measurement_caches(
             cache_summary["measurement_cache_key"]
             == references[modality]["measurement_cache_key"]
         )
-    atlas_manifest = json.loads(
-        (output / "manifest.json").read_text(encoding="utf-8")
-    )
-    assert (
-        atlas_manifest["input_exports"]["train"]["sha256"]
-        == compact_sha256
-    )
-    assert (
-        atlas_manifest["input_exports"]["train"]["manifest"][
-            "precompaction_sha256"
-        ]
-        == original_sha256
-    )
+    assert not (output / "manifest.json").exists()
 
 
 @pytest.mark.parametrize(

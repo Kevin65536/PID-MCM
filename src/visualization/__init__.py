@@ -1,10 +1,9 @@
-"""Provenance-aware Token Physiology Atlas figures."""
+"""Token Physiology Atlas figures."""
 from .token_physiology_plots import (
     FigureArtifacts,
     INSUFFICIENT_SUPPORT_COLOR,
     MISSING_COLOR,
     SUPPORTED_COLOR,
-    build_figure_manifest,
     plot_codebook_embedding_colored,
     plot_token_feature_heatmap,
     plot_token_feature_profile_ci,
@@ -17,7 +16,6 @@ __all__ = [
     "INSUFFICIENT_SUPPORT_COLOR",
     "MISSING_COLOR",
     "SUPPORTED_COLOR",
-    "build_figure_manifest",
     "plot_codebook_embedding_colored",
     "plot_token_feature_heatmap",
     "plot_token_feature_profile_ci",

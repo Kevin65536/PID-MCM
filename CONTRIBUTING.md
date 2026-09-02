@@ -102,8 +102,8 @@ Verify work in this order:
 7. one-time protected evaluation, only when the owning protocol gate and the
    explicitly user-approved scope are both satisfied.
 
-A run is evidence only when its manifest, resolved configuration, completion
-status, summary, and declared endpoint are present. A suite summary cannot
+A run is evidence only when its resolved configuration, completion status,
+summary, and declared endpoint are present. A suite summary cannot
 override an individual run record. Failed, negative, aborted, and
 scientifically undetermined outcomes remain part of the record.
 
@@ -112,7 +112,7 @@ scientifically undetermined outcomes remain part of the record.
 Keep the smallest package that preserves the scientific conclusion and normal
 comparison use:
 
-- resolved configuration, split/registry identities, manifests, summaries,
+- resolved configuration, split/registry identities, summaries,
   tables, figures, and decision records;
 - a checkpoint only when it is still needed for an active run, a recurring
   analysis, a consumer interface, or an irreplaceable reference;

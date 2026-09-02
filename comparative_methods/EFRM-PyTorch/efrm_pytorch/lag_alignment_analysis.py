@@ -766,7 +766,6 @@ def analyze_evidence(
             "relative_crop_offset_profile_svg": str(output / "relative_crop_offset_profile.svg"),
             "relative_crop_offset_profile_png": str(output / "relative_crop_offset_profile.png"),
             "relative_crop_offset_profile_pdf": str(output / "relative_crop_offset_profile.pdf"),
-            "figure_manifest": str(output / "figure_manifest.json"),
         },
     }
     (output / "analysis_metrics.json").write_text(
@@ -813,30 +812,6 @@ def analyze_evidence(
         "- `analysis_metrics.json`",
     ]
     (output / "REPORT.md").write_text("\n".join(report_lines) + "\n", encoding="utf-8")
-    coverage_values = [float(row["all_same_record"]["coverage_fraction"]) for row in profiles]
-    alt_text = (
-        f"{label}: relative crop-offset proxy profile using {null_permutations} same-record block permutations. "
-        f"Matched-query coverage spans {min(coverage_values):.3f} to {max(coverage_values):.3f} across the predefined grid. "
-        "The zero-offset point is the synchronized/event-relative crop baseline and must not be read as a physiological lag peak; physical lag is not identifiable from crop_start_s."
-    )
-    figure_manifest = {
-        "schema": "efrm_lag_figure_manifest_v2",
-        "public_validation_only": True,
-        "protected_accessed": False,
-        "figure_base": str(output / "relative_crop_offset_profile"),
-        "files": {
-            suffix: {
-                "path": str(output / f"relative_crop_offset_profile.{suffix}"),
-                "sha256": _sha256(output / f"relative_crop_offset_profile.{suffix}"),
-            }
-            for suffix in ("svg", "png", "pdf")
-        },
-        "alt_text": alt_text,
-        "null_permutations": int(null_permutations),
-        "coverage_fraction_range": [min(coverage_values), max(coverage_values)],
-        "physical_lag_identifiable": False,
-    }
-    (output / "figure_manifest.json").write_text(json.dumps(figure_manifest, indent=2, sort_keys=True), encoding="utf-8")
     (output / "capability_report.json").write_text(
         json.dumps({
             "schema": CAPABILITY_SCHEMA,
@@ -935,22 +910,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     (output_root / "capability_report.json").write_text(
         json.dumps(capability, indent=2, sort_keys=True, default=_jsonable), encoding="utf-8"
-    )
-    aggregate_figures = []
-    for row in reports:
-        metrics_path = Path(str(row["artifacts"]["figure_manifest"]))
-        if not metrics_path.is_file():
-            continue
-        manifest = _read_json(metrics_path)
-        aggregate_figures.append(manifest)
-    (output_root / "figure_manifest.json").write_text(
-        json.dumps({
-            "schema": "efrm_lag_figure_set_manifest_v1",
-            "public_validation_only": True,
-            "protected_accessed": False,
-            "physical_lag_identifiable": False,
-            "figures": aggregate_figures,
-        }, indent=2, sort_keys=True), encoding="utf-8"
     )
     (output_root / "README.md").write_text(
         "# EFRM lag-alignment capability\n\n"

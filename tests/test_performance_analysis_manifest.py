@@ -29,7 +29,7 @@ def test_p0_manifest_keeps_protected_results_descriptive_only() -> None:
     ] == "prohibited"
 
 
-def test_p0_manifest_requires_fail_closed_and_figure_provenance() -> None:
+def test_p0_manifest_requires_fail_closed_and_figure_sources() -> None:
     payload = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
 
     requirements = payload["common_requirements"]
@@ -38,8 +38,8 @@ def test_p0_manifest_requires_fail_closed_and_figure_provenance() -> None:
         "capability_report"
     )
     figure_requirements = set(requirements["plots"]["require"])
-    assert {"source_data", "transformation_code", "figure_manifest"}.issubset(
+    assert {"source_data", "transformation_code"}.issubset(
         figure_requirements
     )
-    assert "alt_text" not in figure_requirements
+    assert {"alt_text", "figure_manifest"}.isdisjoint(figure_requirements)
     assert requirements["plots"]["target_journal"] == "unresolved"

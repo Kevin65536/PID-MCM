@@ -14,8 +14,8 @@ E2 T0 checkpoint:
 
 [`token_physiology_atlas_standard_loader_core_20260730`](../../experiments/runs/physiology_semantic_tokenizer/e2_semantic_objectives/20260723_e2_v4_semantic_objective_suite_v1/runs/t0_seed20260719/analysis/token_physiology_atlas_standard_loader_core_20260730/)
 
-Its manifest reports `status=complete`, `splits=[train,val]`, and
-`protected_test_opened=false`.
+The retained run is complete, covers `train` and `val`, and did not open the
+protected test split.
 
 | Split / modality | Active tokens | Support-qualified tokens |
 | --- | ---: | ---: |
@@ -162,19 +162,16 @@ beside its figures.
 
 ## Output contract
 
-An Atlas run atomically publishes:
+An Atlas run publishes:
 
-- top-level manifest and summary;
+- a top-level summary;
 - token support, profile, distribution, exemplar, assignment, nuisance,
   state-association, sequence, and lag tables;
 - stability and information-ledger records;
 - PNG/SVG figures as requested;
-- per-figure source and manifest data.
+- per-figure source data.
 
-The manifest records source hashes, split, tier, thresholds, units/transform,
-software identity, protected-test state, wall time, artifact inventory, and
-output hashes. Existing output directories are not overwritten unless
-explicitly forced.
+Existing output directories are not overwritten unless explicitly forced.
 
 ## Entrypoint
 

@@ -157,7 +157,7 @@ observation-aligned auxiliary target derived from a joint smoother.
   audits.
 - `continuous_coupling_upper_bound.csv` and its `_pre_gauge` counterpart:
   coupling sensitivity to target coordinates.
-- `visual_review.yaml` and `visual_audit_manifest.json`: reviewed figure status,
+- `visual_review.yaml` and `visual_review.json`: reviewed figure status,
   hashes, and protected-test decision.
 - `20260724_E0_SIGN_CALIBRATED_PHYSICAL_TEACHER_ACCEPTANCE.md`: authoritative
   complete-E0 acceptance.

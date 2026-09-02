@@ -355,7 +355,6 @@ def _save(fig: Any, output_dir: Path, stem: str) -> Path:
         output_dir / stem,
         formats="png",
         dpi=300,
-        write_manifest=False,
     )
     plt.close(fig)
     return artifacts.figure_paths[0]
@@ -1666,8 +1665,6 @@ def _synthetic_self_check() -> None:
         output = _render(run_dir)
         for stem in MANDATORY_STEMS:
             assert (output / f"{stem}.png").exists(), stem
-        assert not list(output.glob("*.alt.txt"))
-        assert not list(output.glob("*.manifest.json"))
         assert not (output / "通道空间关联_边界.png").exists()
         explanation = (output / "可视化说明.md").read_text(encoding="utf-8")
         assert "不是全脑活动热图" in explanation

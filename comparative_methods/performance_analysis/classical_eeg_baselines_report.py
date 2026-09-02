@@ -262,7 +262,7 @@ def build_report(root: Path = DEFAULT_ROOT, *, tasks: Sequence[str] = TASKS) -> 
     figure_png = root / "subject_macro_f1_public_fold_average.png"
     figure_pdf = root / "subject_macro_f1_public_fold_average.pdf"
     alt_text = _plot(summaries, figure_png, figure_pdf)
-    manifest = {
+    result = {
         "schema": "classical_eeg_bandpower_public_report_v2",
         "status": "completed",
         "analysis_label": "exploratory_public_development_only",
@@ -276,7 +276,6 @@ def build_report(root: Path = DEFAULT_ROOT, *, tasks: Sequence[str] = TASKS) -> 
         "tasks": summaries,
         "figures": {"png": str(figure_png), "pdf": str(figure_pdf), "alt_text": alt_text},
     }
-    (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report_lines = [
         "# Classical EEG band-power baseline: public validation report",
         "",
@@ -312,11 +311,11 @@ def build_report(root: Path = DEFAULT_ROOT, *, tasks: Sequence[str] = TASKS) -> 
             "",
             f"Alt text: {alt_text}",
             "",
-            "Machine-readable provenance, sample-identity audit counts, fold metrics and subject-level rows are in [`manifest.json`](manifest.json). The fold-level artifacts remain under each task's `lda/` directory.",
+            "Fold metrics and subject-level rows remain under each task's `lda/` directory.",
         ]
     )
     (root / "REPORT.md").write_text("\n".join(report_lines) + "\n", encoding="utf-8")
-    return manifest
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:

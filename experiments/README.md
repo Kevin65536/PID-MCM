@@ -99,20 +99,16 @@ Any future registered physiology-semantic output uses:
 experiments/runs/physiology_semantic_tokenizer/<suite>/<immutable-run>/
 ```
 
-A result is auditable only when its resolved config, manifest, declared
-split/cache/schema identity, non-hash runtime versions, completion status,
+A result is auditable only when its resolved config, declared split/cache/schema
+identity, non-hash runtime versions, completion status,
 primary endpoint, summary/table, and necessary prediction or figure source
 data are present. Suite summaries do not override run records; file/data hashes
 are not part of this contract.
 
-Generated payloads remain ignored by Git. Lightweight manifests, decision
-summaries, and evidence indexes may be force-tracked intentionally. Historical
+Generated payloads remain ignored by Git. Lightweight decision summaries and
+evidence indexes may be force-tracked intentionally. Historical
 analysis always names an exact archive path; active tools never recurse through
 archives.
-
-The completion manifest is the atomic publication boundary: tables and figures
-may be written while it says `incomplete`, and a run is consumable only after
-the manifest is atomically replaced with `complete`.
 
 Launch and evidence conventions are in [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 The owning plan is [`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md).

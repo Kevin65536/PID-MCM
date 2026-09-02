@@ -1048,8 +1048,8 @@ def run_diagnostics(
         figures.append(plot_value_minus_b0_heatmap(records, output_dir, metric=metric))
     if "macro_f1" in {record.metric for record in records}:
         figures.append(plot_descriptive_decomposition(records, fold_rows, summary, output_dir, metric="macro_f1"))
-    manifest = {
-        "schema": "global_diagnostics_figure_manifest_v2",
+    result = {
+        "schema": "global_diagnostics_v2",
         "analysis_id": "20260816_p0_global_diagnostics",
         "created_by": "comparative_methods/performance_analysis/global_diagnostics.py",
         "protected_data_policy": "frozen descriptive/post-hoc; no tuning; folds are not independent subjects",
@@ -1078,20 +1078,7 @@ def run_diagnostics(
             for metric in sorted({record.metric for record in records})
         },
     }
-    _write_json(output_dir / "figure_manifest.json", manifest)
-    _write_json(
-        output_dir / "analysis_manifest.json",
-        {
-            "schema": "global_diagnostics_analysis_manifest_v1",
-            "analysis_id": "20260816_p0_global_diagnostics",
-            "protected_data_policy": manifest["protected_data_policy"],
-            "source": manifest["source"],
-            "note": "Only sealed aggregate tables were consumed; no hyperparameter or method selection was performed.",
-            "outputs": manifest["outputs"],
-            "figure_manifest": "figure_manifest.json",
-        },
-    )
-    return manifest
+    return result
 
 
 def _build_parser() -> argparse.ArgumentParser:

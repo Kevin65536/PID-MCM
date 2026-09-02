@@ -18,12 +18,10 @@ from __future__ import annotations
 
 import csv
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
 from pathlib import Path
-import platform
 import tempfile
 import time
 from typing import Any, Iterable, Mapping, Sequence
@@ -1826,15 +1824,6 @@ def _profile_matrix(
     return matrix
 
 
-def _figure_symmetric_limit(values: np.ndarray) -> float:
-    finite = np.asarray(values, dtype=np.float64)
-    finite = finite[np.isfinite(finite)]
-    if not len(finite):
-        return 1.0
-    limit = float(np.max(np.abs(finite)))
-    return limit if limit > 0.0 else 1.0
-
-
 def _embedding_by_token(
     payload: Mapping[str, np.ndarray],
     result: ModalitySplitAtlas,
@@ -1866,7 +1855,6 @@ def _prepare_figure_targets(
     force: bool,
 ) -> None:
     targets = [Path(f"{stem}.{fmt}") for fmt in formats]
-    targets.append(Path(f"{stem}.manifest.json"))
     existing = [path for path in targets if path.exists() or path.is_symlink()]
     if existing and not force:
         raise FileExistsError(
@@ -1883,7 +1871,6 @@ def _prepare_figure_targets(
 def _write_figures(
     split_results: Mapping[str, Mapping[str, ModalitySplitAtlas]],
     payloads: Mapping[str, Mapping[str, np.ndarray]],
-    input_exports: Mapping[str, Mapping[str, str]],
     output_dir: Path,
     *,
     config: Mapping[str, Any],
@@ -1923,27 +1910,6 @@ def _write_figures(
             supported = np.asarray(
                 [not bool(row["insufficient_support"]) for row in support_rows]
             )
-            provenance = {
-                "atlas_schema": ATLAS_SCHEMA_VERSION,
-                "split": split,
-                "modality": modality,
-                "input_export": dict(input_exports[split]),
-                "measurement_cache": {
-                    "path": str(result.measurement_cache["path"]),
-                    "npz_sha256": result.measurement_cache["manifest"][
-                        "npz_sha256"
-                    ],
-                    "measurement_cache_key": result.measurement_cache[
-                        "measurement_cache_key"
-                    ],
-                },
-                "support_thresholds": result.token_result.manifest[
-                    "support_thresholds"
-                ],
-                "input_unit": "canonical_robust_sd",
-                "interpretation": "descriptive token-conditioned phenotype",
-            }
-
             support_stem = figure_dir / f"{split}_{modality}_token_support"
             _prepare_figure_targets(support_stem, formats, force=force)
             figure, _ = plot_token_support(
@@ -1960,20 +1926,9 @@ def _write_figures(
                 support_stem,
                 formats=formats,
                 dpi=dpi,
-                provenance={
-                    **provenance,
-                    "visualization": {
-                        "kind": "token_support",
-                        "token_count": int(len(token_ids)),
-                        "value_field": "hard-assigned valid patch count",
-                        "x_order": "ascending token ID",
-                    },
-                },
             )
             plt.close(figure)
             produced.extend(artifacts.figure_paths)
-            if artifacts.manifest_path is not None:
-                produced.append(artifacts.manifest_path)
 
             ranked = sorted(
                 range(len(token_ids)),
@@ -1983,9 +1938,6 @@ def _write_figures(
             selected_ids = token_ids[ranked]
             selected_support = supported[ranked]
             matrix = _profile_matrix(result.token_result, selected_ids.tolist())
-            heatmap_limit = _figure_symmetric_limit(
-                matrix[selected_support]
-            )
             heatmap_stem = figure_dir / f"{split}_{modality}_phenotype_heatmap"
             _prepare_figure_targets(heatmap_stem, formats, force=force)
             figure, _ = plot_token_feature_heatmap(
@@ -2003,31 +1955,9 @@ def _write_figures(
                 heatmap_stem,
                 formats=formats,
                 dpi=dpi,
-                provenance={
-                    **provenance,
-                    "visualization": {
-                        "kind": "hard_token_phenotype_heatmap",
-                        "profile_type": "hard",
-                        "value_field": "marginal_standardized_effect",
-                        "selected_token_ids": selected_ids.tolist(),
-                        "selection_rule": (
-                            "support sufficient first, then assigned patch count "
-                            "descending, then token ID ascending"
-                        ),
-                        "color_scale": {
-                            "cmap": "RdBu_r",
-                            "center": 0.0,
-                            "vmin": -heatmap_limit,
-                            "vmax": heatmap_limit,
-                            "unit": "marginal subject-equal scale",
-                        },
-                    },
-                },
             )
             plt.close(figure)
             produced.extend(artifacts.figure_paths)
-            if artifacts.manifest_path is not None:
-                produced.append(artifacts.manifest_path)
 
             feature_candidates = (
                 ("channel_mean/log_relative_power_alpha",)
@@ -2043,8 +1973,6 @@ def _write_figures(
             colors = full_matrix[:, feature_column]
             embedding = _embedding_by_token(payloads[split], result)
             if embedding.shape[1] >= 2 and np.sum(np.all(np.isfinite(embedding), axis=1)) >= 2:
-                supported_colors = colors[supported & np.isfinite(colors)]
-                codebook_color_limit = _figure_symmetric_limit(supported_colors)
                 embedding_stem = (
                     figure_dir / f"{split}_{modality}_codebook_{feature_name.replace('/', '_')}"
                 )
@@ -2067,44 +1995,10 @@ def _write_figures(
                     embedding_stem,
                     formats=formats,
                     dpi=dpi,
-                    provenance={
-                        **provenance,
-                        "visualization": {
-                            "kind": "codebook_pca_feature",
-                            "embedding_shape": list(embedding.shape),
-                            "projection": "centered unscaled PCA via SVD",
-                            "feature_name": feature_name,
-                            "profile_type": "hard",
-                            "value_field": "marginal_standardized_effect",
-                            "annotate_token_ids": False,
-                            "color_scale": {
-                                "cmap": "RdBu_r",
-                                "center": 0.0,
-                                "vmin": -codebook_color_limit,
-                                "vmax": codebook_color_limit,
-                                "unit": "marginal subject-equal scale",
-                            },
-                        },
-                    },
                 )
                 plt.close(figure)
                 produced.extend(artifacts.figure_paths)
-                if artifacts.manifest_path is not None:
-                    produced.append(artifacts.manifest_path)
     return produced
-
-
-def _artifact_inventory(output_dir: Path) -> list[dict[str, Any]]:
-    manifest_path = output_dir / "manifest.json"
-    return [
-        {
-            "path": str(path.relative_to(output_dir)),
-            "bytes": path.stat().st_size,
-            "sha256": _sha256(path),
-        }
-        for path in sorted(output_dir.rglob("*"))
-        if path.is_file() and path != manifest_path
-    ]
 
 
 def build_token_physiology_atlas(
@@ -2154,16 +2048,7 @@ def build_token_physiology_atlas(
     resolved_exports = {
         split: Path(path).resolve() for split, path in exports.items()
     }
-    input_export_records = {
-        split: {
-            "path": str(path),
-            "sha256": _sha256(path),
-        }
-        for split, path in resolved_exports.items()
-    }
-
     payloads: dict[str, dict[str, np.ndarray]] = {}
-    input_manifests: dict[str, dict[str, Any]] = {}
     split_results: dict[str, dict[str, ModalitySplitAtlas]] = {}
     for split, path in resolved_exports.items():
         payload, export_manifest = load_token_export(
@@ -2172,7 +2057,6 @@ def build_token_physiology_atlas(
             allow_test=allow_test,
         )
         payloads[split] = payload
-        input_manifests[split] = export_manifest
         split_results[split] = analyze_export_split(
             payload,
             export_manifest,
@@ -2373,7 +2257,6 @@ def build_token_physiology_atlas(
         _write_figures(
             split_results,
             payloads,
-            input_export_records,
             output,
             config=effective_config,
             formats_override=formats,
@@ -2418,32 +2301,6 @@ def build_token_physiology_atlas(
         "wall_time_seconds": elapsed,
     }
     _write_json_atomic(output / "summary.json", summary, force=force)
-    manifest = {
-        "schema": ATLAS_SCHEMA_VERSION,
-        "created_utc": datetime.now(timezone.utc).isoformat(),
-        "completed": True,
-        "protected_test_opened": "test" in split_results,
-        "input_exports": {
-            split: {
-                **input_export_records[split],
-                "manifest": input_manifests[split],
-            }
-            for split in split_results
-        },
-        "config": effective_config,
-        "bootstrap_iterations_override": bootstrap_iterations,
-        "coupling_permutations_override": coupling_permutations,
-        "information_ledger_enabled": information_ledger,
-        "measurement_cache_dir": str(cache_dir),
-        "raw_patches_copied_to_atlas": False,
-        "software": {
-            "python": platform.python_version(),
-            "numpy": np.__version__,
-        },
-        "wall_time_seconds": elapsed,
-        "artifacts": _artifact_inventory(output),
-    }
-    _write_json_atomic(output / "manifest.json", manifest, force=force)
     return output
 
 

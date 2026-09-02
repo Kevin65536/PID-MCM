@@ -77,7 +77,6 @@ figures:
   formats: ["png", "pdf", "svg"]
   dpi: 180
   top_tokens: 24
-  write_manifest: true
   overwrite: false
 
 cache:

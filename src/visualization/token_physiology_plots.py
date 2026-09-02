@@ -13,12 +13,8 @@ symmetric colour scale centred on zero.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-import hashlib
-import json
 import os
 from pathlib import Path
-import platform
 import tempfile
 from typing import Any, Mapping, Sequence
 
@@ -36,7 +32,6 @@ INSUFFICIENT_SUPPORT_COLOR = "#D9D9D9"
 SUPPORTED_COLOR = "#0072B2"
 REFERENCE_COLOR = "#333333"
 _SUPPORTED_FORMATS = ("png", "pdf", "svg")
-_MANIFEST_SCHEMA = "token_physiology_figure_manifest_v2"
 
 
 @dataclass(frozen=True)
@@ -44,7 +39,6 @@ class FigureArtifacts:
     """Paths created by :func:`save_figure_atomic`."""
 
     figure_paths: tuple[Path, ...]
-    manifest_path: Path | None
 
 
 def _as_1d(
@@ -806,14 +800,6 @@ def _target_with_suffix(stem: Path, suffix: str) -> Path:
     return Path(f"{stem}.{suffix}")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _stage_path(parent: Path, stem_name: str, suffix: str) -> Path:
     descriptor, raw_path = tempfile.mkstemp(
         dir=parent,
@@ -822,13 +808,6 @@ def _stage_path(parent: Path, stem_name: str, suffix: str) -> Path:
     )
     os.close(descriptor)
     return Path(raw_path)
-
-
-def _write_text_staged(path: Path, content: str) -> None:
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
 
 
 def _publish_without_overwrite(staged: Path, target: Path) -> None:
@@ -841,77 +820,19 @@ def _publish_without_overwrite(staged: Path, target: Path) -> None:
     staged.unlink()
 
 
-def build_figure_manifest(
-    figure: Figure,
-    staged_outputs: Sequence[tuple[Path, Path, str]],
-    *,
-    dpi: int,
-    provenance: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Build the JSON-serialisable manifest used by the atomic exporter."""
-
-    width, height = figure.get_size_inches()
-    axes = []
-    for axis in figure.axes:
-        axes.append(
-            {
-                "title": axis.get_title(),
-                "xlabel": axis.get_xlabel(),
-                "ylabel": axis.get_ylabel(),
-            }
-        )
-    outputs = [
-        {
-            "filename": target.name,
-            "format": format_name,
-            "bytes": staged.stat().st_size,
-            "sha256": _sha256(staged),
-        }
-        for staged, target, format_name in staged_outputs
-    ]
-    manifest: dict[str, Any] = {
-        "schema": _MANIFEST_SCHEMA,
-        "created_utc": datetime.now(timezone.utc).isoformat(),
-        "figure": {
-            "width_inches": float(width),
-            "height_inches": float(height),
-            "axes_count": len(figure.axes),
-            "axes": axes,
-        },
-        "export": {
-            "rasterization_dpi": int(dpi),
-            "opaque_background": True,
-            "bbox_inches": None,
-            "outputs": outputs,
-        },
-        "software": {
-            "python": platform.python_version(),
-            "matplotlib": mpl.__version__,
-            "numpy": np.__version__,
-        },
-        "provenance": dict(provenance or {}),
-    }
-    # Fail before writing if provenance contains unsupported objects.
-    json.dumps(manifest, ensure_ascii=False, allow_nan=False)
-    return manifest
-
-
 def save_figure_atomic(
     figure: Figure,
     output: str | Path,
     *,
     formats: Sequence[str] | str | None = None,
     dpi: int = 300,
-    provenance: Mapping[str, Any] | None = None,
-    write_manifest: bool = True,
 ) -> FigureArtifacts:
     """Atomically save a figure without ever replacing an existing artifact.
 
     ``output`` may be a stem or include one of the supported suffixes.  Passing
     ``formats=("png", "pdf", "svg")`` writes all three representations.  The
     exporter preserves the figure's physical page size (``bbox_inches=None``)
-    and uses an opaque white background.  The optional manifest is
-    ``<stem>.manifest.json``.
+    and uses an opaque white background.
 
     Existing regular files, directories, or symlinks cause a preflight
     :class:`FileExistsError`.  There is deliberately no overwrite switch.
@@ -931,14 +852,10 @@ def save_figure_atomic(
         _target_with_suffix(stem, format_name)
         for format_name in normalised_formats
     )
-    manifest_target = (
-        _target_with_suffix(stem, "manifest.json") if write_manifest else None
-    )
-    all_targets = list(figure_targets)
-    if manifest_target is not None:
-        all_targets.append(manifest_target)
     existing = [
-        target for target in all_targets if target.exists() or target.is_symlink()
+        target
+        for target in figure_targets
+        if target.exists() or target.is_symlink()
     ]
     if existing:
         joined = ", ".join(str(path) for path in existing)
@@ -946,7 +863,6 @@ def save_figure_atomic(
 
     staged_paths: list[Path] = []
     staged_outputs: list[tuple[Path, Path, str]] = []
-    staged_manifest: Path | None = None
     try:
         save_rc = {
             "pdf.fonttype": 42,
@@ -979,44 +895,14 @@ def save_figure_atomic(
                 )
                 staged_outputs.append((staged, target, format_name))
 
-        if manifest_target is not None:
-            manifest = build_figure_manifest(
-                figure,
-                staged_outputs,
-                dpi=dpi,
-                provenance=provenance,
-            )
-            staged_manifest = _stage_path(
-                stem.parent,
-                stem.name,
-                ".manifest.json.tmp",
-            )
-            staged_paths.append(staged_manifest)
-            _write_text_staged(
-                staged_manifest,
-                json.dumps(
-                    manifest,
-                    indent=2,
-                    sort_keys=True,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
-                + "\n",
-            )
-
         for staged, target, _ in staged_outputs:
             _publish_without_overwrite(staged, target)
-        if staged_manifest is not None and manifest_target is not None:
-            _publish_without_overwrite(staged_manifest, manifest_target)
     finally:
         for staged in staged_paths:
             if staged.exists() or staged.is_symlink():
                 staged.unlink()
 
-    return FigureArtifacts(
-        figure_paths=figure_targets,
-        manifest_path=manifest_target,
-    )
+    return FigureArtifacts(figure_paths=figure_targets)
 
 
 __all__ = [
@@ -1024,7 +910,6 @@ __all__ = [
     "INSUFFICIENT_SUPPORT_COLOR",
     "MISSING_COLOR",
     "SUPPORTED_COLOR",
-    "build_figure_manifest",
     "plot_codebook_embedding_colored",
     "plot_token_feature_heatmap",
     "plot_token_feature_profile_ci",

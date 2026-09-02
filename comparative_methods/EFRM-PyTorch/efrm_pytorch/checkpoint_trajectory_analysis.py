@@ -969,6 +969,8 @@ def run_analysis(
         "field_columns": list(TIDY_FIELDS),
         "runs": summary,
         "alignment_epoch_interpolation": False,
+        "model_checkpoints_loaded": False,
+        "similarity_matrices_loaded": False,
     }
     summary_path = output / "summary.json"
     summary_path.write_text(json.dumps(summary_payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -977,33 +979,7 @@ def run_analysis(
     _plot_alignment(all_rows, output)
     report_path = output / "REPORT.md"
     report_path.write_text(_markdown_report(source_root, output, all_rows, inventories, summary), encoding="utf-8")
-    manifest = {
-        "schema": SCHEMA,
-        "generated_at": _now(),
-        "source_root": str(source_root),
-        "output_dir": str(output),
-        "selection": {
-            "include_all": include_all,
-            "run_filters": list(run_filters or []),
-            "default_rule": "formal_stage_a, source_reference, paper_reference, and development runs; smoke/Stage-B excluded unless --include-all",
-        },
-        "run_count": len(inventories),
-        "row_count": len(all_rows),
-        "alignment_epoch_interpolation": False,
-        "alignment_metric_basis": "row_weighted_duplicate_unaware_existing_export",
-        "model_checkpoints_loaded": False,
-        "similarity_matrices_loaded": False,
-        "protected_test_opened": False,
-        "runs": inventories,
-        "outputs": {},
-        "missingness_policy": "Only fields physically present in source JSON/JSONL are populated; missing alignment values remain blank/None.",
-    }
-    # Add output hashes only after every file has been written.
-    for path in sorted(output.iterdir()):
-        if path.is_file() and path.name != "manifest.json":
-            manifest["outputs"][path.name] = _sha256(path)
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    return manifest
+    return summary_payload
 
 
 def main(argv: Sequence[str] | None = None) -> None:

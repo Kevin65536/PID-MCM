@@ -923,31 +923,7 @@ def analyze_one(
         "metrics": metric_rows,
         "block_permutation": permutation_rows,
     }
-    (output_dir / "hierarchical_metrics.json").write_text(
-        json.dumps(_jsonable(metrics_json), indent=2, sort_keys=True), encoding="utf-8"
-    )
     _plot_report(evidence.run_id, metric_rows, permutation_rows, output_dir / "hierarchical_alignment")
-    output_files = sorted(
-        path
-        for path in output_dir.iterdir()
-        if path.is_file() and path.name not in {"manifest.json", "hierarchical_metrics.json"}
-    )
-    run_output_manifest = {
-        "schema": f"{ANALYSIS_SCHEMA}_files_v1",
-        "run_id": evidence.run_id,
-        "files": [
-            {"path": path.name, "sha256": _sha256(path), "bytes": path.stat().st_size}
-            for path in output_files
-        ],
-    }
-    (output_dir / "manifest.json").write_text(
-        json.dumps(_jsonable(run_output_manifest), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    metrics_json["output_manifest"] = run_output_manifest
-    # Keep the JSON self-contained while retaining a hash for every generated
-    # non-JSON artifact.  The JSON and manifest deliberately do not hash each
-    # other, avoiding a self-referential provenance cycle.
     (output_dir / "hierarchical_metrics.json").write_text(
         json.dumps(_jsonable(metrics_json), indent=2, sort_keys=True), encoding="utf-8"
     )
@@ -977,66 +953,6 @@ def _failure_report(output_dir: Path, error: Exception, inputs: Sequence[str]) -
     )
 
 
-def refresh_existing_manifests(output_root: str | Path) -> None:
-    """Refresh output hashes after an approved plot-only re-render.
-
-    This is intentionally separate from metric computation: it never opens
-    evidence and only re-hashes files already inside the analysis output root.
-    """
-
-    root = Path(output_root)
-    manifest_path = root / "manifest.json"
-    root_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    for item in root_manifest.get("inputs", []):
-        run_dir = root / str(item["output_subdir"])
-        run_manifest_path = run_dir / "manifest.json"
-        metrics_path = run_dir / "hierarchical_metrics.json"
-        if metrics_path.is_file():
-            metrics_json = json.loads(metrics_path.read_text(encoding="utf-8"))
-            metric_files = sorted(
-                path
-                for path in run_dir.iterdir()
-                if path.is_file() and path.name not in {"manifest.json", "hierarchical_metrics.json"}
-            )
-            metrics_json["output_manifest"]["files"] = [
-                {"path": path.name, "sha256": _sha256(path), "bytes": path.stat().st_size}
-                for path in metric_files
-            ]
-            metrics_path.write_text(
-                json.dumps(_jsonable(metrics_json), indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
-        if run_manifest_path.is_file():
-            run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
-            run_files = sorted(
-                path
-                for path in run_dir.iterdir()
-                if path.is_file() and path.name not in {"manifest.json", "hierarchical_metrics.json"}
-            )
-            run_manifest["files"] = [
-                {"path": path.name, "sha256": _sha256(path), "bytes": path.stat().st_size}
-                for path in run_files
-            ]
-            run_manifest_path.write_text(
-                json.dumps(_jsonable(run_manifest), indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-        output_files = sorted(path for path in run_dir.iterdir() if path.is_file())
-        item["output_files"] = [
-            {"path": path.name, "sha256": _sha256(path), "bytes": path.stat().st_size}
-            for path in output_files
-        ]
-    root_manifest["root_outputs"] = [
-        {"path": path.name, "sha256": _sha256(path), "bytes": path.stat().st_size}
-        for path in sorted(root.iterdir())
-        if path.is_file() and path.name != "manifest.json"
-    ]
-    manifest_path.write_text(
-        json.dumps(_jsonable(root_manifest), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-
 def run_cli(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", action="append", required=True, help="full_validation_clip_alignment_evidence.npz; repeat twice for the two Stage-A runs")
@@ -1053,20 +969,12 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         evidences = [load_evidence(path) for path in args.evidence]
         if not evidences:
             raise EvidenceError("at least one evidence file is required")
-        root_manifest: dict[str, Any] = {
-            "schema": ANALYSIS_SCHEMA,
-            "status": "completed",
-            "analysis": "duplicate-aware hierarchical alignment",
+        results: dict[str, Any] = {
             "inputs": [],
-            "permutations": int(args.permutations),
-            "seed": int(args.seed),
-            "views": ["unique_sample", "raw_duplicate_aware"],
-            "relations": list(RELATIONS),
-            "block_types": list(BLOCK_TYPES),
         }
         for offset, evidence in enumerate(evidences):
             run_name = _safe_name(evidence.run_id)
-            if run_name in {str(item.get("run_id")) for item in root_manifest["inputs"]}:
+            if run_name in {str(item.get("run_id")) for item in results["inputs"]}:
                 run_name = f"{run_name}_{offset + 1}"
             result = analyze_one(
                 evidence,
@@ -1074,26 +982,13 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
                 permutations=args.permutations,
                 seed=args.seed + offset,
             )
-            run_output_dir = output_root / run_name
-            output_files = sorted(path for path in run_output_dir.iterdir() if path.is_file())
-            root_manifest["inputs"].append({
+            results["inputs"].append({
                 "run_id": evidence.run_id,
                 "output_subdir": run_name,
-                "evidence_path": str(evidence.path),
-                "evidence_sha256": _sha256(evidence.path),
                 "row_count": result["row_count"],
                 "unique_sample_count": result["unique_sample_count"],
                 "duplicate_summary": result["duplicate_summary"],
-                "output_files": [
-                    {
-                        "path": path.name,
-                        "sha256": _sha256(path),
-                        "bytes": path.stat().st_size,
-                    }
-                    for path in output_files
-                ],
             })
-        root_manifest["input_count"] = len(root_manifest["inputs"])
         output_root.mkdir(parents=True, exist_ok=True)
         summary_lines = [
             "# EFRM hierarchical alignment analysis",
@@ -1101,7 +996,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             "This is a public-validation, duplicate-aware diagnostic. The primary view uses stable first-occurrence sample_id de-duplication; raw_duplicate_aware is a sensitivity view that excludes repeated sample IDs from negative pools.",
             "",
         ]
-        for item in root_manifest["inputs"]:
+        for item in results["inputs"]:
             result_path = output_root / str(item["output_subdir"]) / "hierarchical_metrics.json"
             result = json.loads(result_path.read_text(encoding="utf-8"))
             dup = result["duplicate_summary"]
@@ -1130,19 +1025,6 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             "",
         ])
         (output_root / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
-        root_manifest["root_outputs"] = [
-            {
-                "path": path.name,
-                "sha256": _sha256(path),
-                "bytes": path.stat().st_size,
-            }
-            for path in sorted(output_root.iterdir())
-            if path.is_file() and path.name != "manifest.json"
-        ]
-        (output_root / "manifest.json").write_text(
-            json.dumps(_jsonable(root_manifest), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
         return 0
     except Exception as error:
         _failure_report(output_root, error, args.evidence)

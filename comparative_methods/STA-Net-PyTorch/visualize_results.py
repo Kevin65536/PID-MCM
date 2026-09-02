@@ -793,12 +793,6 @@ def run(args: argparse.Namespace) -> Path:
         "checkpoint_selection_manifest_sha256": None if selection_path is None else sha256(selection_path),
     }
     write_json(output_dir / "summary.json", summary)
-    artifact_manifest = {
-        str(path.relative_to(output_dir)): sha256(path)
-        for path in sorted(output_dir.rglob("*"))
-        if path.is_file() and path.name != "artifact_manifest.json"
-    }
-    write_json(output_dir / "artifact_manifest.json", {"schema": REPORT_SCHEMA, "artifacts": artifact_manifest})
     print(json.dumps({"status": "completed", "output_dir": str(output_dir), "tasks": [row["task"] for row in summaries]}, indent=2))
     return output_dir
 
