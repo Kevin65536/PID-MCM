@@ -1,16 +1,24 @@
 # Physiology-semantic tokenizer configurations
 
-This directory contains the active synthetic T3a P0 contract, one bounded
-nonprotected measured diagnostic, and retained contracts from the stopped
+This directory contains the active synthetic T3a P0 contract, one synthetic
+T3c composite T-P2 screen, three bounded nonprotected measured diagnostics, one
+array-free T3c admission contract, and retained contracts from the stopped
 R-series. Generated variants, local tuning files, run outputs and abandoned
 preregistries are intentionally excluded from Git.
 
-> **Lifecycle (2026-08-27): one synthetic qualification contract plus one
-> measured exploratory diagnostic.** `t3a_balloon_robust_p0.yaml` remains the
-> synthetic qualification path. `t3_measured_reconstruction_null_v1.yaml` can
-> read only the declared nonprotected development split and is decision-
-> ineligible. Neither entry can open protected data. The retained E0–E2 and
-> R-series configurations remain stopped replay surfaces.
+> **Lifecycle (2026-09-03): one synthetic qualification contract, one
+> synthetic composite identifiability screen, three measured exploratory
+> diagnostics, and one array-free admission gate.**
+> `t3a_balloon_robust_p0.yaml` remains the
+> synthetic qualification path. `t3_measured_reconstruction_null_v1.yaml`,
+> `t3_identifiability_v1.yaml`, and `t3_multisession_loso_v1.yaml` can read only
+> their declared nonprotected development scope and are decision-ineligible.
+> `t3c_hierarchical_composite_admission_v1.yaml` cannot read measured arrays
+> and currently blocks the measured hierarchy.
+> `t3c_composite_synthetic_t2_v1.yaml` is synthetic-only; its formal result
+> blocks both C1 directions and leaves C2 unrun. No entry can open protected
+> data. The retained E0–E2 and R-series configurations remain stopped replay
+> surfaces.
 
 ## Retained historical boundary
 
@@ -42,6 +50,10 @@ The version-controlled configuration surface is deliberately limited to:
 | --- | --- | --- |
 | `t3a_balloon_robust_p0.yaml` | Synthetic physics, identifiability, corruption, null, calibration and visualization contract | **Active synthetic P0**; measured/protected inputs disabled |
 | `t3_measured_reconstruction_null_v1.yaml` | Real EEG/fNIRS center-mask reconstruction and independent/pairing/time-shift null diagnostic | **Active measured development diagnostic**; subjects 01–23 only, protected 24–29 closed, not qualification evidence |
+| `t3_identifiability_v1.yaml` | Known-truth synthetic plus fit-only M2 multistart/profile/bound/SVD diagnostic | **Active measured development diagnostic**; gauges/selects on 01–18, analyzes three fit representatives, loads no subject 19–29 arrays/window samples, not qualification evidence |
+| `t3_multisession_loso_v1.yaml` | Fit-only three-session LOSO with a shared effective-κ center, zero-sum training-session deviations, and target-masked nominal recovery scoring | **Active measured development diagnostic**; subjects 01–18 and records 01/03/05 only, loads no subject 19–29 arrays, not qualification evidence |
+| `t3c_hierarchical_composite_admission_v1.yaml` | Array-free gain/time composite map, shrinkage smoke, and Step 2/3 prerequisite audit | **Active admission gate**; current result `BLOCKED_PREREQUISITE`, measured hierarchy not started |
+| `t3c_composite_synthetic_t2_v1.yaml` | Known-truth C1 gain/time SBC, profile, multistart, confounding, SVD, and held-out screen | **Complete synthetic negative**; both C1 directions failed, C2 not run, measured hierarchy remains blocked |
 | `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | **Stopped**; completed, primary result negative |
 | `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | **Stopped**; completed, structural audit passed |
 | `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | **Stopped**; formal-v3 did not qualify |
@@ -75,4 +87,4 @@ loss weights to zero.
 The consolidated methods, results, interpretation and stop decision are in
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-03_

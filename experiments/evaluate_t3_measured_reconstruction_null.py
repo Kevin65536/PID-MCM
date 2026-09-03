@@ -80,6 +80,16 @@ MODEL_IDS = ("T0", "T1", "T2b", "T3a")
 MODE_IDS = ("joint", "center_masked_eeg", "center_masked_fnirs", "eeg_only", "fnirs_only")
 NULL_IDS = ("independent", "pairing", "time_shift")
 OBS_NAMES = ("EEG", "HbO", "HbR")
+STAGE_RECOMMENDATION_CONTRACT = (
+    ("M0_fixed", True),
+    ("M1_beta", True),
+    ("M1_kappa", True),
+    ("M1_tau", True),
+    ("M2_beta_kappa_tau", False),
+    ("M3_plus_gamma", False),
+    ("M4_plus_alpha", False),
+    ("M5_plus_E0_diagnostic", False),
+)
 MODEL_LABELS = {
     "T0": "T0 持续性基线",
     "T1": "T1 独立线性模型",
@@ -299,6 +309,8 @@ def validate_config(config: Mapping[str, Any]) -> None:
         if not stage_id or stage_id in stage_ids or not set(free).issubset(expected_parameters):
             raise ValueError("parameter-fit stage ids/free parameters are invalid")
         stage_ids.append(stage_id)
+    if any(not isinstance(stage.get("recommendation_eligible"), bool) for stage in stages):
+        raise ValueError("every parameter-fit stage requires a boolean recommendation_eligible flag")
     heldout_positions = tuple(int(value) for value in parameter_fit.get("heldout_trial_positions", ()))
     if len(heldout_positions) != 2 or len(set(heldout_positions)) != 2 or min(heldout_positions) < 0:
         raise ValueError("parameter fit requires two distinct non-negative heldout trial positions")
@@ -972,6 +984,8 @@ def _plot_shared_driver(
 
 def _prepare_measured_series(
     config: Mapping[str, Any],
+    *,
+    gauge_excluded_trial_positions: Sequence[int] = (),
 ) -> tuple[
     list[Trial],
     list[PreparedTrial],
@@ -1004,8 +1018,17 @@ def _prepare_measured_series(
             or trial.fnirs_roles != reference_trial.fnirs_roles
         ):
             raise RuntimeError("cross-trial channel identity/order mismatch")
+    gauge_excluded = set(map(int, gauge_excluded_trial_positions))
+    gauge_trials: list[Trial] = []
+    for subject in fit_subjects:
+        ordered = sorted(loaded[subject], key=lambda trial: int(trial.event_index))
+        if gauge_excluded and max(gauge_excluded) >= len(ordered):
+            raise RuntimeError(f"{subject}: gauge exclusion position exceeds available trials")
+        gauge_trials.extend(trial for index, trial in enumerate(ordered) if index not in gauge_excluded)
+    if not gauge_trials:
+        raise RuntimeError("fit-cohort gauge has no training trials")
     hbo_indices, hbo_names, _ = _select_active_hbo(
-        fit_trials,
+        gauge_trials,
         baseline_duration_s=float(config["data"]["baseline_duration_s"]),
         task_duration_s=float(config["data"]["task_duration_s"]),
         count=int(config["analysis"]["active_hbo_channels"]),
@@ -1017,7 +1040,8 @@ def _prepare_measured_series(
     ], dtype=int)
     if not len(eeg_indices):
         raise RuntimeError("no scalp EEG channels remain after EOG/ECG/EMG exclusion")
-    adapter, fit_drivers = _fit_eeg_adapter(fit_trials, eeg_indices)
+    adapter, _ = _fit_eeg_adapter(gauge_trials, eeg_indices)
+    fit_drivers = [_apply_eeg_adapter(trial, adapter) for trial in fit_trials]
     validation_drivers = [_apply_eeg_adapter(trial, adapter) for trial in validation_trials]
     fit_hbo = [np.mean(trial.fnirs[:, hbo_indices], axis=1, dtype=np.float64) for trial in fit_trials]
     fit_hbr = [np.mean(trial.fnirs[:, hbr_indices], axis=1, dtype=np.float64) for trial in fit_trials]
@@ -1581,7 +1605,7 @@ def _stage_summaries(
         eligible = bool(
             stage_id == "M0_fixed"
             or (
-                bool(stage.get("recommendation_eligible", True))
+                bool(stage["recommendation_eligible"])
                 and median_delta < 0.0
                 and boundary_fraction <= float(fit_config["max_stage_boundary_fraction"])
                 and unidentifiable_fraction <= float(fit_config["max_stage_unidentifiable_fraction"])
@@ -1602,7 +1626,7 @@ def _stage_summaries(
             "boundary_fraction_free_parameter_rows": boundary_fraction,
             "non_identifiable_subject_fraction": unidentifiable_fraction,
             "physical_boolean_failures": physical_failures,
-            "recommendation_eligible_by_contract": bool(stage.get("recommendation_eligible", True)),
+            "recommendation_eligible_by_contract": bool(stage["recommendation_eligible"]),
             "passes_exploratory_selection_rule": eligible,
         })
     finite = [row for row in stage_summary if np.isfinite(float(row["fNIRS_gaussian_negative_log_score_median"]))]
@@ -2312,7 +2336,7 @@ def _run_parameter_fit_validated(config: Mapping[str, Any], run_dir: Path) -> di
     (run_dir / "summary.md").write_text(
         "# T3a 实测被试生理参数拟合与分布\n\n"
         "01–18 号被试用于逐级释放参数和内部 trial 留出比较；每个 trial 独立从静息状态重置，先验每名被试只计一次。19–23 号被试的主性能与 Null 使用冻结的 01–18 群体参数；其逐被试参数仅在选型之后重拟合并单列为描述性结果。24–29 未开放。P0/Q0、EEG loading、共享驱动尺度及噪声保持固定，因此这里的参数仍是标准化观测坐标下的有效模型参数。\n\n"
-        f"## 选型结论\n\n生理可辨识约束下推荐 `{recommended_stage_id}`；单看内部留出预测，最佳为 `{best_predictive_stage_id}`；用于展示 23 人可比参数分布的选型后描述性阶段为 `{distribution_stage_id}`。E0 阶段按合同仅作诊断。\n\n"
+        f"## 选型结论\n\n生理可辨识约束下推荐 `{recommended_stage_id}`；单看内部留出预测，最佳为 `{best_predictive_stage_id}`；用于展示 23 人可比参数分布的选型后描述性阶段为 `{distribution_stage_id}`。M2–M5 按合同仅作补偿诊断，不参与推荐。\n\n"
         "## 逐级结果\n\n" + "\n".join(stage_lines) + "\n\n"
         "## 逐被试分布摘要\n\n" + "\n".join(distribution_lines) + "\n\n"
         "局部 Laplace 区间、优化成功和边界内估计都不自动等于参数可辨识；最终解释以 `subject_stage_geometry.csv` 与图中的分类为准。\n",
@@ -2692,6 +2716,12 @@ def run(
     """Validate the contract, then leave an incomplete manifest on failure."""
 
     validate_config(config)
+    recommendation_contract = tuple(
+        (str(stage["id"]), bool(stage["recommendation_eligible"]))
+        for stage in config["ssm"]["t3a"]["parameter_fit"]["stages"]
+    )
+    if recommendation_contract != STAGE_RECOMMENDATION_CONTRACT:
+        raise ValueError("only M0 and the three single-parameter M1 stages may be recommendation-eligible")
     output_root = (REPO_ROOT / str(config["output"]["root"])).resolve()
     resolved_run_dir = Path(run_dir).resolve()
     try:

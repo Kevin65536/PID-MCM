@@ -192,17 +192,17 @@ ssm:
           free: [tau]
           recommendation_eligible: true
         - id: M2_beta_kappa_tau
-          label_zh: M2 β+κ+τ
+          label_zh: M2 β+κ+τ（诊断）
           free: [beta, kappa, tau]
-          recommendation_eligible: true
+          recommendation_eligible: false
         - id: M3_plus_gamma
-          label_zh: M3 再加 γ
+          label_zh: M3 再加 γ（诊断）
           free: [beta, kappa, tau, gamma]
-          recommendation_eligible: true
+          recommendation_eligible: false
         - id: M4_plus_alpha
-          label_zh: M4 再加 α
+          label_zh: M4 再加 α（诊断）
           free: [beta, kappa, tau, gamma, alpha]
-          recommendation_eligible: true
+          recommendation_eligible: false
         - id: M5_plus_E0_diagnostic
           label_zh: M5 再加 E0（诊断）
           free: [beta, kappa, tau, gamma, alpha, E0]

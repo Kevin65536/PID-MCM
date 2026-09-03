@@ -1,13 +1,14 @@
 # Experiment workspace
 
-_T3a synthetic P0 and the nonprotected measured reconstruction/null diagnostic
-are executable; protected data remain closed_
+_T3a synthetic P0, a synthetic-only T3c composite T-P2 screen, three
+nonprotected measured diagnostics, and one array-free T3c admission gate are
+executable; protected data remain closed_
 
 ## Directory roles
 
 | Path | Role |
 | --- | --- |
-| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | T3a synthetic P0, measured reconstruction/null diagnostic, plus retained stopped R-series contracts |
+| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | T3a synthetic P0, synthetic T3c composite T-P2, three measured diagnostics, the array-free T3c admission gate, and retained stopped R-series contracts |
 | `scripts/` | replay/evidence, state, and figure tools |
 | [`runs/`](runs/README.md) | retained generated evidence; future run root only after registration |
 | `archive/` | local superseded generations; Git-ignored and never default-discovered |
@@ -74,6 +75,72 @@ smoothing is retained only as a posterior-fit description. Null results report
 EEG-only pairing specificity separately from donor leakage into the T2b/T3a
 joint shared state.
 
+The second-step fit-only identifiability diagnostic is registered in
+[`t3_identifiability_v1.yaml`](configs/physiology_semantic_tokenizer/t3_identifiability_v1.yaml)
+with entrypoint
+[`evaluate_t3_identifiability.py`](evaluate_t3_identifiability.py). It first
+runs one known-truth synthetic case. Only after that completes does it fit the
+01--18 observation gauge, select fixed-M0 low/median/high residual subjects,
+and run 16 transformed-space starts, true profile likelihood, expanded-bound
+refits, and conditional forward sensitivity SVD on their eight fit trials.
+The shared loader still constructs canonical dataset-index metadata and window
+references, but no arrays are loaded and no window samples are materialized for
+subjects 19--29. The output is exploratory and cannot qualify a teacher or
+authorize tokenizer promotion.
+
+```bash
+.venv/bin/python experiments/evaluate_t3_identifiability.py \
+  --run-dir experiments/runs/physiology_semantic_tokenizer/t3_identifiability/<fresh_run_id>
+```
+
+The third-step fit-only multi-session diagnostic is registered in
+[`t3_multisession_loso_v1.yaml`](configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml)
+with entrypoint
+[`evaluate_t3_multisession_loso.py`](evaluate_t3_multisession_loso.py). It uses
+only subjects 01--18 and cache records `session_01/03/05`, fits two complete
+sessions per fold, and freezes all fit-dependent objects before target-masked
+apply to the third session. The common window is `[-5,+25) s`; the primary
+score uses the nominal recovery envelope `[+10,+25) s`. Event durations are
+not indexed, so this is not labelled an exact annotated rest period. The run
+is exploratory, decision-ineligible, and cannot open subjects 19--29.
+
+```bash
+.venv/bin/python experiments/evaluate_t3_multisession_loso.py \
+  --config experiments/configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml \
+  --run-dir experiments/runs/physiology_semantic_tokenizer/t3_multisession_loso/<fresh_run_id>
+```
+
+The fourth-step `T3c` entry is currently an array-free admission gate, not a
+measured hierarchy launcher. It checks frozen Step 2/3 evidence, the analytic
+gain/time coordinate, and the Normal–Normal shrinkage primitive. If any
+prerequisite is absent it records `BLOCKED_PREREQUISITE` before measured
+metadata or arrays are read.
+
+```bash
+.venv/bin/python experiments/evaluate_t3c_hierarchical_composite_admission.py \
+  --config experiments/configs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission_v1.yaml \
+  --run-dir experiments/runs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission/<fresh_run_id>
+```
+
+The fourth-step known-truth composite `T-P2` screen is registered separately in
+[`t3c_composite_synthetic_t2_v1.yaml`](configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml)
+with entrypoint
+[`evaluate_t3c_composite_synthetic_t2.py`](evaluate_t3c_composite_synthetic_t2.py).
+It runs 60 independent replicates for each one-dimensional gain/time direction,
+passes only noisy training observations to the fitter, and opens no measured,
+validation, or protected data. The formal v1 result is
+`BLOCKED_C1_COMPOSITE_IDENTIFIABILITY`: both C1 directions failed, so C2 remains
+`NOT_RUN_C1_GATE_NOT_MET` and measured hierarchy remains blocked. The manifest
+owns run state; the retained
+[`detailed report`](../docs/analysis/20260903_T3C_COMPOSITE_SYNTHETIC_TP2_REPORT.md)
+owns the human-readable interpretation.
+
+```bash
+.venv/bin/python experiments/evaluate_t3c_composite_synthetic_t2.py \
+  --config experiments/configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml \
+  --run-dir experiments/runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2/<fresh_run_id>
+```
+
 ## Frozen method boundary and implementation candidates
 
 The theory/architecture principles are retained in
@@ -83,7 +150,7 @@ recorded in the [design note](../docs/physiology_semantic_tokenizer/architecture
 and its [framework diagram](../docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg).
 No YAML or measured-data run is authorized by those artifacts.
 
-Except for the two entries above, the existing physiology-semantic
+Except for the six entries above, the existing physiology-semantic
 YAML/runtime surface is stopped historical and replay-only; do not clone or
 reinterpret it as a new contract. An implementation inside the frozen boundary must first
 pass synthetic software, target/teacher, tensor-shape, split, and null checks.

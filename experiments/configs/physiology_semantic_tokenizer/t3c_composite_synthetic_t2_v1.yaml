@@ -1,0 +1,138 @@
+schema: t3c_composite_synthetic_t2_v1
+
+experiment:
+  name: t3c_composite_synthetic_t2_v1
+  scope: synthetic_known_truth_only
+  measured_data_enabled: false
+  validation_data_enabled: false
+  protected_data_enabled: false
+  qualification_eligible: false
+  decision_eligibility: false
+  seed: 20260903
+
+sources:
+  model:
+    path: src/inference/t3a_balloon_robust_ssm.py
+    sha256: 4221b4a53e9b2041d6db5e0274e4d5b509ab8108291e004c01ab67d9054326e4
+  synthetic_reference:
+    path: experiments/configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml
+    sha256: f8343378c00cb8e0237aba6db82a4bebdf383816ca1f70daccb480c23ce16e31
+  composite_contract:
+    path: experiments/configs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission_v1.yaml
+    sha256: 6ce049571bd268f5e68e7f3f1b1e43a66f875b06e3b056b28e36c7ec77bec0b1
+
+composite:
+  coordinates: [log_gain_relative, log_time_relative]
+  reference:
+    beta: 1.0
+    kappa: 0.64
+    gamma: 0.32
+    tau: 2.0
+    alpha: 0.32
+    E0: 0.32
+  fixed_gauge: [zeta, tv, alpha, E0, P0, Q0, optical_observation, eeg_loading]
+  raw_bounds:
+    beta: [0.25, 4.0]
+    kappa: [0.20, 1.50]
+    gamma: [0.10, 1.00]
+    tau: [0.50, 5.00]
+    alpha: [0.10, 0.80]
+    E0: [0.10, 0.80]
+  candidates:
+    C1_G:
+      active: [log_gain_relative]
+      fixed: {log_time_relative: 0.0}
+      registered_bounds: [-0.60, 0.60]
+      expanded_bounds: [-0.80, 0.80]
+      truth_prior_mean: 0.0
+      truth_prior_sd: 0.20
+      truth_support: [-0.40, 0.40]
+    C1_T:
+      active: [log_time_relative]
+      fixed: {log_gain_relative: 0.0}
+      registered_bounds: [-0.50, 0.50]
+      expanded_bounds: [-0.55, 0.55]
+      truth_prior_mean: 0.0
+      truth_prior_sd: 0.15
+      truth_support: [-0.40, 0.40]
+  c2_policy: separate_run_only_if_C1_G_and_C1_T_pass
+
+simulation:
+  independent_replicates_per_direction: 60
+  sampling_hz: 4.0
+  duration_s_per_trial: 40.0
+  train_trials_per_replicate: 3
+  heldout_trials_per_replicate: 1
+  heldout_fnirs_mask_from_s: 12.0
+  heldout_score_coordinates: [HbO, HbR]
+  independent_trial_reset: true
+  truth_integrator: independent_solve_ivp
+  state_process_noise: false
+  noise:
+    family: student_t_homoscedastic
+    df: 5.0
+    scale: {EEG: 0.080, HbO: 0.025, HbR: 0.015}
+  driver:
+    decay_per_s: 0.45
+    diffusion_sd_per_sqrt_s: 0.08
+    pulse_amplitude: 0.12
+  observation:
+    P0: 1.0
+    Q0: 0.35
+    eeg_loading: 1.0
+    eeg_offset: 0.0
+    process_sd: {r: 0.080, s: 0.010, log_f: 0.006, log_v: 0.004, log_p: 0.004, log_q: 0.004}
+
+inference:
+  objective: likelihood_only_for_point_fit_and_profile
+  sbc_posterior: truncated_normal_prior_with_EKF_likelihood
+  primary_sbc_approximation: EKF_Laplace_truncated_normal
+  fallback_sbc_approximation: exact_1d_grid_quadrature_under_EKF_likelihood
+  fallback_selection_rule: use_grid_only_if_Laplace_fails_prefrozen_calibration_gates
+  multistarts: 16
+  optimizer_max_iterations: 60
+  optimizer_ftol: 1.0e-7
+  workers: 16
+  profile_points: 21
+  posterior_grid_points: 81
+  profile_delta_nll: 1.920729410347062
+  profile_reference_tolerance_nll: 0.01
+  posterior_hessian_step: 0.005
+  boundary_fraction_of_span: 0.01
+  sensitivity_step: 0.01
+  sensitivity_relative_singular_threshold: 0.05
+  prediction_equivalence_whitened_rmse: 0.10
+  material_parameter_difference_fraction_of_span: 0.01
+  driver_stability_max_nrmse: 0.10
+  driver_stability_min_correlation: 0.95
+  bootstrap_repetitions: 10000
+
+gates:
+  minimum_independent_sbc_replicates: 60
+  maximum_solver_failure_fraction: 0.0
+  maximum_estimate_boundary_contact_fraction: 0.0
+  maximum_profile_boundary_contact_fraction: 0.05
+  minimum_profile_truth_coverage: 0.90
+  maximum_profile_truth_coverage: 0.99
+  maximum_profile_reference_difference_nll: 0.01
+  minimum_multistart_success_fraction: 1.0
+  maximum_multistart_nll_spread_per_observation: 0.10
+  maximum_multistart_parameter_spread_fraction: 0.10
+  maximum_expanded_outside_registered_near_optimal_count: 0
+  maximum_material_prediction_equivalent_count: 0
+  sbc_ks_alpha_critical_multiplier: 1.36
+  minimum_sbc_rank_mean: 0.45
+  maximum_sbc_rank_mean: 0.55
+  minimum_sbc_coverage_95: 0.90
+  maximum_sbc_coverage_95: 0.99
+  required_nominal_coverage_in_binomial_interval: 0.95
+  minimum_posterior_sd_grid_steps: 2.0
+  maximum_posterior_grid_cdf_difference: 0.02
+  maximum_absolute_bias_fraction_of_span: 0.05
+  maximum_rmse_fraction_of_span: 0.20
+  maximum_bias_ci_extent_fraction_of_span: 0.10
+  maximum_heldout_excess_oracle_nll_per_observation: 0.10
+  heldout_noninferiority_margin_nll_per_observation: 0.05
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2

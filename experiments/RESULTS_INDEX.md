@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-08-25; payload-pruning record retained from
+_Evidence surface updated 2026-09-03; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -34,6 +34,10 @@ use local payloads only when a report explicitly requires them.
 | D1B (abandoned) | [`20260728_d1b_train_only_grid_v1`](runs/physiology_semantic_tokenizer/r1p_d1b_train_only_hyperparameter_seal/20260728_d1b_train_only_grid_v1/summary.json) | incomplete train-only evidence; validation remained undetermined and the lane is not continued |
 | R2-D formal (stopped) | [`20260728_r2d_cj_seed20260728_formal_v1`](runs/physiology_semantic_tokenizer/r2_continuous_observability/20260728_r2d_cj_seed20260728_formal_v1/summary.json) | bilateral observability failure |
 | R2-D statistical audit (stopped) | [`20260728_r1d_cj_seed20260728_v2_stat_audit`](runs/physiology_semantic_tokenizer/r2_continuous_observability_analysis/20260728_r1d_cj_seed20260728_v2_stat_audit/diagnostic_summary.json) | uncertainty and diagnostic reference |
+| T3 Step 2 identifiability (complete exploratory negative) | [`detailed report`](../docs/analysis/20260902_T3_IDENTIFIABILITY_STEP2_REPORT.md) and local [`v3 summary`](runs/physiology_semantic_tokenizer/t3_identifiability/20260902_step2_identifiability_v3/summary.md) | fit-only beta/kappa/tau practical-identifiability endpoint unsupported; no qualification or promotion |
+| T3 Step 3 three-session LOSO (complete exploratory negative) | [`detailed report`](../docs/analysis/20260902_T3_MULTISESSION_LOSO_STEP3_REPORT.md) and local [`v2 summary`](runs/physiology_semantic_tokenizer/t3_multisession_loso/20260902_step3_multisession_loso_v2/summary.md) | fit-only effective-kappa candidate worsened held-out recovery NLL versus fixed M0; parameter screen failed; no trait, qualification, or promotion claim |
+| T3c Step 4 hierarchical admission (complete blocked gate) | [`detailed report`](../docs/analysis/20260903_T3C_HIERARCHICAL_STEP4_ADMISSION_REPORT.md) and local [`v3 summary`](runs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission/20260903_step4_admission_v3/summary.md) | array-free admission found 6/8 prerequisites unmet; measured partial pooling not started; no trait, qualification, or promotion claim |
+| T3c Step 4 composite synthetic T-P2 (complete negative) | [`detailed report`](../docs/analysis/20260903_T3C_COMPOSITE_SYNTHETIC_TP2_REPORT.md) and local [`v1 summary`](runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2/20260903_step4_composite_t2_v1/summary.md) | both C1 gain/time directions failed; C2 not run; synthetic identifiability evidence only, measured hierarchy remains blocked |
 
 All E/R entries above are stopped historical evidence surfaces except D1B, which is
 an abandoned incomplete lane. They can be read or replayed where their exact

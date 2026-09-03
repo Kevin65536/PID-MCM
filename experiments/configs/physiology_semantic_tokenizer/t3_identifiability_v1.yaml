@@ -1,0 +1,64 @@
+schema: t3_identifiability_v1
+
+experiment:
+  name: t3_identifiability_v1
+  scope: fit_only_measured_development_diagnostic
+  measured_data_enabled: true
+  protected_data_enabled: false
+  qualification_eligible: false
+  decision_eligibility: false
+  seed: 20260902
+
+sources:
+  measured_config: experiments/configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml
+  measured_config_sha256: 09317a7fd6eb50b44c829d1ad3f2e5a4319a2fe29e16544448d44095801a939e
+  synthetic_config: experiments/configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml
+  synthetic_config_sha256: f8343378c00cb8e0237aba6db82a4bebdf383816ca1f70daccb480c23ce16e31
+  parent_run_id: t3_measured_reconstruction_null/20260828_subject_parameter_fit_v2
+  parent_manifest: experiments/runs/physiology_semantic_tokenizer/t3_measured_reconstruction_null/20260828_subject_parameter_fit_v2/manifest.json
+  parent_run_role: context_only_not_consumed
+
+estimand:
+  hypothesis: beta_kappa_tau_are_practically_identifiable_on_fit_only_T3a_observations
+  estimand_id: fit_only_practical_identifiability_beta_kappa_tau_v1
+  primary_endpoint: every_beta_kappa_tau_profile_grid_is_complete_and_support_is_finite_contiguous_and_inside_registered_bounds
+  operator: likelihood_only_profile_with_companion_parameters_and_latent_states_reoptimized
+  'null': no_cross_modal_null_operator_diagnostic_only
+
+selection:
+  # Compute this fixed-model score on all 01--18 fit subjects before running
+  # any M2 identifiability analysis.  The two internal holdouts are not used.
+  metric: M0_fixed_pooled_predictive_nll_per_finite_observation
+  heldout_trial_positions: [4, 9]
+  roles: [low, median, high]
+
+synthetic:
+  replicate_id: 0
+  seed: 20260902
+  truth_parameters: prior_center
+  observations: noisy_clean_scenario
+
+analysis:
+  stage: M2_beta_kappa_tau
+  active_parameters: [beta, kappa, tau]
+  sensitivity_parameters: [beta, kappa, tau, gamma, alpha, E0]
+  objective: likelihood_only
+  transformed_multistarts: 16
+  optimizer_max_iterations: 60
+  optimizer_ftol: 1.0e-7
+  workers: 16
+  profile_points: 9
+  profile_multistarts: 2
+  profile_likelihood_ratio_delta_nll: 1.920729410347062
+  profile_reference_consistency_tolerance_nll: 0.01
+  expanded_bound_fraction_in_transformed_space: 0.25
+  boundary_fraction_in_transformed_space: 0.01
+  sensitivity_step_in_transformed_space: 0.01
+  sensitivity_relative_singular_value_threshold: 0.05
+  prediction_equivalence_max_whitened_rmse: 0.10
+  material_parameter_difference_min_fraction_of_transformed_span: 0.01
+  driver_stability_max_nrmse: 0.10
+  driver_stability_min_correlation: 0.95
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/t3_identifiability

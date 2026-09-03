@@ -7,13 +7,18 @@ physiology-semantic tokenizer generation. The plan is limited to physical-teache
 qualification, source/observation tokenization, and coupling-prior retention. It
 does not use downstream task performance as a training or selection endpoint.
 
-Two bounded SSM entry points are now registered. The synthetic P0 launcher
-remains the qualification path; the measured reconstruction/null launcher is a
-nonprotected development diagnostic with its own executable contract. The
-measured diagnostic uses only the registered development subjects, fits on
-subjects 01--18, applies frozen objects to subjects 19--23, and keeps subjects
-24--29 closed. Its outputs are exploratory reconstruction and null evidence;
-they are not clean truth, teacher qualification, or a physical-teacher claim.
+Six bounded SSM entry points are now registered. The synthetic P0 launcher
+remains the qualification path; a separate synthetic-only `T3c` composite
+`T-P2` screen tests the gain/time directions but is decision-ineligible. The
+measured reconstruction/null, fit-only identifiability, and fit-only
+three-session LOSO launchers are nonprotected development diagnostics with
+their own executable contracts. An array-free `T3c` admission gate checks
+whether hierarchical composite fitting may start. Reconstruction fits on
+subjects 01--18 and applies frozen objects to subjects 19--23.
+Identifiability and LOSO use only subjects 01--18 and load no 19--23 arrays;
+all three measured diagnostics keep subjects 24--29 closed. Their outputs are
+exploratory; they are not clean truth, teacher qualification, or a
+physical-teacher claim.
 Protected data and every other protected surface remain closed.
 
 The measured diagnostic does not replace the synthetic qualification gates or
@@ -318,11 +323,13 @@ The parameter contract separates three kinds of restriction:
   the fixed model first, then the single-parameter `beta`, `kappa`, and `tau`
   fits, then `beta+kappa+tau`, followed by one-at-a-time additions of `gamma`
   and `alpha`. Release `E0` only as a final strong-prior diagnostic because the
-  current standardized fNIRS coordinate cannot establish absolute OEF. Each
-  subject shares one parameter vector across independently reset trials. A
-  later stage cannot be retained merely for reconstruction gain when its
-  posterior is boundary-bound, prior-dominated, or compensatory. `p` has no
-  separate free dynamic parameter in `T3a`.
+  current standardized fNIRS coordinate cannot establish absolute OEF. Only the
+  fixed model and the three single-parameter fits are recommendation-eligible;
+  `M2`--`M5` are retained only to diagnose compensation. Each subject shares one
+  parameter vector across independently reset trials. A later stage cannot be
+  retained merely for reconstruction gain when its posterior is boundary-bound,
+  prior-dominated, or compensatory. `p` has no separate free dynamic parameter
+  in `T3a`.
 
 Names must not overstate what the equations identify. `kappa` and `gamma` are
 lumped model coefficients, not direct molecular vasodilation rates; `E0` is the
@@ -649,6 +656,65 @@ Its result is a nonprotected exploratory
 diagnostic and is not a Croce/Balloon qualification, clean-ground-truth claim,
 or protected evaluation. `T3b`, `T3c`, and `T5` enter only after their declared
 triggers.
+
+The plan's second-step fit-only identifiability suite is registered separately
+in
+[`t3_identifiability_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3_identifiability_v1.yaml)
+and
+[`evaluate_t3_identifiability.py`](../experiments/evaluate_t3_identifiability.py).
+It freezes likelihood-only M2 (`beta`, `kappa`, `tau`) diagnostics at 16
+transformed-space starts, a true one-parameter profile that reoptimizes both
+companion parameters and latent states, 25% transformed-bound expansion, and
+a six-raw-parameter conditional forward sensitivity SVD. One noisy
+known-truth clean-scenario synthetic case must complete before the loader is
+called. The measured arm fits its observation gauge and M0 selection score on
+01--18 only, then analyzes the low/median/high representatives' eight fit
+trials. The shared loader constructs canonical dataset-index metadata and
+window references, but it never loads arrays or materializes window samples
+for 19--23 validation and 24--29 protected subjects. This suite is exploratory
+and cannot change qualification, promotion, or protected-data state.
+
+The plan's third-step three-session LOSO diagnostic is registered in
+[`t3_multisession_loso_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml)
+and
+[`evaluate_t3_multisession_loso.py`](../experiments/evaluate_t3_multisession_loso.py).
+It uses only subjects 01--18, MA trials, and cache records
+`session_01/03/05`; each fold fits two complete sessions and applies frozen
+objects to the third. The common safe window is `[-5,+25) s`, with fNIRS
+masked from task onset and the primary score restricted to the 15-second
+nominal recovery envelope `[+10,+25) s`. Because event durations are absent,
+the endpoint is not labelled an exact annotated rest period. Only effective
+`kappa` varies: the two training-session estimates define a zero-sum log
+session deviation and a geometric subject center for held-out apply. All other
+physiological parameters remain fixed. This diagnostic cannot load 19--29
+arrays or alter qualification, promotion, or protected-data state.
+
+The plan's fourth-step hierarchy begins with the array-free admission contract
+[`t3c_hierarchical_composite_admission_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission_v1.yaml)
+and
+[`evaluate_t3c_hierarchical_composite_admission.py`](../experiments/evaluate_t3c_hierarchical_composite_admission.py).
+It freezes the analytic `G_f/T_f/zeta_f/T_v` coordinate and a diagonal
+one/two-dimensional Normal hierarchy, then checks the frozen Step 2/3 evidence
+before any new measured metadata or array access. At the 2026-09-03 v3
+admission snapshot the result was `BLOCKED_PREREQUISITE`: `T-P2`, a common
+gauge, a prospective fixed endpoint, composite SBC/profile/multistart evidence,
+and a pre-measured practical margin were not yet available. Consequently no
+measured hierarchical fit was registered or authorized by this entry.
+
+The follow-up synthetic `T-P2` composite screen is registered in
+[`t3c_composite_synthetic_t2_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml)
+and
+[`evaluate_t3c_composite_synthetic_t2.py`](../experiments/evaluate_t3c_composite_synthetic_t2.py).
+Its formal run uses 60 independent known-truth replicates for each
+one-dimensional direction (`C1_G`, `C1_T`), independently reset training and
+held-out trials, and a fitter boundary containing noisy training observations
+but no realized truth, driver, generation seed, or held-out array. Both C1
+directions failed their registered gates, so the run decision is
+`BLOCKED_C1_COMPOSITE_IDENTIFIABILITY` and `C2_GT` was not run. The detailed
+result is retained in the
+[`T-P2` report](analysis/20260903_T3C_COMPOSITE_SYNTHETIC_TP2_REPORT.md).
+This synthetic evidence is not qualification evidence and does not authorize
+measured hierarchical fitting.
 
 ## Historical lifecycle boundary
 

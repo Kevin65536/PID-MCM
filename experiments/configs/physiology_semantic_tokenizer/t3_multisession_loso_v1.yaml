@@ -1,0 +1,131 @@
+schema: t3_multisession_loso_v1
+
+experiment:
+  name: t3_multisession_loso_v1
+  scope: fit_only_multisession_measured_exploratory
+  measured_data_enabled: true
+  validation_data_enabled: false
+  protected_data_enabled: false
+  qualification_eligible: false
+  decision_eligibility: false
+  seed: 20260902
+
+sources:
+  measured_config: experiments/configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml
+  measured_config_sha256: 09317a7fd6eb50b44c829d1ad3f2e5a4319a2fe29e16544448d44095801a939e
+  metadata_sha256:
+    cache_manifest.json: ed514e10b3e3e83a51963d2ba57067e6237a47a58eaa555cb3369510600b1500
+    event_index/event_manifest.json: ecef4bac6577471bece0397b50655e37df80eb2349aa4ff9f4b2d107f63e9031
+    event_index/events.jsonl: 37c4b52ad68356116c920b7bc1cb828b6533455318380829a2477b9d7933f3bb
+    event_index/alignment_reports.jsonl: f10bef9c1ac4e8ebb9982405dd9b14a8a25a28502c467babf039bdc06f3e3dd9
+    eeg_artifact_clean_v4/cache_manifest.json: 7b6145e205eba65e7f945903ad9ce2368c1c338b2efcc25749f6d4b7e8ff05c0
+    channel_geometry/geometry_manifest.json: e0b2fdf987b10046269985008f35d353e41ea5f7654771c8f981a47301cdfa4b
+    channel_geometry/channels.jsonl: 2af21a1e0d7df349a6a946d85331d72d3b669a4a5950aac30b018da2d7ced0a1
+
+data:
+  cache_root: data/cache/physiology_semantic_clean_v1
+  dataset_id: eeg_fnirs_single_trial
+  target_label: MA
+  eeg_signal_branch: raw_with_ocular_artifact
+  subjects:
+    - subject_01
+    - subject_02
+    - subject_03
+    - subject_04
+    - subject_05
+    - subject_06
+    - subject_07
+    - subject_08
+    - subject_09
+    - subject_10
+    - subject_11
+    - subject_12
+    - subject_13
+    - subject_14
+    - subject_15
+    - subject_16
+    - subject_17
+    - subject_18
+  validation_subjects_closed:
+    - subject_19
+    - subject_20
+    - subject_21
+    - subject_22
+    - subject_23
+  protected_subjects_closed:
+    - subject_24
+    - subject_25
+    - subject_26
+    - subject_27
+    - subject_28
+    - subject_29
+  sessions:
+    - record_id: session_01
+      source_session_idx_zero_based: 1
+    - record_id: session_03
+      source_session_idx_zero_based: 3
+    - record_id: session_05
+      source_session_idx_zero_based: 5
+  trials_per_subject_session: 10
+  window_offset_s: -5.0
+  window_duration_s: 30.0
+  baseline_duration_s: 5.0
+  task_duration_s: 10.0
+  nominal_recovery_duration_s: 15.0
+  next_event_guard_s: 0.5
+  expected_selected_record_count: 54
+  expected_all_event_count: 1080
+  expected_unique_target_trial_count: 540
+
+analysis:
+  sampling_hz: 10.0
+  active_hbo_channels: 1
+  models: [M0_fixed, M1_kappa_shared, M1_kappa_session_nuisance]
+  primary_model: M1_kappa_session_nuisance
+  primary_reference: M0_fixed
+  primary_metric: variance_matched_gaussian_negative_log_score
+  heldout_input_mask:
+    relative_start_s: 0.0
+    relative_stop_s: 25.0
+  primary_recovery_mask:
+    relative_start_s: 10.0
+    relative_stop_s: 25.0
+  secondary_response_mask:
+    relative_start_s: 0.0
+    relative_stop_s: 25.0
+  kappa_coordinate:
+    interpretation: effective_one_dimensional_adaptation_coefficient_not_biological_trait
+    prior_mean: 0.64
+    prior_sd: 0.20
+    bounds: [0.20, 1.50]
+    session_decomposition: log_kappa_center_plus_zero_sum_training_session_deviation
+    heldout_rule: geometric_center_of_two_training_session_estimates
+    session_effect_penalty: none_beyond_each_session_existing_kappa_prior
+  optimizer:
+    transformed_grid_points: 9
+    max_iterations: 35
+    xatol: 0.0001
+    boundary_fraction_of_log_span: 0.01
+    workers: 16
+  bootstrap:
+    unit: subject
+    replicates: 10000
+    confidence: 0.95
+    seed: 20260902
+  exploratory_screens:
+    center_log_range_fraction_max: 0.10
+    minimum_stable_subject_fraction: 0.75
+    maximum_boundary_fit_fraction: 0.25
+    driver_nrmse_max: 0.10
+    driver_correlation_min: 0.95
+  synthetic_preflight:
+    subjects: 1
+    sessions: 3
+    trials_per_session: 2
+    true_center_kappa: 0.64
+    training_log_deviation: 0.20
+    required_finite_scores: true
+    required_objective_not_worse_than_registered_prior: true
+
+output:
+  root: experiments/runs/physiology_semantic_tokenizer/t3_multisession_loso

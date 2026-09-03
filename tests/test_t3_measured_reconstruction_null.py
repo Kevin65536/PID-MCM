@@ -6,6 +6,7 @@ import pytest
 
 from experiments.evaluate_t3_measured_reconstruction_null import (
     PreparedTrial,
+    STAGE_RECOMMENDATION_CONTRACT,
     Trial,
     _finite_hessian_bounded,
     _fit_subject_stage,
@@ -20,6 +21,7 @@ from experiments.evaluate_t3_measured_reconstruction_null import (
     _to_optimizer_coordinate,
     _write_json,
     load_config,
+    run,
     validate_config,
 )
 from experiments.scripts.render_t3_measured_parameter_effects import (
@@ -33,8 +35,16 @@ from src.inference.t3a_balloon_robust_ssm import BalloonConfig, BalloonObservati
 CONFIG = Path("experiments/configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml")
 
 
-def test_measured_boundary_and_non_circular_null() -> None:
+def test_measured_boundary_and_non_circular_null(tmp_path: Path) -> None:
     config = load_config(CONFIG)
+    stages = config["ssm"]["t3a"]["parameter_fit"]["stages"]
+    assert tuple((stage["id"], stage["recommendation_eligible"]) for stage in stages) == STAGE_RECOMMENDATION_CONTRACT
+
+    invalid_stage = deepcopy(config)
+    invalid_stage["ssm"]["t3a"]["parameter_fit"]["stages"][4]["recommendation_eligible"] = True
+    with pytest.raises(ValueError, match="only M0"):
+        run(invalid_stage, tmp_path)
+
     invalid = deepcopy(config)
     invalid["data"]["conditions"][0]["subjects"].append("subject_24")
     with pytest.raises(ValueError, match="loader subjects"):
